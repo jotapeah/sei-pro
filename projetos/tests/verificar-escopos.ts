@@ -170,4 +170,50 @@ export async function verificarEscopos(): Promise<void> {
     ),
   );
   checar("datas do mover nao mudam", de.etapas[0]?.inicio === "2026-10-07" && HOJE === "2026-10-06");
+
+  secao("projetos: mover com destino hostil e vinculo torto");
+  const nav2 = { agora: 1_000 };
+  const { repo: ua } = novoRepo(ESCOPO_UN, areaMemoria(), "a", nav2);
+  const { repo: ea2 } = novoRepo(ESCOPO_EU, areaMemoria(), "b", nav2);
+  const pm = await ua.criarProjeto({ nome: "Mover" });
+  const em = await ua.criarEtapa({ projeto: pm.id, nome: "E", inicio: "2026-10-07", fim: "2026-10-08" });
+  await ea2.importar({ p: [{ ...pm, atualizadoEm: 9e12, removidoEm: 9e12 }] });
+  const mv = await moverEntreEscopos(ua, ea2, pm.id);
+  checar("lapide mais nova no destino: projeto fica vivo no destino", mv.removidoEm === undefined && !!(await ea2.obterProjeto(pm.id)));
+  checar("lapide mais nova no destino: origem lapidada so depois", !(await ua.dados()).projetos.length);
+  checar(
+    "etapa foi junto",
+    (await ea2.dados()).etapas.some((x) => x.id === em.id),
+  );
+
+  const pn = await ua.criarProjeto({ nome: "Mesmo" });
+  const mesmo = await moverEntreEscopos(ua, ua, pn.id).then(
+    () => false,
+    () => true,
+  );
+  checar("mover para o mesmo escopo e recusado", mesmo && !!(await ua.obterProjeto(pn.id)));
+
+  const pi = await ua.criarProjeto({ nome: "Invalido" });
+  await ua.etapas.gravar("ruim", { ...etapa({ id: "ruim", projeto: pi.id }), inicio: "2026-02-30" });
+  const invalido = await moverEntreEscopos(ua, ea2, pi.id).then(
+    () => false,
+    () => true,
+  );
+  checar(
+    "item invalido: recusa e origem intacta, destino sem o projeto",
+    invalido && !!(await ua.obterProjeto(pi.id)) && !(await ea2.projetos.obter(pi.id)),
+  );
+
+  const { repo: rv } = novoRepo(ESCOPO_UN, areaMemoria(), "v");
+  const torto = await rv.importar({
+    p: [
+      projeto({ id: "t1", processo: { protocolo: 5.03e16 as never } }),
+      projeto({ id: "t2", processo: "x" as never }),
+      projeto({ id: "t3", processo: { protocolo: "1", sigiloso: "sim" as never } }),
+    ],
+    e: [{ ...etapa({ id: "t4", projeto: "t1" }), documento: { numero: 5 as never } }],
+  });
+  checar("processo/documento tortos sao ignorados", torto.ignorados === 4 && torto.novos === 0, torto);
+  await rv.projetos.gravar("t5", projeto({ id: "t5", processo: { protocolo: 123 as never } }));
+  checar("vinculos nao lanca com vinculo torto ja gravado", (await rv.vinculos()).size === 0);
 }

@@ -708,6 +708,26 @@ export function manterNumeroSigiloso<T extends { processo?: Vinculo }>(vencedor:
 
 const texto = (x: unknown): x is string => typeof x === "string";
 
+/** `processo` opcional: objeto com `protocolo` texto, `idProcedimento` texto ou ausente, `sigiloso` booleano ou ausente. */
+function vinculoValido(v: unknown): boolean {
+  if (v === undefined) return true;
+  if (!v || typeof v !== "object") return false;
+  const o = v as Record<string, unknown>;
+  return (
+    texto(o.protocolo) &&
+    (o.idProcedimento === undefined || texto(o.idProcedimento)) &&
+    (o.sigiloso === undefined || typeof o.sigiloso === "boolean")
+  );
+}
+
+/** `documento` opcional: `numero` texto, `titulo` texto ou ausente. */
+function documentoValido(d: unknown): boolean {
+  if (d === undefined) return true;
+  if (!d || typeof d !== "object") return false;
+  const o = d as Record<string, unknown>;
+  return texto(o.numero) && (o.titulo === undefined || texto(o.titulo));
+}
+
 /** Forma mínima de cada tipo (arquivo editado à mão ou de versão estranha não entra). */
 export function entidadeValida(x: unknown, tipo: keyof Entidades): boolean {
   if (!x || typeof x !== "object") return false;
@@ -717,7 +737,7 @@ export function entidadeValida(x: unknown, tipo: keyof Entidades): boolean {
   if (o.removidoEm !== undefined && typeof o.removidoEm !== "number") return false;
   switch (tipo) {
     case "p":
-      return texto(o.nome) && Array.isArray(o.etiquetas) && texto(o.ordem);
+      return texto(o.nome) && Array.isArray(o.etiquetas) && texto(o.ordem) && vinculoValido(o.processo);
     case "f":
       return texto(o.projeto) && texto(o.nome) && texto(o.ordem);
     case "e":
@@ -729,7 +749,9 @@ export function entidadeValida(x: unknown, tipo: keyof Entidades): boolean {
         dataValida(o.fim) &&
         Array.isArray(o.dependeDe) &&
         Array.isArray(o.checklist) &&
-        Array.isArray(o.etiquetas)
+        Array.isArray(o.etiquetas) &&
+        vinculoValido(o.processo) &&
+        documentoValido(o.documento)
       );
     case "h":
       return texto(o.alvo) && texto(o.projeto) && typeof o.quando === "number" && texto(o.campo);
@@ -749,7 +771,10 @@ export async function indiceDosEscopos(repos: readonly RepositorioProjetos[]): P
  * (mesmos ids, carimbo novo, para vencer na mesclagem) e deixa lápide no de
  * origem. Registra a mudança de visibilidade no histórico do destino. O destino
  * recebe tudo numa gravação só (`importar` com a anotação); a origem, noutra
- * (`lapidarMovidos`): se a segunda falhar, sobra uma cópia, nunca se perde dado.
+ * (`lapidarMovidos`), e só depois de confirmar a cópia viva no destino: mesmo escopo,
+ * item inválido ou cópia que não ficou viva recusam sem lapidar nada. As cópias levam
+ * carimbo acima de qualquer lápide que o destino já tenha desses ids (relógio adiantado
+ * de outro computador), para vencerem na mesclagem.
  */
 export async function moverEntreEscopos(origem: RepositorioProjetos, destino: RepositorioProjetos, id: string): Promise<Projeto> {
   const p = await origem.obterProjeto(id);
@@ -765,23 +790,36 @@ export async function moverEntreEscopos(origem: RepositorioProjetos, destino: Re
   const fases = d.fases.filter((f) => f.projeto === id);
   const etapas = d.etapas.filter((e) => e.projeto === id);
   const registros = await origem.historico(id);
-  const cDestino = destino.carimboAtual();
+  if (baseDoEscopo(origem.escopo) === baseDoEscopo(destino.escopo)) throw new ErroValidacao(["O projeto já está nesse escopo."]);
+  const ids = new Set([id, ...fases.map((f) => f.id), ...etapas.map((e) => e.id), ...registros.map((r) => r.id)]);
+  const noDestino = await destino.entidades();
+  let maisNovo = 0;
+  for (const x of [...noDestino.p, ...noDestino.f, ...noDestino.e, ...noDestino.h])
+    if (ids.has(x.id)) maisNovo = Math.max(maisNovo, x.atualizadoEm, x.removidoEm ?? 0);
+  const c0 = destino.carimboAtual();
+  const cDestino = { ...c0, agora: Math.max(c0.agora, maisNovo + 1) };
   const recarimbar = <T extends Entidade>(x: T): T => editar(x, {} as Partial<Omit<T, "id" | "atualizadoEm" | "dispositivo">>, cDestino);
-  await destino.importar(
-    { p: [recarimbar(p)], f: fases.map(recarimbar), e: etapas.map(recarimbar), h: registros.map(recarimbar) },
-    {
-      registros: [
-        {
-          alvo: p.id,
-          projeto: p.id,
-          campo: "visibilidade",
-          antes: rotuloDaVis(origem.escopo.vis),
-          depois: rotuloDaVis(destino.escopo.vis),
-        },
-      ],
-      carimbo: cDestino,
-    },
-  );
+  const copias = { p: [recarimbar(p)], f: fases.map(recarimbar), e: etapas.map(recarimbar), h: registros.map(recarimbar) };
+  const invalidas =
+    !entidadeValida(copias.p[0], "p") ||
+    copias.f.some((x) => !entidadeValida(x, "f")) ||
+    copias.e.some((x) => !entidadeValida(x, "e")) ||
+    copias.h.some((x) => !entidadeValida(x, "h"));
+  if (invalidas) throw new ErroValidacao(["O projeto tem itens inválidos e não foi movido."]);
+  const r = await destino.importar(copias, {
+    registros: [
+      {
+        alvo: p.id,
+        projeto: p.id,
+        campo: "visibilidade",
+        antes: rotuloDaVis(origem.escopo.vis),
+        depois: rotuloDaVis(destino.escopo.vis),
+      },
+    ],
+    carimbo: cDestino,
+  });
+  if (r.ignorados > 0 || !(await destino.obterProjeto(id)))
+    throw new ErroValidacao(["Não foi possível confirmar a cópia no destino; o projeto continua na origem."]);
   await origem.lapidarMovidos({ p, f: fases, e: etapas, h: registros }, origem.carimboAtual());
-  return (await destino.obterProjeto(id))!;
+  return (await destino.obterProjeto(id)) as Projeto;
 }

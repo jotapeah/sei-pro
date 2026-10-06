@@ -19,7 +19,7 @@ export function chaveProtocolo(protocolo: string): string {
   return protocolo.replace(/\D/g, "");
 }
 
-const chaveDe = (v: Vinculo | undefined): string => (v?.protocolo ? chaveProtocolo(v.protocolo) : "");
+const chaveDe = (v: Vinculo | undefined): string => (typeof v?.protocolo === "string" && v.protocolo ? chaveProtocolo(v.protocolo) : "");
 
 export function indiceDeProcessos(
   escopos: ReadonlyArray<{ vis: Vis; projetos: readonly Projeto[]; etapas: readonly Etapa[] }>,
