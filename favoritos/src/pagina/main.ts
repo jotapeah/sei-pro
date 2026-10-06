@@ -11,8 +11,9 @@ import { idDispositivo } from "@comum/armazenamento/dispositivo";
 import { hojeISO } from "@comum/datas/dias";
 import { lerOpcaoLegada } from "@comum/opcoes/legadas";
 import { corDoTemaSei, temaEscuroLegado } from "@comum/pagina/tema";
+import { ligarPortaDoPainel } from "@comum/painel/embutido";
 import { ligarLadoAba } from "@comum/ponte/lateral";
-import { criarRpc, ErroRpc, type PortaRpc, type Rpc } from "@comum/ponte/rpc";
+import { ErroRpc, type PortaRpc } from "@comum/ponte/rpc";
 import { travarComLocks, travarEsperando } from "@comum/sincronia/trava";
 import cssBase from "@comum/ui/base.css";
 import { acaoNaArvore, lerArvore } from "@nucleo/dominio/arvore";
@@ -306,22 +307,9 @@ function montarEmbutido(
     sobreposicao: montado.sobreposicao,
     avisar: avisoNaPagina(document, ctx.temaEscuro),
   });
-  let rpc: Rpc | null = null;
   // A cada carga do iframe, uma porta nova: o app só aceita a porta da própria aba (@comum/ponte/conexaoDaAba).
-  montado.iframe.addEventListener("load", () => {
-    rpc?.fechar();
-    rpc = criarRpc(chrome.runtime.connect({ name: CANAL_FAVORITOS }), tratadores);
-    // A porta caiu (app fechado ou extensão atualizada): ninguém mais vai pedir para desligar a sobreposição.
-    rpc.aoFechar(() => montado.sobreposicao.ligar(false));
-  });
-  return {
-    painel: montado.painel,
-    corpo: montado.corpo,
-    fechar: () => {
-      rpc?.fechar();
-      montado.fechar();
-    },
-  };
+  const porta = ligarPortaDoPainel(montado, () => chrome.runtime.connect({ name: CANAL_FAVORITOS }) as unknown as PortaRpc, tratadores);
+  return { painel: montado.painel, corpo: montado.corpo, fechar: porta.fechar };
 }
 
 /** "Atualizar fora da unidade": a caixa inteira como trava, depois um processo por vez (pagina/atualizar.ts). */
