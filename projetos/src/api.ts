@@ -5,6 +5,7 @@
  * aos outros pelo caminho; este arquivo só junta tudo.
  */
 
+export * from "./modelo/calendario";
 export * from "./modelo/constantes";
 export * from "./modelo/escopo";
 export type * from "./modelo/tipos";
