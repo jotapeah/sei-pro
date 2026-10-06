@@ -16,6 +16,7 @@ import { novoId } from "@comum/id";
 import { esperarConexaoDaAba } from "@comum/ponte/conexaoDaAba";
 import { PonteLateral } from "@comum/ponte/lateral";
 import { ErroRpc, type PortaRpc, type Rpc } from "@comum/ponte/rpc";
+import { escolherArquivoSync } from "@comum/sincronia/arquivo";
 import { definirEmissorDeAviso, mostrarAviso } from "@comum/ui/aviso";
 import { h, icone } from "@comum/ui/dom";
 import { definirJanelaQueCresce } from "@comum/ui/flutuante";
@@ -25,7 +26,7 @@ import { temPainelLateral } from "../modelo/exibicao";
 import type { Carimbo, ContextoAba } from "../modelo/tipos";
 import { RepositorioFavoritos } from "../repositorio";
 import { CHAVE_CONTADOR } from "../shell/painel";
-import { ControleArquivo, type HandleArquivo, handlesNoIndexedDB, temSeletorDeArquivo } from "../sincronia/arquivoSync";
+import { ControleArquivo, handlesNoIndexedDB, temSeletorDeArquivo } from "../sincronia/arquivoSync";
 import { copiasNoIndexedDB } from "../sincronia/copias";
 import { observarAltura } from "./altura";
 import { type AbrirModal, AppFavoritos } from "./app";
@@ -341,24 +342,9 @@ function criarApp(b: Base, ctx: ContextoAba, rpc: Pick<Rpc, "chamar">, g: Gancho
           handles: handlesNoIndexedDB(),
           carimbo: b.carimbo,
           // Um arquivo por SEI e usuário: dois SEIs no mesmo arquivo funcionam, mas cada um fica mais simples sozinho.
-          escolher: (modo) => escolherArquivoSync(modo, `favoritos-seipro-${ctx.login.toLowerCase()}-${ctx.host}.json`),
+          escolher: (modo) =>
+            escolherArquivoSync(modo, `favoritos-seipro-${ctx.login.toLowerCase()}-${ctx.host}.json`, "Favoritos do SEI Pro"),
         })
       : null,
   });
-}
-
-/** Seletor de arquivo do navegador (File System Access). Cancelar devolve null. */
-async function escolherArquivoSync(modo: "novo" | "existente", nomeSugerido = "favoritos-seipro.json"): Promise<HandleArquivo | null> {
-  const tipos = [{ description: "Favoritos do SEI Pro", accept: { "application/json": [".json"] } }];
-  const w = window as unknown as {
-    showSaveFilePicker(o: unknown): Promise<HandleArquivo>;
-    showOpenFilePicker(o: unknown): Promise<HandleArquivo[]>;
-  };
-  try {
-    if (modo === "novo") return await w.showSaveFilePicker({ suggestedName: nomeSugerido, types: tipos });
-    return (await w.showOpenFilePicker({ types: tipos, multiple: false }))[0] ?? null;
-  } catch (e) {
-    if ((e as { name?: string }).name === "AbortError") return null;
-    throw e;
-  }
 }

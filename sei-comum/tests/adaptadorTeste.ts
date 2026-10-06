@@ -5,6 +5,7 @@
  * (`vence`) da sei-comum.
  */
 
+import type { AdaptadorArquivo } from "../src/sincronia/arquivo";
 import { assinaturaEstavel, porId } from "../src/sincronia/assinatura";
 import { purgarLapides, type Versionada, vence } from "../src/sincronia/entidade";
 import type { AdaptadorTexto } from "../src/sincronia/motor";
@@ -136,4 +137,36 @@ export function destinoTeste(inicial: string | null = null) {
     },
   };
   return d;
+}
+
+/** O arquivo de teste: uma lista por dono (o mesmo arquivo pode ter sido escolhido por outro usuário). */
+export interface EnvArquivoTeste {
+  formato: "teste";
+  versao: number;
+  donos: Array<{ dono: string; itens: ItemTeste[] }>;
+}
+
+export function adaptadorArquivoTeste(repo: RepoTeste, dono: string): AdaptadorArquivo<EnvArquivoTeste> {
+  return {
+    formato: "teste",
+    versao: 1,
+    ler(bruto) {
+      const b = bruto as Partial<EnvArquivoTeste> | null;
+      return b?.formato === "teste" && b.versao === 1 && Array.isArray(b.donos) ? (b as EnvArquivoTeste) : null;
+    },
+    async importar(env) {
+      for (const d of env.donos) if (d.dono === dono) repo.importar({ formato: "teste", versao: 1, dono, itens: d.itens });
+    },
+    async exportar(lido) {
+      const outros = (lido?.donos ?? []).filter((d) => d.dono !== dono);
+      return {
+        envelope: { formato: "teste", versao: 1, donos: [{ dono, itens: [...repo.itens.values()] }, ...outros] },
+        outros: outros.length,
+      };
+    },
+    assinatura: (env) =>
+      assinaturaEstavel(
+        env.donos.map((d) => ({ dono: d.dono, itens: porId(d.itens) })).sort((a, b) => (a.dono < b.dono ? -1 : a.dono > b.dono ? 1 : 0)),
+      ),
+  };
 }
