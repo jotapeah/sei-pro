@@ -13,11 +13,14 @@ import { areaChrome } from "@comum/armazenamento/area";
 import { idDispositivo } from "@comum/armazenamento/dispositivo";
 import { hojeISO } from "@comum/datas/dias";
 import { novoId } from "@comum/id";
+import { observarAltura } from "@comum/painel/altura";
+import { emissorDeAvisoPelaPagina } from "@comum/painel/aviso";
+import { sobreposicaoNoApp } from "@comum/painel/sobreposicao";
 import { esperarConexaoDaAba } from "@comum/ponte/conexaoDaAba";
 import { PonteLateral } from "@comum/ponte/lateral";
 import { ErroRpc, type PortaRpc, type Rpc } from "@comum/ponte/rpc";
 import { escolherArquivoSync } from "@comum/sincronia/arquivo";
-import { definirEmissorDeAviso, mostrarAviso } from "@comum/ui/aviso";
+import { definirEmissorDeAviso } from "@comum/ui/aviso";
 import { baixar, criarAbrirModal, criarConfirmar, escolherArquivo } from "@comum/ui/dialogo";
 import { h, icone } from "@comum/ui/dom";
 import { definirJanelaQueCresce } from "@comum/ui/flutuante";
@@ -29,7 +32,6 @@ import { RepositorioFavoritos } from "../repositorio";
 import { CHAVE_CONTADOR } from "../shell/painel";
 import { ControleArquivo, handlesNoIndexedDB, temSeletorDeArquivo } from "../sincronia/arquivoSync";
 import { copiasNoIndexedDB } from "../sincronia/copias";
-import { observarAltura } from "./altura";
 import { AppFavoritos } from "./app";
 import { carregarLeaflet } from "./mapa";
 
@@ -72,16 +74,10 @@ async function iniciarEmbutido(): Promise<void> {
   addEventListener("spro-popover", (ev) => altura.extra(Number((ev as CustomEvent<{ fundo?: number }>).detail?.fundo) || 0));
   // O iframe cresce com o conteúdo: listas abrem para baixo. Com diálogo sobreposto, a janela é a tela e não cresce.
   definirJanelaQueCresce(() => document.documentElement.dataset.sobreposto !== "sim");
-  const sobrepor = sobreposicao(rpc, altura);
+  // Diálogo no meio da tela visível: a aba põe o iframe por cima de tudo enquanto há diálogo aberto.
+  const sobrepor = sobreposicaoNoApp(rpc, altura);
   // Aviso no rodapé da TELA do SEI (o do iframe ficaria lá embaixo, fora da vista); com diálogo aberto, aqui mesmo.
-  definirEmissorDeAviso((texto, acao, ms) => {
-    if (document.documentElement.dataset.sobreposto) return false;
-    rpc
-      .chamar<boolean>("aviso", { texto, acao: acao?.rotulo, ms }, ms + 5000)
-      .then((acionado) => acionado && acao?.fazer())
-      .catch(() => mostrarAviso(document, texto, acao, ms));
-    return true;
-  });
+  definirEmissorDeAviso(emissorDeAvisoPelaPagina(rpc));
   const app = criarApp(b, ctx, rpc, {
     embutido: true,
     aoAbrirModal: sobrepor.abrir,
@@ -160,52 +156,6 @@ async function iniciarLateral(): Promise<void> {
   addEventListener("pagehide", () => void ponte.encerrar());
   // As abas que já estão abertas conectam ao ver o anúncio; se nenhuma vier, avisa.
   setTimeout(reagir, 1500);
-}
-
-/**
- * Diálogo do painel embutido FORA do contêiner: enquanto há diálogo aberto, a
- * aba põe o iframe por cima da tela inteira (pagina/sobreposicao.ts), o app
- * esconde a lista e deixa o fundo transparente; o diálogo fica no meio da parte
- * visível da tela, onde quer que o usuário esteja na página. Sem resposta da
- * aba (versão antiga do content script), volta ao jeito antigo: o iframe cresce.
- */
-function sobreposicao(rpc: Pick<Rpc, "chamar">, altura: ReturnType<typeof observarAltura>): { abrir(): void; fechar(): void } {
-  const html = document.documentElement;
-  let abertos = 0;
-  let reserva: ReturnType<typeof setTimeout> | undefined;
-  return {
-    abrir() {
-      if (abertos++ > 0) return;
-      html.dataset.sobreposto = "abrindo";
-      clearTimeout(reserva);
-      reserva = setTimeout(() => {
-        if (html.dataset.sobreposto !== "abrindo") return;
-        html.dataset.sobreposto = "falhou";
-        altura.minimo(640);
-      }, 800);
-      void rpc
-        .chamar<boolean>("sobrepor", { ativo: true }, 3000)
-        .then((ok) => {
-          clearTimeout(reserva);
-          if (!abertos) return;
-          html.dataset.sobreposto = ok ? "sim" : "falhou";
-          if (!ok) altura.minimo(640);
-        })
-        .catch(() => {
-          clearTimeout(reserva);
-          if (!abertos) return;
-          html.dataset.sobreposto = "falhou";
-          altura.minimo(640);
-        });
-    },
-    fechar() {
-      if (abertos === 0 || --abertos > 0) return;
-      clearTimeout(reserva);
-      delete html.dataset.sobreposto;
-      altura.minimo(0);
-      void rpc.chamar("sobrepor", { ativo: false }, 3000).catch(() => undefined);
-    },
-  };
 }
 
 interface Ganchos {
