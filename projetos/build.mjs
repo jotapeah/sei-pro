@@ -26,6 +26,8 @@ const comum = {
   charset: "ascii",
   logLevel: "warning",
   legalComments: "none",
+  // O fonte original da Frappe 1.2.2 tem dois metodos view_is (vale o segundo, como no pacote publicado).
+  logOverride: { "duplicate-class-member": "silent" },
   loader: { ".css": "text" },
   banner: { js: "/* GERADO por projetos/build.mjs. NAO EDITE ESTE ARQUIVO. Rode: npm run build */" },
 };

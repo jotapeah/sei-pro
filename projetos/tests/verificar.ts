@@ -9,6 +9,7 @@ import { verificarModelos } from "./verificar-modelos";
 import { verificarOperacoes } from "./verificar-operacoes";
 import { verificarRepositorio } from "./verificar-repositorio";
 import { verificarSituacao } from "./verificar-situacao";
+import { verificarVendor } from "./verificar-vendor";
 
 verificarEscopo();
 verificarCalendario();
@@ -19,4 +20,5 @@ verificarFiltro();
 await verificarRepositorio();
 await verificarEscopos();
 await verificarModelos();
+await verificarVendor();
 resumo();
