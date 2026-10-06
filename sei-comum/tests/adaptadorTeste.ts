@@ -68,12 +68,24 @@ export function repoTeste(): RepoTeste {
   };
 }
 
+/** O que o motor passou a cada `exportar` (as provas conferem o "inválido" x "inexistente"). */
+export type ChamadaExportar = Parameters<AdaptadorTexto<EnvTeste>["exportar"]>[0];
+
 export function adaptadorTeste(
   repo: RepoTeste,
-  o: { dono?: string; teto?: number; aviso?: number; chaveStatus?: string; diasLapide?: number } = {},
+  o: {
+    dono?: string;
+    teto?: number;
+    aviso?: number;
+    chaveStatus?: string;
+    diasLapide?: number;
+    antesDeRegravarInvalido?: AdaptadorTexto<EnvTeste>["antesDeRegravarInvalido"];
+    aoExportar?: (c: ChamadaExportar) => void;
+  } = {},
 ): AdaptadorTexto<EnvTeste> {
   const dono = o.dono ?? "pedro";
   return {
+    ...(o.antesDeRegravarInvalido ? { antesDeRegravarInvalido: o.antesDeRegravarInvalido } : {}),
     modulo: "teste",
     chaveStatus: o.chaveStatus ?? "teste/sync/tp/a",
     teto: o.teto ?? 100 * 1024,
@@ -89,7 +101,9 @@ export function adaptadorTeste(
     async importar(env) {
       repo.importar(env);
     },
-    async exportar({ agora }) {
+    async exportar(c) {
+      o.aoExportar?.(c);
+      const { agora } = c;
       const itens = [...repo.itens.values()];
       return { formato: "teste", versao: 1, dono, itens: o.diasLapide === undefined ? itens : purgarLapides(itens, agora, o.diasLapide) };
     },

@@ -1,6 +1,15 @@
 import { areaMemoria } from "../src/armazenamento/area";
-import { MotorTextoPadrao, nomeDaTrava, type StatusSync, textoDoErro } from "../src/sincronia/motor";
-import { adaptadorTeste, destinoTeste, type EnvTeste, item, itensDoTexto, repoTeste, textoDeOutro } from "./adaptadorTeste";
+import { MotorTextoPadrao, nomeDaTrava, type StatusSync, type Temporizador, textoDoErro } from "../src/sincronia/motor";
+import {
+  adaptadorTeste,
+  type ChamadaExportar,
+  destinoTeste,
+  type EnvTeste,
+  item,
+  itensDoTexto,
+  repoTeste,
+  textoDeOutro,
+} from "./adaptadorTeste";
 import { checar, secao, tique } from "./util";
 
 const DIA = 86_400_000;
@@ -15,6 +24,11 @@ function montar(
     diasLapide?: number;
     agora?: number;
     permitido?: () => Promise<boolean>;
+    atrasoEnvio?: number;
+    temporizador?: Temporizador;
+    aleatorio?: () => number;
+    antesDeRegravarInvalido?: (motivo: string, html: string) => Promise<void>;
+    aoExportar?: (c: ChamadaExportar) => void;
   } = {},
 ) {
   const area = areaMemoria();
@@ -22,20 +36,36 @@ function montar(
   const destino = destinoTeste(o.remoto ?? null);
   let agora = o.agora ?? 10_000_000;
   let ocupado = false;
+  let emCurso = false;
   const travas: string[] = [];
   const motor = new MotorTextoPadrao<EnvTeste>({
-    adaptador: adaptadorTeste(repo, { teto: o.teto, aviso: o.aviso, diasLapide: o.diasLapide }),
+    adaptador: adaptadorTeste(repo, {
+      teto: o.teto,
+      aviso: o.aviso,
+      diasLapide: o.diasLapide,
+      antesDeRegravarInvalido: o.antesDeRegravarInvalido,
+      aoExportar: o.aoExportar,
+    }),
     destino,
     area,
+    // Como o Web Locks com `ifAvailable`: ocupada por outra aba (`ocupar`) ou pela rodada desta mesma aba ainda em curso.
     travar: async (nome, fn) => {
       travas.push(nome);
-      return ocupado ? null : fn();
+      if (ocupado || emCurso) return null;
+      emCurso = true;
+      try {
+        return await fn();
+      } finally {
+        emCurso = false;
+      }
     },
     agora: () => agora,
-    atrasoEnvio: 10,
+    atrasoEnvio: o.atrasoEnvio ?? 10,
     releituras: o.releituras,
     intervaloPuxar: o.intervaloPuxar,
     permitido: o.permitido,
+    temporizador: o.temporizador,
+    aleatorio: o.aleatorio,
   });
   return {
     area,
@@ -222,4 +252,272 @@ export async function verificarMotorTexto(): Promise<void> {
     !(await itensDoTexto(p.destino.html)).some((i) => i.id === "x"),
     await itensDoTexto(p.destino.html),
   );
+
+  await verificarMudancaDuranteRodada();
+  await verificarEsperaCrescente();
+  await verificarGanchoInvalido();
+  await verificarOrdemEReleitura();
+}
+
+/** Um colega que grava o texto a cada leitura (o texto nunca para). */
+function colegaSemParar(d: ReturnType<typeof destinoTeste>): (n: number) => Promise<void> {
+  const lista: ReturnType<typeof item>[] = [];
+  return async (n) => {
+    lista.push(item(`c${n}`, 50 + n));
+    d.html = await textoDeOutro([...lista]);
+  };
+}
+
+async function verificarMudancaDuranteRodada(): Promise<void> {
+  secao("motor generico: mudanca local durante uma rodada longa");
+  const g1 = montar();
+  g1.repo.por("a1", "um", 100);
+  g1.destino.aoLer = async (n) => {
+    // A releitura (já depois do exportar) demora; nesse meio o usuário acrescenta um item.
+    if (n === 2) {
+      g1.repo.por("a2", "dois", 200);
+      await g1.motor.marcarPendente();
+      await tique(20);
+    }
+  };
+  const sg1 = await g1.motor.sincronizar();
+  checar(
+    "a rodada grava o que exportou e termina ainda pendente (o item novo ficou de fora)",
+    sg1.estado === "ok" && sg1.pendente && ids(await itensDoTexto(g1.destino.html)) === "a1",
+    sg1,
+  );
+  g1.destino.aoLer = undefined;
+  await tique(60);
+  checar(
+    "e o envio rearmado leva o item novo ao texto, sem ninguem pedir",
+    ids(await itensDoTexto(g1.destino.html)) === "a1,a2" && (await g1.motor.status()).pendente === false,
+    await itensDoTexto(g1.destino.html),
+  );
+
+  const g2 = montar();
+  g2.repo.por("a1", "um", 100);
+  g2.destino.aoLer = async (n) => {
+    if (n === 2) {
+      g2.repo.por("a2", "dois", 200);
+      // Como o controle faz a cada mudança local; o envio (10 ms) dispara com a trava ainda com esta rodada.
+      void g2.motor.agendarEnvio();
+      await tique(40);
+    }
+  };
+  await g2.motor.sincronizar();
+  g2.destino.aoLer = undefined;
+  await tique(80);
+  checar(
+    "o envio agendado que achou a trava com a propria rodada nao se perde",
+    ids(await itensDoTexto(g2.destino.html)) === "a1,a2" && (await g2.motor.status()).pendente === false,
+    await itensDoTexto(g2.destino.html),
+  );
+
+  const g3 = montar();
+  g3.repo.por("a1", "um", 100);
+  g3.ocupar(true);
+  await g3.motor.agendarEnvio();
+  await tique(40);
+  const lidasOcupada = g3.destino.lidas;
+  g3.ocupar(false);
+  await tique(60);
+  checar(
+    "trava com outra aba quando o envio dispara: o envio e rearmado e acontece",
+    lidasOcupada === 0 && ids(await itensDoTexto(g3.destino.html)) === "a1" && (await g3.motor.status()).pendente === false,
+    { lidasOcupada, lidas: g3.destino.lidas, gravadas: g3.destino.gravadas },
+  );
+  g3.motor.parar();
+}
+
+async function verificarEsperaCrescente(): Promise<void> {
+  secao("motor generico: depois de desistir, nova tentativa com espera crescente e sorteio");
+  const esperas: number[] = [];
+  let armado: (() => void) | undefined;
+  const relogio: Temporizador = {
+    definir: (fn, ms) => {
+      esperas.push(ms);
+      armado = fn;
+      return esperas.length;
+    },
+    cancelar: () => undefined,
+  };
+  const b = montar({ remoto: await textoDeOutro([item("b1", 50)]), atrasoEnvio: 15_000, temporizador: relogio, aleatorio: () => 0 });
+  b.repo.por("a1", "um", 100);
+  const mudando = colegaSemParar(b.destino);
+  b.destino.aoLer = mudando;
+  for (let i = 0; i < 7; i++) await b.motor.sincronizar({ forcar: true });
+  checar(
+    "o texto nao para de mudar: 15 s, 30 s, 1 min, 2 min, 4 min e o teto de 5 min",
+    esperas.join() === "15000,30000,60000,120000,240000,300000,300000",
+    esperas,
+  );
+  b.destino.aoLer = undefined;
+  const lidasB = b.destino.lidas;
+  armado?.();
+  await tique(30);
+  const sb = await b.motor.status();
+  checar(
+    "a tentativa armada roda sozinha e, com o texto parado, grava",
+    b.destino.lidas > lidasB && sb.estado === "ok" && !sb.pendente,
+    sb,
+  );
+  esperas.length = 0;
+  b.destino.aoLer = mudando;
+  await b.motor.sincronizar({ forcar: true });
+  checar("depois de gravar, a espera volta ao comeco", esperas.join() === "15000", esperas);
+
+  const sorteadas: number[] = [];
+  for (const sorteio of [0, 0.5]) {
+    const j = montar({
+      remoto: await textoDeOutro([item("b1", 50)]),
+      atrasoEnvio: 15_000,
+      aleatorio: () => sorteio,
+      temporizador: {
+        definir: (_fn, ms) => {
+          sorteadas.push(ms);
+          return 0;
+        },
+        cancelar: () => undefined,
+      },
+    });
+    j.repo.por("a1", "um", 100);
+    j.destino.aoLer = colegaSemParar(j.destino);
+    await j.motor.sincronizar({ forcar: true });
+  }
+  checar("o sorteio (ate metade da espera) separa dois usuarios", sorteadas.join() === "15000,18750", sorteadas);
+}
+
+async function verificarGanchoInvalido(): Promise<void> {
+  secao("motor generico: gancho antes de regravar um texto invalido");
+  const editado = `${await textoDeOutro([item("b1", 50)])}\n<p>Comentário do colega no fim do texto.</p>`;
+  const gancho: Array<{ motivo: string; html: string; gravadasAntes: number }> = [];
+  const exportes: ChamadaExportar[] = [];
+  const contar = { gravadas: () => -1 };
+  const comGancho = (remoto: string | null) =>
+    montar({
+      remoto,
+      antesDeRegravarInvalido: async (motivo, html) => {
+        gancho.push({ motivo, html, gravadasAntes: contar.gravadas() });
+      },
+      aoExportar: (c) => exportes.push(c),
+    });
+  const h1 = comGancho(editado);
+  contar.gravadas = () => h1.destino.gravadas;
+  h1.repo.por("a1", "um", 100);
+  const sh1 = await h1.motor.sincronizar();
+  checar(
+    "colega acrescentou um paragrafo (o codec recusa): o gancho recebe o HTML invalido antes da gravacao",
+    gancho.length === 1 &&
+      gancho[0]?.html === editado &&
+      /editado/.test(gancho[0]?.motivo ?? "") &&
+      gancho[0]?.gravadasAntes === 0 &&
+      h1.destino.gravadas === 1 &&
+      sh1.estado === "ok" &&
+      /regrav/.test(sh1.mensagem ?? ""),
+    { gancho: gancho.map((g) => ({ ...g, html: g.html.length })), sh1 },
+  );
+  checar(
+    "e o exportar sabe que o texto existe e e invalido (nao inexistente)",
+    exportes.length > 0 && exportes.every((c) => c.remoto === null && c.invalido === true),
+    exportes.map((c) => ({ remoto: c.remoto !== null, invalido: c.invalido })),
+  );
+
+  gancho.length = 0;
+  exportes.length = 0;
+  const outroDono = await textoDeOutro([item("x", 1)], "maria");
+  const h2 = comGancho(outroDono);
+  contar.gravadas = () => h2.destino.gravadas;
+  h2.repo.por("a1", "um", 100);
+  await h2.motor.sincronizar();
+  checar(
+    "invalido pelo adaptador (outro dono): o gancho tambem e chamado antes de gravar",
+    gancho.length === 1 &&
+      gancho[0]?.html === outroDono &&
+      /outro dono/.test(gancho[0]?.motivo ?? "") &&
+      gancho[0]?.gravadasAntes === 0 &&
+      exportes.every((c) => c.invalido === true),
+    { gancho: gancho.map((g) => g.motivo), exportes: exportes.map((c) => c.invalido) },
+  );
+
+  gancho.length = 0;
+  exportes.length = 0;
+  const h3 = comGancho(null);
+  h3.repo.por("a1", "um", 100);
+  await h3.motor.sincronizar();
+  checar(
+    "texto inexistente: sem gancho, e o exportar recebe invalido: false",
+    gancho.length === 0 &&
+      h3.destino.gravadas === 1 &&
+      exportes.length > 0 &&
+      exportes.every((c) => c.remoto === null && c.invalido === false),
+    exportes.map((c) => c.invalido),
+  );
+
+  const h4 = montar({
+    remoto: editado,
+    antesDeRegravarInvalido: async () => {
+      throw new Error("Não foi possível guardar a cópia do texto inválido.");
+    },
+  });
+  h4.repo.por("a1", "um", 100);
+  const sh4 = await h4.motor.sincronizar();
+  checar(
+    "se o gancho falhar, nao grava: fica em erro e o texto do SEI fica como estava",
+    h4.destino.gravadas === 0 && h4.destino.html === editado && sh4.estado === "erro" && /cópia/.test(sh4.mensagem ?? ""),
+    sh4,
+  );
+  checar("e os dados locais ficam intactos", h4.repo.itens.size === 1 && h4.repo.itens.get("a1")?.valor === "um");
+}
+
+async function verificarOrdemEReleitura(): Promise<void> {
+  secao("motor generico: permissao antes da releitura, e releitura pela carga");
+  const ordem: string[] = [];
+  const o1 = montar({
+    permitido: async () => {
+      ordem.push("permitido");
+      return true;
+    },
+  });
+  o1.destino.aoLer = () => {
+    ordem.push("ler");
+  };
+  o1.repo.por("a1", "um", 100);
+  await o1.motor.sincronizar();
+  checar(
+    "le, confere a permissao, rele e grava (a releitura fica colada na gravacao)",
+    ordem.join() === "ler,permitido,ler" && o1.destino.gravadas === 1,
+    ordem,
+  );
+  const o2 = montar({ permitido: async () => false });
+  o2.repo.por("a1", "um", 100);
+  await o2.motor.sincronizar();
+  checar("desligado no meio da rodada: nem rele", o2.destino.lidas === 1 && o2.destino.gravadas === 0, o2.destino);
+
+  const plano = await textoDeOutro([item("b1", 50)]);
+  const escapadoDeNovo = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const e1 = montar({ remoto: plano });
+  e1.repo.por("a1", "um", 100);
+  e1.destino.aoLer = (n) => {
+    // O SEI 5 devolve o mesmo conteúdo escapado mais uma vez numa leitura e não na outra.
+    e1.destino.html = n % 2 === 0 ? escapadoDeNovo(plano) : plano;
+  };
+  const se1 = await e1.motor.sincronizar();
+  checar(
+    "o mesmo conteudo escapado mais uma vez (SEI 5) nao conta como mudanca: grava na primeira releitura",
+    se1.estado === "ok" && e1.destino.gravadas === 1 && e1.destino.lidas === 2,
+    { se1, lidas: e1.destino.lidas, gravadas: e1.destino.gravadas },
+  );
+  e1.motor.parar();
+
+  const exportes: ChamadaExportar[] = [];
+  const r = montar({ remoto: await textoDeOutro([item("b1", 50)]), aoExportar: (c) => exportes.push(c) });
+  r.repo.por("a1", "um", 100);
+  r.destino.aoLer = colegaSemParar(r.destino);
+  await r.motor.sincronizar();
+  checar(
+    "releituras: 3 = 3 releituras e 2 novas mesclas (3 exportar ao todo) antes de desistir",
+    r.destino.lidas === 4 && exportes.length === 3 && r.destino.gravadas === 0,
+    { lidas: r.destino.lidas, exportes: exportes.length },
+  );
+  r.motor.parar();
 }
