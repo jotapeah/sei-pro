@@ -142,4 +142,107 @@ export async function verificarRepositorio(): Promise<void> {
   const p3 = await r3.criarProjeto({ nome: "Hist" });
   for (let i = 0; i < 310; i++) await r3.editarProjeto(p3.id, { nome: `Hist ${i}` });
   checar("historico podado em 300 registros", (await r3.historico()).length === LIMITES.historico);
+
+  secao("projetos: repositorio - dependencia de etapa removida e fase morta");
+  {
+    const { repo: r } = novoRepo();
+    const pr = await r.criarProjeto({ nome: "R" });
+    const a = await r.criarEtapa({ projeto: pr.id, nome: "A", inicio: "2026-10-07", fim: "2026-10-08" });
+    const b = await r.criarEtapa({ projeto: pr.id, nome: "B", inicio: "2026-10-09", fim: "2026-10-10", dependeDe: [a.id] });
+    await r.removerEtapa(a.id);
+    const ren = await r.editarEtapa(b.id, { nome: "B2" }, HOJE);
+    checar("dependente de etapa removida continua editavel e mantem o id", ren.nome === "B2" && ren.dependeDe.join() === a.id);
+    const mantem = await r.editarEtapa(b.id, { dependeDe: [a.id] }, HOJE);
+    checar("id ja salvo (removido) pode ser reenviado", mantem.dependeDe.join() === a.id);
+    const novoRuim = await lanca(() => r.editarEtapa(b.id, { dependeDe: [a.id, "zzz"] }, HOJE));
+    checar(
+      "id novo inexistente continua recusado",
+      mensagens(novoRuim) === "Uma etapa só pode depender de etapas do mesmo projeto.",
+      mensagens(novoRuim),
+    );
+    await r.restaurarEtapa(a.id);
+    const ciclo = await lanca(() => r.editarEtapa(a.id, { dependeDe: [b.id] }, HOJE));
+    checar(
+      "restaurada, a dependencia volta a valer (ciclo recusado)",
+      mensagens(ciclo).startsWith("Dependência circular"),
+      mensagens(ciclo),
+    );
+
+    const fa = await r.criarFase(pr.id, "Fase");
+    const c = await r.criarEtapa({ projeto: pr.id, nome: "C", inicio: "2026-10-12", fim: "2026-10-13", fase: fa.id });
+    await r.removerEtapa(c.id);
+    await r.removerFase(fa.id);
+    const volta = await r.restaurarEtapa(c.id);
+    checar("restaurar etapa com fase morta limpa a fase", volta !== undefined && !("fase" in volta));
+    const edC = await r.editarEtapa(c.id, { nome: "C2" }, HOJE);
+    checar("etapa que apontava para fase morta e editavel", edC.nome === "C2" && edC.fase === undefined);
+    const faseMorta = await lanca(() => r.editarEtapa(c.id, { fase: fa.id }, HOJE));
+    checar("escolher fase morta continua recusado", mensagens(faseMorta) === "A fase escolhida não existe mais.");
+
+    const d1 = await r.criarEtapa({ projeto: pr.id, nome: "D", inicio: "2026-10-14", fim: "2026-10-15" });
+    await r.removerEtapa(d1.id);
+    await r.removerProjeto(pr.id);
+    const semProjeto = await lanca(() => r.restaurarEtapa(d1.id));
+    checar("restaurar etapa de projeto removido e recusado", mensagens(semProjeto) === "O projeto não existe mais.", mensagens(semProjeto));
+    await r.etapas.gravar(d1.id, { ...d1, removidoEm: undefined });
+    const vivos = await r.dados();
+    checar("dados omite etapas e fases de projeto removido", !vivos.projetos.length && !vivos.etapas.length && !vivos.fases.length);
+  }
+
+  secao("projetos: repositorio - uma gravacao e um aviso por operacao");
+  {
+    const memoria = areaMemoria();
+    let gravacoes = 0;
+    const area = {
+      ...memoria,
+      gravar: async (i: Record<string, unknown>) => {
+        gravacoes++;
+        return memoria.gravar(i);
+      },
+    };
+    const { repo: r } = novoRepo(undefined, area);
+    let avisos = 0;
+    r.aoMudar(() => avisos++);
+    const operacao = async (nome: string, f: () => Promise<unknown>) => {
+      gravacoes = 0;
+      avisos = 0;
+      await f();
+      checar(`${nome}: 1 gravacao e 1 aviso`, gravacoes === 1 && avisos === 1, `${gravacoes} gravacoes, ${avisos} avisos`);
+    };
+    let pj = await r.criarProjeto({ nome: "Atomico" });
+    await operacao("criarProjeto", async () => {
+      pj = await r.criarProjeto({ nome: "Outro" });
+    });
+    const fz = await r.criarFase(pj.id, "F");
+    const ea = await r.criarEtapa({ projeto: pj.id, nome: "A", inicio: "2026-10-07", fim: "2026-10-08", fase: fz.id });
+    await r.criarEtapa({ projeto: pj.id, nome: "B", inicio: "2026-10-09", fim: "2026-10-10", dependeDe: [ea.id] });
+    await operacao("editarEtapa com historico", () => r.editarEtapa(ea.id, { nome: "A2", progresso: 10, medida: "manual" }, HOJE));
+    await operacao("removerProjeto", () => r.removerProjeto(pj.id));
+    await operacao("restaurarProjeto", () => r.restaurarProjeto(pj.id));
+    await operacao("duplicarProjeto", () => r.duplicarProjeto(pj.id));
+    await operacao("removerFase", () => r.removerFase(fz.id));
+    await operacao("redefinirPlanoOriginal", async () => {
+      await r.editarEtapa(ea.id, { inicio: "2026-10-01", fim: "2026-10-14" }, "2026-10-07");
+      gravacoes = 0;
+      avisos = 0;
+      await r.editarEtapa(ea.id, { fim: "2026-10-21" }, "2026-10-07");
+      gravacoes = 0;
+      avisos = 0;
+      await r.redefinirPlanoOriginal(pj.id);
+    });
+  }
+
+  secao("projetos: repositorio - undefined so apaga campo opcional");
+  {
+    const { repo: r } = novoRepo();
+    const pr = await r.criarProjeto({ nome: "U", etiquetas: ["x"] });
+    const e = await r.criarEtapa({ projeto: pr.id, nome: "E", inicio: "2026-10-07", fim: "2026-10-08", medida: "checklist" });
+    const e2 = await r.editarEtapa(e.id, { medida: undefined, nome: undefined, dependeDe: undefined, etiquetas: undefined } as never, HOJE);
+    checar(
+      "etapa: undefined em campo obrigatorio e ignorado",
+      e2.medida === "checklist" && e2.nome === "E" && Array.isArray(e2.dependeDe) && Array.isArray(e2.etiquetas),
+    );
+    const p2 = await r.editarProjeto(pr.id, { nome: undefined, etiquetas: undefined } as never);
+    checar("projeto: undefined em campo obrigatorio e ignorado", p2.nome === "U" && p2.etiquetas.join() === "x");
+  }
 }

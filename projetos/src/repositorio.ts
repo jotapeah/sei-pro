@@ -41,7 +41,6 @@ import type {
   Carimbo,
   DataISO,
   DocumentoSei,
-  Entidade,
   Entidades,
   Escopo,
   Etapa,
@@ -61,26 +60,27 @@ export interface Dados {
   modelos: Modelo[];
 }
 
-export type MudancasProjeto = Partial<Pick<Projeto, "nome" | "processo" | "etiquetas">>;
-export type MudancasEtapa = Partial<
-  Pick<
-    Etapa,
-    | "nome"
-    | "inicio"
-    | "fim"
-    | "marco"
-    | "fase"
-    | "dependeDe"
-    | "responsavel"
-    | "medida"
-    | "progresso"
-    | "checklist"
-    | "processo"
-    | "documento"
-    | "etiquetas"
-    | "observacoes"
-  >
+/** Só campo opcional aceita `undefined` (apaga); nos obrigatórios ele é ignorado. */
+type Mudanca<T, Obrigatorios extends keyof T, Opcionais extends keyof T> = {
+  [K in Obrigatorios]?: Exclude<T[K], undefined>;
+} & { [K in Opcionais]?: T[K] };
+
+export type MudancasProjeto = Mudanca<Projeto, "nome" | "etiquetas", "processo">;
+export type MudancasEtapa = Mudanca<
+  Etapa,
+  "nome" | "inicio" | "fim" | "marco" | "dependeDe" | "medida" | "progresso" | "checklist" | "etiquetas",
+  "fase" | "responsavel" | "processo" | "documento" | "observacoes"
 >;
+
+const OBRIGATORIOS_PROJETO = ["nome", "etiquetas"] as const;
+const OBRIGATORIOS_ETAPA = ["nome", "inicio", "fim", "marco", "dependeDe", "medida", "progresso", "checklist", "etiquetas"] as const;
+
+/** Cópia sem as chaves obrigatórias que vieram `undefined` (o contrato "undefined apaga" é só dos opcionais). */
+function semObrigatoriosVazios<T extends object>(m: T, obrigatorios: readonly string[]): T {
+  const r = { ...m } as Record<string, unknown>;
+  for (const k of obrigatorios) if (r[k] === undefined) delete r[k];
+  return r as T;
+}
 
 // Chave inválida (dado antigo ou editado à mão) não entra na conta: senão nada novo grava.
 const maiorOrdem = (itens: ReadonlyArray<{ ordem: string }>): string | null =>
@@ -125,10 +125,12 @@ export class RepositorioProjetos {
   /** O que está vivo: projetos, fases e etapas na ordem manual; modelos pelo nome. */
   async dados(): Promise<Dados> {
     const t = await this.entidades();
+    const projetos = t.p.filter(vivo).sort(porOrdem);
+    const ativos = new Set(projetos.map((p) => p.id));
     return {
-      projetos: t.p.filter(vivo).sort(porOrdem),
-      fases: t.f.filter(vivo).sort(porOrdem),
-      etapas: t.e.filter(vivo).sort(porOrdem),
+      projetos,
+      fases: t.f.filter((f) => vivo(f) && ativos.has(f.projeto)).sort(porOrdem),
+      etapas: t.e.filter((e) => vivo(e) && ativos.has(e.projeto)).sort(porOrdem),
       modelos: t.m.filter(vivo).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
     };
   }
@@ -142,10 +144,26 @@ export class RepositorioProjetos {
       .sort((a, b) => b.quando - a.quando || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
   }
 
-  private async anotar(novos: RegistroNovo[], c: Carimbo): Promise<void> {
-    if (!novos.length) return;
+  private entradas<T>(col: Colecao<T>, itens: Array<[string, T]>): Record<string, unknown> {
+    return Object.fromEntries(itens.map(([id, v]) => [col.chave(id), v]));
+  }
+
+  /**
+   * Grava de uma vez as entidades e os registros do histórico (um `area.gravar` só: o
+   * `chrome.storage.local.set` é atômico, então nenhum ouvinte nem unload vê meio estado e
+   * `aoMudar` avisa uma vez). A poda de excedentes (`Area` só remove em outra chamada) vem depois,
+   * e só quando passa do limite.
+   */
+  private async salvar(itens: Record<string, unknown>, novos: RegistroNovo[], c: Carimbo): Promise<void> {
     const regs = carimbarRegistros(novos, c, this.gerarId);
-    await this.registros.gravarVarios(regs.map((r) => [r.id, r]));
+    await this.area.gravar({
+      ...itens,
+      ...this.entradas(
+        this.registros,
+        regs.map((r) => [r.id, r]),
+      ),
+    });
+    if (!regs.length) return;
     const sobra = excedentes(await this.registros.listar(), LIMITES.historico);
     await this.registros.apagar(sobra);
   }
@@ -184,22 +202,20 @@ export class RepositorioProjetos {
     const p = novoProjeto(d, this.gerarId(), indiceEntre(maiorOrdem(await this.projetos.listar()), null), c);
     const problemas = problemasDoProjeto(p);
     if (problemas.length) throw new ErroValidacao(problemas);
-    await this.projetos.gravar(p.id, p);
-    await this.anotar(registrosDeProjeto(undefined, p), c);
+    await this.salvar(this.entradas(this.projetos, [[p.id, p]]), registrosDeProjeto(undefined, p), c);
     return p;
   }
 
   async editarProjeto(id: string, m: MudancasProjeto): Promise<Projeto> {
     const atual = await this.exigirProjeto(id);
-    const mud: MudancasProjeto = { ...m };
+    const mud: MudancasProjeto = semObrigatoriosVazios(m, OBRIGATORIOS_PROJETO);
     if (typeof mud.nome === "string") mud.nome = nomeLimpo(mud.nome);
     if (mud.etiquetas) mud.etiquetas = etiquetasLimpas(mud.etiquetas);
     const problemas = problemasDoProjeto({ ...atual, ...mud });
     if (problemas.length) throw new ErroValidacao(problemas);
     const c = this.carimbo();
     const p = editar(atual, mud, c);
-    await this.projetos.gravar(id, p);
-    await this.anotar(registrosDeProjeto(atual, p), c);
+    await this.salvar(this.entradas(this.projetos, [[id, p]]), registrosDeProjeto(atual, p), c);
     return p;
   }
 
@@ -208,8 +224,7 @@ export class RepositorioProjetos {
     if (atual.arquivadoEm !== undefined) return atual;
     const c = this.carimbo();
     const p = editar(atual, { arquivadoEm: c.agora }, c);
-    await this.projetos.gravar(id, p);
-    await this.anotar(registrosDeProjeto(atual, p), c);
+    await this.salvar(this.entradas(this.projetos, [[id, p]]), registrosDeProjeto(atual, p), c);
     return p;
   }
 
@@ -219,8 +234,7 @@ export class RepositorioProjetos {
     await this.exigirVagaDeProjeto();
     const c = this.carimbo();
     const p = editar(atual, { arquivadoEm: undefined }, c);
-    await this.projetos.gravar(id, p);
-    await this.anotar(registrosDeProjeto(atual, p), c);
+    await this.salvar(this.entradas(this.projetos, [[id, p]]), registrosDeProjeto(atual, p), c);
     return p;
   }
 
@@ -229,11 +243,22 @@ export class RepositorioProjetos {
     const atual = await this.exigirProjeto(id);
     const c = this.carimbo();
     const [fases, etapas] = await Promise.all([this.fases.listar(), this.etapas.listar()]);
-    await this.fases.gravarVarios(fases.filter((f) => vivo(f) && f.projeto === id).map((f) => [f.id, remover(f, c)]));
-    await this.etapas.gravarVarios(etapas.filter((e) => vivo(e) && e.projeto === id).map((e) => [e.id, remover(e, c)]));
     const p = remover(atual, c);
-    await this.projetos.gravar(id, p);
-    await this.anotar(registrosDeProjeto(atual, p), c);
+    await this.salvar(
+      {
+        ...this.entradas(
+          this.fases,
+          fases.filter((f) => vivo(f) && f.projeto === id).map((f) => [f.id, remover(f, c)]),
+        ),
+        ...this.entradas(
+          this.etapas,
+          etapas.filter((e) => vivo(e) && e.projeto === id).map((e) => [e.id, remover(e, c)]),
+        ),
+        ...this.entradas(this.projetos, [[id, p]]),
+      },
+      registrosDeProjeto(atual, p),
+      c,
+    );
   }
 
   /** Desfaz `removerProjeto`: volta o projeto e o que foi removido junto com ele. */
@@ -243,11 +268,22 @@ export class RepositorioProjetos {
     const quando = atual.removidoEm;
     const c = this.carimbo();
     const [fases, etapas] = await Promise.all([this.fases.listar(), this.etapas.listar()]);
-    await this.fases.gravarVarios(fases.filter((f) => f.projeto === id && f.removidoEm === quando).map((f) => [f.id, restaurar(f, c)]));
-    await this.etapas.gravarVarios(etapas.filter((e) => e.projeto === id && e.removidoEm === quando).map((e) => [e.id, restaurar(e, c)]));
     const p = restaurar(atual, c);
-    await this.projetos.gravar(id, p);
-    await this.anotar(registrosDeProjeto(atual, p), c);
+    await this.salvar(
+      {
+        ...this.entradas(
+          this.fases,
+          fases.filter((f) => f.projeto === id && f.removidoEm === quando).map((f) => [f.id, restaurar(f, c)]),
+        ),
+        ...this.entradas(
+          this.etapas,
+          etapas.filter((e) => e.projeto === id && e.removidoEm === quando).map((e) => [e.id, restaurar(e, c)]),
+        ),
+        ...this.entradas(this.projetos, [[id, p]]),
+      },
+      registrosDeProjeto(atual, p),
+      c,
+    );
     return p;
   }
 
@@ -293,10 +329,21 @@ export class RepositorioProjetos {
         c,
       ),
     );
-    await this.projetos.gravar(p.id, p);
-    await this.fases.gravarVarios([...novasFases.values()].map((f) => [f.id, f]));
-    await this.etapas.gravarVarios(novas.map((e) => [e.id, e]));
-    await this.anotar(registrosDeProjeto(undefined, p), c);
+    await this.salvar(
+      {
+        ...this.entradas(this.projetos, [[p.id, p]]),
+        ...this.entradas(
+          this.fases,
+          [...novasFases.values()].map((f) => [f.id, f]),
+        ),
+        ...this.entradas(
+          this.etapas,
+          novas.map((e) => [e.id, e]),
+        ),
+      },
+      registrosDeProjeto(undefined, p),
+      c,
+    );
     return p;
   }
 
@@ -313,8 +360,7 @@ export class RepositorioProjetos {
     if (igual) return igual;
     const c = this.carimbo();
     const f = novaFase(projeto, limpo, this.gerarId(), indiceEntre(maiorOrdem(todas.filter((x) => x.projeto === projeto)), null), c);
-    await this.fases.gravar(f.id, f);
-    await this.anotar(registrosDeFase(undefined, f), c);
+    await this.salvar(this.entradas(this.fases, [[f.id, f]]), registrosDeFase(undefined, f), c);
     return f;
   }
 
@@ -325,8 +371,7 @@ export class RepositorioProjetos {
     if (!limpo) throw new ErroValidacao(["Informe o nome da fase."]);
     const c = this.carimbo();
     const f = editar(atual, { nome: limpo.slice(0, LIMITES.nome) }, c);
-    await this.fases.gravar(id, f);
-    await this.anotar(registrosDeFase(atual, f), c);
+    await this.salvar(this.entradas(this.fases, [[id, f]]), registrosDeFase(atual, f), c);
     return f;
   }
 
@@ -336,10 +381,18 @@ export class RepositorioProjetos {
     if (!vivo(atual)) return;
     const c = this.carimbo();
     const afetadas = (await this.etapas.listar()).filter((e) => vivo(e) && e.fase === id);
-    await this.etapas.gravarVarios(afetadas.map((e) => [e.id, editar(e, { fase: undefined }, c)]));
     const f = remover(atual, c);
-    await this.fases.gravar(id, f);
-    await this.anotar(registrosDeFase(atual, f), c);
+    await this.salvar(
+      {
+        ...this.entradas(
+          this.etapas,
+          afetadas.map((e) => [e.id, editar(e, { fase: undefined }, c)]),
+        ),
+        ...this.entradas(this.fases, [[id, f]]),
+      },
+      registrosDeFase(atual, f),
+      c,
+    );
   }
 
   // ---------- etapas ----------
@@ -353,11 +406,18 @@ export class RepositorioProjetos {
     return (await this.etapas.listar()).filter((e) => vivo(e) && e.projeto === projeto);
   }
 
-  private async conferirEtapa(e: Etapa, doProjeto: Etapa[]): Promise<void> {
+  /**
+   * `antigos`: dependências já salvas. As que apontam para etapa removida ficam (voltam a valer se ela
+   * for restaurada) e não são validadas; só id novo precisa estar vivo. A fase só é conferida
+   * quando está sendo escolhida agora (`conferirFase`): fase morta já salva conta como "sem fase".
+   */
+  private async conferirEtapa(e: Etapa, doProjeto: Etapa[], antigos: readonly string[] = [], conferirFase = true): Promise<void> {
+    const vivas = new Set(doProjeto.map((x) => x.id));
+    const alvo = { ...e, dependeDe: e.dependeDe.filter((d) => vivas.has(d) || !antigos.includes(d)) };
     const problemas = problemasDaEtapa(e);
-    const dep = validarDependencias(e, doProjeto);
+    const dep = validarDependencias(alvo, doProjeto);
     if (dep) problemas.push(dep);
-    if (e.fase) {
+    if (e.fase && conferirFase) {
       const f = await this.fases.obter(e.fase);
       if (!vivo(f) || f.projeto !== e.projeto) problemas.push("A fase escolhida não existe mais.");
     }
@@ -372,15 +432,14 @@ export class RepositorioProjetos {
     const c = this.carimbo();
     const e = novaEtapa(d, this.gerarId(), indiceEntre(maiorOrdem(doProjeto), null), c);
     await this.conferirEtapa(e, doProjeto);
-    await this.etapas.gravar(e.id, e);
-    await this.anotar(registrosDeEtapa(undefined, e), c);
+    await this.salvar(this.entradas(this.etapas, [[e.id, e]]), registrosDeEtapa(undefined, e), c);
     return e;
   }
 
   async editarEtapa(id: string, m: MudancasEtapa, hoje: DataISO): Promise<Etapa> {
     const atual = await this.obterEtapa(id);
     if (!atual) throw new ErroValidacao(["A etapa não existe mais."]);
-    const mud: MudancasEtapa = { ...m };
+    const mud: MudancasEtapa = semObrigatoriosVazios(m, OBRIGATORIOS_ETAPA);
     if (typeof mud.nome === "string") mud.nome = nomeLimpo(mud.nome);
     if (mud.etiquetas) mud.etiquetas = etiquetasLimpas(mud.etiquetas);
     if (mud.checklist) mud.checklist = checklistLimpo(mud.checklist);
@@ -393,11 +452,10 @@ export class RepositorioProjetos {
     const datas = inicio !== atual.inicio || fim !== atual.fim ? aplicarDatas(atual, inicio, fim, hoje) : { inicio, fim, base: atual.base };
     const final: MudancasEtapa & Pick<Etapa, "base"> = { ...mud, ...datas, marco };
     const doProjeto = await this.etapasDoProjeto(atual.projeto);
-    await this.conferirEtapa(semVazios({ ...atual, ...final }), doProjeto);
+    await this.conferirEtapa(semVazios({ ...atual, ...final }), doProjeto, atual.dependeDe, mud.fase !== undefined);
     const c = this.carimbo();
     const e = editar(atual, final, c);
-    await this.etapas.gravar(id, e);
-    await this.anotar(registrosDeEtapa(atual, e, await this.apoio(atual.projeto)), c);
+    await this.salvar(this.entradas(this.etapas, [[id, e]]), registrosDeEtapa(atual, e, await this.apoio(atual.projeto)), c);
     return e;
   }
 
@@ -421,9 +479,15 @@ export class RepositorioProjetos {
     if (problemas.length) throw new ErroValidacao(problemas);
     const c = this.carimbo();
     const gravadas = [...novas.values()].map((e) => editar(porId.get(e.id)!, { inicio: e.inicio, fim: e.fim, base: e.base }, c));
-    await this.etapas.gravarVarios(gravadas.map((e) => [e.id, e]));
     const registros = gravadas.flatMap((e) => registrosDeEtapa(porId.get(e.id), e));
-    await this.anotar(registros, c);
+    await this.salvar(
+      this.entradas(
+        this.etapas,
+        gravadas.map((e) => [e.id, e]),
+      ),
+      registros,
+      c,
+    );
     return gravadas;
   }
 
@@ -432,8 +496,7 @@ export class RepositorioProjetos {
     if (!atual) throw new ErroValidacao(["A etapa não existe mais."]);
     const c = this.carimbo();
     const e = concluir(atual, hoje, c, documento);
-    await this.etapas.gravar(id, e);
-    await this.anotar(registrosDeEtapa(atual, e), c);
+    await this.salvar(this.entradas(this.etapas, [[id, e]]), registrosDeEtapa(atual, e), c);
     return e;
   }
 
@@ -442,8 +505,7 @@ export class RepositorioProjetos {
     if (!atual) throw new ErroValidacao(["A etapa não existe mais."]);
     const c = this.carimbo();
     const e = reabrir(atual, c);
-    await this.etapas.gravar(id, e);
-    await this.anotar(registrosDeEtapa(atual, e), c);
+    await this.salvar(this.entradas(this.etapas, [[id, e]]), registrosDeEtapa(atual, e), c);
     return e;
   }
 
@@ -452,17 +514,18 @@ export class RepositorioProjetos {
     if (!atual) return;
     const c = this.carimbo();
     const e = remover(atual, c);
-    await this.etapas.gravar(id, e);
-    await this.anotar(registrosDeEtapa(atual, e), c);
+    await this.salvar(this.entradas(this.etapas, [[id, e]]), registrosDeEtapa(atual, e), c);
   }
 
   async restaurarEtapa(id: string): Promise<Etapa | undefined> {
     const atual = await this.etapas.obter(id);
     if (!atual || atual.removidoEm === undefined) return atual;
+    if (!(await this.obterProjeto(atual.projeto))) throw new ErroValidacao(["O projeto não existe mais."]);
+    const fase = atual.fase ? await this.fases.obter(atual.fase) : undefined;
+    const faseViva = vivo(fase) && fase.projeto === atual.projeto;
     const c = this.carimbo();
-    const e = restaurar(atual, c);
-    await this.etapas.gravar(id, e);
-    await this.anotar(registrosDeEtapa(atual, e), c);
+    const e = restaurar(faseViva ? atual : { ...atual, fase: undefined }, c);
+    await this.salvar(this.entradas(this.etapas, [[id, e]]), registrosDeEtapa(atual, e), c);
     return e;
   }
 
@@ -472,20 +535,21 @@ export class RepositorioProjetos {
     if (!alvos.length) return 0;
     const c = this.carimbo();
     const gravadas = alvos.map((e) => editar(e, { base: e.base ? redefinirBase(e) : baseInicial(e.inicio, e.fim) }, c));
-    await this.etapas.gravarVarios(gravadas.map((e) => [e.id, e]));
-    await this.anotar(
+    await this.salvar(
+      this.entradas(
+        this.etapas,
+        gravadas.map((e) => [e.id, e]),
+      ),
       gravadas.flatMap((e, i) => registrosDeEtapa(alvos[i], e)),
       c,
     );
     return gravadas.length;
   }
 
+  /** Um aviso por gravação no escopo (ouve a base, não cada coleção). */
   aoMudar(cb: () => void): () => void {
-    const parar = [this.projetos, this.fases, this.etapas, this.registros, this.modelos].map((col) =>
-      (col as Colecao<Entidade>).aoMudar(cb),
-    );
-    return () => {
-      for (const p of parar) p();
-    };
+    return this.area.aoMudar((m) => {
+      if (Object.keys(m).some((k) => k.startsWith(this.base))) cb();
+    });
   }
 }
