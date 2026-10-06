@@ -3,6 +3,7 @@ import { resumo } from "./util";
 import { verificarCalendario } from "./verificar-calendario";
 import { verificarDependencias } from "./verificar-dependencias";
 import { verificarEscopo } from "./verificar-escopo";
+import { verificarFiltro } from "./verificar-filtro";
 import { verificarOperacoes } from "./verificar-operacoes";
 import { verificarSituacao } from "./verificar-situacao";
 
@@ -11,4 +12,5 @@ verificarCalendario();
 verificarSituacao();
 verificarDependencias();
 verificarOperacoes();
+verificarFiltro();
 resumo();

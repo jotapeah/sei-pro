@@ -10,6 +10,7 @@ export * from "./modelo/calendario";
 export * from "./modelo/constantes";
 export * from "./modelo/dependencias";
 export * from "./modelo/escopo";
+export * from "./modelo/filtro";
 export * from "./modelo/historico";
 export * from "./modelo/linhaDeBase";
 export * from "./modelo/operacoes";
