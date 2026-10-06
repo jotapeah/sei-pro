@@ -19,4 +19,5 @@ export * from "./modelo/resumo";
 export * from "./modelo/situacao";
 export type * from "./modelo/tipos";
 export * from "./modelo/validacao";
+export * from "./modelo/vinculos";
 export * from "./repositorio";

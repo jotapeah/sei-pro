@@ -9,8 +9,10 @@ import type { Area } from "@comum/armazenamento/area";
 import { Colecao, obterPorPrefixo } from "@comum/armazenamento/colecao";
 import { novoId } from "@comum/id";
 import { indiceEntre, indiceValido } from "@comum/ordem/indice";
+import { mesclar, purgarLapides, type Versionada } from "@comum/sincronia/entidade";
 import { normalizarTexto } from "@comum/texto";
-import { LIMITES } from "./modelo/constantes";
+import { dataValida } from "./modelo/calendario";
+import { DIAS_LAPIDE_EU, DIAS_LAPIDE_UNIDADE, LIMITES } from "./modelo/constantes";
 import { validarDependencias, violacoesDeDatas } from "./modelo/dependencias";
 import { baseDoEscopo, chaveMeta, prefixoDe, rotuloDaVis } from "./modelo/escopo";
 import {
@@ -41,7 +43,9 @@ import type {
   Carimbo,
   DataISO,
   DocumentoSei,
+  Entidade,
   Entidades,
+  EnvelopeProjetos,
   Escopo,
   Etapa,
   Fase,
@@ -49,8 +53,10 @@ import type {
   MudancaDeDatas,
   Projeto,
   Registro,
+  Vinculo,
 } from "./modelo/tipos";
 import { checklistLimpo, ErroValidacao, etiquetasLimpas, nomeLimpo, problemasDaEtapa, problemasDoProjeto } from "./modelo/validacao";
+import { indiceDeProcessos, type VinculoProcesso } from "./modelo/vinculos";
 
 /** O que está vivo no escopo (sem lápides), numa leitura só. */
 export interface Dados {
@@ -133,6 +139,16 @@ export class RepositorioProjetos {
       etapas: t.e.filter((e) => vivo(e) && ativos.has(e.projeto)).sort(porOrdem),
       modelos: t.m.filter(vivo).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
     };
+  }
+
+  /** Carimbo para gravações feitas fora da classe (mover entre escopos). */
+  carimboAtual(): Carimbo {
+    return this.carimbo();
+  }
+
+  /** Registro "visibilidade" (mover entre "Só eu" e "Toda a unidade"). */
+  async anotarVisibilidade(p: Projeto, antes: string, depois: string, c: Carimbo): Promise<void> {
+    await this.salvar({}, [{ alvo: p.id, projeto: p.id, campo: "visibilidade", antes, depois }], c);
   }
 
   // ---------- histórico ----------
@@ -546,10 +562,226 @@ export class RepositorioProjetos {
     return gravadas.length;
   }
 
+  // ---------- sincronia, arquivo, limpeza ----------
+
+  /** Envelope do escopo com TUDO (lápides inclusive). A privacidade dos sigilosos é do adaptador da sincronia (P4). */
+  async exportar(agora: number = Date.now()): Promise<EnvelopeProjetos> {
+    const env: EnvelopeProjetos = {
+      formato: "seipro-projetos",
+      versao: 1,
+      host: this.escopo.host,
+      unidade: this.escopo.unidade,
+      vis: this.escopo.vis,
+      gerado: agora,
+      entidades: await this.entidades(),
+    };
+    if (this.escopo.vis === "eu") env.login = this.escopo.login.trim().toLowerCase();
+    return env;
+  }
+
+  /**
+   * Mescla entidades vindas de fora (Texto Padrão, arquivo, outro escopo): por
+   * entidade vence a gravação mais recente (`mesclar` do sei-comum). Item
+   * malformado é ignorado. Vínculo sigiloso que chega vazio (sem número) mantém
+   * o número que este computador já tinha. Tudo vai num `area.gravar` só (um aviso
+   * em `aoMudar`); `anotacoes` (registros do histórico a criar junto, com o carimbo)
+   * entram nessa mesma gravação.
+   */
+  async importar(
+    ent: Partial<Entidades>,
+    anotacoes?: { registros: RegistroNovo[]; carimbo: Carimbo },
+  ): Promise<{ novos: number; atualizados: number; ignorados: number }> {
+    const soma = { novos: 0, atualizados: 0, ignorados: 0 };
+    let itens: Record<string, unknown> = {};
+    const mesclarCol = async <T extends Versionada>(
+      col: Colecao<T>,
+      lista: readonly unknown[] | undefined,
+      tipo: keyof Entidades,
+      combinar?: (vencedor: T, local: T | undefined) => T,
+    ) => {
+      const r = await this.mesclarEm(col, lista ?? [], tipo, combinar);
+      soma.novos += r.novos;
+      soma.atualizados += r.atualizados;
+      soma.ignorados += r.ignorados;
+      itens = { ...itens, ...this.entradas(col, r.gravar) };
+    };
+    await mesclarCol(this.projetos, ent.p, "p", manterNumeroSigiloso);
+    await mesclarCol(this.fases, ent.f, "f");
+    await mesclarCol(this.etapas, ent.e, "e", manterNumeroSigiloso);
+    await mesclarCol(this.registros, ent.h, "h");
+    await mesclarCol(this.modelos, ent.m, "m");
+    if (anotacoes) await this.salvar(itens, anotacoes.registros, anotacoes.carimbo);
+    else if (Object.keys(itens).length) await this.area.gravar(itens);
+    return soma;
+  }
+
+  private async mesclarEm<T extends Versionada>(
+    col: Colecao<T>,
+    itens: readonly unknown[],
+    tipo: keyof Entidades,
+    combinar: (vencedor: T, local: T | undefined) => T = (v) => v,
+  ): Promise<{ gravar: Array<[string, T]>; novos: number; atualizados: number; ignorados: number }> {
+    const locais = await col.listar();
+    const validos = itens.filter((x) => entidadeValida(x, tipo)) as T[];
+    const porId = new Map(locais.map((i) => [i.id, i]));
+    const gravar: Array<[string, T]> = [];
+    let novos = 0;
+    let atualizados = 0;
+    // `mesclar` devolve o próprio objeto vencedor: se é o local, nada a gravar.
+    for (const vencedor of mesclar(locais, validos)) {
+      const atual = porId.get(vencedor.id);
+      if (vencedor === atual) continue;
+      gravar.push([vencedor.id, combinar(vencedor, atual)]);
+      if (atual) atualizados += 1;
+      else novos += 1;
+    }
+    return { gravar, novos, atualizados, ignorados: itens.length - validos.length };
+  }
+
+  /**
+   * Lápide, numa gravação só, no projeto, nas fases, nas etapas e nos registros que
+   * foram para outro escopo (mover entre escopos), com o carimbo `c`.
+   */
+  async lapidarMovidos(d: { p: Projeto; f: Fase[]; e: Etapa[]; h: Registro[] }, c: Carimbo): Promise<void> {
+    await this.area.gravar({
+      ...this.entradas(
+        this.etapas,
+        d.e.map((e) => [e.id, remover(e, c)]),
+      ),
+      ...this.entradas(
+        this.fases,
+        d.f.map((f) => [f.id, remover(f, c)]),
+      ),
+      ...this.entradas(
+        this.registros,
+        d.h.map((r) => [r.id, remover(r, c)]),
+      ),
+      ...this.entradas(this.projetos, [[d.p.id, remover(d.p, c)]]),
+    });
+  }
+
+  /**
+   * Apaga de vez as lápides velhas (180 dias na unidade, 90 no "só eu": um
+   * usuário eventual da unidade não pode ressuscitar exclusões) e poda o
+   * histórico em 300 registros. Devolve quantas chaves saíram. `Area` não tem
+   * "gravar e remover" juntos: é uma única `remover` com todas as chaves.
+   */
+  async limpar(agora: number = Date.now()): Promise<number> {
+    const dias = this.escopo.vis === "unidade" ? DIAS_LAPIDE_UNIDADE : DIAS_LAPIDE_EU;
+    const chaves: string[] = [];
+    const cols = [this.projetos, this.fases, this.etapas, this.modelos] as Array<Colecao<Versionada>>;
+    for (const col of cols) {
+      const todos = await col.listar();
+      const manter = new Set(purgarLapides(todos, agora, dias).map((i) => i.id));
+      for (const i of todos) if (!manter.has(i.id)) chaves.push(col.chave(i.id));
+    }
+    const regs = await this.registros.listar();
+    const mantidos = purgarLapides(regs, agora, dias);
+    const ficam = new Set(mantidos.map((i) => i.id));
+    for (const r of regs) if (!ficam.has(r.id)) chaves.push(this.registros.chave(r.id));
+    for (const id of excedentes(mantidos, LIMITES.historico)) chaves.push(this.registros.chave(id));
+    if (chaves.length) await this.area.remover(chaves);
+    return chaves.length;
+  }
+
+  /** Índice protocolo → vínculos deste escopo (para juntar os dois escopos, use `indiceDosEscopos`). */
+  async vinculos(): Promise<Map<string, VinculoProcesso[]>> {
+    const d = await this.dados();
+    return indiceDeProcessos([{ vis: this.escopo.vis, projetos: d.projetos, etapas: d.etapas }]);
+  }
+
   /** Um aviso por gravação no escopo (ouve a base, não cada coleção). */
   aoMudar(cb: () => void): () => void {
     return this.area.aoMudar((m) => {
       if (Object.keys(m).some((k) => k.startsWith(this.base))) cb();
     });
   }
+}
+
+/** Vínculo sigiloso que chegou sem número (Texto Padrão) mantém o número deste computador. */
+export function manterNumeroSigiloso<T extends { processo?: Vinculo }>(vencedor: T, local: T | undefined): T {
+  const v = vencedor.processo;
+  const l = local?.processo;
+  if (!v?.sigiloso || v.protocolo || !l?.sigiloso || !l.protocolo) return vencedor;
+  return { ...vencedor, processo: semVazios({ ...v, protocolo: l.protocolo, idProcedimento: v.idProcedimento ?? l.idProcedimento }) };
+}
+
+const texto = (x: unknown): x is string => typeof x === "string";
+
+/** Forma mínima de cada tipo (arquivo editado à mão ou de versão estranha não entra). */
+export function entidadeValida(x: unknown, tipo: keyof Entidades): boolean {
+  if (!x || typeof x !== "object") return false;
+  const o = x as Record<string, unknown>;
+  if (!texto(o.id) || !o.id || typeof o.atualizadoEm !== "number" || !Number.isFinite(o.atualizadoEm) || !texto(o.dispositivo))
+    return false;
+  if (o.removidoEm !== undefined && typeof o.removidoEm !== "number") return false;
+  switch (tipo) {
+    case "p":
+      return texto(o.nome) && Array.isArray(o.etiquetas) && texto(o.ordem);
+    case "f":
+      return texto(o.projeto) && texto(o.nome) && texto(o.ordem);
+    case "e":
+      return (
+        texto(o.projeto) &&
+        texto(o.nome) &&
+        texto(o.ordem) &&
+        dataValida(o.inicio) &&
+        dataValida(o.fim) &&
+        Array.isArray(o.dependeDe) &&
+        Array.isArray(o.checklist) &&
+        Array.isArray(o.etiquetas)
+      );
+    case "h":
+      return texto(o.alvo) && texto(o.projeto) && typeof o.quando === "number" && texto(o.campo);
+    case "m":
+      return texto(o.nome) && Array.isArray(o.fases) && Array.isArray(o.etapas);
+  }
+}
+
+/** Junta o índice dos escopos da unidade (o painel e a caixa mostram os dois). */
+export async function indiceDosEscopos(repos: readonly RepositorioProjetos[]): Promise<Map<string, VinculoProcesso[]>> {
+  const dados = await Promise.all(repos.map(async (r) => ({ vis: r.escopo.vis, ...(await r.dados()) })));
+  return indiceDeProcessos(dados);
+}
+
+/**
+ * "Quem vê" mudou: leva projeto, fases, etapas e registros para o outro escopo
+ * (mesmos ids, carimbo novo, para vencer na mesclagem) e deixa lápide no de
+ * origem. Registra a mudança de visibilidade no histórico do destino. O destino
+ * recebe tudo numa gravação só (`importar` com a anotação); a origem, noutra
+ * (`lapidarMovidos`): se a segunda falhar, sobra uma cópia, nunca se perde dado.
+ */
+export async function moverEntreEscopos(origem: RepositorioProjetos, destino: RepositorioProjetos, id: string): Promise<Projeto> {
+  const p = await origem.obterProjeto(id);
+  if (!p) throw new ErroValidacao(["O projeto não existe mais."]);
+  if (p.arquivadoEm === undefined) {
+    const ativos = (await destino.dados()).projetos.filter((x) => x.arquivadoEm === undefined);
+    if (ativos.length >= LIMITES.projetosAtivos)
+      throw new ErroValidacao([
+        `Limite de ${LIMITES.projetosAtivos} projetos ativos em “${rotuloDaVis(destino.escopo.vis)}”. Arquive ou exclua algum.`,
+      ]);
+  }
+  const d = await origem.dados();
+  const fases = d.fases.filter((f) => f.projeto === id);
+  const etapas = d.etapas.filter((e) => e.projeto === id);
+  const registros = await origem.historico(id);
+  const cDestino = destino.carimboAtual();
+  const recarimbar = <T extends Entidade>(x: T): T => editar(x, {} as Partial<Omit<T, "id" | "atualizadoEm" | "dispositivo">>, cDestino);
+  await destino.importar(
+    { p: [recarimbar(p)], f: fases.map(recarimbar), e: etapas.map(recarimbar), h: registros.map(recarimbar) },
+    {
+      registros: [
+        {
+          alvo: p.id,
+          projeto: p.id,
+          campo: "visibilidade",
+          antes: rotuloDaVis(origem.escopo.vis),
+          depois: rotuloDaVis(destino.escopo.vis),
+        },
+      ],
+      carimbo: cDestino,
+    },
+  );
+  await origem.lapidarMovidos({ p, f: fases, e: etapas, h: registros }, origem.carimboAtual());
+  return (await destino.obterProjeto(id))!;
 }

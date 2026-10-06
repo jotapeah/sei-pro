@@ -1,0 +1,173 @@
+import { areaMemoria } from "@comum/armazenamento/area";
+import { chaveProtocolo, indiceDeProcessos } from "../src/modelo/vinculos";
+import { entidadeValida, indiceDosEscopos, manterNumeroSigiloso, moverEntreEscopos } from "../src/repositorio";
+import { ESCOPO_EU, ESCOPO_UN, novoRepo } from "./apoioRepositorio";
+import { etapa, HOJE, projeto } from "./fabrica";
+import { checar, secao } from "./util";
+
+const DIA = 86_400_000;
+
+export async function verificarEscopos(): Promise<void> {
+  secao("projetos: exportar e importar envelope");
+  const area = areaMemoria();
+  const navegador = { agora: 1_000 };
+  const { repo: un } = novoRepo(ESCOPO_UN, area, "u", navegador);
+  const { repo: eu } = novoRepo(ESCOPO_EU, area, "e", navegador);
+  const p = await un.criarProjeto({ nome: "Pregão", processo: { protocolo: "50300.004410/2026-02" } });
+  const f = await un.criarFase(p.id, "Planejamento");
+  const e1 = await un.criarEtapa({ projeto: p.id, nome: "ETP", inicio: "2026-10-07", fim: "2026-10-20", fase: f.id });
+  const e2 = await un.criarEtapa({
+    projeto: p.id,
+    nome: "TR",
+    inicio: "2026-10-21",
+    fim: "2026-10-30",
+    processo: { protocolo: "50300.009999/2026-01" },
+  });
+  await un.removerEtapa(e2.id);
+  const env = await un.exportar(5_000);
+  checar(
+    "envelope da unidade sem login",
+    env.formato === "seipro-projetos" && env.versao === 1 && env.vis === "unidade" && env.login === undefined,
+  );
+  checar(
+    "envelope leva lapides",
+    env.entidades.e.some((e) => e.id === e2.id && e.removidoEm !== undefined),
+  );
+  checar("envelope do 'eu' leva o login", (await eu.exportar()).login === "ana");
+  const { repo: outro } = novoRepo(ESCOPO_UN, areaMemoria(), "o");
+  const r1 = await outro.importar(env.entidades);
+  checar(
+    "importar num repositorio vazio",
+    r1.novos === env.entidades.p.length + 1 + 2 + env.entidades.h.length && r1.atualizados === 0,
+    r1,
+  );
+  let avisosImportar = 0;
+  const pararImportar = outro.aoMudar(() => avisosImportar++);
+  await outro.importar({
+    e: [
+      { ...e1, id: "z1" },
+      { ...e1, id: "z2" },
+    ],
+  });
+  pararImportar();
+  checar("importar varias entidades avisa uma vez", avisosImportar === 1, avisosImportar);
+  checar(
+    "importar de novo nao muda nada (idempotente)",
+    (await outro.importar(env.entidades)).novos === 0 && (await outro.importar(env.entidades)).atualizados === 0,
+  );
+  const maisNova = { ...e1, nome: "ETP revisado", atualizadoEm: e1.atualizadoEm + 100 };
+  const maisVelha = { ...e1, nome: "ETP antigo", atualizadoEm: e1.atualizadoEm - 100 };
+  checar(
+    "versao mais nova vence",
+    (await outro.importar({ e: [maisNova] })).atualizados === 1 && (await outro.obterEtapa(e1.id))?.nome === "ETP revisado",
+  );
+  checar(
+    "versao mais velha perde",
+    (await outro.importar({ e: [maisVelha] })).atualizados === 0 && (await outro.obterEtapa(e1.id))?.nome === "ETP revisado",
+  );
+  const lixo = await outro.importar({ e: [{ id: "x" } as never, { ...e1, id: "y", inicio: "2026-02-30" }], p: [null as never] });
+  checar("malformado e data impossivel sao ignorados", lixo.ignorados === 3 && lixo.novos === 0, lixo);
+  checar(
+    "lapide que chega remove",
+    (await outro.dados()).etapas.every((e) => e.id !== e2.id),
+  );
+
+  secao("projetos: sigiloso que chega sem numero");
+  const local = projeto({ id: "s", processo: { protocolo: "50300.000001/2026-11", sigiloso: true, idProcedimento: "77" } });
+  const vazio = projeto({ id: "s", nome: "Novo nome", processo: { protocolo: "", sigiloso: true }, atualizadoEm: 9 });
+  const r = manterNumeroSigiloso(vazio, local);
+  checar(
+    "mantem o numero e o id local",
+    r.processo?.protocolo === "50300.000001/2026-11" && r.processo.idProcedimento === "77" && r.nome === "Novo nome",
+  );
+  checar("sem copia local fica vazio", manterNumeroSigiloso(vazio, undefined).processo?.protocolo === "");
+  checar(
+    "nao sigiloso passa como veio",
+    manterNumeroSigiloso(projeto({ id: "s", processo: { protocolo: "" } }), local).processo?.protocolo === "",
+  );
+  const { repo: rs } = novoRepo(ESCOPO_UN, areaMemoria(), "s");
+  await rs.importar({ p: [local] });
+  await rs.importar({ p: [vazio] });
+  checar("na mesclagem o numero local fica", (await rs.obterProjeto("s"))?.processo?.protocolo === "50300.000001/2026-11");
+  const { repo: ro } = novoRepo(ESCOPO_UN, areaMemoria(), "q");
+  await ro.importar({ p: [projeto({ id: "torto", ordem: "zz!!" })] });
+  checar(
+    "chave de ordem invalida importada nao impede criar",
+    (await ro.criarProjeto({ nome: "Depois do torto" })).nome === "Depois do torto",
+  );
+  checar("entidadeValida aceita etapa completa", entidadeValida(etapa({ id: "a" }), "e"));
+  checar("entidadeValida recusa etapa sem datas", !entidadeValida({ ...etapa({ id: "a" }), fim: undefined }, "e"));
+
+  secao("projetos: limpeza de lapides");
+  const { repo: rl, relogio } = novoRepo(ESCOPO_UN, areaMemoria(), "l");
+  const pl = await rl.criarProjeto({ nome: "Velho" });
+  await rl.removerProjeto(pl.id);
+  const removidoEm = relogio();
+  checar("unidade: lapide de 179 dias fica", (await rl.limpar(removidoEm + 179 * DIA)) === 0);
+  checar("unidade: lapide de 181 dias sai", (await rl.limpar(removidoEm + 181 * DIA)) === 1 && !(await rl.projetos.obter(pl.id)));
+  const { repo: rle, relogio: relogioEu } = novoRepo(ESCOPO_EU, areaMemoria(), "m");
+  const pe = await rle.criarProjeto({ nome: "Meu" });
+  await rle.removerProjeto(pe.id);
+  checar("so eu: lapide de 91 dias sai", (await rle.limpar(relogioEu() + 91 * DIA)) === 1);
+
+  secao("projetos: indice de processos");
+  checar("chaveProtocolo so digitos", chaveProtocolo("50300.004410/2026-02") === "50300004410202602");
+  const pa = projeto({ id: "pa", processo: { protocolo: "50300.004410/2026-02" } });
+  const pb = projeto({ id: "pb", arquivadoEm: 5, processo: { protocolo: "50300.004410/2026-02" } });
+  const ea = etapa({ id: "ea", projeto: "pa" });
+  const eb = etapa({ id: "eb", projeto: "pa", processo: { protocolo: "50300.000777/2026-00" } });
+  const ec = etapa({ id: "ec", projeto: "pc", processo: { protocolo: "50300.000777/2026-00" } });
+  const pc = projeto({ id: "pc" });
+  const idx = indiceDeProcessos([
+    { vis: "unidade", projetos: [pa, pb], etapas: [ea, eb] },
+    { vis: "eu", projetos: [pc], etapas: [ec, { ...etapa({ id: "ed", projeto: "pc", processo: { protocolo: "1" } }), removidoEm: 1 }] },
+  ]);
+  const doProjeto = idx.get("50300004410202602");
+  checar(
+    "processo do projeto: papel projeto com as etapas sem processo proprio",
+    doProjeto?.length === 1 && doProjeto[0]?.papel === "projeto" && doProjeto[0]?.etapas.map((e) => e.id).join() === "ea",
+  );
+  const deEtapa = idx.get("50300000777202600");
+  checar(
+    "processo de etapa nos dois escopos",
+    deEtapa?.map((v) => `${v.vis}:${v.projeto.id}:${v.papel}`).join() === "unidade:pa:etapa,eu:pc:etapa",
+  );
+  checar("arquivado e lapide ficam fora", !idx.has("1") && !doProjeto?.some((v) => v.projeto.id === "pb"));
+  const juntos = await indiceDosEscopos([un, eu]);
+  checar(
+    "indiceDosEscopos junta os repositorios",
+    juntos
+      .get("50300004410202602")?.[0]
+      ?.etapas.map((e) => e.id)
+      .join() === e1.id,
+  );
+
+  secao("projetos: mover entre escopos");
+  let avisos = 0;
+  const parar = eu.aoMudar(() => avisos++);
+  const movido = await moverEntreEscopos(un, eu, p.id);
+  parar();
+  checar("aoMudar avisa as gravacoes", avisos > 0);
+  checar("destino do mover recebe tudo numa gravacao so", avisos === 1, avisos);
+  checar("mesmo id no destino", movido.id === p.id);
+  const de = await eu.dados();
+  checar("fases e etapas vivas foram junto", de.fases.length === 1 && de.etapas.length === 1 && de.etapas[0]?.fase === f.id);
+  checar("origem ficou sem o projeto", !(await un.dados()).projetos.length && !(await un.dados()).etapas.length);
+  const hist = await eu.historico(p.id);
+  checar(
+    "historico foi junto e registra a visibilidade",
+    hist[0]?.campo === "visibilidade" &&
+      hist[0]?.antes === "Toda a unidade" &&
+      hist[0]?.depois === "Só eu" &&
+      hist.some((x) => x.campo === "criacao"),
+  );
+  checar("historico saiu da origem", !(await un.historico(p.id)).length);
+  checar(
+    "mover projeto que nao existe e recusado",
+    await moverEntreEscopos(un, eu, "nada").then(
+      () => false,
+      () => true,
+    ),
+  );
+  checar("datas do mover nao mudam", de.etapas[0]?.inicio === "2026-10-07" && HOJE === "2026-10-06");
+}
