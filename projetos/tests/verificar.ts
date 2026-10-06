@@ -5,6 +5,7 @@ import { verificarDependencias } from "./verificar-dependencias";
 import { verificarEscopo } from "./verificar-escopo";
 import { verificarFiltro } from "./verificar-filtro";
 import { verificarOperacoes } from "./verificar-operacoes";
+import { verificarRepositorio } from "./verificar-repositorio";
 import { verificarSituacao } from "./verificar-situacao";
 
 verificarEscopo();
@@ -13,4 +14,5 @@ verificarSituacao();
 verificarDependencias();
 verificarOperacoes();
 verificarFiltro();
+await verificarRepositorio();
 resumo();
