@@ -4,7 +4,8 @@
  * data, com término antes do início ou com mais de 10 anos.
  */
 
-import { somarDias } from "@comum/datas/dias";
+import { hojeISO, somarDias } from "@comum/datas/dias";
+import { dataValida } from "../modelo/calendario";
 import type { DataISO } from "../modelo/tipos";
 import type { TarefaFrappe } from "../vendor/frappe-gantt/index";
 import type { Linha } from "./linhas";
@@ -31,10 +32,18 @@ export function classesDaLinha(l: Linha): string {
   return l.etapa.marco ? `st-marco st-${l.situacao}` : `st-${l.situacao}`;
 }
 
+/**
+ * Dado de fora malformado: data inexistente vira barra de 1 dia na outra data
+ * da linha; sem nenhuma válida, em hoje (a linha nunca some nem derruba o Gantt).
+ */
 function datasDesenhaveis(inicio: DataISO, fim: DataISO): { start: DataISO; end: DataISO } {
-  const end = fim < inicio ? inicio : fim;
-  const teto = somarDias(inicio, TETO_DIAS);
-  return { start: inicio, end: end > teto ? teto : end };
+  const okInicio = dataValida(inicio);
+  const okFim = dataValida(fim);
+  const ini = okInicio ? inicio : okFim ? fim : hojeISO();
+  const fi = okFim ? fim : ini;
+  const end = fi < ini ? ini : fi;
+  const teto = somarDias(ini, TETO_DIAS);
+  return { start: ini, end: end > teto ? teto : end };
 }
 
 export function tarefasDoGantt(linhas: readonly Linha[]): TarefaFrappe[] {

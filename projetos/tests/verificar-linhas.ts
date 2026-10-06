@@ -101,4 +101,33 @@ export function verificarLinhas(): void {
   );
   checar("termino antes do inicio vira 1 dia (a Frappe descartaria)", torta.find((x) => x.id === "t")?.end === "2026-10-09");
   checar("mais de 10 anos e cortado no desenho", (torta.find((x) => x.id === "l")?.end ?? "") < "2036-01-01");
+
+  const malformadas = linhasDoProjeto(
+    {
+      projeto: "p1",
+      fases: [],
+      etapas: [
+        etapa({ id: "a", inicio: "x", fim: "2026-10-09" }),
+        etapa({ id: "b", inicio: "2026-10-01", fim: "2026-02-30" }),
+        etapa({ id: "c", inicio: "x", fim: "y" }),
+      ],
+    },
+    base,
+  );
+  let tm: ReturnType<typeof tarefasDoGantt> = [];
+  let lancou = false;
+  try {
+    tm = tarefasDoGantt(malformadas);
+  } catch {
+    lancou = true;
+  }
+  const valida = (x: string | undefined) => /^\d{4}-\d{2}-\d{2}$/.test(x ?? "");
+  checar("data malformada nao derruba o Gantt e mantem 1 tarefa por linha", !lancou && tm.length === malformadas.length && tm.length === 3);
+  checar(
+    "inicio invalido usa o fim; fim invalido usa o inicio; ambos invalidos usam hoje",
+    tm.find((x) => x.id === "a")?.start === "2026-10-09" &&
+      tm.find((x) => x.id === "b")?.end === "2026-10-01" &&
+      valida(tm.find((x) => x.id === "c")?.start) &&
+      tm.every((x) => valida(x.start) && valida(x.end) && x.end >= x.start),
+  );
 }
