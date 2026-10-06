@@ -2,7 +2,7 @@
  * Monta a Frappe Gantt (ajustada) numa área e devolve um controlador. O app
  * (P3) só fala com este módulo: escala, linhas, rolar para hoje, realce,
  * clique e mudança de datas. Arraste: a Frappe avisa `on_date_change` a cada
- * passo do mouse; aqui só se marca "pendente" e, ao soltar o botão, as datas
+ * passo do mouse (truncado, perde 1 dia em Semana); aqui o botão pressionado sobre uma barra arma o arraste e, ao soltar o botão, as datas
  * de TODAS as barras de etapa são relidas da posição (em dias inteiros) e
  * comparadas com as linhas. Recusa (`validar`) redesenha como estava.
  */
@@ -43,8 +43,11 @@ export interface OpcoesGantt {
   validar?: (mudancas: MudancaDeDatas[]) => string | null;
   aoMudarDatas?: (mudancas: MudancaDeDatas[]) => void;
   aoRecusar?: (mensagem: string) => void;
-  /** A escala pedida teria colunas demais: o Gantt montou na mais fina que cabe (`escala` do controle). */
-  aoAjustarEscala?: (escala: Escala) => void;
+  /**
+   * A escala real difere da pedida (colunas demais) ou voltou a ser a pedida depois de ajustada:
+   * chamada sempre que o par (real, pedida) muda e há ou havia ajuste. `controle.escala` é a real.
+   */
+  aoAjustarEscala?: (real: Escala, pedida: Escala) => void;
   /** Exceção da Frappe ao montar (spec 9: o app cai para a vista Lista). Sem ela, a exceção sobe. */
   aoFalhar?: (erro: unknown) => void;
 }
@@ -70,14 +73,13 @@ export function datasDaBarra(g: Gantt, barra: BarraFrappe): { inicio: DataISO; f
   return { inicio, fim: somarDias(inicio, Math.max(1, Math.round(largura / px)) - 1) };
 }
 
+/** Intervalo das datas que a Frappe de fato desenha (as saneadas e presas ao calendário de `tarefasDoGantt`) mais hoje. */
 function intervalo(linhas: readonly Linha[], hoje: DataISO): { inicio: DataISO; fim: DataISO } {
   let inicio = hoje;
   let fim = hoje;
-  for (const l of linhas) {
-    const i = l.tipo === "etapa" ? l.etapa.inicio : l.inicio;
-    const f = l.tipo === "etapa" ? l.etapa.fim : l.fim;
-    if (i < inicio) inicio = i;
-    if (f > fim) fim = f;
+  for (const t of tarefasDoGantt(linhas)) {
+    if (t.start < inicio) inicio = t.start;
+    if (t.end > fim) fim = t.end;
   }
   return { inicio, fim };
 }
@@ -129,7 +131,7 @@ export function opcoesFrappe(
 export function montarGantt(area: HTMLElement, linhas: readonly Linha[], op: OpcoesGantt): ControleGantt {
   let pedida = op.escala;
   let escala = escalaQueCabe(pedida, linhas, op.hoje);
-  let avisada: Escala | null = null;
+  let avisada: { real: Escala; pedida: Escala } = { real: pedida, pedida };
   let atuais: readonly Linha[] = linhas;
   let mapa = new Map(atuais.map((l) => [l.id, l]));
   let gantt: Gantt | null = null;
@@ -138,6 +140,7 @@ export function montarGantt(area: HTMLElement, linhas: readonly Linha[], op: Opc
   const doc = area.ownerDocument;
   const dec = { mostrarLista: op.mostrarLista };
 
+  /** Soltou o botão: relê as datas pela posição; só grava, redesenha e segura o clique se alguma data mudou. */
   const confirmar = (g: Gantt): void => {
     const mudancas: MudancaDeDatas[] = [];
     for (const b of g.bars) {
@@ -147,11 +150,8 @@ export function montarGantt(area: HTMLElement, linhas: readonly Linha[], op: Opc
       const fim = l.etapa.marco ? d.inicio : d.fim;
       if (d.inicio !== l.etapa.inicio || fim !== l.etapa.fim) mudancas.push({ id: l.id, inicio: d.inicio, fim });
     }
+    if (!mudancas.length) return;
     ultimoArraste = Date.now();
-    if (!mudancas.length) {
-      desenhar(true);
-      return;
-    }
     const recusa = op.validar?.(mudancas) ?? null;
     if (recusa) {
       desenhar(true);
@@ -159,6 +159,13 @@ export function montarGantt(area: HTMLElement, linhas: readonly Linha[], op: Opc
       return;
     }
     op.aoMudarDatas?.(mudancas);
+  };
+
+  // O arraste é armado no botão pressionado sobre uma barra ou alça, não pelo `on_date_change` da Frappe:
+  // ele usa datas truncadas e deixa passar 1 dia em Semana (64/7 px por dia).
+  const aoPressionar = (e: Event): void => {
+    const alvo = e.target as Element | null;
+    pendente = !!alvo?.closest?.(".bar-wrapper, .handle");
   };
 
   const aoSoltar = (): void => {
@@ -169,8 +176,10 @@ export function montarGantt(area: HTMLElement, linhas: readonly Linha[], op: Opc
 
   function ajustarEscala(): void {
     escala = escalaQueCabe(pedida, atuais, op.hoje);
-    if (escala !== pedida && escala !== avisada) op.aoAjustarEscala?.(escala);
-    avisada = escala !== pedida ? escala : null;
+    const mudou = escala !== avisada.real || pedida !== avisada.pedida;
+    const havia = avisada.real !== avisada.pedida;
+    if (mudou && (escala !== pedida || havia)) op.aoAjustarEscala?.(escala, pedida);
+    avisada = { real: escala, pedida };
   }
 
   function desenhar(manterRolagem: boolean): void {
@@ -187,9 +196,6 @@ export function montarGantt(area: HTMLElement, linhas: readonly Linha[], op: Opc
           if (!l || l.tipo === "fase") return;
           op.aoClicar?.(t.id, gantt?.get_bar(t.id)?.group ?? area);
         },
-        on_date_change: () => {
-          pendente = true;
-        },
         after_render: (g, barra) => (barra ? decorarBarra(g, barra, mapa.get(barra.task.id), dec) : decorar(g, mapa, dec)),
       });
       if (rolagem !== undefined) gantt.$container.scrollLeft = rolagem;
@@ -204,6 +210,7 @@ export function montarGantt(area: HTMLElement, linhas: readonly Linha[], op: Opc
   // Escopo do gantt.css (tokens --spro-* e classes de situação).
   area.classList.add("spro-gantt");
   doc.addEventListener("mouseup", aoSoltar);
+  area.addEventListener("mousedown", aoPressionar);
   ajustarEscala();
   desenhar(false);
 
@@ -234,6 +241,7 @@ export function montarGantt(area: HTMLElement, linhas: readonly Linha[], op: Opc
     },
     destruir() {
       doc.removeEventListener("mouseup", aoSoltar);
+      area.removeEventListener("mousedown", aoPressionar);
       gantt?.destroy();
       gantt = null;
       area.replaceChildren();

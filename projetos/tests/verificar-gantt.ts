@@ -1,9 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { somarDias } from "@comum/datas/dias";
 import { MODOS } from "../src/gantt/escalas";
 import { idLinhaFase, linhasDoProjeto } from "../src/gantt/linhas";
 import { COR_FERIADO, escalaQueCabe, MAX_COLUNAS, montarGantt, opcoesFrappe } from "../src/gantt/montar";
+import { tarefasDoGantt } from "../src/gantt/tarefas";
 import type { MudancaDeDatas } from "../src/modelo/tipos";
 import { area, esperarQuadro, instalarAmbienteGantt } from "./ambienteGantt";
 import { cenario, HOSTIL } from "./cenarioGantt";
@@ -147,6 +149,79 @@ export async function verificarGantt(): Promise<void> {
   );
   checar("sem @import e so ASCII", !css.includes("@import") && [...css].every((ch) => ch.charCodeAt(0) <= 0x7f));
 
+  secao("projetos: arraste confirmado pela posicao");
+  const dA = "2026-08-24";
+  const dB = somarDias(dA, 43);
+  const ladoALado = linhasDoProjeto(
+    {
+      projeto: "p1",
+      fases: [],
+      etapas: [etapa({ id: "a", inicio: dA, fim: somarDias(dA, 2) }), etapa({ id: "b", inicio: dB, fim: somarDias(dB, 2) })],
+    },
+    { hoje: HOJE, ordem: "inicio", recolhidas: new Set<string>() },
+  );
+  const areaD = area(doc);
+  const mudD: MudancaDeDatas[][] = [];
+  const cliquesD: string[] = [];
+  const ctlD = montarGantt(areaD, ladoALado, {
+    escala: "Semana",
+    hoje: HOJE,
+    mostrarLista: true,
+    moverDependentes: false,
+    aoClicar: (id) => cliquesD.push(id),
+    aoMudarDatas: (m) => mudD.push(m),
+  });
+  await esperarQuadro();
+  const evD = (tipo: string, offsetX: number): Event => {
+    const Ev = (doc.defaultView as unknown as { Event: typeof Event }).Event;
+    const ev = new Ev(tipo, { bubbles: true });
+    Object.defineProperty(ev, "offsetX", { value: offsetX });
+    return ev;
+  };
+  const svgD = areaD.querySelector("svg.gantt")!;
+  let datasChamadas = 0;
+  const aoDatas = ctlD.gantt!.options.on_date_change;
+  ctlD.gantt!.options.on_date_change = (...r) => {
+    datasChamadas++;
+    return aoDatas?.(...r);
+  };
+  const barraB = areaD.querySelector('.bar-wrapper[data-id="b"]')!;
+  barraB.dispatchEvent(evD("mousedown", 100));
+  for (let p = 1; p <= 11; p++) svgD.dispatchEvent(evD("mousemove", 100 + p));
+  svgD.dispatchEvent(evD("mouseup", 111));
+  checar(
+    "+1 dia em Semana sem date_change da Frappe e confirmado",
+    datasChamadas === 0 && mudD.length === 1 && mudD[0]?.map((m) => `${m.id}:${m.inicio}`).join() === `b:${somarDias(dB, 1)}`,
+    { datasChamadas, mudD },
+  );
+  ctlD.atualizar(ladoALado);
+  await new Promise((r) => setTimeout(r, 450));
+  const svgAntes = areaD.querySelector("svg.gantt");
+  const nMud = mudD.length;
+  areaD.querySelector('.bar-wrapper[data-id="a"]')!.dispatchEvent(evD("mousedown", 100));
+  areaD.querySelector("svg.gantt")!.dispatchEvent(evD("mousemove", 101));
+  areaD.querySelector("svg.gantt")!.dispatchEvent(evD("mouseup", 101));
+  disparar(areaD.querySelector('.bar-wrapper[data-id="a"]')!, "click");
+  checar(
+    "tremor de 1 px: sem mudanca, sem redesenho e o clique abre",
+    mudD.length === nMud && areaD.querySelector("svg.gantt") === svgAntes && cliquesD.join() === "a",
+  );
+  ctlD.atualizar(ladoALado);
+  await esperarQuadro();
+  const svgAtual = areaD.querySelector("svg.gantt")!;
+  areaD.querySelector('.bar-wrapper[data-id="a"]')!.dispatchEvent(evD("mousedown", 100));
+  svgAtual.dispatchEvent(evD("mousemove", 101));
+  svgAtual.dispatchEvent(evD("mouseup", 101));
+  areaD.querySelector('.bar-wrapper[data-id="b"]')!.dispatchEvent(evD("mousedown", 100));
+  svgAtual.dispatchEvent(evD("mousemove", 100 + 3 * (64 / 7) + 1));
+  svgAtual.dispatchEvent(evD("mouseup", 100 + 3 * (64 / 7) + 1));
+  checar(
+    "arraste sem mudanca nao pega carona no seguinte",
+    mudD.length === nMud + 1 && mudD[nMud]?.length === 1 && mudD[nMud]?.[0]?.id === "b",
+    mudD,
+  );
+  ctlD.destruir();
+
   secao("projetos: colunas limitadas");
   const decadas = linhasDoProjeto(
     {
@@ -166,20 +241,57 @@ export async function verificarGantt(): Promise<void> {
     hoje: HOJE,
     mostrarLista: true,
     moverDependentes: true,
-    aoAjustarEscala: (e) => avisos.push(e),
+    aoAjustarEscala: (real, pedida) => avisos.push(`${real}:${pedida}`),
   });
   await esperarQuadro();
   checar(
     "um seculo em Dia monta em Mes e avisa",
-    longo.escala === "Mês" && longo.gantt?.config.view_mode.name === "Mês" && avisos.join() === "Mês",
+    longo.escala === "Mês" && longo.gantt?.config.view_mode.name === "Mês" && avisos.join() === "Mês:Dia",
   );
   checar(
     "colunas dentro do limite",
     areaLonga.querySelectorAll(".lower-text").length > 0 && areaLonga.querySelectorAll(".lower-text").length <= MAX_COLUNAS,
   );
   longo.trocarEscala("Semana");
-  checar("trocar para Semana tambem e ajustada", longo.escala === "Mês" && avisos.length === 1);
+  longo.trocarEscala("Semana");
+  checar("trocar para Semana (ainda ajustada) avisa com a nova pedida", longo.escala === "Mês" && avisos.join() === "Mês:Dia,Mês:Semana");
+  longo.atualizar(todas);
+  checar(
+    "atualizar com linhas que cabem volta a pedida e avisa",
+    longo.escala === "Semana" && avisos.join() === "Mês:Dia,Mês:Semana,Semana:Semana",
+  );
+  longo.atualizar(todas);
+  checar("sem mudanca nao avisa de novo", avisos.length === 3);
   longo.destruir();
+
+  const malformada = linhasDoProjeto(
+    { projeto: "p1", fases: [], etapas: [etapa({ id: "x1", inicio: "9999-12-31", fim: "2026-10-09" })] },
+    { hoje: HOJE, ordem: "inicio", recolhidas: new Set<string>() },
+  );
+  checar("inicio em 9999 com fim antes: nao cabe em Dia", escalaQueCabe("Dia", malformada, HOJE) !== "Dia");
+  const emSeculos = linhasDoProjeto(
+    {
+      projeto: "p1",
+      fases: [],
+      etapas: [etapa({ id: "x1", inicio: "9999-01-01", fim: "9999-01-05" }), etapa({ id: "x2", inicio: "2026-10-01", fim: "2026-10-05" })],
+    },
+    { hoje: HOJE, ordem: "inicio", recolhidas: new Set<string>() },
+  );
+  checar("etapa valida em 9999 e outra em 2026: presa a 2100, cabe em Mes", escalaQueCabe("Dia", emSeculos, HOJE) === "Mês");
+  checar(
+    "tarefas presas ao calendario (2000 a 2100)",
+    tarefasDoGantt(emSeculos).every((t) => t.start >= "2000-01-01" && t.end <= "2100-12-31"),
+  );
+  const areaSeculos = area(doc);
+  const seculos = montarGantt(areaSeculos, emSeculos, { escala: "Dia", hoje: HOJE, mostrarLista: true, moverDependentes: true });
+  await esperarQuadro();
+  checar(
+    "9999 + 2026 monta com poucas colunas",
+    seculos.gantt !== null &&
+      areaSeculos.querySelectorAll(".lower-text").length <= MAX_COLUNAS &&
+      areaSeculos.querySelectorAll(".bar-wrapper").length === 2,
+  );
+  seculos.destruir();
 
   secao("projetos: falha da Frappe");
   const outra = doc.createElement("div");

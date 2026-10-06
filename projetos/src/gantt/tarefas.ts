@@ -5,7 +5,7 @@
  */
 
 import { hojeISO, somarDias } from "@comum/datas/dias";
-import { dataValida } from "../modelo/calendario";
+import { ANO_MAX, ANO_MIN, dataValida } from "../modelo/calendario";
 import type { DataISO } from "../modelo/tipos";
 import type { TarefaFrappe } from "../vendor/frappe-gantt/index";
 import type { Linha } from "./linhas";
@@ -32,6 +32,10 @@ export function classesDaLinha(l: Linha): string {
   return l.etapa.marco ? `st-marco st-${l.situacao}` : `st-${l.situacao}`;
 }
 
+const PRIMEIRO_DIA = `${ANO_MIN}-01-01`;
+const ULTIMO_DIA = `${ANO_MAX}-12-31`;
+const preso = (d: DataISO): DataISO => (d < PRIMEIRO_DIA ? PRIMEIRO_DIA : d > ULTIMO_DIA ? ULTIMO_DIA : d);
+
 /**
  * Dado de fora malformado: data inexistente vira barra de 1 dia na outra data
  * da linha; sem nenhuma válida, em hoje (a linha nunca some nem derruba o Gantt).
@@ -42,8 +46,11 @@ function datasDesenhaveis(inicio: DataISO, fim: DataISO): { start: DataISO; end:
   const ini = okInicio ? inicio : okFim ? fim : hojeISO();
   const fi = okFim ? fim : ini;
   const end = fi < ini ? ini : fi;
-  const teto = somarDias(ini, TETO_DIAS);
-  return { start: ini, end: end > teto ? teto : end };
+  // Presas à faixa do calendário (2000 a 2100): o Gantt nunca tem mais de ~100 anos, e "Ano" sempre cabe.
+  const start = preso(ini);
+  const fimPreso = preso(end);
+  const teto = somarDias(start, TETO_DIAS);
+  return { start, end: fimPreso > teto ? teto : fimPreso };
 }
 
 export function tarefasDoGantt(linhas: readonly Linha[]): TarefaFrappe[] {
