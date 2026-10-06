@@ -1,10 +1,13 @@
 /**
  * Monta a Frappe Gantt (ajustada) numa área e devolve um controlador. O app
  * (P3) só fala com este módulo: escala, linhas, rolar para hoje, realce,
- * clique e mudança de datas. Arraste: a Frappe avisa `on_date_change` a cada
- * passo do mouse (truncado, perde 1 dia em Semana); aqui o botão pressionado sobre uma barra arma o arraste e, ao soltar o botão, as datas
- * de TODAS as barras de etapa são relidas da posição (em dias inteiros) e
- * comparadas com as linhas. Recusa (`validar`) redesenha como estava.
+ * clique e mudança de datas. Arraste: o `on_date_change` da Frappe é truncado
+ * (perde 1 dia em Semana) e não é usado. Só em Dia e Semana e fora do modo
+ * somente leitura, o botão principal pressionado sobre uma barra arma o
+ * arraste e guarda a posição (x e largura) de cada barra; ao soltar, só as
+ * barras que MEXERAM (as arrastadas e os dependentes que a Frappe moveu) têm
+ * as datas relidas da posição (em dias inteiros) e comparadas com as linhas.
+ * Recusa (`validar`) redesenha como estava.
  */
 
 import { diferencaDias, somarDias } from "@comum/datas/dias";
@@ -136,6 +139,9 @@ export function montarGantt(area: HTMLElement, linhas: readonly Linha[], op: Opc
   let mapa = new Map(atuais.map((l) => [l.id, l]));
   let gantt: Gantt | null = null;
   let pendente = false;
+  /** x e largura de cada barra no `mousedown`: só quem mexeu entra no lote (datas presas ou saneadas não contam). */
+  let posicoes = new Map<string, string>();
+  const posicao = (b: BarraFrappe): string => `${b.$bar.getAttribute("x")}|${b.$bar.getAttribute("width")}`;
   let ultimoArraste = 0;
   const doc = area.ownerDocument;
   const dec = { mostrarLista: op.mostrarLista };
@@ -145,7 +151,7 @@ export function montarGantt(area: HTMLElement, linhas: readonly Linha[], op: Opc
     const mudancas: MudancaDeDatas[] = [];
     for (const b of g.bars) {
       const l = mapa.get(b.task.id);
-      if (l?.tipo !== "etapa") continue;
+      if (l?.tipo !== "etapa" || posicoes.get(b.task.id) === posicao(b)) continue;
       const d = datasDaBarra(g, b);
       const fim = l.etapa.marco ? d.inicio : d.fim;
       if (d.inicio !== l.etapa.inicio || fim !== l.etapa.fim) mudancas.push({ id: l.id, inicio: d.inicio, fim });
@@ -162,10 +168,16 @@ export function montarGantt(area: HTMLElement, linhas: readonly Linha[], op: Opc
   };
 
   // O arraste é armado no botão pressionado sobre uma barra ou alça, não pelo `on_date_change` da Frappe:
-  // ele usa datas truncadas e deixa passar 1 dia em Semana (64/7 px por dia).
+  // ele usa datas truncadas e deixa passar 1 dia em Semana (64/7 px por dia). Mês e Ano não arrastam
+  // (as datas só se leem da posição em Dia e Semana) e somente leitura nunca arma: o clique segue normal.
   const aoPressionar = (e: Event): void => {
+    const botao = (e as MouseEvent).button;
     const alvo = e.target as Element | null;
-    pendente = !!alvo?.closest?.(".bar-wrapper, .handle");
+    pendente = false;
+    if (op.somenteLeitura || !escalaEditavel(escala) || (botao !== undefined && botao !== 0) || !gantt) return;
+    if (!alvo?.closest?.(".bar-wrapper, .handle")) return;
+    pendente = true;
+    posicoes = new Map(gantt.bars.map((b) => [b.task.id, posicao(b)]));
   };
 
   const aoSoltar = (): void => {

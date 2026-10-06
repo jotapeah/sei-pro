@@ -222,6 +222,71 @@ export async function verificarGantt(): Promise<void> {
   );
   ctlD.destruir();
 
+  secao("projetos: clique nao vira arraste");
+  const clicar = async (op: { escala: "Mês" | "Ano" | "Semana"; somenteLeitura?: boolean }, linhas: typeof todas, id: string) => {
+    const a2 = area(doc);
+    const mud2: MudancaDeDatas[][] = [];
+    const cl2: string[] = [];
+    const c2 = montarGantt(a2, linhas, {
+      ...op,
+      hoje: HOJE,
+      mostrarLista: true,
+      moverDependentes: true,
+      aoClicar: (i) => cl2.push(i),
+      aoMudarDatas: (m) => mud2.push(m),
+    });
+    await esperarQuadro();
+    const alvo = a2.querySelector(`.bar-wrapper[data-id="${id}"]`)!;
+    alvo.dispatchEvent(evD("mousedown", 100));
+    a2.querySelector("svg.gantt")!.dispatchEvent(evD("mouseup", 100));
+    disparar(alvo, "click");
+    c2.destruir();
+    return { mud2, cl2 };
+  };
+  for (const esc of ["Mês", "Ano"] as const) {
+    const r = await clicar({ escala: esc }, todas, "e2");
+    checar(`clique em ${esc}: nada gravado e o clique chega`, r.mud2.length === 0 && r.cl2.join() === "e2", r);
+  }
+  const rl = await clicar({ escala: "Semana", somenteLeitura: true }, todas, "e2");
+  checar("clique somente leitura: nada gravado e o clique chega", rl.mud2.length === 0 && rl.cl2.join() === "e2", rl);
+
+  secao("projetos: so reporta o que se moveu");
+  const distorcidas = linhasDoProjeto(
+    {
+      projeto: "p1",
+      fases: [],
+      etapas: [
+        etapa({ id: "v", inicio: "1999-03-01", fim: "1999-03-05" }),
+        etapa({ id: "mal", inicio: "2026-10-09", fim: "2026-10-01" }),
+        etapa({ id: "a", inicio: dA, fim: somarDias(dA, 2) }),
+        etapa({ id: "b", inicio: dB, fim: somarDias(dB, 2) }),
+      ],
+    },
+    { hoje: HOJE, ordem: "inicio", recolhidas: new Set<string>() },
+  );
+  const areaX = area(doc);
+  const mudX: MudancaDeDatas[][] = [];
+  const clX: string[] = [];
+  const ctlX = montarGantt(areaX, distorcidas, {
+    escala: "Semana",
+    hoje: HOJE,
+    mostrarLista: true,
+    moverDependentes: false,
+    aoClicar: (i) => clX.push(i),
+    aoMudarDatas: (m) => mudX.push(m),
+  });
+  await esperarQuadro();
+  const svgX = areaX.querySelector("svg.gantt")!;
+  areaX.querySelector('.bar-wrapper[data-id="a"]')!.dispatchEvent(evD("mousedown", 100));
+  svgX.dispatchEvent(evD("mouseup", 100));
+  disparar(areaX.querySelector('.bar-wrapper[data-id="a"]')!, "click");
+  checar("clique com etapas presas/saneadas: nada reportado", mudX.length === 0 && clX.join() === "a", mudX);
+  areaX.querySelector('.bar-wrapper[data-id="b"]')!.dispatchEvent(evD("mousedown", 100));
+  svgX.dispatchEvent(evD("mousemove", 100 + 3 * (64 / 7) + 1));
+  svgX.dispatchEvent(evD("mouseup", 100 + 3 * (64 / 7) + 1));
+  checar("arraste: so a barra arrastada e reportada", mudX.length === 1 && mudX[0]?.map((m) => m.id).join() === "b", mudX);
+  ctlX.destruir();
+
   secao("projetos: colunas limitadas");
   const decadas = linhasDoProjeto(
     {
