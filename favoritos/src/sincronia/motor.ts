@@ -1,43 +1,23 @@
 /**
- * Motor da sincronia de UMA lista com UM destino (spec 9.1): puxar → mesclar →
- * (se mudou) empurrar. A mesclagem é a do repositório (vence a versão mais
- * recente de cada entidade, com lápides), então a rodada pode se repetir sem
- * medo, em qualquer aba e em qualquer ordem.
+ * Motor da sincronia da lista DA UNIDADE com o Texto Padrão (spec 9.1). O
+ * motor é o genérico da sei-comum (`@comum/sincronia/motor`); aqui fica o
+ * adaptador dos favoritos: o envelope de um escopo, a mesclagem do
+ * repositório, a assinatura e as mensagens de sempre.
  *
- * - Puxa no máximo a cada 5 min, salvo pendência local ou pedido do usuário.
- * - Mudança local marca "pendente" NA HORA (persistido: se a página fechar, a
- *   próxima carga envia) e envia 15 s depois da última.
- * - Remoto inválido (texto editado por um colega, corrompido, de outro escopo)
- *   nunca apaga nada: é regravado a partir do local.
- * - Sem permissão de Texto Padrão: "indisponível", e não insiste por um dia.
- * - Uma trava por lista (Web Locks, quando a página tem) evita duas abas juntas;
- *   e o conteúdo igual ao remoto não é regravado.
+ * Sem releitura antes de gravar (`releituras: 0`): o texto é de UMA pessoa, e
+ * o comportamento (e as provas) dos Favoritos ficam exatamente como eram.
  */
 
 import type { Area } from "@comum/armazenamento/area";
+import { type AdaptadorTexto, type DestinoTexto, MotorTextoPadrao } from "@comum/sincronia/motor";
+import type { Envelope } from "../arquivo";
 import type { Carimbo, Escopo } from "../modelo/tipos";
 import type { RepositorioFavoritos } from "../repositorio";
 import { assinaturaEnvelope } from "./assinatura";
-import { AVISO_TEXTO, conteudoDoTexto, envelopeDaUnidade, lerConteudoDoTexto, TETO_TEXTO } from "./textoPadrao";
+import { AVISO_TEXTO, envelopeDaUnidade, legivelFavoritos, TETO_TEXTO, validarEnvelopeDoTexto } from "./textoPadrao";
 
-export interface StatusSync {
-  estado: "ok" | "erro" | "indisponivel" | "nunca";
-  /** Última tentativa. */
-  quando: number;
-  ultimoOk?: number;
-  ultimoPuxar?: number;
-  mensagem?: string;
-  /** Bytes do último conteúdo gravado ou lido. */
-  tamanho?: number;
-  /** Há mudança local ainda não enviada. */
-  pendente: boolean;
-  indisponivelAte?: number;
-}
-
-export interface DestinoSync {
-  ler(): Promise<string | null>;
-  gravar(html: string): Promise<void>;
-}
+export { type StatusSync, textoDoErro } from "@comum/sincronia/motor";
+export type DestinoSync = DestinoTexto;
 
 export interface DepsMotor {
   repo: RepositorioFavoritos;
@@ -56,138 +36,44 @@ export interface DepsMotor {
   permitido?: () => Promise<boolean>;
 }
 
-const CINCO_MIN = 5 * 60_000;
-const UM_DIA = 86_400_000;
-
-export function textoDoErro(e: unknown): { estado: StatusSync["estado"]; mensagem: string } {
-  const codigo = (e as { codigo?: string } | null)?.codigo;
-  if (codigo === "SEI_SESSAO_EXPIRADA") return { estado: "erro", mensagem: "Sessão do SEI expirada. Entre de novo no SEI." };
-  if (codigo === "SEI_ACAO_INDISPONIVEL")
-    return { estado: "indisponivel", mensagem: "Indisponível nesta unidade: o SEI não oferece Textos Padrão para você aqui." };
-  return { estado: "erro", mensagem: e instanceof Error ? e.message : String(e) };
+export function adaptadorFavoritos(
+  d: Pick<DepsMotor, "repo" | "escopo" | "carimbo" | "nomeUsuario" | "chaveStatus" | "teto">,
+): AdaptadorTexto<Envelope> {
+  return {
+    modulo: "favoritos",
+    chaveStatus: d.chaveStatus,
+    teto: d.teto ?? TETO_TEXTO,
+    aviso: d.teto ? d.teto * 0.8 : AVISO_TEXTO,
+    legivel: () => legivelFavoritos(d.nomeUsuario),
+    validar: (bruto) => validarEnvelopeDoTexto(bruto, d.escopo),
+    importar: async (env) => {
+      await d.repo.importar(env.escopos[0]!);
+    },
+    // Um sigiloso só vai (como aviso, sem número) se o texto já tinha uma cópia dele: idsRemotos.
+    exportar: ({ remoto }) =>
+      envelopeDaUnidade(d.repo, d.escopo, d.carimbo(), new Set((remoto?.escopos[0]?.favoritos ?? []).map((f) => f.id))),
+    assinatura: assinaturaEnvelope,
+    mensagens: {
+      maisNovo:
+        "Os favoritos no SEI foram gravados por uma versão mais nova do SEI Pro. Atualize a extensão neste computador; o texto não foi alterado.",
+      grandeDemais: (kb, tetoKb) =>
+        `A lista ficou grande demais para o Texto Padrão (${kb} KB de ${tetoKb} KB). Use a sincronização por arquivo.`,
+      pertoDoTeto: (kb) => `A lista está perto do limite do Texto Padrão (${kb} KB).`,
+    },
+  };
 }
 
-export class MotorSincronia {
-  private espera: ReturnType<typeof setTimeout> | undefined;
-
-  constructor(private readonly d: DepsMotor) {}
-
-  private agora(): number {
-    return this.d.agora?.() ?? Date.now();
-  }
-
-  async status(): Promise<StatusSync> {
-    const v = (await this.d.area.obter(this.d.chaveStatus))[this.d.chaveStatus] as StatusSync | undefined;
-    return v ?? { estado: "nunca", quando: 0, pendente: false };
-  }
-
-  private async gravarStatus(m: Partial<StatusSync>): Promise<StatusSync> {
-    const novo = { ...(await this.status()), ...m };
-    await this.d.area.gravar({ [this.d.chaveStatus]: novo });
-    return novo;
-  }
-
-  async marcarPendente(): Promise<void> {
-    const s = await this.status();
-    if (!s.pendente) await this.gravarStatus({ pendente: true });
-  }
-
-  /** Mudança local: pendente na hora, envio 15 s depois da última. */
-  agendarEnvio(): Promise<void> {
-    clearTimeout(this.espera);
-    this.espera = setTimeout(() => void this.sincronizar({ forcar: true }).catch(() => undefined), this.d.atrasoEnvio ?? 15_000);
-    return this.marcarPendente();
-  }
-
-  parar(): void {
-    clearTimeout(this.espera);
-  }
-
-  async sincronizar(o: { forcar?: boolean } = {}): Promise<StatusSync> {
-    const agora = this.agora();
-    const s = await this.status();
-    if (!o.forcar) {
-      if (s.estado === "indisponivel" && (s.indisponivelAte ?? 0) > agora) return s;
-      if (!s.pendente && s.ultimoPuxar && agora - s.ultimoPuxar < CINCO_MIN) return s;
-    }
-    const nome = `seipro-favoritos-sync|${this.d.chaveStatus}`;
-    const feito = await this.d.travar(nome, () => this.rodada(agora));
-    return feito ?? (await this.status());
-  }
-
-  private async rodada(agora: number): Promise<StatusSync> {
-    try {
-      const remoto = await this.d.destino.ler();
-      let assinaturaRemota = "";
-      let invalido: string | null = null;
-      let idsRemotos = new Set<string>();
-      if (remoto !== null) {
-        const r = await lerConteudoDoTexto(remoto, this.d.escopo);
-        if ("maisNovo" in r) {
-          return this.gravarStatus({
-            estado: "erro",
-            quando: agora,
-            ultimoPuxar: agora,
-            mensagem:
-              "Os favoritos no SEI foram gravados por uma versão mais nova do SEI Pro. Atualize a extensão neste computador; o texto não foi alterado.",
-          });
-        }
-        if ("envelope" in r) {
-          await this.d.repo.importar(r.envelope.escopos[0]!);
-          assinaturaRemota = assinaturaEnvelope(r.envelope);
-          idsRemotos = new Set(r.envelope.escopos[0]!.favoritos.map((f) => f.id));
-        } else {
-          invalido = r.invalido;
-        }
-      }
-      const env = await envelopeDaUnidade(this.d.repo, this.d.escopo, this.d.carimbo(), idsRemotos);
-      if (remoto !== null && !invalido && assinaturaEnvelope(env) === assinaturaRemota) {
-        return this.gravarStatus({
-          estado: "ok",
-          quando: agora,
-          ultimoOk: agora,
-          ultimoPuxar: agora,
-          pendente: false,
-          mensagem: undefined,
-          tamanho: remoto.length,
-        });
-      }
-      const html = await conteudoDoTexto(env, this.d.nomeUsuario);
-      const teto = this.d.teto ?? TETO_TEXTO;
-      if (html.length > teto) {
-        return this.gravarStatus({
-          estado: "erro",
-          quando: agora,
-          ultimoPuxar: agora,
-          tamanho: html.length,
-          mensagem: `A lista ficou grande demais para o Texto Padrão (${Math.ceil(html.length / 1024)} KB de ${Math.round(teto / 1024)} KB). Use a sincronização por arquivo.`,
-        });
-      }
-      if (this.d.permitido && !(await this.d.permitido())) {
-        return this.gravarStatus({ estado: "nunca", quando: agora, pendente: false, mensagem: undefined });
-      }
-      await this.d.destino.gravar(html);
-      const aviso =
-        html.length > (this.d.teto ? teto * 0.8 : AVISO_TEXTO)
-          ? `A lista está perto do limite do Texto Padrão (${Math.ceil(html.length / 1024)} KB).`
-          : undefined;
-      return this.gravarStatus({
-        estado: "ok",
-        quando: agora,
-        ultimoOk: agora,
-        ultimoPuxar: agora,
-        pendente: false,
-        tamanho: html.length,
-        mensagem: invalido ? `O texto no SEI estava inválido (${invalido}) e foi regravado a partir deste computador.` : aviso,
-      });
-    } catch (e) {
-      const t = textoDoErro(e);
-      return this.gravarStatus({
-        estado: t.estado,
-        mensagem: t.mensagem,
-        quando: agora,
-        indisponivelAte: t.estado === "indisponivel" ? agora + UM_DIA : undefined,
-      });
-    }
+export class MotorSincronia extends MotorTextoPadrao<Envelope> {
+  constructor(d: DepsMotor) {
+    super({
+      adaptador: adaptadorFavoritos(d),
+      destino: d.destino,
+      area: d.area,
+      travar: d.travar,
+      agora: d.agora,
+      atrasoEnvio: d.atrasoEnvio,
+      permitido: d.permitido,
+      releituras: 0,
+    });
   }
 }

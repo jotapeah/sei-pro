@@ -1,0 +1,139 @@
+/**
+ * Um módulo de mentira para as provas da sincronia genérica: itens
+ * versionados num Map (o "repositório"), o envelope
+ * `{ formato: "teste", versao: 1, dono, itens }` e a mesclagem de verdade
+ * (`vence`) da sei-comum.
+ */
+
+import { assinaturaEstavel, porId } from "../src/sincronia/assinatura";
+import { purgarLapides, type Versionada, vence } from "../src/sincronia/entidade";
+import type { AdaptadorTexto } from "../src/sincronia/motor";
+import { gerarConteudoTexto, lerConteudoTexto, versaoMaisNova } from "../src/sincronia/textoPadraoCodec";
+
+export interface ItemTeste extends Versionada {
+  valor: string;
+}
+
+export interface EnvTeste {
+  formato: "teste";
+  versao: number;
+  dono: string;
+  itens: ItemTeste[];
+}
+
+export interface RepoTeste {
+  itens: Map<string, ItemTeste>;
+  por(id: string, valor: string, quando: number, dispositivo?: string): void;
+  remover(id: string, quando: number): void;
+  importar(env: EnvTeste): void;
+  aoMudar(cb: () => void): () => void;
+}
+
+export function repoTeste(): RepoTeste {
+  const itens = new Map<string, ItemTeste>();
+  const ouvintes = new Set<() => void>();
+  const avisar = () => {
+    for (const o of [...ouvintes]) o();
+  };
+  return {
+    itens,
+    por(id, valor, quando, dispositivo = "A") {
+      itens.set(id, { id, valor, atualizadoEm: quando, dispositivo });
+      avisar();
+    },
+    remover(id, quando) {
+      const i = itens.get(id);
+      if (!i) return;
+      itens.set(id, { ...i, atualizadoEm: quando, removidoEm: quando });
+      avisar();
+    },
+    importar(env) {
+      let mudou = false;
+      for (const i of env.itens) {
+        const atual = itens.get(i.id);
+        if (!atual || vence(i, atual)) {
+          itens.set(i.id, i);
+          mudou = true;
+        }
+      }
+      if (mudou) avisar();
+    },
+    aoMudar(cb) {
+      ouvintes.add(cb);
+      return () => {
+        ouvintes.delete(cb);
+      };
+    },
+  };
+}
+
+export function adaptadorTeste(
+  repo: RepoTeste,
+  o: { dono?: string; teto?: number; aviso?: number; chaveStatus?: string; diasLapide?: number } = {},
+): AdaptadorTexto<EnvTeste> {
+  const dono = o.dono ?? "pedro";
+  return {
+    modulo: "teste",
+    chaveStatus: o.chaveStatus ?? "teste/sync/tp/a",
+    teto: o.teto ?? 100 * 1024,
+    aviso: o.aviso ?? 80 * 1024,
+    legivel: () => "Dados internos do SEI Pro (teste). Não edite.",
+    validar(bruto) {
+      if (versaoMaisNova(bruto, "teste", 1)) return { maisNovo: true };
+      const b = bruto as Partial<EnvTeste> | null;
+      if (b?.formato !== "teste" || b.versao !== 1 || !Array.isArray(b.itens)) return { invalido: "não é do módulo de teste" };
+      if (b.dono !== dono) return { invalido: "é de outro dono" };
+      return { ok: b as EnvTeste };
+    },
+    async importar(env) {
+      repo.importar(env);
+    },
+    async exportar({ agora }) {
+      const itens = [...repo.itens.values()];
+      return { formato: "teste", versao: 1, dono, itens: o.diasLapide === undefined ? itens : purgarLapides(itens, agora, o.diasLapide) };
+    },
+    assinatura: (env) => assinaturaEstavel({ dono: env.dono, itens: porId(env.itens) }),
+  };
+}
+
+/** O texto que outro computador (ou um colega) gravaria com estes itens. */
+export function textoDeOutro(itens: ItemTeste[], dono = "pedro", versao = 1): Promise<string> {
+  return gerarConteudoTexto("Dados internos do SEI Pro (teste).", { formato: "teste", versao, dono, itens });
+}
+
+/** Os itens guardados num texto (vazio se o texto não é do módulo de teste). */
+export async function itensDoTexto(html: string | null): Promise<ItemTeste[]> {
+  if (html === null) return [];
+  const r = await lerConteudoTexto(html);
+  return "bruto" in r ? ((r.bruto as EnvTeste).itens ?? []) : [];
+}
+
+export const item = (id: string, quando: number, dispositivo = "B", removido = false): ItemTeste => ({
+  id,
+  valor: id,
+  atualizadoEm: quando,
+  dispositivo,
+  ...(removido ? { removidoEm: quando } : {}),
+});
+
+/** O Texto Padrão "no SEI": conta leituras e gravações; `aoLer` muda o texto como outra pessoa faria. */
+export function destinoTeste(inicial: string | null = null) {
+  const d = {
+    html: inicial,
+    lidas: 0,
+    gravadas: 0,
+    aoLer: undefined as ((n: number) => Promise<void> | void) | undefined,
+    erro: undefined as { codigo: string; message: string } | undefined,
+    async ler(): Promise<string | null> {
+      d.lidas++;
+      await d.aoLer?.(d.lidas);
+      if (d.erro) throw Object.assign(new Error(d.erro.message), { codigo: d.erro.codigo });
+      return d.html;
+    },
+    async gravar(html: string): Promise<void> {
+      d.gravadas++;
+      d.html = html;
+    },
+  };
+  return d;
+}
