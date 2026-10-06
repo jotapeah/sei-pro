@@ -12,6 +12,7 @@ import { verificarPonteLateralGenerica } from "./verificar-lateral";
 import { verificarMenu } from "./verificar-menu";
 import { verificarOpcoes } from "./verificar-opcoes";
 import { verificarRpc } from "./verificar-rpc";
+import { verificarSincroniaBase } from "./verificar-sincronia-base";
 import { verificarUi } from "./verificar-ui";
 
 verificarDatas();
@@ -29,4 +30,5 @@ await verificarComboboxNoDialogo();
 await verificarMenu();
 await verificarFlutuante();
 await verificarPonteLateralGenerica();
+await verificarSincroniaBase();
 resumo();

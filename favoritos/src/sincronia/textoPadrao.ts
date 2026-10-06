@@ -9,8 +9,14 @@
  * é apagado.
  */
 
-import { codificar, decodificar, deParagrafos, paraParagrafos } from "@comum/sincronia/codec";
-import { hashCurto } from "@comum/texto";
+import {
+  gerarConteudoTexto,
+  lerConteudoTexto,
+  nomeDeTextoInterno,
+  PREFIXO_TEXTO_INTERNO,
+  type ValidacaoTexto,
+  versaoMaisNova,
+} from "@comum/sincronia/textoPadraoCodec";
 import { type Envelope, lerEnvelope } from "../arquivo";
 import type { Carimbo, Escopo, Favorito } from "../modelo/tipos";
 import type { RepositorioFavoritos } from "../repositorio";
@@ -18,13 +24,11 @@ import type { RepositorioFavoritos } from "../repositorio";
 /** Teto do conteúdo: o CKEditor 5 baixa o conteúdo de todos os textos da unidade (P1). */
 export const TETO_TEXTO = 100 * 1024;
 export const AVISO_TEXTO = 80 * 1024;
-export const PREFIXO_TEXTO = "[_SEIPRO_";
+export const PREFIXO_TEXTO = PREFIXO_TEXTO_INTERNO;
 
 /** `[_SEIPRO_FAV_<login>]`, no máximo 50 caracteres (o limite do campo). */
 export function nomeDoTexto(login: string): string {
-  const l = login.trim().toLowerCase();
-  const nome = `${PREFIXO_TEXTO}FAV_${l}]`;
-  return nome.length <= 50 ? nome : `${PREFIXO_TEXTO}FAV_${l.slice(0, 27)}~${hashCurto(l).slice(0, 8)}]`;
+  return nomeDeTextoInterno("FAV", login.trim().toLowerCase());
 }
 
 export const DESCRICAO_TEXTO = "Dados internos do SEI Pro (favoritos). Não use em documentos nem edite.";
@@ -87,9 +91,13 @@ export async function envelopeDaUnidade(
   };
 }
 
-export async function conteudoDoTexto(env: Envelope, nomeUsuario: string): Promise<string> {
-  const legivel = `Dados internos do SEI Pro — favoritos de ${nomeUsuario}. Não use em documentos nem edite: o SEI Pro regrava este texto sozinho.`;
-  return paraParagrafos(legivel, await codificar(env));
+/** O parágrafo legível que abre o texto. */
+export function legivelFavoritos(nomeUsuario: string): string {
+  return `Dados internos do SEI Pro — favoritos de ${nomeUsuario}. Não use em documentos nem edite: o SEI Pro regrava este texto sozinho.`;
+}
+
+export function conteudoDoTexto(env: Envelope, nomeUsuario: string): Promise<string> {
+  return gerarConteudoTexto(legivelFavoritos(nomeUsuario), env);
 }
 
 const mesmoEscopo = (a: Escopo, b: Escopo) =>
@@ -98,24 +106,23 @@ const mesmoEscopo = (a: Escopo, b: Escopo) =>
   a.lista === b.lista &&
   (a.unidade?.id ?? "") === (b.unidade?.id ?? "");
 
-export async function lerConteudoDoTexto(
-  html: string,
-  escopo: Escopo,
-): Promise<{ envelope: Envelope } | { invalido: string } | { maisNovo: true }> {
-  const b64 = deParagrafos(html);
-  if (!b64) return { invalido: "o texto não tem os dados do SEI Pro (foi editado ou está vazio)" };
-  let bruto: unknown;
-  try {
-    bruto = await decodificar(b64);
-  } catch {
-    return { invalido: "os dados do texto estão corrompidos" };
-  }
+/** O envelope já decodificado (o codec é da sei-comum): só vale o do mesmo SEI, login e unidade. */
+export function validarEnvelopeDoTexto(bruto: unknown, escopo: Escopo): ValidacaoTexto<Envelope> {
   // Gravado por uma versão mais nova do SEI Pro: não é "inválido", e esta versão não pode regravar por cima.
-  const b = bruto as { formato?: unknown; versao?: unknown } | null;
-  if (b?.formato === "seipro-favoritos" && typeof b.versao === "number" && b.versao > 1) return { maisNovo: true };
+  if (versaoMaisNova(bruto, "seipro-favoritos", 1)) return { maisNovo: true };
   const lido = lerEnvelope(bruto);
   if (!lido) return { invalido: "o texto não está no formato dos favoritos" };
   const e = lido.envelope.escopos;
   if (e.length !== 1 || !mesmoEscopo(e[0]!.escopo, escopo)) return { invalido: "o texto é de outro usuário ou de outra unidade" };
-  return { envelope: lido.envelope };
+  return { ok: lido.envelope };
+}
+
+export async function lerConteudoDoTexto(
+  html: string,
+  escopo: Escopo,
+): Promise<{ envelope: Envelope } | { invalido: string } | { maisNovo: true }> {
+  const r = await lerConteudoTexto(html);
+  if ("invalido" in r) return r;
+  const v = validarEnvelopeDoTexto(r.bruto, escopo);
+  return "ok" in v ? { envelope: v.ok } : v;
 }

@@ -37,3 +37,16 @@ export function purgarLapides<T extends Versionada>(lista: T[], agora: number, d
   const limite = agora - dias * 86_400_000;
   return lista.filter((i) => i.removidoEm === undefined || i.removidoEm >= limite);
 }
+
+/**
+ * Todas as listas de um envelope sem as lápides mais velhas que `dias`. O
+ * prazo é de quem exporta e pode mudar por escopo (Projetos: 180 dias no texto
+ * da unidade, que um colega eventual pode demorar a sincronizar; 90 no pessoal).
+ * Lápide que sai cedo demais deixa o item "ressuscitar" pelo computador que
+ * ainda o tinha vivo.
+ */
+export function podarLapides<C extends Record<string, Versionada[]>>(colecoes: C, agora: number, dias: number): C {
+  const saida: Record<string, Versionada[]> = {};
+  for (const [k, lista] of Object.entries(colecoes)) saida[k] = purgarLapides(lista, agora, dias);
+  return saida as C;
+}

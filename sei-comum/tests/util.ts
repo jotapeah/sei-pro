@@ -64,3 +64,6 @@ export function resumo(): void {
   console.log(`\n${passou} ok, ${falhou} falha(s)\n`);
   if (falhou > 0) process.exit(1);
 }
+
+/** Deixa as promessas e os setTimeout curtos correrem. */
+export const tique = (ms = 5): Promise<void> => new Promise((r) => setTimeout(r, ms));
