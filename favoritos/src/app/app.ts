@@ -9,6 +9,7 @@ import { gerarCsv } from "@comum/csv";
 import type { DataISO } from "@comum/datas/dias";
 import type { Rpc } from "@comum/ponte/rpc";
 import { avisar } from "@comum/ui/aviso";
+import type { AbrirModal } from "@comum/ui/dialogo";
 import { h, icone, type NomeIcone } from "@comum/ui/dom";
 import { fecharOrfaos } from "@comum/ui/flutuante";
 import { criarMenu } from "@comum/ui/menu";
@@ -56,7 +57,7 @@ import { montarSincronizacao } from "./componentes/sincronizacao";
 import { linhasCsv } from "./csv";
 import { type LeafletMinimo, montarMapaFavorito, montarMapaGeral, pontosDoMapa } from "./mapa";
 
-export type AbrirModal = (o: { titulo: string; conteudo: HTMLElement; icone?: NomeIcone; aoFechar?: () => void }) => { fechar(): void };
+export type { AbrirModal } from "@comum/ui/dialogo";
 
 export interface DepsApp {
   rpc: Pick<Rpc, "chamar">;

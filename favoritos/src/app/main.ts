@@ -18,6 +18,7 @@ import { PonteLateral } from "@comum/ponte/lateral";
 import { ErroRpc, type PortaRpc, type Rpc } from "@comum/ponte/rpc";
 import { escolherArquivoSync } from "@comum/sincronia/arquivo";
 import { definirEmissorDeAviso, mostrarAviso } from "@comum/ui/aviso";
+import { baixar, criarAbrirModal, criarConfirmar, escolherArquivo } from "@comum/ui/dialogo";
 import { h, icone } from "@comum/ui/dom";
 import { definirJanelaQueCresce } from "@comum/ui/flutuante";
 import { CANAL_FAVORITOS, CANAL_LATERAL, CHAVE_LATERAL } from "../modelo/constantes";
@@ -29,7 +30,7 @@ import { CHAVE_CONTADOR } from "../shell/painel";
 import { ControleArquivo, handlesNoIndexedDB, temSeletorDeArquivo } from "../sincronia/arquivoSync";
 import { copiasNoIndexedDB } from "../sincronia/copias";
 import { observarAltura } from "./altura";
-import { type AbrirModal, AppFavoritos } from "./app";
+import { AppFavoritos } from "./app";
 import { carregarLeaflet } from "./mapa";
 
 const lateral = new URLSearchParams(location.hash.slice(1)).get("modo") === "lateral";
@@ -235,87 +236,9 @@ function criarApp(b: Base, ctx: ContextoAba, rpc: Pick<Rpc, "chamar">, g: Gancho
     pessoal: new RepositorioFavoritos(b.area, esc.pessoal, b.carimbo),
   };
 
-  const abrirModal: AbrirModal = ({ titulo, conteudo, icone: nome, aoFechar }) => {
-    const dlg = h("dialog", { class: "spro-dialogo", "aria-label": titulo });
-    const fechar = () => {
-      if (dlg.open) dlg.close();
-    };
-    dlg.append(
-      h(
-        "header",
-        {},
-        nome ? h("span", { class: "spro-dialogo-icone", "aria-hidden": "true" }, icone(nome, 18)) : null,
-        h("h2", {}, titulo),
-        h(
-          "button",
-          { type: "button", class: "spro-botao-icone", "aria-label": "Fechar", title: "Fechar (Esc)", onclick: fechar },
-          icone("fechar", 16),
-        ),
-      ),
-      h("div", { class: "spro-dialogo-corpo" }, conteudo),
-    );
-    dlg.addEventListener("close", () => {
-      dlg.remove();
-      g.aoFecharModal?.();
-      aoFechar?.();
-    });
-    document.body.append(dlg);
-    g.aoAbrirModal?.();
-    dlg.showModal();
-    // Foco no primeiro campo (e não no X do cabeçalho, o primeiro focável da árvore).
-    dlg
-      .querySelector<HTMLElement>(
-        ".spro-dialogo-corpo :is(input:not([type=hidden]):not([type=radio]):not([type=checkbox]), textarea, .spro-combo, .spro-botao.primario)",
-      )
-      ?.focus({ preventScroll: true });
-    return { fechar };
-  };
-
-  const confirmar = (texto: string) =>
-    new Promise<boolean>((ok) => {
-      let resposta = false;
-      let modal: { fechar(): void } | null = null;
-      const corpo = h(
-        "div",
-        {},
-        h("p", {}, texto),
-        h(
-          "div",
-          { class: "spro-dialogo-rodape" },
-          h("button", { type: "button", class: "spro-botao", onclick: () => modal?.fechar() }, "Cancelar"),
-          h(
-            "button",
-            {
-              type: "button",
-              class: "spro-botao perigo",
-              onclick: () => {
-                resposta = true;
-                modal?.fechar();
-              },
-            },
-            "Confirmar",
-          ),
-        ),
-      );
-      modal = abrirModal({ titulo: "Confirmar", icone: "alerta", conteudo: corpo, aoFechar: () => ok(resposta) });
-    });
-
-  const baixar = (nome: string, conteudo: string, tipo: string) => {
-    const url = URL.createObjectURL(new Blob([conteudo], { type: tipo }));
-    const a = h("a", { href: url, download: nome });
-    document.body.append(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 10_000);
-  };
-
-  const escolherArquivo = () =>
-    new Promise<string | null>((ok) => {
-      const i = h("input", { type: "file", accept: ".json,application/json" });
-      i.addEventListener("change", async () => ok(i.files?.[0] ? await i.files[0].text() : null));
-      i.addEventListener("cancel", () => ok(null));
-      i.click();
-    });
+  // Com o painel embutido, o diálogo põe o iframe por cima da tela (aoAbrirModal/aoFecharModal).
+  const abrirModal = criarAbrirModal({ aoAbrir: g.aoAbrirModal, aoFechar: g.aoFecharModal });
+  const confirmar = criarConfirmar(abrirModal);
 
   return new AppFavoritos(raiz, {
     rpc,
@@ -328,7 +251,7 @@ function criarApp(b: Base, ctx: ContextoAba, rpc: Pick<Rpc, "chamar">, g: Gancho
     confirmar,
     baixar,
     copiar: (texto) => navigator.clipboard.writeText(texto),
-    escolherArquivo,
+    escolherArquivo: () => escolherArquivo(),
     hoje: () => hojeISO(),
     aoRedesenhar: g.aoRedesenhar,
     aoContar: g.aoContar,

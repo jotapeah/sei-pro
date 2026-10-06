@@ -8,6 +8,7 @@ import { verificarCombobox, verificarComboboxNoDialogo } from "./verificar-combo
 import { verificarControlePagina } from "./verificar-controle-pagina";
 import { verificarBancoECopias } from "./verificar-copias";
 import { verificarDatas } from "./verificar-datas";
+import { verificarDialogo } from "./verificar-dialogo";
 import { verificarEntidade } from "./verificar-entidade";
 import { verificarFlutuante } from "./verificar-flutuante";
 import { verificarId } from "./verificar-id";
@@ -41,4 +42,5 @@ await verificarMotorTexto();
 await verificarControlePagina();
 await verificarBancoECopias();
 await verificarArquivo();
+await verificarDialogo();
 resumo();

@@ -11,6 +11,7 @@ import type { Area } from "@comum/armazenamento/area";
 import { gerarCsv } from "@comum/csv";
 import type { Rpc } from "@comum/ponte/rpc";
 import { avisar } from "@comum/ui/aviso";
+import type { AbrirModal } from "@comum/ui/dialogo";
 import { h, icone, type NomeIcone } from "@comum/ui/dom";
 import { fecharOrfaos } from "@comum/ui/flutuante";
 import { criarMenu } from "@comum/ui/menu";
@@ -35,7 +36,7 @@ import type { AcoesItem } from "./componentes/item";
 import { renderLista } from "./componentes/lista";
 import { numero, processos } from "./formato";
 
-export type AbrirModal = (o: { titulo: string; conteudo: HTMLElement; icone?: NomeIcone; aoFechar?: () => void }) => { fechar(): void };
+export type { AbrirModal } from "@comum/ui/dialogo";
 
 /** A ponte com os Favoritos (Task 15). null = Favoritos novo inativo: sem estrela, filtro nem "Favoritar". */
 export interface FavoritosDoApp {

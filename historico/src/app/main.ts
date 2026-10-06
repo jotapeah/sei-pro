@@ -19,11 +19,12 @@ import { lerOpcaoLegada } from "@comum/opcoes/legadas";
 import { esperarConexaoDaAba } from "@comum/ponte/conexaoDaAba";
 import { PonteLateral } from "@comum/ponte/lateral";
 import { ErroRpc, type PortaRpc, type Rpc } from "@comum/ponte/rpc";
+import { baixar, criarAbrirModal, criarConfirmar } from "@comum/ui/dialogo";
 import { h, icone } from "@comum/ui/dom";
 import { CANAL_HISTORICO, CANAL_LATERAL, CHAVE_LATERAL, chaveEscopo } from "../modelo/constantes";
 import type { ContextoHistorico } from "../modelo/tipos";
 import { RepositorioHistorico } from "../repositorio";
-import { type AbrirModal, AppHistorico } from "./app";
+import { AppHistorico } from "./app";
 import { favoritosDoApp, precisaRemontar } from "./favoritos";
 
 const parametros = new URLSearchParams(location.hash.slice(1));
@@ -39,6 +40,10 @@ const raiz = document.getElementById("app")!;
 const conexao = lateral ? null : esperarConexaoDaAba(CANAL_HISTORICO);
 
 const mensagem = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+/** Diálogos do app: <dialog> modais irmãos do modal, e o mais novo fica por cima (top layer). */
+const abrirModal = criarAbrirModal();
+const confirmar = criarConfirmar(abrirModal);
 
 if (lateral)
   void iniciarLateral().catch((e) =>
@@ -249,78 +254,4 @@ function abrirLateral(dlg: HTMLDialogElement): void {
 
 function abrirOpcoes(): void {
   void chrome.runtime.openOptionsPage().catch(() => void window.open(chrome.runtime.getURL("html/options.html"), "_blank"));
-}
-
-/** Diálogos do app: <dialog> modais irmãos do modal, e o mais novo fica por cima (top layer). */
-const abrirModal: AbrirModal = ({ titulo, conteudo, icone: nome, aoFechar }) => {
-  const dlg = h("dialog", { class: "spro-dialogo", "aria-label": titulo });
-  const fechar = () => {
-    if (dlg.open) dlg.close();
-  };
-  dlg.append(
-    h(
-      "header",
-      {},
-      nome ? h("span", { class: "spro-dialogo-icone", "aria-hidden": "true" }, icone(nome, 18)) : null,
-      h("h2", {}, titulo),
-      h(
-        "button",
-        { type: "button", class: "spro-botao-icone", "aria-label": "Fechar", title: "Fechar (Esc)", onclick: fechar },
-        icone("fechar", 16),
-      ),
-    ),
-    h("div", { class: "spro-dialogo-corpo" }, conteudo),
-  );
-  dlg.addEventListener("close", () => {
-    dlg.remove();
-    aoFechar?.();
-  });
-  document.body.append(dlg);
-  dlg.showModal();
-  // Foco no primeiro campo (e não no X do cabeçalho, o primeiro focável da árvore).
-  dlg
-    .querySelector<HTMLElement>(
-      ".spro-dialogo-corpo :is(input:not([type=hidden]):not([type=radio]):not([type=checkbox]), textarea, .spro-combo, .spro-botao.primario)",
-    )
-    ?.focus({ preventScroll: true });
-  return { fechar };
-};
-
-function confirmar(texto: string, rotuloOk = "Confirmar"): Promise<boolean> {
-  return new Promise<boolean>((ok) => {
-    let resposta = false;
-    let modal: { fechar(): void } | null = null;
-    const corpo = h(
-      "div",
-      {},
-      h("p", {}, texto),
-      h(
-        "div",
-        { class: "spro-dialogo-rodape" },
-        h("button", { type: "button", class: "spro-botao", onclick: () => modal?.fechar() }, "Cancelar"),
-        h(
-          "button",
-          {
-            type: "button",
-            class: "spro-botao perigo",
-            onclick: () => {
-              resposta = true;
-              modal?.fechar();
-            },
-          },
-          rotuloOk,
-        ),
-      ),
-    );
-    modal = abrirModal({ titulo: "Confirmar", icone: "alerta", conteudo: corpo, aoFechar: () => ok(resposta) });
-  });
-}
-
-function baixar(nome: string, conteudo: string, tipo: string): void {
-  const url = URL.createObjectURL(new Blob([conteudo], { type: tipo }));
-  const a = h("a", { href: url, download: nome });
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
