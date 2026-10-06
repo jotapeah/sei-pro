@@ -29,6 +29,11 @@ export function verificarOperacoes(): void {
   const base = { nome: "Etapa", inicio: "2026-10-05", fim: "2026-10-09", progresso: 0, checklist: [], etiquetas: [] };
   checar("etapa valida", problemasDaEtapa(base).length === 0);
   checar("nome vazio", problemasDaEtapa({ ...base, nome: "   " }).join() === "Informe o nome da etapa.");
+  checar("etapa de 10 anos passa", problemasDaEtapa({ ...base, inicio: "2026-01-01", fim: "2035-12-01" }).length === 0);
+  checar(
+    "etapa de decadas e recusada (mesmo teto da importacao)",
+    problemasDaEtapa({ ...base, inicio: "2000-01-03", fim: "2100-01-03" }).join() === "A etapa pode durar no máximo cerca de 10 anos.",
+  );
   checar("nome com 201 caracteres", problemasDaEtapa({ ...base, nome: "x".repeat(201) }).join() === "O nome pode ter até 200 caracteres.");
   checar("nome com 200 caracteres passa", problemasDaEtapa({ ...base, nome: "x".repeat(200) }).length === 0);
   checar("30 de fevereiro", problemasDaEtapa({ ...base, inicio: "2026-02-30" }).join() === "Informe datas válidas.");

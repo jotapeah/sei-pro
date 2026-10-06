@@ -4,8 +4,9 @@
  * diálogo mostra as mensagens como vieram.
  */
 
+import { diferencaDias } from "@comum/datas/dias";
 import { normalizarTexto } from "@comum/texto";
-import { dataValida, MAX_DIAS_UTEIS } from "./calendario";
+import { dataValida, LIMITE_DIAS_ETAPA, MAX_DIAS_UTEIS } from "./calendario";
 import { LIMITES } from "./constantes";
 import type { Etapa, ItemChecklist, Modelo, Projeto } from "./tipos";
 
@@ -65,6 +66,7 @@ export function problemasDaEtapa(
   const saida = problemasDoNome(e.nome, "Informe o nome da etapa.");
   if (!dataValida(e.inicio) || !dataValida(e.fim)) saida.push("Informe datas válidas.");
   else if (e.fim < e.inicio) saida.push("O término não pode ser antes do início.");
+  else if (diferencaDias(e.inicio, e.fim) > LIMITE_DIAS_ETAPA) saida.push("A etapa pode durar no máximo cerca de 10 anos.");
   if (!Number.isFinite(e.progresso) || e.progresso < 0 || e.progresso > 100) saida.push("O progresso vai de 0 a 100.");
   if (e.checklist.length > LIMITES.checklistItens) saida.push(`O checklist pode ter até ${LIMITES.checklistItens} itens.`);
   if (e.checklist.some((i) => i.texto.length > LIMITES.checklistTexto))

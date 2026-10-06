@@ -19,6 +19,8 @@ export const ANO_MAX = 2100;
 export const MAX_DIAS_UTEIS = 2600;
 /** Dias corridos que cabem em `MAX_DIAS_UTEIS` úteis com folga (2600 × 7/5 = 3640 + feriados). */
 const MAX_DIAS_CORRIDOS = 3700;
+/** Etapa com mais dias corridos que isto (cerca de 10 anos) é rejeitada na digitação e na importação: travaria o desenho das barras. */
+export const LIMITE_DIAS_ETAPA = Math.ceil((MAX_DIAS_UTEIS * 7) / 5);
 
 /** Inteiro entre `min` e `max`; não finito (NaN, ±Infinity) vira `senao`. */
 function limitar(n: number, min: number, max: number, senao: number): number {

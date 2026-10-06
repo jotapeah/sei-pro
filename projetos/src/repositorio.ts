@@ -12,7 +12,7 @@ import { novoId } from "@comum/id";
 import { indiceEntre, indiceValido } from "@comum/ordem/indice";
 import { mesclar, purgarLapides, type Versionada } from "@comum/sincronia/entidade";
 import { normalizarTexto } from "@comum/texto";
-import { dataValida, MAX_DIAS_UTEIS } from "./modelo/calendario";
+import { dataValida, LIMITE_DIAS_ETAPA } from "./modelo/calendario";
 import { DIAS_LAPIDE_EU, DIAS_LAPIDE_UNIDADE, LIMITES } from "./modelo/constantes";
 import { validarDependencias, violacoesDeDatas } from "./modelo/dependencias";
 import { baseDoEscopo, chaveMeta, prefixoDe, rotuloDaVis } from "./modelo/escopo";
@@ -808,9 +808,6 @@ function documentoValido(d: unknown): boolean {
   const o = d as Record<string, unknown>;
   return texto(o.numero) && (o.titulo === undefined || texto(o.titulo));
 }
-
-/** Etapa com mais dias corridos que isto (cerca de 10 anos) é rejeitada: travaria o desenho das barras. */
-const LIMITE_DIAS_ETAPA = Math.ceil((MAX_DIAS_UTEIS * 7) / 5);
 
 /** Forma mínima de cada tipo (arquivo editado à mão ou de versão estranha não entra). */
 export function entidadeValida(x: unknown, tipo: keyof Entidades): boolean {
