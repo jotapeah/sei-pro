@@ -7,10 +7,12 @@
  * (src/api.ts: modelo, repositorio, modelos, wrapper do Gantt e a Frappe ajustada) e roda
  * os portoes sobre o resultado:
  *   - JS so ASCII (regra do projeto para JS da extensao; o esbuild ja escapa, o portao confere);
- *   - sem innerHTML/outerHTML/insertAdjacentHTML nem acao em atributo on* (DOM seguro).
+ *   - sem innerHTML/outerHTML/insertAdjacentHTML nem acao em atributo on* (DOM seguro);
+ *   - estatico/gantt.css so ASCII.
  * O P3 troca ENTRADAS pelas saidas reais (dist/js/init_projetos.js, dist/js/projetos/app.js,
  * dist/html/projetos.html, dist/css/projetos.css) e passa a gravar em dist/.
  */
+import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
@@ -55,6 +57,11 @@ for (const { nome, entrada, formato, saida } of ENTRADAS) {
     console.log(`  ${nome.padEnd(26)} ${Math.round(f.contents.length / 1024)} KB (em memoria)`);
   }
 }
+
+const css = await readFile(resolve(AQUI, "estatico/gantt.css"));
+const j = css.findIndex((b) => b > 0x7f);
+if (j >= 0) erro(`byte nao-ASCII em estatico/gantt.css (posicao ${j})`);
+console.log(`  ${"estatico/gantt.css".padEnd(26)} ${Math.round(css.length / 1024)} KB`);
 
 if (falhou) process.exit(1);
 console.log("  portoes: ASCII e DOM seguro ok");

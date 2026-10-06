@@ -5,8 +5,10 @@
  * aos outros pelo caminho; este arquivo só junta tudo.
  */
 
+export * from "./gantt/decorar";
 export * from "./gantt/escalas";
 export * from "./gantt/linhas";
+export * from "./gantt/montar";
 export * from "./gantt/tarefas";
 export * from "./modelo/alertas";
 export * from "./modelo/calendario";
