@@ -1,4 +1,5 @@
 import type { Area } from "@comum/armazenamento/area";
+import { chaveConsentimento, estadoConsentimento } from "@comum/sincronia/consentimento";
 import { CHAVE_PREFERENCIAS } from "./modelo/constantes";
 import { PREFERENCIAS_PADRAO, type Preferencias } from "./modelo/tipos";
 
@@ -16,8 +17,8 @@ export async function gravarPreferencias(sync: Area, m: Partial<Preferencias>): 
 /**
  * O consentimento é de cada pessoa em cada unidade: o texto fica visível para ELA, ligar numa não liga
  * nas outras, e outro usuário do SEI no mesmo perfil do navegador não herda o "ligado".
+ * A chave (`host|login|idUnidade`) é a da sei-comum (`@comum/sincronia/consentimento`).
  */
-const chaveTP = (host: string, login: string, idUnidade: string) => `${host}|${login.trim().toLowerCase()}|${idUnidade}`;
 
 export function estadoTextoPadrao(
   p: Preferencias,
@@ -25,7 +26,7 @@ export function estadoTextoPadrao(
   login: string,
   idUnidade: string,
 ): "nao-perguntado" | "ligado" | "desligado" {
-  return p.textoPadraoUnidades?.[chaveTP(host, login, idUnidade)] ?? "nao-perguntado";
+  return estadoConsentimento(p.textoPadraoUnidades, chaveConsentimento(host, login, idUnidade));
 }
 
 export async function definirTextoPadrao(
@@ -36,5 +37,7 @@ export async function definirTextoPadrao(
   valor: "ligado" | "desligado",
 ): Promise<Preferencias> {
   const p = await lerPreferencias(sync);
-  return gravarPreferencias(sync, { textoPadraoUnidades: { ...(p.textoPadraoUnidades ?? {}), [chaveTP(host, login, idUnidade)]: valor } });
+  return gravarPreferencias(sync, {
+    textoPadraoUnidades: { ...(p.textoPadraoUnidades ?? {}), [chaveConsentimento(host, login, idUnidade)]: valor },
+  });
 }

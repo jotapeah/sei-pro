@@ -13,6 +13,7 @@ import { verificarMenu } from "./verificar-menu";
 import { verificarOpcoes } from "./verificar-opcoes";
 import { verificarRpc } from "./verificar-rpc";
 import { verificarSincroniaBase } from "./verificar-sincronia-base";
+import { verificarTravaEConsentimento } from "./verificar-trava";
 import { verificarUi } from "./verificar-ui";
 
 verificarDatas();
@@ -31,4 +32,5 @@ await verificarMenu();
 await verificarFlutuante();
 await verificarPonteLateralGenerica();
 await verificarSincroniaBase();
+await verificarTravaEConsentimento();
 resumo();

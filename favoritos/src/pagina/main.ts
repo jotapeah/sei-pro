@@ -13,6 +13,7 @@ import { lerOpcaoLegada } from "@comum/opcoes/legadas";
 import { corDoTemaSei, temaEscuroLegado } from "@comum/pagina/tema";
 import { ligarLadoAba } from "@comum/ponte/lateral";
 import { criarRpc, ErroRpc, type PortaRpc, type Rpc } from "@comum/ponte/rpc";
+import { travarComLocks, travarEsperando } from "@comum/sincronia/trava";
 import cssBase from "@comum/ui/base.css";
 import { acaoNaArvore, lerArvore } from "@nucleo/dominio/arvore";
 import { listarCaixa } from "@nucleo/dominio/caixa";
@@ -109,7 +110,7 @@ async function principal(): Promise<void> {
           escopo: esc.unidade,
           carimbo,
           travar: travarComLocks,
-          travarEsperando: travarEsperandoComLocks,
+          travarEsperando,
           armazem: () =>
             criarArmazemTextoPadrao(new Sei(location.href, () => paginaDe(document)), {
               nome: nomeDoTexto(ctx.login),
@@ -323,13 +324,6 @@ function montarEmbutido(
   };
 }
 
-/** Uma aba sincroniza por vez (Web Locks; o SEI em HTTP não tem: aí vale a comparação de conteúdo do motor). */
-function travarComLocks<T>(nome: string, fn: () => Promise<T>): Promise<T | null> {
-  const locks = (navigator as Navigator & { locks?: LockManager }).locks;
-  if (!locks) return fn();
-  return locks.request(nome, { ifAvailable: true }, async (lock): Promise<T | null> => (lock ? fn() : null)) as Promise<T | null>;
-}
-
 /** "Atualizar fora da unidade": a caixa inteira como trava, depois um processo por vez (pagina/atualizar.ts). */
 function controleAtualizar(ctx: ContextoAba, area: Area, repos: Repos): ControleAtualizar {
   return new ControleAtualizar(
@@ -433,11 +427,4 @@ function instalarDocumentosFavoritos(repos: Repos): void {
     );
     for (const r of [repos.unidade, repos.pessoal]) r?.aoMudar(() => void ler().then(() => estrelas.repintar()));
   });
-}
-
-/** A mesma trava, esperando a vez (para o "apagar do SEI" nunca ser pulado). */
-function travarEsperandoComLocks<T>(nome: string, fn: () => Promise<T>): Promise<T> {
-  const locks = (navigator as Navigator & { locks?: LockManager }).locks;
-  if (!locks) return fn();
-  return locks.request(nome, () => fn()) as Promise<T>;
 }
