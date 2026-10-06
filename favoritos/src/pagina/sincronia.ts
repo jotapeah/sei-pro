@@ -1,6 +1,7 @@
 /**
  * Sincronia por Texto Padrão, do lado da aba do SEI (o content script tem a
- * sessão). Liga e desliga sozinha conforme o consentimento DESTA unidade
+ * sessão). O controle é o genérico da sei-comum (`@comum/sincronia/controlePagina`),
+ * com o adaptador dos favoritos e o consentimento DESTA unidade
  * (`estadoTextoPadrao`), que o usuário decide no app:
  * - ao carregar o Controle de Processos, puxa (no máximo a cada 5 min);
  * - qualquer mudança na lista da unidade, feita aqui, no app ou em outra aba,
@@ -9,35 +10,19 @@
  */
 
 import type { Area } from "@comum/armazenamento/area";
+import { type ArmazemTexto, ControleTextoPadrao } from "@comum/sincronia/controlePagina";
+import type { Envelope } from "../arquivo";
 import { CHAVE_PREFERENCIAS } from "../modelo/constantes";
 import { chaveEscopo } from "../modelo/escopo";
-import type { Carimbo, ContextoAba, Escopo, Preferencias } from "../modelo/tipos";
+import type { Carimbo, ContextoAba, Escopo } from "../modelo/tipos";
 import { definirTextoPadrao, estadoTextoPadrao, lerPreferencias } from "../preferencias";
 import type { RepositorioFavoritos } from "../repositorio";
-import { MotorSincronia, type StatusSync } from "../sincronia/motor";
-import { PREFIXO_TEXTO } from "../sincronia/textoPadrao";
+import { adaptadorFavoritos, type StatusSync } from "../sincronia/motor";
+
+export { ocultarTextosInternos } from "@comum/sincronia/controlePagina";
+export type ArmazemDestino = ArmazemTexto;
 
 export const chaveStatusTexto = (e: Escopo): string => `favoritos/sync/tp/${chaveEscopo(e)}`;
-
-/** Esconde os textos de dados do SEI Pro no seletor "Texto Padrão" ao gerar documento. É cosmético: o dado continua no SEI. */
-export function ocultarTextosInternos(doc: Document): number {
-  let n = 0;
-  for (const o of doc.querySelectorAll<HTMLOptionElement>('select#selTextoPadrao option, select[name="selTextoPadrao"] option')) {
-    if ((o.textContent ?? "").trim().startsWith(PREFIXO_TEXTO)) {
-      o.remove();
-      n++;
-    }
-  }
-  return n;
-}
-
-export interface ArmazemDestino {
-  ler(): Promise<string | null>;
-  gravar(html: string): Promise<void>;
-  excluir(): Promise<boolean>;
-  /** Para conferir que o texto sumiu depois de excluir. */
-  localizar?(): Promise<unknown | null>;
-}
 
 export interface DepsControle {
   ctx: ContextoAba;
@@ -54,102 +39,52 @@ export interface DepsControle {
 }
 
 export class ControleSincronia {
-  private motor: MotorSincronia | null = null;
-  private pararMudancas: (() => void) | null = null;
-  private pararPrefs: (() => void) | null = null;
+  private readonly controle: ControleTextoPadrao<Envelope>;
 
-  constructor(private readonly d: DepsControle) {}
-
-  private estado(p: Preferencias): "nao-perguntado" | "ligado" | "desligado" {
-    return estadoTextoPadrao(p, this.d.ctx.host, this.d.ctx.login, this.d.escopo.unidade?.id ?? "");
-  }
-
-  private criarMotor(): MotorSincronia {
-    const armazem = this.d.armazem();
-    return new MotorSincronia({
-      repo: this.d.repo,
-      escopo: this.d.escopo,
-      destino: { ler: () => armazem.ler(), gravar: (h) => armazem.gravar(h) },
-      area: this.d.area,
-      chaveStatus: chaveStatusTexto(this.d.escopo),
-      carimbo: this.d.carimbo,
-      nomeUsuario: this.d.ctx.nome || this.d.ctx.login,
-      travar: this.d.travar,
-      atrasoEnvio: this.d.atrasoEnvio,
-      // Conferido logo antes de gravar: quem desligou (ou mandou apagar) no meio de uma rodada não ganha o texto de volta.
-      permitido: async () => this.estado(await lerPreferencias(this.d.sync)) === "ligado",
+  constructor(d: DepsControle) {
+    const idUnidade = d.escopo.unidade?.id ?? "";
+    this.controle = new ControleTextoPadrao<Envelope>({
+      area: d.area,
+      adaptador: adaptadorFavoritos({
+        repo: d.repo,
+        escopo: d.escopo,
+        carimbo: d.carimbo,
+        nomeUsuario: d.ctx.nome || d.ctx.login,
+        chaveStatus: chaveStatusTexto(d.escopo),
+      }),
+      armazem: d.armazem,
+      consentimento: {
+        estado: async () => estadoTextoPadrao(await lerPreferencias(d.sync), d.ctx.host, d.ctx.login, idUnidade),
+        definir: (valor) => definirTextoPadrao(d.sync, d.ctx.host, d.ctx.login, idUnidade, valor),
+        aoMudar: (cb) =>
+          d.sync.aoMudar((m) => {
+            if (CHAVE_PREFERENCIAS in m) cb();
+          }),
+      },
+      aoMudarLocal: (cb) => d.repo.aoMudar(cb),
+      travar: d.travar,
+      travarEsperando: d.travarEsperando,
+      atrasoEnvio: d.atrasoEnvio,
+      // Um texto por pessoa: sem releitura antes de gravar (o comportamento de sempre).
+      releituras: 0,
     });
   }
 
-  private rodar(forcar: boolean): Promise<StatusSync> {
-    this.motor ??= this.criarMotor();
-    return this.motor.sincronizar({ forcar });
-  }
-
-  private ligar(puxar: boolean): void {
-    if (this.pararMudancas) return;
-    this.motor ??= this.criarMotor();
-    // As escritas da própria mesclagem também chegam aqui: custam uma leitura a mais 15 s depois,
-    // que acha tudo igual e não regrava. Ignorá-las por janela de tempo engoliria mudança do usuário.
-    this.pararMudancas = this.d.repo.aoMudar(() => void this.motor?.agendarEnvio());
-    if (puxar) void this.rodar(false).catch(() => undefined);
-  }
-
-  private desligar(): void {
-    this.pararMudancas?.();
-    this.pararMudancas = null;
-    this.motor?.parar();
-  }
-
-  async iniciar(tela: string | null): Promise<void> {
-    const ligado = this.estado(await lerPreferencias(this.d.sync)) === "ligado";
-    if (ligado) {
-      const pendente =
-        (await this.motor?.status())?.pendente ??
-        ((await this.d.area.obter(chaveStatusTexto(this.d.escopo)))[chaveStatusTexto(this.d.escopo)] as StatusSync | undefined)?.pendente;
-      this.ligar(tela === "caixa" || pendente === true);
-    }
-    this.pararPrefs = this.d.sync.aoMudar((m) => {
-      if (!(CHAVE_PREFERENCIAS in m)) return;
-      void lerPreferencias(this.d.sync).then((p) => {
-        const e = this.estado(p);
-        if (e === "ligado" && !this.pararMudancas) {
-          this.ligar(false);
-          void this.rodar(true).catch(() => undefined);
-        } else if (e !== "ligado") {
-          this.desligar();
-        }
-      });
-    });
+  iniciar(tela: string | null): Promise<void> {
+    return this.controle.iniciar({ puxar: tela === "caixa" });
   }
 
   /** "Sincronizar agora", pedido pelo app. */
   agora(): Promise<StatusSync> {
-    return this.rodar(true);
+    return this.controle.agora();
   }
 
   /** "Apagar meus dados do SEI desta unidade": exclui o texto e desliga a sincronia. */
-  async apagar(): Promise<boolean> {
-    this.desligar();
-    await definirTextoPadrao(this.d.sync, this.d.ctx.host, this.d.ctx.login, this.d.escopo.unidade?.id ?? "", "desligado");
-    const armazem = this.d.armazem();
-    const fazer = async () => {
-      let excluiu = await armazem.excluir();
-      // Confere: uma rodada que terminou nesse meio tempo (outra aba) pode ter gravado o texto de novo.
-      if (armazem.localizar && (await armazem.localizar())) excluiu = (await armazem.excluir()) || excluiu;
-      return excluiu;
-    };
-    // Na mesma trava da rodada: espera a que está em curso terminar, e só então exclui.
-    const nome = `seipro-favoritos-sync|${chaveStatusTexto(this.d.escopo)}`;
-    const excluiu = this.d.travarEsperando ? await this.d.travarEsperando(nome, fazer) : await fazer();
-    await this.d.area.gravar({
-      [chaveStatusTexto(this.d.escopo)]: { estado: "nunca", quando: Date.now(), pendente: false } satisfies StatusSync,
-    });
-    return excluiu;
+  apagar(): Promise<boolean> {
+    return this.controle.apagar();
   }
 
   parar(): void {
-    this.desligar();
-    this.pararPrefs?.();
+    this.controle.parar();
   }
 }
