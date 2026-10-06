@@ -5,6 +5,9 @@
  * aos outros pelo caminho; este arquivo só junta tudo.
  */
 
+export * from "./gantt/escalas";
+export * from "./gantt/linhas";
+export * from "./gantt/tarefas";
 export * from "./modelo/alertas";
 export * from "./modelo/calendario";
 export * from "./modelo/constantes";
