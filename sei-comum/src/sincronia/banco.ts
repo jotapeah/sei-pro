@@ -25,7 +25,10 @@ export function abrirBanco(nome: string, fabrica: IDBFactory = globalThis.indexe
   });
 }
 
-/** Uma operação num depósito, numa transação própria; resolve quando a transação termina. */
+/**
+ * Uma operação num depósito, numa transação própria; resolve quando a transação termina.
+ * Rejeita no erro e também no abort (a cota excedida aborta a transação sem `error`).
+ */
 export function noDeposito<T>(
   nome: string,
   deposito: Deposito,
@@ -44,6 +47,10 @@ export function noDeposito<T>(
         };
         t.onerror = () => {
           erro(t.error);
+          db.close();
+        };
+        t.onabort = () => {
+          erro(t.error ?? new Error("A transação do IndexedDB foi abortada."));
           db.close();
         };
       }),

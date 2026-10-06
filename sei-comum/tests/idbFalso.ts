@@ -2,6 +2,8 @@
  * IndexedDB mínimo em memória, só o que `banco.ts` usa: open com upgrade,
  * depósitos com keyPath e índice, get/put/delete/getAll e a transação que
  * termina depois. Conta as atualizações de versão de cada banco.
+ * `abortarProxima` faz a próxima transação abortar (como a cota excedida no
+ * commit: só o evento `abort`, com o erro na transação, sem `complete` nem `error`).
  */
 
 interface DepositoFalso {
@@ -15,9 +17,15 @@ interface BancoFalso {
   depositos: Map<string, DepositoFalso>;
 }
 
-export function idbFalso(): { fabrica: IDBFactory; bancos: Map<string, BancoFalso>; atualizacoes: Map<string, number> } {
+export function idbFalso(): {
+  fabrica: IDBFactory;
+  bancos: Map<string, BancoFalso>;
+  atualizacoes: Map<string, number>;
+  abortarProxima(nome?: string): void;
+} {
   const bancos = new Map<string, BancoFalso>();
   const atualizacoes = new Map<string, number>();
+  let abortar: string | null = null;
   const pedido = <T>(result: T) => ({ result });
   const fabrica = {
     open(nome: string, versao: number) {
@@ -57,11 +65,23 @@ export function idbFalso(): { fabrica: IDBFactory; bancos: Map<string, BancoFals
                   ),
               }),
             };
-            const t: { error: null; oncomplete?: () => void; onerror?: () => void; objectStore: () => typeof loja } = {
+            const t: {
+              error: { name: string; message: string } | null;
+              oncomplete?: () => void;
+              onerror?: () => void;
+              onabort?: () => void;
+              objectStore: () => typeof loja;
+            } = {
               error: null,
               objectStore: () => loja,
             };
-            setTimeout(() => t.oncomplete?.(), 0);
+            const aborta = abortar;
+            abortar = null;
+            setTimeout(() => {
+              if (aborta === null) return t.oncomplete?.();
+              t.error = { name: aborta, message: `transação abortada (${aborta})` };
+              t.onabort?.();
+            }, 0);
             return t;
           },
           close: () => undefined,
@@ -76,5 +96,12 @@ export function idbFalso(): { fabrica: IDBFactory; bancos: Map<string, BancoFals
       return r;
     },
   };
-  return { fabrica: fabrica as unknown as IDBFactory, bancos, atualizacoes };
+  return {
+    fabrica: fabrica as unknown as IDBFactory,
+    bancos,
+    atualizacoes,
+    abortarProxima: (nome = "QuotaExceededError") => {
+      abortar = nome;
+    },
+  };
 }

@@ -1,5 +1,5 @@
 import { areaMemoria } from "../src/armazenamento/area";
-import { chaveConsentimento, consentimentoNaArea, definirConsentimento } from "../src/sincronia/consentimento";
+import { chaveConsentimento, consentimentoNaArea, definirConsentimento, type PortaConsentimento } from "../src/sincronia/consentimento";
 import { ControleTextoPadrao, ocultarTextosInternos } from "../src/sincronia/controlePagina";
 import type { StatusSync } from "../src/sincronia/motor";
 import { travarComLocks } from "../src/sincronia/trava";
@@ -182,4 +182,36 @@ export async function verificarControlePagina(): Promise<void> {
   );
   checar("e o apagar, sem travarEsperando, tambem", (await c4.apagar()) === true && r4.remoto.html === null);
   c4.parar();
+
+  secao("controle da pagina: iniciar de novo nao duplica o ouvinte do consentimento");
+  const prefs5 = areaMemoria();
+  const base5 = porta(prefs5);
+  let ouvintes = 0;
+  const contada: PortaConsentimento = {
+    estado: () => base5.estado(),
+    definir: (v) => base5.definir(v),
+    aoMudar: (cb) => {
+      ouvintes++;
+      const soltar = base5.aoMudar(cb);
+      return () => {
+        ouvintes--;
+        soltar();
+      };
+    },
+  };
+  const r5 = armazemEmMemoria();
+  const c5 = new ControleTextoPadrao<EnvTeste>({
+    area: areaMemoria(),
+    adaptador: adaptadorTeste(repoTeste()),
+    armazem: () => r5.armazem,
+    consentimento: contada,
+    aoMudarLocal: () => () => undefined,
+    travar: (_n, fn) => fn(),
+    releituras: 0,
+  });
+  await c5.iniciar({ puxar: false });
+  await c5.iniciar({ puxar: false });
+  checar("duas chamadas a iniciar: um ouvinte so", ouvintes === 1, ouvintes);
+  c5.parar();
+  checar("e parar solta o ouvinte (nenhum fica para tras)", ouvintes === 0, ouvintes);
 }

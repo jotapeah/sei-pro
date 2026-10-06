@@ -1,7 +1,7 @@
 import { abrirBanco, noDeposito } from "../src/sincronia/banco";
 import { type Copia, copiasEmMemoria, copiasNoIndexedDB, fazerCopiaDoDia, recarimbarAtivos } from "../src/sincronia/copias";
 import { idbFalso } from "./idbFalso";
-import { checar, secao } from "./util";
+import { checar, secao, tique } from "./util";
 
 const dono = { host: "sei.exemplo.gov.br", login: "Pedro" };
 
@@ -92,4 +92,24 @@ export async function verificarBancoECopias(): Promise<void> {
     lidas[0]?.envelope.favoritos === 5 && idb.atualizacoes.get("seipro-favoritos") === 1,
     idb.atualizacoes,
   );
+
+  secao("IndexedDB: transacao abortada (cota excedida) rejeita, nao fica pendurada");
+  const idb2 = idbFalso();
+  idb2.abortarProxima();
+  const desfecho = await Promise.race([
+    noDeposito("seipro-teste", "copias", "readwrite", (s) => s.put({ id: "x" }), idb2.fabrica).then(
+      () => "resolveu",
+      (e: { name?: string } | null) => `rejeitou:${e?.name}`,
+    ),
+    tique(50).then(() => "pendurada"),
+  ]);
+  checar("a promessa rejeita com o erro da transacao", desfecho === "rejeitou:QuotaExceededError", desfecho);
+  const copiasDepois = copiasNoIndexedDB<{ x: number }>("seipro-teste", idb2.fabrica);
+  const falha = await copiasDepois
+    .gravar({ id: "h|p|2026-10-06", dono: "h|p", dia: "2026-10-06", quando: 1, quantidade: 1, envelope: { x: 1 } })
+    .then(
+      () => null,
+      (e: unknown) => e,
+    );
+  checar("a transacao seguinte grava normalmente", falha === null && (await copiasDepois.listar({ host: "h", login: "p" })).length === 1);
 }

@@ -102,6 +102,8 @@ export class ControleTextoPadrao<E> {
 
   async iniciar(o: { puxar: boolean }): Promise<void> {
     if ((await this.d.consentimento.estado()) === "ligado") this.ligar(o.puxar || (await this.pendenteGravado()));
+    // Iniciar de novo (mesmo duas chamadas cruzadas) troca o ouvinte do consentimento em vez de somar outro.
+    this.pararConsentimento?.();
     this.pararConsentimento = this.d.consentimento.aoMudar(() => {
       void this.d.consentimento.estado().then((e) => {
         if (e === "ligado" && !this.pararMudancas) {
