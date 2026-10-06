@@ -5,7 +5,11 @@
  * aos outros pelo caminho; este arquivo só junta tudo.
  */
 
+export * from "./modelo/alertas";
 export * from "./modelo/calendario";
 export * from "./modelo/constantes";
 export * from "./modelo/escopo";
+export * from "./modelo/progresso";
+export * from "./modelo/resumo";
+export * from "./modelo/situacao";
 export type * from "./modelo/tipos";
