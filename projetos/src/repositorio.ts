@@ -55,8 +55,18 @@ import type {
   Registro,
   Vinculo,
 } from "./modelo/tipos";
-import { checklistLimpo, ErroValidacao, etiquetasLimpas, nomeLimpo, problemasDaEtapa, problemasDoProjeto } from "./modelo/validacao";
+import {
+  checklistLimpo,
+  ErroValidacao,
+  etiquetasLimpas,
+  nomeLimpo,
+  problemasDaEtapa,
+  problemasDoModelo,
+  problemasDoProjeto,
+} from "./modelo/validacao";
 import { indiceDeProcessos, type VinculoProcesso } from "./modelo/vinculos";
+import { aplicarModelo } from "./modelos/aplicar";
+import { modeloDoProjeto } from "./modelos/salvar";
 
 /** O que está vivo no escopo (sem lápides), numa leitura só. */
 export interface Dados {
@@ -560,6 +570,75 @@ export class RepositorioProjetos {
       c,
     );
     return gravadas.length;
+  }
+
+  // ---------- modelos ----------
+
+  /**
+   * Projeto novo a partir de um modelo (embutido ou salvo), começando em `inicio`. Projeto, fases e
+   * etapas vão numa gravação só (um aviso em `aoMudar`); o modelo inválido ou que gere datas em
+   * conflito é recusado sem gravar nada.
+   */
+  async criarProjetoDeModelo(d: DadosNovoProjeto, modelo: Modelo, inicio: DataISO): Promise<Projeto> {
+    await this.exigirVagaDeProjeto();
+    const c = this.carimbo();
+    const p = novoProjeto(d, this.gerarId(), indiceEntre(maiorOrdem(await this.projetos.listar()), null), c);
+    const problemas = [...problemasDoProjeto(p), ...problemasDoModelo(modelo)];
+    if (problemas.length) throw new ErroValidacao([...new Set(problemas)]);
+    const { fases, etapas } = aplicarModelo(modelo, inicio, { projeto: p.id, carimbo: c, novoId: this.gerarId });
+    const conflitos = violacoesDeDatas(etapas);
+    if (conflitos.length) throw new ErroValidacao(conflitos);
+    await this.salvar(
+      {
+        ...this.entradas(this.projetos, [[p.id, p]]),
+        ...this.entradas(
+          this.fases,
+          fases.map((f) => [f.id, f]),
+        ),
+        ...this.entradas(
+          this.etapas,
+          etapas.map((e) => [e.id, e]),
+        ),
+      },
+      registrosDeProjeto(undefined, p),
+      c,
+    );
+    return p;
+  }
+
+  async salvarComoModelo(projeto: string, nome: string, descricao?: string): Promise<Modelo> {
+    await this.exigirProjeto(projeto);
+    const vivos = (await this.modelos.listar()).filter(vivo);
+    if (vivos.length >= LIMITES.modelos) throw new ErroValidacao([`Limite de ${LIMITES.modelos} modelos. Exclua algum.`]);
+    const d = await this.dados();
+    const c = this.carimbo();
+    const m = modeloDoProjeto(
+      { fases: d.fases.filter((f) => f.projeto === projeto), etapas: d.etapas.filter((e) => e.projeto === projeto) },
+      nome,
+      this.gerarId(),
+      c,
+      descricao,
+    );
+    const problemas = problemasDoModelo(m);
+    if (problemas.length) throw new ErroValidacao(problemas);
+    await this.modelos.gravar(m.id, m);
+    return m;
+  }
+
+  async renomearModelo(id: string, nome: string): Promise<Modelo> {
+    const atual = await this.modelos.obter(id);
+    if (!vivo(atual)) throw new ErroValidacao(["O modelo não existe mais."]);
+    const proposta = { ...atual, nome: nomeLimpo(nome) };
+    const problemas = problemasDoModelo(proposta);
+    if (problemas.length) throw new ErroValidacao(problemas);
+    const m = editar(atual, { nome: proposta.nome }, this.carimbo());
+    await this.modelos.gravar(id, m);
+    return m;
+  }
+
+  async removerModelo(id: string): Promise<void> {
+    const atual = await this.modelos.obter(id);
+    if (vivo(atual)) await this.modelos.gravar(id, remover(atual, this.carimbo()));
   }
 
   // ---------- sincronia, arquivo, limpeza ----------

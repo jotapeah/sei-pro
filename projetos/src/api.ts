@@ -20,4 +20,7 @@ export * from "./modelo/situacao";
 export type * from "./modelo/tipos";
 export * from "./modelo/validacao";
 export * from "./modelo/vinculos";
+export * from "./modelos/aplicar";
+export * from "./modelos/embutidos";
+export * from "./modelos/salvar";
 export * from "./repositorio";
