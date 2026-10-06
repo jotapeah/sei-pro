@@ -5,7 +5,7 @@
  */
 
 import { normalizarTexto } from "@comum/texto";
-import { dataValida } from "./calendario";
+import { dataValida, MAX_DIAS_UTEIS } from "./calendario";
 import { LIMITES } from "./constantes";
 import type { Etapa, ItemChecklist, Modelo, Projeto } from "./tipos";
 
@@ -74,14 +74,46 @@ export function problemasDaEtapa(
   return saida;
 }
 
-export function problemasDoModelo(m: Pick<Modelo, "nome" | "fases" | "etapas">): string[] {
-  const saida = problemasDoNome(m.nome, "Informe o nome do modelo.");
-  if (m.etapas.length > LIMITES.etapasPorProjeto) saida.push(`Um modelo pode ter até ${LIMITES.etapasPorProjeto} etapas.`);
-  for (const e of m.etapas) {
-    if (!nomeLimpo(e.nome)) saida.push("Toda etapa do modelo precisa de nome.");
-    if (e.aPartirDe < 0 || e.duracao < 0) saida.push("As durações do modelo não podem ser negativas.");
-    if (e.fase !== undefined && (e.fase < 0 || e.fase >= m.fases.length))
-      saida.push("Etapa do modelo aponta para uma fase que não existe.");
+function inteiroNaFaixa(n: unknown, max: number): boolean {
+  return typeof n === "number" && Number.isInteger(n) && n >= 0 && n <= max;
+}
+
+/**
+ * Forma do conteúdo de um modelo, sem confiar nos tipos: o modelo pode vir de um
+ * Texto Padrão da unidade editado à mão. É a mesma regra do cadastro e da importação.
+ */
+export function problemasDaEstruturaDoModelo(fases: unknown, etapas: unknown): string[] {
+  if (!Array.isArray(fases) || !Array.isArray(etapas)) return ["O modelo precisa de lista de fases e de etapas."];
+  const saida: string[] = [];
+  if (fases.length > LIMITES.etapasPorProjeto) saida.push(`Um modelo pode ter até ${LIMITES.etapasPorProjeto} fases.`);
+  if (fases.some((f) => typeof f !== "string")) saida.push("Toda fase do modelo precisa ser um texto.");
+  if (etapas.length > LIMITES.etapasPorProjeto) {
+    saida.push(`Um modelo pode ter até ${LIMITES.etapasPorProjeto} etapas.`);
+    return saida;
   }
-  return [...new Set(saida)];
+  etapas.forEach((e: unknown, i) => {
+    if (!e || typeof e !== "object") {
+      saida.push("Toda etapa do modelo precisa ser um objeto.");
+      return;
+    }
+    const x = e as Record<string, unknown>;
+    if (typeof x.nome !== "string" || !nomeLimpo(x.nome)) saida.push("Toda etapa do modelo precisa de nome.");
+    if (!inteiroNaFaixa(x.aPartirDe, MAX_DIAS_UTEIS) || !inteiroNaFaixa(x.duracao, MAX_DIAS_UTEIS))
+      saida.push(`As durações do modelo são números inteiros de 0 a ${MAX_DIAS_UTEIS} dias úteis.`);
+    if (x.fase !== undefined && !(typeof x.fase === "number" && Number.isInteger(x.fase) && x.fase >= 0 && x.fase < fases.length))
+      saida.push("Etapa do modelo aponta para uma fase que não existe.");
+    if (
+      !Array.isArray(x.dependeDe) ||
+      x.dependeDe.some((d) => typeof d !== "number" || !Number.isInteger(d) || d < 0 || d >= etapas.length || d === i)
+    )
+      saida.push("Etapa do modelo depende de uma etapa que não existe ou dela mesma.");
+    if (!Array.isArray(x.checklist) || x.checklist.some((t) => typeof t !== "string" || t.length > LIMITES.checklistTexto))
+      saida.push(`Cada item do checklist do modelo é um texto de até ${LIMITES.checklistTexto} caracteres.`);
+    else if (x.checklist.length > LIMITES.checklistItens) saida.push(`O checklist pode ter até ${LIMITES.checklistItens} itens.`);
+  });
+  return saida;
+}
+
+export function problemasDoModelo(m: Pick<Modelo, "nome" | "fases" | "etapas">): string[] {
+  return [...new Set([...problemasDoNome(m.nome, "Informe o nome do modelo."), ...problemasDaEstruturaDoModelo(m.fases, m.etapas)])];
 }

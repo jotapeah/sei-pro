@@ -7,11 +7,12 @@
 
 import type { Area } from "@comum/armazenamento/area";
 import { Colecao, obterPorPrefixo } from "@comum/armazenamento/colecao";
+import { diferencaDias } from "@comum/datas/dias";
 import { novoId } from "@comum/id";
 import { indiceEntre, indiceValido } from "@comum/ordem/indice";
 import { mesclar, purgarLapides, type Versionada } from "@comum/sincronia/entidade";
 import { normalizarTexto } from "@comum/texto";
-import { dataValida } from "./modelo/calendario";
+import { dataValida, MAX_DIAS_UTEIS } from "./modelo/calendario";
 import { DIAS_LAPIDE_EU, DIAS_LAPIDE_UNIDADE, LIMITES } from "./modelo/constantes";
 import { validarDependencias, violacoesDeDatas } from "./modelo/dependencias";
 import { baseDoEscopo, chaveMeta, prefixoDe, rotuloDaVis } from "./modelo/escopo";
@@ -60,6 +61,7 @@ import {
   ErroValidacao,
   etiquetasLimpas,
   nomeLimpo,
+  problemasDaEstruturaDoModelo,
   problemasDaEtapa,
   problemasDoModelo,
   problemasDoProjeto,
@@ -807,6 +809,9 @@ function documentoValido(d: unknown): boolean {
   return texto(o.numero) && (o.titulo === undefined || texto(o.titulo));
 }
 
+/** Etapa com mais dias corridos que isto (cerca de 10 anos) é rejeitada: travaria o desenho das barras. */
+const LIMITE_DIAS_ETAPA = Math.ceil((MAX_DIAS_UTEIS * 7) / 5);
+
 /** Forma mínima de cada tipo (arquivo editado à mão ou de versão estranha não entra). */
 export function entidadeValida(x: unknown, tipo: keyof Entidades): boolean {
   if (!x || typeof x !== "object") return false;
@@ -826,6 +831,7 @@ export function entidadeValida(x: unknown, tipo: keyof Entidades): boolean {
         texto(o.ordem) &&
         dataValida(o.inicio) &&
         dataValida(o.fim) &&
+        diferencaDias(o.inicio, o.fim) <= LIMITE_DIAS_ETAPA &&
         Array.isArray(o.dependeDe) &&
         Array.isArray(o.checklist) &&
         Array.isArray(o.etiquetas) &&
@@ -835,7 +841,7 @@ export function entidadeValida(x: unknown, tipo: keyof Entidades): boolean {
     case "h":
       return texto(o.alvo) && texto(o.projeto) && typeof o.quando === "number" && texto(o.campo);
     case "m":
-      return texto(o.nome) && Array.isArray(o.fases) && Array.isArray(o.etapas);
+      return texto(o.nome) && problemasDaEstruturaDoModelo(o.fases, o.etapas).length === 0;
   }
 }
 

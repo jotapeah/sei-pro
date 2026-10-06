@@ -6,17 +6,27 @@
 
 import { indicesEntre } from "@comum/ordem/indice";
 import { FERIADOS, fimPorDuracao, proximoUtil, somarUteis } from "../modelo/calendario";
+import { LIMITES } from "../modelo/constantes";
 import { novaEtapa, novaFase } from "../modelo/operacoes";
-import type { Carimbo, DataISO, Etapa, Fase, Modelo } from "../modelo/tipos";
+import type { Carimbo, DataISO, Etapa, EtapaModelo, Fase, Modelo } from "../modelo/tipos";
 
 export interface DatasDaEtapa {
   inicio: DataISO;
   fim: DataISO;
 }
 
+/**
+ * Defesa em profundidade: o modelo pode vir de um Texto Padrão editado à mão e chegar
+ * aqui sem validação. Só as primeiras `etapasPorProjeto` etapas/fases contam, e as
+ * durações são limitadas a `MAX_DIAS_UTEIS` pelo calendário (valor não finito vale 0/1).
+ */
+function etapasDe(modelo: Pick<Modelo, "etapas">): EtapaModelo[] {
+  return modelo.etapas.slice(0, LIMITES.etapasPorProjeto);
+}
+
 export function datasDoModelo(modelo: Pick<Modelo, "etapas">, inicio: DataISO, feriados: ReadonlySet<DataISO> = FERIADOS): DatasDaEtapa[] {
   const base = proximoUtil(inicio, feriados);
-  return modelo.etapas.map((e) => {
+  return etapasDe(modelo).map((e) => {
     const ini = e.aPartirDe > 0 ? somarUteis(base, Math.floor(e.aPartirDe), feriados) : base;
     return { inicio: ini, fim: e.marco ? ini : fimPorDuracao(ini, e.duracao, feriados) };
   });
@@ -38,8 +48,8 @@ export function previaDoModelo(
   const datas = datasDoModelo(modelo, inicio, feriados);
   const termina = datas.reduce<DataISO | undefined>((m, d) => (m === undefined || d.fim > m ? d.fim : m), undefined);
   const previa: PreviaModelo = {
-    etapas: modelo.etapas.length,
-    fases: modelo.fases.length,
+    etapas: datas.length,
+    fases: modelo.fases.slice(0, LIMITES.etapasPorProjeto).length,
     primeiras: modelo.etapas.slice(0, 3).map((e, i) => ({ nome: e.nome, ...datas[i]! })),
   };
   if (termina) previa.termina = termina;
@@ -56,12 +66,14 @@ export interface ContextoModelo {
 /** Fases e etapas novas (ids novos; dependências e fases remapeadas; índices inválidos descartados). */
 export function aplicarModelo(modelo: Modelo, inicio: DataISO, ctx: ContextoModelo): { fases: Fase[]; etapas: Etapa[] } {
   const c = ctx.carimbo;
-  const ordensF = modelo.fases.length ? indicesEntre(null, null, modelo.fases.length) : [];
-  const fases = modelo.fases.map((nome, i) => novaFase(ctx.projeto, nome, ctx.novoId(), ordensF[i]!, c));
-  const ids = modelo.etapas.map(() => ctx.novoId());
-  const ordensE = modelo.etapas.length ? indicesEntre(null, null, modelo.etapas.length) : [];
+  const nomesFases = modelo.fases.slice(0, LIMITES.etapasPorProjeto);
+  const lista = etapasDe(modelo);
+  const ordensF = nomesFases.length ? indicesEntre(null, null, nomesFases.length) : [];
+  const fases = nomesFases.map((nome, i) => novaFase(ctx.projeto, nome, ctx.novoId(), ordensF[i]!, c));
+  const ids = lista.map(() => ctx.novoId());
+  const ordensE = lista.length ? indicesEntre(null, null, lista.length) : [];
   const datas = datasDoModelo(modelo, inicio, ctx.feriados ?? FERIADOS);
-  const etapas = modelo.etapas.map((e, i) =>
+  const etapas = lista.map((e, i) =>
     novaEtapa(
       {
         projeto: ctx.projeto,

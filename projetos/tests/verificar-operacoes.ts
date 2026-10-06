@@ -59,6 +59,29 @@ export function verificarOperacoes(): void {
       etapas: [{ nome: "x", fase: 0, aPartirDe: 0, duracao: 1, marco: false, dependeDe: [], checklist: [] }],
     }).join() === "Etapa do modelo aponta para uma fase que não existe.",
   );
+  const em = { nome: "x", aPartirDe: 0, duracao: 1, marco: false, dependeDe: [] as number[], checklist: [] as string[] };
+  const ruimModelo = (e: object, fases: string[] = []): boolean =>
+    problemasDoModelo({ nome: "M", fases, etapas: [{ ...em, ...e }] }).length > 0;
+  checar("modelo recusa aPartirDe 1e9", ruimModelo({ aPartirDe: 1e9 }));
+  checar("modelo recusa duracao Infinity e NaN", ruimModelo({ duracao: Number.POSITIVE_INFINITY }) && ruimModelo({ duracao: Number.NaN }));
+  checar("modelo recusa fracao e texto como numero", ruimModelo({ aPartirDe: 1.5 }) && ruimModelo({ duracao: "3" }));
+  checar("modelo aceita o teto (2600) e recusa 2601", !ruimModelo({ duracao: 2600 }) && ruimModelo({ duracao: 2601 }));
+  checar(
+    "modelo recusa fase fracionaria ou alem do fim",
+    ruimModelo({ fase: 1 }, ["a"]) && ruimModelo({ fase: 0.5 }, ["a"]) && !ruimModelo({ fase: 0 }, ["a"]),
+  );
+  checar(
+    "modelo recusa dependeDe fora da faixa e a si mesma",
+    ruimModelo({ dependeDe: [5] }) && ruimModelo({ dependeDe: [0] }) && ruimModelo({ dependeDe: [-1] }),
+  );
+  checar(
+    "modelo recusa checklist com nao-texto ou item gigante",
+    ruimModelo({ checklist: [1] }) && ruimModelo({ checklist: ["a".repeat(201)] }),
+  );
+  checar(
+    "modelo recusa mais de 300 etapas",
+    problemasDoModelo({ nome: "M", fases: [], etapas: Array.from({ length: 301 }, () => ({ ...em })) }).length > 0,
+  );
   checar("nomeLimpo junta espacos", nomeLimpo("  Revisão   da  norma ") === "Revisão da norma");
   checar(
     "etiquetasLimpas sem repetidas por acento e caixa",

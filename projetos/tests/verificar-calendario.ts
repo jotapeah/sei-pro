@@ -6,9 +6,11 @@ import {
   FERIADOS,
   feriadosNoPeriodo,
   fimPorDuracao,
+  MAX_DIAS_UTEIS,
   meiaNoite,
   proximoUtil,
   sextaDaSemana,
+  somarUteis,
   uteisEntre,
 } from "../src/modelo/calendario";
 import { checar, secao } from "./util";
@@ -61,4 +63,28 @@ export function verificarCalendario(): void {
   checar("dataValida recusa formato brasileiro", !dataValida("06/10/2026"));
   checar("dataValida recusa nao-texto", !dataValida(20261006));
   checar("29/02 so em ano bissexto", dataValida("2028-02-29") && !dataValida("2027-02-29"));
+
+  secao("projetos: calendario a prova de valores hostis");
+  const tempo = <T>(f: () => T): { r: T; ms: number } => {
+    const t = Date.now();
+    const r = f();
+    return { r, ms: Date.now() - t };
+  };
+  checar("MAX_DIAS_UTEIS e 2600", MAX_DIAS_UTEIS === 2600);
+  const inf = tempo(() => fimPorDuracao("2026-10-06", Number.POSITIVE_INFINITY));
+  checar("fimPorDuracao(Infinity) termina e vale 1 dia", inf.ms < 2000 && inf.r === "2026-10-06");
+  checar("fimPorDuracao(NaN) vale 1 dia", fimPorDuracao("2026-10-06", Number.NaN) === "2026-10-06");
+  const mil = tempo(() => fimPorDuracao("2026-10-06", 1e9));
+  checar("fimPorDuracao(1e9) termina rapido e no teto", mil.ms < 2000 && mil.r === fimPorDuracao("2026-10-06", MAX_DIAS_UTEIS));
+  const som = tempo(() => somarUteis("2026-10-06", 1e9));
+  checar("somarUteis(1e9) termina rapido e no teto", som.ms < 2000 && som.r === somarUteis("2026-10-06", MAX_DIAS_UTEIS));
+  checar(
+    "somarUteis(Infinity/NaN) = a propria data",
+    somarUteis("2026-10-06", Number.POSITIVE_INFINITY) === "2026-10-06" && somarUteis("2026-10-06", Number.NaN) === "2026-10-06",
+  );
+  checar("somarUteis ainda volta com negativo normal", somarUteis("2026-10-07", -1) === "2026-10-06");
+  const longa = tempo(() => duracaoUteis("2026-01-01", "2100-12-31"));
+  checar("duracaoUteis de 75 anos termina rapido e no teto", longa.ms < 2000 && longa.r === MAX_DIAS_UTEIS);
+  const entre = tempo(() => [uteisEntre("2026-01-01", "2100-12-31"), uteisEntre("2100-12-31", "2026-01-01")]);
+  checar("uteisEntre de 75 anos: teto com sinal", entre.ms < 2000 && entre.r[0] === MAX_DIAS_UTEIS && entre.r[1] === -MAX_DIAS_UTEIS);
 }

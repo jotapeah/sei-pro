@@ -6,11 +6,25 @@
  * seguinte a partir das 21h em Brasília.
  */
 
-import { type DataISO, deISO, diasUteisEntre, ehDiaUtil, hojeISO, somarDias, somarDiasUteis } from "@comum/datas/dias";
+import { type DataISO, deISO, diasUteisEntre, diferencaDias, ehDiaUtil, hojeISO, somarDias, somarDiasUteis } from "@comum/datas/dias";
 import { conjuntoDeFeriados, type Feriado, feriadosNacionais } from "@comum/datas/feriados";
 
 export const ANO_MIN = 2000;
 export const ANO_MAX = 2100;
+/**
+ * Teto de dias úteis (cerca de 10 anos) para qualquer contagem ou soma. Modelos e
+ * etapas podem vir de um Texto Padrão editável à mão: sem teto, `aPartirDe: 1e9` ou
+ * `Infinity` faria a página do SEI girar dia a dia para sempre.
+ */
+export const MAX_DIAS_UTEIS = 2600;
+/** Dias corridos que cabem em `MAX_DIAS_UTEIS` úteis com folga (2600 × 7/5 = 3640 + feriados). */
+const MAX_DIAS_CORRIDOS = 3700;
+
+/** Inteiro entre `min` e `max`; não finito (NaN, ±Infinity) vira `senao`. */
+function limitar(n: number, min: number, max: number, senao: number): number {
+  if (typeof n !== "number" || !Number.isFinite(n)) return senao;
+  return Math.min(max, Math.max(min, Math.trunc(n)));
+}
 
 function anos(de: number, ate: number): number[] {
   return Array.from({ length: ate - de + 1 }, (_, i) => de + i);
@@ -46,33 +60,40 @@ export function ehUtil(iso: DataISO, feriados: ReadonlySet<DataISO> = FERIADOS):
 /** A própria data, se for dia útil; senão o próximo dia útil. */
 export function proximoUtil(iso: DataISO, feriados: ReadonlySet<DataISO> = FERIADOS): DataISO {
   let d = iso;
-  while (!ehDiaUtil(d, feriados)) d = somarDias(d, 1);
+  // Uma semana basta; o limite protege de um conjunto de feriados que cubra todos os dias.
+  for (let i = 0; i < 366 && !ehDiaUtil(d, feriados); i++) d = somarDias(d, 1);
   return d;
 }
 
 /** Dias úteis em [inicio, fim], inclusive. 0 quando fim < inicio ou não há dia útil no período. */
 export function duracaoUteis(inicio: DataISO, fim: DataISO, feriados: ReadonlySet<DataISO> = FERIADOS): number {
   if (fim < inicio) return 0;
-  return (ehDiaUtil(inicio, feriados) ? 1 : 0) + diasUteisEntre(inicio, fim, feriados);
+  if (diferencaDias(inicio, fim) > MAX_DIAS_CORRIDOS) return MAX_DIAS_UTEIS;
+  return Math.min(MAX_DIAS_UTEIS, ehDiaUtil(inicio, feriados) ? 1 : 0) + diasUteisEntre(inicio, fim, feriados);
 }
 
 /**
  * Término de uma etapa que começa em `inicio` e dura `duracao` dias úteis
- * (inclusive). O início vai para o próximo dia útil; duração < 1 vale 1.
+ * (inclusive). O início vai para o próximo dia útil; duração < 1 ou não finita
+ * vale 1 e acima de `MAX_DIAS_UTEIS` vale o teto.
  */
 export function fimPorDuracao(inicio: DataISO, duracao: number, feriados: ReadonlySet<DataISO> = FERIADOS): DataISO {
   const comeco = proximoUtil(inicio, feriados);
-  const n = Math.max(1, Math.floor(duracao));
+  const n = limitar(duracao, 1, MAX_DIAS_UTEIS, 1);
   return n === 1 ? comeco : somarDiasUteis(comeco, n - 1, feriados);
 }
 
-/** Dias úteis depois de `a` até `b` (inclusive); negativo quando b < a. */
+/** Dias úteis depois de `a` até `b` (inclusive); negativo quando b < a. Limitado a ±`MAX_DIAS_UTEIS`. */
 export function uteisEntre(a: DataISO, b: DataISO, feriados: ReadonlySet<DataISO> = FERIADOS): number {
-  return diasUteisEntre(a, b, feriados);
+  const corridos = diferencaDias(a, b);
+  if (Math.abs(corridos) > MAX_DIAS_CORRIDOS) return corridos > 0 ? MAX_DIAS_UTEIS : -MAX_DIAS_UTEIS;
+  return limitar(diasUteisEntre(a, b, feriados), -MAX_DIAS_UTEIS, MAX_DIAS_UTEIS, 0);
 }
 
+/** Soma `n` dias úteis (negativo volta). `n` não finito vale 0; o módulo é limitado a `MAX_DIAS_UTEIS`. */
 export function somarUteis(iso: DataISO, n: number, feriados: ReadonlySet<DataISO> = FERIADOS): DataISO {
-  return somarDiasUteis(iso, n, feriados);
+  const q = limitar(n, -MAX_DIAS_UTEIS, MAX_DIAS_UTEIS, 0);
+  return q === 0 ? iso : somarDiasUteis(iso, q, feriados);
 }
 
 /** Feriados (com nome) entre duas datas, inclusive: para o destaque do Gantt na escala Dia. */

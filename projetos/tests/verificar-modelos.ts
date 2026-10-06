@@ -79,6 +79,36 @@ export async function verificarModelos(): Promise<void> {
     aplicarModelo(ruim, "2026-08-03", { projeto: "p", carimbo: C, novoId: () => `z${++k}` }).etapas[0]?.dependeDe.length === 0,
   );
 
+  secao("projetos: modelo hostil nao trava");
+  const hEt = { nome: "h", aPartirDe: 1e9, duracao: Number.POSITIVE_INFINITY, marco: false, dependeDe: [], checklist: [] };
+  const hostil = {
+    ...REVISAO!,
+    etapas: [hEt, { ...hEt, aPartirDe: Number.NaN, duracao: Number.NaN }, { ...hEt, aPartirDe: -5, duracao: -1e9 }],
+  };
+  const t0 = Date.now();
+  const ap = aplicarModelo(hostil, "2026-08-03", { projeto: "p", carimbo: C, novoId: () => `h${++k}` });
+  const pvh = previaDoModelo(hostil, "2026-08-03");
+  checar("modelo hostil: aplicar e previa terminam rapido", Date.now() - t0 < 3000 && ap.etapas.length === 3 && pvh.etapas === 3);
+  checar(
+    "modelo hostil: datas dentro de 11 anos e fim >= inicio",
+    ap.etapas.every((e) => e.fim >= e.inicio && e.fim < "2038-01-01"),
+  );
+  const enorme = { ...REVISAO!, etapas: Array.from({ length: 5000 }, () => ({ ...REVISAO!.etapas[0]! })) };
+  checar(
+    "modelo com milhares de etapas e cortado no limite",
+    aplicarModelo(enorme, "2026-08-03", { projeto: "p", carimbo: C, novoId: () => `g${++k}` }).etapas.length === LIMITES.etapasPorProjeto,
+  );
+  const longo = modeloDoProjeto(
+    {
+      fases: [],
+      etapas: [{ ...ap.etapas[0]!, id: "e1", inicio: "2026-01-05", fim: "2100-01-05", removidoEm: undefined, dependeDe: [] }],
+    },
+    "Longo",
+    "ml",
+    C,
+  );
+  checar("salvar como modelo com etapa de 74 anos termina e fica no teto", longo.etapas[0]!.duracao <= 2600);
+
   secao("projetos: salvar como modelo (ida e volta)");
   const volta = modeloDoProjeto({ fases, etapas }, "Minha revisão", "m1", C);
   const ida = REVISAO!.etapas.map((e) => `${e.aPartirDe}/${e.duracao}`).join();

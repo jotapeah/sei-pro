@@ -96,6 +96,31 @@ export async function verificarEscopos(): Promise<void> {
     (await ro.criarProjeto({ nome: "Depois do torto" })).nome === "Depois do torto",
   );
   checar("entidadeValida aceita etapa completa", entidadeValida(etapa({ id: "a" }), "e"));
+  checar("entidadeValida recusa etapa de 30 anos", !entidadeValida(etapa({ id: "a", inicio: "2026-01-05", fim: "2056-01-05" }), "e"));
+  checar("entidadeValida aceita etapa de 5 anos", entidadeValida(etapa({ id: "a", inicio: "2026-01-05", fim: "2031-01-05" }), "e"));
+  const mBase = {
+    id: "m",
+    nome: "M",
+    fases: ["F"],
+    etapas: [{ nome: "x", aPartirDe: 0, duracao: 1, marco: false, dependeDe: [], checklist: [] }],
+    criadoEm: 1,
+    atualizadoEm: 1,
+    dispositivo: "d",
+  };
+  checar("entidadeValida aceita modelo normal", entidadeValida(mBase, "m"));
+  checar(
+    "entidadeValida recusa modelo hostil (aPartirDe 1e9)",
+    !entidadeValida({ ...mBase, etapas: [{ ...mBase.etapas[0], aPartirDe: 1e9 }] }, "m"),
+  );
+  checar("entidadeValida recusa modelo com fase que nao e texto", !entidadeValida({ ...mBase, fases: [1] }, "m"));
+  checar("entidadeValida recusa modelo com etapa que nao e objeto", !entidadeValida({ ...mBase, etapas: [null] }, "m"));
+  const hostil = { ...mBase, id: "mh", etapas: [{ ...mBase.etapas[0], duracao: Number.POSITIVE_INFINITY }] };
+  const { repo: rh } = novoRepo(ESCOPO_UN, areaMemoria(), "h");
+  const rImp = await rh.importar({ m: [mBase, hostil as never], e: [etapa({ id: "trinta", inicio: "2026-01-05", fim: "2056-01-05" })] });
+  checar(
+    "importar ignora modelo hostil e etapa de 30 anos",
+    (await rh.dados()).modelos.length === 1 && (await rh.dados()).etapas.length === 0 && rImp.ignorados === 2,
+  );
   checar("entidadeValida recusa etapa sem datas", !entidadeValida({ ...etapa({ id: "a" }), fim: undefined }, "e"));
 
   secao("projetos: limpeza de lapides");
