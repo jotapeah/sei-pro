@@ -11,7 +11,7 @@ export { criarHttp, verificarPagina, type Http, type Pagina, type Arquivo, type 
 export { codificarLatin1, decodificarLatin1, paraLatin1Seguro } from "./sessao/codificacao";
 export { definirAnalisador } from "./sessao/dom";
 export { Formulario, lerLupa, serializarLupa, urlContem, normalizar, type ItemLupa, type Opcao } from "./formulario/formulario";
-export { linksAssinados, linkDaAcao, parametros, semAssinaturas } from "./links/links";
+export { linkDoMenu, linksAssinados, linkDaAcao, parametros, semAssinaturas } from "./links/links";
 export { abrirArvore, lerArvore, acaoNaArvore, type Arvore, type DocumentoArvore, type NivelAcesso } from "./dominio/arvore";
 export { consultarProcesso, alterarProcesso, concluirProcesso, reabrirProcesso, type Processo, type AlteracaoProcesso } from "./dominio/processo";
 export {
@@ -42,4 +42,11 @@ export { listarOpcoes, type ListaOpcoes, type OpcaoSei } from "./dominio/opcoes"
 export { enviarProcesso, assinarDocumento, type Envio, type Assinatura } from "./dominio/tramitacao";
 export { excluirDocumento, cancelarDocumento, cancelarAssinatura, darCiencia } from "./dominio/acoesDocumento";
 export { pesquisar, type CriteriosPesquisa, type ResultadoPesquisa } from "./dominio/pesquisa";
-export { criarArmazemTextoPadrao, type ArmazemTextoPadrao, type TextoLocalizado } from "./dominio/textoPadrao";
+export {
+  criarArmazemTextoPadrao,
+  type ArmazemTextoPadrao,
+  type ConferenciaGravacao,
+  type ResultadoGravacao,
+  type SeiDoTexto,
+  type TextoLocalizado,
+} from "./dominio/textoPadrao";

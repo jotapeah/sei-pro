@@ -11,7 +11,7 @@
 
 import { abrirArvore, type Arvore } from "./dominio/arvore";
 import { Formulario } from "./formulario/formulario";
-import { linksAssinados, parametros } from "./links/links";
+import { linkDoMenu, linksAssinados, parametros } from "./links/links";
 import { analisarHtml, decodificarEntidades, textoDe } from "./sessao/dom";
 import { ErroSei } from "./sessao/erros";
 import { criarHttp, type DependenciasHttp, type Http, type OpcoesHttp, type Pagina } from "./sessao/http";
@@ -105,20 +105,9 @@ export class Sei {
     return lerContexto(this.base());
   }
 
-  /** Link assinado de um item do menu principal (ex.: `procedimento_controlar`). */
+  /** Link assinado de um item do menu principal (ex.: `procedimento_controlar`): `linkDoMenu` na tela base. */
   linkMenu(acao: string): string {
-    // Procura primeiro no menu: a mesma ação aparece em outros lugares da tela
-    // com parâmetros extras (ex.: `procedimento_controlar&tipo_filtro=M` é a
-    // caixa filtrada por marcador, e usá-la mudaria a visão do usuário).
-    const base = this.base();
-    const menu = [...base.doc.querySelectorAll("#infraMenu a[href], #main-menu a[href], .infraMenu a[href]")]
-      .map((a) => a.getAttribute("href") ?? "")
-      .join("\n");
-    const candidatos = linksAssinados(menu).filter((l) => parametros(l).get("acao") === acao);
-    const todos = candidatos.length ? candidatos : linksAssinados(base.html).filter((l) => parametros(l).get("acao") === acao);
-    const l = todos.sort((a, b) => [...parametros(a).keys()].length - [...parametros(b).keys()].length)[0];
-    if (!l) throw new ErroSei("SEI_ACAO_INDISPONIVEL", `O menu do SEI n\u00E3o oferece "${acao}" para este usu\u00E1rio.`);
-    return l;
+    return linkDoMenu(this.base(), acao);
   }
 
   /** Recarrega a tela base (depois de trocar de unidade, por exemplo). */
