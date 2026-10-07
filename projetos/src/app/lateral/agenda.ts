@@ -75,7 +75,10 @@ export function linhaDoCartao(p: ProjetoNaTela, hoje: DataISO): { texto: string;
   const r = p.resumo;
   if (r.situacao === "semEtapas") return { texto: "sem etapas", tom: "normal" };
   if (r.situacao === "concluido") {
-    const fim = p.etapas.reduce<string>((m, e) => (e.concluidaEm && e.concluidaEm > m ? e.concluidaEm : m), "");
+    const fim = p.etapas.reduce<string>(
+      (m, e) => (e.removidoEm === undefined && e.concluidaEm && e.concluidaEm > m ? e.concluidaEm : m),
+      "",
+    );
     return { texto: fim ? `concluído em ${dataDoPrazo(fim, hoje)}` : "concluído", tom: "ok" };
   }
   const termina = r.fim ? ` · termina ${dataDoPrazo(r.fim, hoje)}` : "";

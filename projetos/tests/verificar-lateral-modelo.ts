@@ -195,4 +195,53 @@ export function verificarLateralModelo(): void {
       .meses.map((m) => m.rotulo)
       .join() === "out",
   );
+
+  secao("lateral (rodada 1): ano fora de 2000-2100, data torta e lapide");
+  const opcoes = { hoje: HOJE, ordem: "inicio" as const, recolhidas: new Set<string>() };
+  const mini = (m: Partial<Etapa>) =>
+    miniGantt(linhasDoProjeto({ projeto: "m", fases: [], etapas: [etapa({ id: "r", projeto: "m", ...m })] }, opcoes), HOJE);
+  const g9999 = mini({ inicio: "2026-10-01", fim: "9999-12-31" });
+  checar(
+    "fim 9999: nao lanca, barra vazia e eixo do mes de hoje",
+    g9999.linhas[0]?.tipo === "etapa" && g9999.linhas[0].largura === 0 && g9999.meses.length === 1,
+    g9999,
+  );
+  const g1900 = mini({ inicio: "1900-01-01", fim: "2026-10-09" });
+  checar("inicio 1900 nao distorce o eixo", g1900.meses.length === 1 && g1900.meses[0]?.rotulo === "out", g1900.meses);
+  const g2100 = mini({ inicio: "2100-12-01", fim: "2101-01-10" });
+  checar("inicio 2100 com fim 2101: nao lanca", g2100.linhas[0]?.tipo === "etapa" && g2100.linhas[0].largura === 0);
+  const g100 = mini({ inicio: "2000-01-03", fim: "2100-12-30" });
+  checar("seculo inteiro: no maximo 8 rotulos", g100.meses.length <= 8 && g100.meses.length > 0, g100.meses.length);
+
+  const tortas: unknown[] = [null, "", "2026-13-40", "2026-02-31", "2026-10-07x", "9999-01-01", "1900-01-01"];
+  for (const t of tortas) {
+    const e = etapa({ id: "t", projeto: "pA", inicio: "2026-10-01", fim: t as string });
+    let texto = "";
+    let ok = true;
+    try {
+      texto = textoDoPrazo(e, HOJE);
+      urgenciaDaEtapa(e, HOJE);
+      agendaDaUnidade(unidade([projeto({ id: "pA" })], [e]).ativos, HOJE, { soMinhas: false, eu });
+    } catch {
+      ok = false;
+    }
+    checar(`fim ${JSON.stringify(t)}: nao lanca e diz "sem data"`, ok && texto === "sem data" && !texto.includes("undefined"), texto);
+    checar(`fim ${JSON.stringify(t)}: sem faixa na arvore`, urgenciaDaEtapa(e, HOJE) === null);
+  }
+  const tInicio = textoDoPrazo(etapa({ id: "t", inicio: "2026-13-40", fim: "2026-10-30" }), HOJE);
+  checar("inicio torto: segue pelo termino", tInicio === "até 30/10", tInicio);
+  const tConc = textoDoPrazo(etapa({ id: "t", concluidaEm: "2026-13-40" }), HOJE);
+  checar("concluidaEm torto: so concluida, sem data inventada", tConc === "concluída", tConc);
+
+  const comLapide = linhaDoCartao(
+    unidade(
+      [projeto({ id: "c" })],
+      [
+        etapa({ id: "a", projeto: "c", inicio: "2026-09-01", fim: "2026-09-30", concluidaEm: "2026-09-30" }),
+        etapa({ id: "b", projeto: "c", inicio: "2026-09-01", fim: "2026-10-05", concluidaEm: "2026-10-05", removidoEm: 5 }),
+      ],
+    ).ativos[0]!,
+    HOJE,
+  );
+  checar("lapide nao entra no concluido em", comLapide.texto === "concluído em 30/09" && comLapide.tom === "ok", comLapide);
 }

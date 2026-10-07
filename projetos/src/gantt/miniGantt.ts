@@ -7,7 +7,7 @@
  */
 
 import { type DataISO, diferencaDias, somarDias } from "@comum/datas/dias";
-import { dataValida } from "../modelo/calendario";
+import { dataNaFaixa } from "../modelo/calendario";
 import type { SituacaoEtapa } from "../modelo/situacao";
 import type { Linha } from "./linhas";
 
@@ -41,7 +41,7 @@ const arredondar = (n: number) => Math.round(n * 100) / 100;
 const limitar = (n: number) => Math.max(0, Math.min(100, n));
 
 export function miniGantt(linhas: readonly Linha[], hoje: DataISO): MiniGantt {
-  const etapas = linhas.flatMap((l) => (l.tipo === "etapa" && dataValida(l.etapa.inicio) && dataValida(l.etapa.fim) ? [l.etapa] : []));
+  const etapas = linhas.flatMap((l) => (l.tipo === "etapa" && dataNaFaixa(l.etapa.inicio) && dataNaFaixa(l.etapa.fim) ? [l.etapa] : []));
   const menor = etapas.reduce<DataISO>((m, e) => (e.inicio < m ? e.inicio : m), etapas[0]?.inicio ?? hoje);
   const maior = etapas.reduce<DataISO>((m, e) => (e.fim > m ? e.fim : m), etapas[0]?.fim ?? hoje);
   const comeco = primeiroDoMes(menor);
@@ -64,7 +64,7 @@ export function miniGantt(linhas: readonly Linha[], hoje: DataISO): MiniGantt {
     if (l.tipo === "fase") saida.push({ tipo: "fase", id: l.id, nome: l.fase.nome });
     else if (l.tipo === "etapa") {
       const e = l.etapa;
-      const valida = dataValida(e.inicio) && dataValida(e.fim) && e.fim >= e.inicio;
+      const valida = dataNaFaixa(e.inicio) && dataNaFaixa(e.fim) && e.fim >= e.inicio;
       saida.push({
         tipo: "etapa",
         id: e.id,

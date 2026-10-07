@@ -7,25 +7,30 @@
 
 import { type DataISO, deISO } from "@comum/datas/dias";
 import { diasUteisDeAtraso } from "./alertas";
-import { FERIADOS, sextaDaSemana, uteisEntre } from "./calendario";
+import { dataNaFaixa, FERIADOS, sextaDaSemana, uteisEntre } from "./calendario";
 import type { Etapa } from "./tipos";
 
 const DIAS_DA_SEMANA = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 
 type BasePrazo = Pick<Etapa, "inicio" | "fim" | "concluidaEm" | "marco">;
 
-/** "02/10" no ano de hoje; "02/10/2027" em outro. */
+/** "02/10" no ano de hoje; "02/10/2027" em outro; "sem data" se não existe ou está fora de 2000-2100. */
 export function dataDoPrazo(iso: DataISO, hoje: DataISO): string {
+  if (!dataNaFaixa(iso)) return "sem data";
   const [a, m, d] = iso.split("-");
   return iso.slice(0, 4) === hoje.slice(0, 4) ? `${d}/${m}` : `${d}/${m}/${a}`;
 }
 
 export function textoDoPrazo(e: BasePrazo, hoje: DataISO): string {
-  if (e.concluidaEm) return `${e.marco ? "cumprido" : "concluída"} em ${dataDoPrazo(e.concluidaEm, hoje)}`;
+  if (e.concluidaEm) {
+    const quando = dataNaFaixa(e.concluidaEm) ? ` em ${dataDoPrazo(e.concluidaEm, hoje)}` : "";
+    return `${e.marco ? "cumprido" : "concluída"}${quando}`;
+  }
+  if (!dataNaFaixa(e.fim)) return "sem data";
   if (e.fim < hoje) return `venceu ${dataDoPrazo(e.fim, hoje)}`;
   if (e.marco) return e.fim === hoje ? "marco hoje" : `marco ${dataDoPrazo(e.fim, hoje)}`;
   if (e.fim === hoje) return "vence hoje";
-  if (e.inicio > hoje) return `começa ${dataDoPrazo(e.inicio, hoje)}`;
+  if (dataNaFaixa(e.inicio) && e.inicio > hoje) return `começa ${dataDoPrazo(e.inicio, hoje)}`;
   if (e.fim <= sextaDaSemana(hoje)) return `até ${DIAS_DA_SEMANA[deISO(e.fim).getDay()] ?? ""} ${dataDoPrazo(e.fim, hoje)}`;
   return `até ${dataDoPrazo(e.fim, hoje)}`;
 }
@@ -40,7 +45,7 @@ export function urgenciaDaEtapa(
   limite = 3,
   feriados: ReadonlySet<DataISO> = FERIADOS,
 ): Urgencia | null {
-  if (e.concluidaEm || e.removidoEm !== undefined) return null;
+  if (e.concluidaEm || e.removidoEm !== undefined || !dataNaFaixa(e.fim)) return null;
   if (e.fim < hoje) return { tipo: "atrasada", dias: diasUteisDeAtraso(e, hoje, feriados) };
   const dias = uteisEntre(hoje, e.fim, feriados);
   return dias <= limite ? { tipo: "vence", dias } : null;
