@@ -8,9 +8,9 @@
 import { type Area, areaMemoria } from "@comum/armazenamento/area";
 import { type DestinoTexto, MotorTextoPadrao, type StatusSync } from "@comum/sincronia/motor";
 import { gerarConteudoTexto, lerConteudoTexto } from "@comum/sincronia/textoPadraoCodec";
-import { chaveMemoriaSigilo } from "../src/modelo/constantes";
+import { chaveMemoriaSigiloLegada, prefixoMemoriaSigilo } from "../src/modelo/constantes";
 import { baseDoEscopo } from "../src/modelo/escopo";
-import { lerMemoria, somarMemoria, TETO_MEMORIA_SIGILO } from "../src/modelo/memoriaSigilo";
+import { ErroMemoriaSigilo, entradasParaGravar, lerMemoria, TETO_APRENDIDAS } from "../src/modelo/memoriaSigilo";
 import type { EnvelopeProjetos, Registro } from "../src/modelo/tipos";
 import {
   adaptadorProjetos,
@@ -345,10 +345,203 @@ export async function verificarSincroniaTexto(): Promise<void> {
   await verificarSigiloGruda();
   await verificarMenoresRodada1();
   await verificarMemoriaDoSigilo();
+  await verificarRaspadoFicaRaspado();
 }
 
-/** A chave documentada da memória do sigilo do usuário (host|login), fora de todo escopo. */
-const CHAVE_MEMORIA = "projetos/sigilo/sei.x.gov.br|ana";
+/** Área de teste que falha (ler ou gravar) quando a operação toca a memória do sigilo e `falhar` está ligado. */
+function areaQueFalha(base: Area, quando: { ler: boolean; gravar: boolean }): Area {
+  const daMemoria = (ks: string[]) => ks.some((k) => k.startsWith("projetos/sigilo/"));
+  return {
+    ...base,
+    obter: async (ch) => {
+      const ks = ch === null || ch === undefined ? ["projetos/sigilo/"] : typeof ch === "string" ? [ch] : ch;
+      if (quando.ler && daMemoria(ks)) throw new Error("falha simulada ao ler o storage");
+      return base.obter(ch);
+    },
+    gravar: async (i) => {
+      if (quando.gravar && daMemoria(Object.keys(i))) throw new Error("falha simulada ao gravar o storage");
+      return base.gravar(i);
+    },
+    aoMudar: base.aoMudar.bind(base),
+  };
+}
+
+/** Rodada 3 da Tarefa 4: o que o texto raspou uma vez continua raspado; a memória falha fechada e nunca despeja. */
+async function verificarRaspadoFicaRaspado(): Promise<void> {
+  const OUTRO = "50300.000002/2026-11";
+  const etapaComDocumentosAntigos = async (repo: ReturnType<typeof novoRepo>["repo"]) => {
+    const p = await repo.criarProjeto({ nome: "Fiscalização", processo: { protocolo: SIGILO } });
+    const e = await repo.criarEtapa({ projeto: p.id, nome: "Ofício", inicio: "2026-10-06", fim: "2026-10-09" });
+    // Os documentos da etapa antes de se saber do sigilo: o 7777001 só fica nos registros.
+    await repo.editarEtapa(e.id, { documento: { numero: "7777001" } }, "2026-10-06");
+    await repo.editarEtapa(e.id, { documento: { numero: "7777002" } }, "2026-10-06");
+    return p;
+  };
+
+  for (const escopo of [ESCOPO_UN, ESCOPO_EU]) {
+    const qual = escopo.vis === "unidade" ? "unidade" : "pessoal";
+    secao(`raspado fica raspado (${qual}, um usuario so): o documento antigo da etapa que deixou de ser sigilosa`);
+    const area = areaMemoria();
+    const { repo } = novoRepo(escopo, area, "r", { agora: AGORA });
+    const p = await etapaComDocumentosAntigos(repo);
+    const sei = noSei(null);
+    const motor = motorDe(repo, area, sei);
+    await motor.sincronizar({ forcar: true });
+    checar(`${qual}: premissa: antes do sigilo, o texto leva os documentos`, (await jsonDoTexto(sei.html)).includes("7777001"));
+    await repo.editarProjeto(p.id, { processo: { protocolo: SIGILO, sigiloso: true } });
+    await motor.sincronizar({ forcar: true });
+    const j1 = await jsonDoTexto(sei.html);
+    checar(`${qual}: marcado, o texto raspa os dois`, !!j1 && !j1.includes("7777001") && !j1.includes("7777002"), j1);
+    await repo.editarProjeto(p.id, { processo: { protocolo: OUTRO } });
+    await motor.sincronizar({ forcar: true });
+    const j2 = await jsonDoTexto(sei.html);
+    checar(
+      `${qual}: trocado o processo, o 7777001 nao volta ao texto (nem o 7777002, nem o numero)`,
+      !!j2 && !j2.includes("7777001") && !j2.includes("7777002") && !j2.includes("000777") && j2.includes("000002"),
+      j2,
+    );
+    checar(
+      `${qual}: e o historico daqui continua com os numeros`,
+      (await repo.historico(p.id)).some((r) => r.campo === "documento" && r.depois === "7777001"),
+    );
+  }
+
+  secao("raspado fica raspado: marcado e trocado entre duas rodadas (nenhum texto montado no meio)");
+  {
+    const area = areaMemoria();
+    const { repo } = novoRepo(ESCOPO_UN, area, "b", { agora: AGORA });
+    const p = await etapaComDocumentosAntigos(repo);
+    await repo.editarProjeto(p.id, { processo: { protocolo: SIGILO, sigiloso: true } });
+    await repo.editarProjeto(p.id, { processo: { protocolo: OUTRO } });
+    const sei = noSei(null);
+    await motorDe(repo, area, sei).sincronizar({ forcar: true });
+    const j = await jsonDoTexto(sei.html);
+    checar(
+      "a gravacao que marcou ja guardou o que o texto rasparia: nada disso vai ao texto",
+      !!j && !j.includes("7777001") && !j.includes("7777002") && !j.includes("000777"),
+      j,
+    );
+  }
+
+  secao("memoria do sigilo falha fechada: erro ao ler");
+  {
+    const base = areaMemoria();
+    const quando = { ler: false, gravar: false };
+    const area = areaQueFalha(base, quando);
+    const { repo } = novoRepo(ESCOPO_UN, area, "f", { agora: AGORA });
+    const p = await repo.criarProjeto({ nome: "Apuração", processo: { protocolo: SIGILO, sigiloso: true } });
+    const sei = noSei(null);
+    const motor = motorDe(repo, area, sei);
+    await motor.sincronizar({ forcar: true });
+    await repo.editarProjeto(p.id, { nome: "Apuração (fase 2)" });
+    quando.ler = true;
+    const s1 = await motor.sincronizar({ forcar: true });
+    checar("a rodada falha como falha comum e o texto nao e gravado", s1.estado === "erro" && sei.gravadas === 1, { s1, g: sei.gravadas });
+    quando.ler = false;
+    const s2 = await motor.sincronizar({ forcar: true });
+    checar("e a seguinte, com o storage de volta, grava", s2.estado === "ok" && sei.gravadas === 2, { s2, g: sei.gravadas });
+  }
+
+  secao("memoria do sigilo falha fechada: erro ao gravar o que o texto raspou");
+  {
+    const base = areaMemoria();
+    const quando = { ler: false, gravar: false };
+    const area = areaQueFalha(base, quando);
+    const { repo } = novoRepo(ESCOPO_UN, area, "g", { agora: AGORA });
+    await repo.criarProjeto({ nome: "Apuração", processo: { protocolo: SIGILO, sigiloso: true } });
+    // A memória se perdeu (outro perfil, limpeza manual): a montagem do texto precisa guardá-la de novo.
+    await base.remover(Object.keys(await base.obter(null)).filter((k) => k.startsWith("projetos/sigilo/")));
+    quando.gravar = true;
+    const sei = noSei(null);
+    const s1 = await motorDe(repo, area, sei).sincronizar({ forcar: true });
+    checar("sem guardar o que raspou, o texto nao e gravado (erro comum)", s1.estado === "erro" && sei.gravadas === 0, {
+      s1,
+      g: sei.gravadas,
+    });
+    quando.gravar = false;
+    const s2 = await motorDe(repo, area, sei).sincronizar({ forcar: true });
+    checar(
+      "e a rodada seguinte grava, sem o numero",
+      s2.estado === "ok" && sei.gravadas === 1 && !(await jsonDoTexto(sei.html)).includes("000777"),
+    );
+  }
+
+  secao("memoria do sigilo falha fechada: valor torto na chave da rodada 2");
+  {
+    const LEGADA = "projetos/sigilo/sei.x.gov.br|ana";
+    const area = areaMemoria();
+    const { repo } = novoRepo(ESCOPO_UN, area, "t", { agora: AGORA });
+    const p = await repo.criarProjeto({ nome: "P1", processo: { protocolo: SIGILO } });
+    await repo.editarProjeto(p.id, { processo: { protocolo: OUTRO } });
+    // Só a memória antiga sabia do sigilo do número (no registro do vínculo trocado), e ela está torta.
+    await area.remover(Object.keys(await area.obter(null)).filter((k) => k.startsWith("projetos/sigilo/")));
+    await area.gravar({ [LEGADA]: { processos: "50300000777202610", documentos: [] } });
+    const sei = noSei(null);
+    const s1 = await motorDe(repo, area, sei).sincronizar({ forcar: true });
+    checar(
+      "torto com conteudo: nao trata como vazio; a rodada falha e o texto nao e gravado",
+      s1.estado === "erro" && sei.gravadas === 0 && !!s1.mensagem,
+      s1,
+    );
+    await area.gravar({ [LEGADA]: { processos: ["50300000777202610"], documentos: [] } });
+    const s2 = await motorDe(repo, area, sei).sincronizar({ forcar: true });
+    checar(
+      "legivel: o que ela sabe vale (o numero sai raspado do registro)",
+      s2.estado === "ok" && sei.gravadas === 1 && !(await jsonDoTexto(sei.html)).includes("000777"),
+      s2,
+    );
+    const area2 = areaMemoria();
+    const { repo: r2 } = novoRepo(ESCOPO_UN, area2, "t", { agora: AGORA });
+    await r2.criarProjeto({ nome: "P2" });
+    await area2.gravar({ [LEGADA]: {} });
+    const sei2 = noSei(null);
+    const s3 = await motorDe(r2, area2, sei2).sincronizar({ forcar: true });
+    checar("torto sem nada dentro: nada a perder, segue como vazia", s3.estado === "ok" && sei2.gravadas === 1, s3);
+  }
+
+  secao("memoria do sigilo: dois contextos guardando ao mesmo tempo nao perdem nada");
+  {
+    const base = areaMemoria();
+    let segurar = false;
+    let presos: Array<() => void> = [];
+    const soltar = () => {
+      for (const f of presos) f();
+      presos = [];
+    };
+    const portao: Area = {
+      ...base,
+      gravar: async (i) => {
+        if (segurar && Object.keys(i).some((k) => k.startsWith("projetos/sigilo/"))) {
+          // Segura até as duas gravações chegarem: as duas leram a memória antes de qualquer uma gravar.
+          await new Promise<void>((r) => {
+            presos.push(r);
+            if (presos.length >= 2) soltar();
+            else setTimeout(soltar, 100);
+          });
+        }
+        return base.gravar(i);
+      },
+      aoMudar: base.aoMudar.bind(base),
+    };
+    const { repo: un } = novoRepo(ESCOPO_UN, portao, "c", { agora: AGORA });
+    const { repo: eu } = novoRepo(ESCOPO_EU, portao, "d", { agora: AGORA });
+    segurar = true;
+    await Promise.all([
+      un.criarProjeto({ nome: "Da unidade", processo: { protocolo: SIGILO, sigiloso: true } }),
+      eu.criarProjeto({ nome: "Meu", processo: { protocolo: OUTRO, sigiloso: true } }),
+    ]);
+    segurar = false;
+    const k = await un.sigilosConhecidos();
+    checar(
+      "a memoria tem os dois numeros (uma gravacao nao apagou a outra)",
+      k.processos.has("50300000777202610") && k.processos.has("50300000002202611"),
+      [...k.processos],
+    );
+  }
+}
+
+/** O prefixo documentado da memória do sigilo do usuário (host|login), fora de todo escopo: uma chave por número. */
+const PREFIXO_MEMORIA = "projetos/sigilo/sei.x.gov.br|ana/";
 
 /** Rodada 2 da Tarefa 4: a memória local e monótona do sigilo, por usuário, que nunca é enviada. */
 async function verificarMemoriaDoSigilo(): Promise<void> {
@@ -411,7 +604,9 @@ async function verificarMemoriaDoSigilo(): Promise<void> {
     const tudo = await areaM.obter(null);
     checar(
       "a memoria fica numa chave propria do usuario, fora de todo escopo (o arquivo e a exportacao leem o escopo)",
-      CHAVE_MEMORIA in tudo && !CHAVE_MEMORIA.startsWith(baseDoEscopo(ESCOPO_UN)) && !CHAVE_MEMORIA.startsWith(baseDoEscopo(ESCOPO_EU)),
+      Object.keys(tudo).some((k) => k.startsWith(PREFIXO_MEMORIA)) &&
+        !PREFIXO_MEMORIA.startsWith(baseDoEscopo(ESCOPO_UN)) &&
+        !PREFIXO_MEMORIA.startsWith(baseDoEscopo(ESCOPO_EU)),
       Object.keys(tudo),
     );
     const env = await rm.exportar(AGORA);
@@ -437,33 +632,88 @@ async function verificarMemoriaDoSigilo(): Promise<void> {
     );
   }
 
-  secao("memoria do sigilo: a forma guardada e o teto");
+  secao("memoria do sigilo: a forma guardada (uma chave por numero, com a origem)");
   {
     checar(
-      "a chave documentada: projetos/sigilo/<host>|<login em minusculas>",
-      chaveMemoriaSigilo("sei.x.gov.br", " Ana ") === CHAVE_MEMORIA,
+      "o prefixo documentado: projetos/sigilo/<host>|<login em minusculas>/ (e a chave unica da rodada 2, so lida)",
+      prefixoMemoriaSigilo("sei.x.gov.br", " Ana ") === PREFIXO_MEMORIA &&
+        chaveMemoriaSigiloLegada("sei.x.gov.br", " Ana ") === "projetos/sigilo/sei.x.gov.br|ana",
     );
-    const torta = lerMemoria({ processos: ["1", 2, null, "1"], documentos: "x" });
+    const LEG = "projetos/sigilo/sei.x.gov.br|ana";
+    const m = lerMemoria(
+      {
+        [`${PREFIXO_MEMORIA}p/123`]: "local",
+        [`${PREFIXO_MEMORIA}p/456`]: "aprendida",
+        [`${PREFIXO_MEMORIA}d/789`]: 42,
+        [`${PREFIXO_MEMORIA}p/`]: "local",
+        [LEG]: { processos: ["555"], documentos: [] },
+      },
+      PREFIXO_MEMORIA,
+      LEG,
+    );
     checar(
-      "a leitura tolera o que veio torto (so textos, sem repetir)",
-      torta.processos.join() === "1" && torta.documentos.length === 0,
-      torta,
+      "a origem de cada numero; valor torto fica como local (o numero esta na chave: nada se perde); a chave antiga legivel vale como local",
+      m.processos.get("123") === "local" &&
+        m.processos.get("456") === "aprendida" &&
+        m.documentos.get("789") === "local" &&
+        m.processos.get("555") === "local" &&
+        m.processos.size === 3,
+      [...m.processos, ...m.documentos],
     );
+    let torta: unknown = null;
+    try {
+      lerMemoria({ [LEG]: { processos: "50300000777202610" } }, PREFIXO_MEMORIA, LEG);
+    } catch (e) {
+      torta = e;
+    }
+    checar("a chave antiga torta e com conteudo: lanca (nao trata como vazia)", torta instanceof ErroMemoriaSigilo, torta);
+    checar("a chave antiga torta sem nada dentro: vazia", lerMemoria({ [LEG]: { x: [] } }, PREFIXO_MEMORIA, LEG).processos.size === 0);
     checar(
-      "somar o que ja esta: nada muda",
-      somarMemoria(lerMemoria({ processos: ["1"], documentos: [] }), { processos: ["1"], documentos: [] }) === null,
+      "somar o que ja esta: nada a gravar",
+      Object.keys(entradasParaGravar(m, { processos: ["123", "456"], documentos: [] }, "aprendida", PREFIXO_MEMORIA)).length === 0,
     );
-    const muitos = Array.from({ length: TETO_MEMORIA_SIGILO + 1 }, (_, i) => String(i));
-    const cheia = somarMemoria(lerMemoria(undefined), { processos: muitos, documentos: ["d"] });
+  }
+
+  secao("memoria do sigilo: nada e despejado; as aprendidas tem teto de 20000");
+  {
+    const areaT = areaMemoria();
+    const { repo: rt } = novoRepo(ESCOPO_UN, areaT, "z", { agora: AGORA });
+    // A local antiga: o número sigiloso de verdade, marcado aqui, que um colega tentaria empurrar para fora.
+    await rt.lembrarSigilo({ processos: ["50300000777202610"], documentos: [] }, "local");
+    await rt.lembrarSigilo(
+      { processos: Array.from({ length: TETO_APRENDIDAS }, (_, i) => `9${String(i).padStart(10, "0")}`), documentos: [] },
+      "aprendida",
+    );
+    await rt.lembrarSigilo({ processos: ["88888888888"], documentos: [] }, "aprendida");
+    const k = await rt.sigilosConhecidos();
+    const doPrefixo = Object.entries(await areaT.obter(null)).filter(([c]) => c.startsWith(`${PREFIXO_MEMORIA}p/`));
     checar(
-      "teto de 5000 por conjunto: acima, saem os mais antigos",
-      TETO_MEMORIA_SIGILO === 5000 &&
-        cheia?.processos.length === 5000 &&
-        cheia.processos[0] === "1" &&
-        cheia.processos[4999] === "5000" &&
-        cheia.documentos.join() === "d",
-      cheia?.processos.length,
+      "20000 aprendidas: a local antiga continua la, e a 20001a aprendida nao entra",
+      TETO_APRENDIDAS === 20000 &&
+        k.processos.has("50300000777202610") &&
+        !k.processos.has("88888888888") &&
+        doPrefixo.filter(([, v]) => v === "aprendida").length === 20000 &&
+        doPrefixo.filter(([, v]) => v === "local").length === 1,
+      doPrefixo.length,
     );
+    await rt.lembrarSigilo({ processos: ["70000000001"], documentos: [] }, "local");
+    checar(
+      "as locais nao tem teto: uma local nova entra mesmo com as aprendidas cheias",
+      (await rt.sigilosConhecidos()).processos.has("70000000001"),
+    );
+    const p = await rt.criarProjeto({ nome: "Da unidade", processo: { protocolo: SIGILO } });
+    const seiT = noSei(null);
+    await motorDe(rt, areaT, seiT).sincronizar({ forcar: true });
+    checar(
+      "e o numero da local continua raspado (digitado sem marca, nao vai ao texto)",
+      seiT.gravadas === 1 &&
+        !(await jsonDoTexto(seiT.html)).includes("000777") &&
+        (await rt.obterProjeto(p.id))?.processo?.sigiloso === true,
+    );
+    const aprendida = `${PREFIXO_MEMORIA}p/90000000000`;
+    checar("premissa: este numero e uma aprendida", (await areaT.obter(aprendida))[aprendida] === "aprendida");
+    await rt.criarProjeto({ nome: "Visto aqui", processo: { protocolo: "9.0000000000", sigiloso: true } });
+    checar("a aprendida vista aqui (a caixa a marcou num vinculo) vira local", (await areaT.obter(aprendida))[aprendida] === "local");
   }
 
   secao("memoria do sigilo: a propria copia que volta nao regrava (nem a memoria)");
@@ -484,7 +734,11 @@ async function verificarMemoriaDoSigilo(): Promise<void> {
     await ri.concluirEtapa(ei.id, "2026-10-09", { numero: "1234567" });
     const seiI = noSei(null);
     await motorDe(ri, espiao, seiI).sincronizar({ forcar: true });
-    checar("premissa: a memoria foi gravada", escritas.includes(CHAVE_MEMORIA), escritas);
+    checar(
+      "premissa: a memoria foi gravada",
+      escritas.some((k) => k.startsWith(PREFIXO_MEMORIA)),
+      escritas,
+    );
     escritas.length = 0;
     await motorDe(ri, espiao, seiI).sincronizar({ forcar: true });
     checar(
@@ -707,9 +961,11 @@ async function verificarSigiloGruda(): Promise<void> {
     rel.agora += 181 * DIA;
     await rq.limpar(rel.agora);
     const hq = (await rq.entidades()).h.filter((r) => r.alvo === eq.id && r.campo === "documento");
+    // Rodada 3: o que o envelope rasparia (inclusive o número antigo, pela etapa sigilosa) já está na memória antes
+    // da poda, então a poda não reescreve mais o histórico daqui.
     checar(
-      "o numero antigo sai do historico daqui (so ele); o marcado, que a memoria cobre, fica",
-      hq.length === 2 && hq.every((r) => r.antes !== "7777001" && r.depois !== "7777001") && hq.some((r) => r.depois === "7777002"),
+      "o historico daqui fica com os dois numeros (a memoria ja os tinha antes da poda)",
+      hq.length === 2 && hq.some((r) => r.depois === "7777001") && hq.some((r) => r.depois === "7777002"),
       hq,
     );
     const seiQ = noSei(null);

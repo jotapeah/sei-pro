@@ -14,7 +14,14 @@ import { jsonEstavel } from "@comum/sincronia/assinatura";
 import { mesclar, purgarLapides, type Versionada } from "@comum/sincronia/entidade";
 import { normalizarTexto } from "@comum/texto";
 import { dataNaFaixa, LIMITE_DIAS_ETAPA } from "./modelo/calendario";
-import { chaveMemoriaSigilo, DIAS_LAPIDE_EU, DIAS_LAPIDE_UNIDADE, FOLGA_RELOGIO_MS, LIMITES } from "./modelo/constantes";
+import {
+  chaveMemoriaSigiloLegada,
+  DIAS_LAPIDE_EU,
+  DIAS_LAPIDE_UNIDADE,
+  FOLGA_RELOGIO_MS,
+  LIMITES,
+  prefixoMemoriaSigilo,
+} from "./modelo/constantes";
 import { problemasDasMudancas, validarDependencias, violacoesDeDatas } from "./modelo/dependencias";
 import { baseDoEscopo, chaveMeta, prefixoDe, rotuloDaVis } from "./modelo/escopo";
 import {
@@ -27,7 +34,17 @@ import {
   registrosDeProjeto,
 } from "./modelo/historico";
 import { aplicarDatas, baseInicial, planoParaRedefinir, redefinirBase } from "./modelo/linhaDeBase";
-import { conhecidosDe, lerMemoria, somarMemoria } from "./modelo/memoriaSigilo";
+import {
+  comEntradas,
+  conhecidosDe,
+  daMemoria,
+  ErroMemoriaSigilo,
+  entradasParaGravar,
+  lerMemoria,
+  type MemoriaSigilo,
+  type NumerosSigilosos,
+  type OrigemSigilo,
+} from "./modelo/memoriaSigilo";
 import {
   concluir,
   type DadosNovaEtapa,
@@ -44,9 +61,9 @@ import {
 } from "./modelo/operacoes";
 import {
   aprendidoDosRegistros,
+  cortarSigilo,
   marcadosNoEstado,
   marcasDeSigilo,
-  rasparRegistro,
   type SigilosConhecidos,
   sigiloDoEnvelope,
 } from "./modelo/sigilo";
@@ -157,9 +174,7 @@ export class RepositorioProjetos {
 
   /** Tudo do escopo, com lápides, numa leitura só (sincronia, arquivo). */
   async entidades(): Promise<Entidades> {
-    const tudo = Object.entries(await obterPorPrefixo(this.area, this.base));
-    const de = <T>(t: string) => tudo.filter(([k]) => k.startsWith(`${this.base}${t}/`)).map(([, v]) => v as T);
-    return { p: de<Projeto>("p"), f: de<Fase>("f"), e: de<Etapa>("e"), h: de<Registro>("h"), m: de<Modelo>("m") };
+    return entidadesDe(await obterPorPrefixo(this.area, this.base), this.base);
   }
 
   /** O que está vivo: projetos, fases e etapas na ordem manual; modelos pelo nome. */
@@ -175,26 +190,59 @@ export class RepositorioProjetos {
     };
   }
 
-  /**
-   * O que este computador já soube sigiloso, para todos os escopos do usuário (a memória do sigilo,
-   * modelo/memoriaSigilo.ts): o envelope que vai a outra pessoa raspa por isto também. Nunca é enviada.
-   */
-  async sigilosConhecidos(): Promise<SigilosConhecidos> {
-    const k = chaveMemoriaSigilo(this.escopo.host, this.escopo.login);
-    return conhecidosDe(lerMemoria((await this.area.obter(k))[k]));
+  private get prefixoMemoria(): string {
+    return prefixoMemoriaSigilo(this.escopo.host, this.escopo.login);
+  }
+
+  private get chaveMemoriaLegada(): string {
+    return chaveMemoriaSigiloLegada(this.escopo.host, this.escopo.login);
+  }
+
+  /** Numa chamada só ao storage: as chaves da memória do sigilo e, com `escopo`, as do escopo. */
+  private async lerChaves(escopo: boolean): Promise<Record<string, unknown>> {
+    const quer = (k: string) => (escopo && k.startsWith(this.base)) || daMemoria(k, this.prefixoMemoria, this.chaveMemoriaLegada);
+    if (this.area.chaves) {
+      const ks = (await this.area.chaves()).filter(quer);
+      return ks.length ? this.area.obter(ks) : {};
+    }
+    return Object.fromEntries(Object.entries(await this.area.obter(null)).filter(([k]) => quer(k)));
   }
 
   /**
-   * A entrada da memória do sigilo com `novos` somados, para ir na mesma gravação; {} se nada muda. Sem
-   * `base`, relê a memória agora (outra aba ou o outro escopo podem ter somado algo desde a última leitura).
+   * A memória do sigilo agora (modelo/memoriaSigilo.ts), de todos os escopos do usuário. Falha fechada: erro do
+   * storage, ou a chave da rodada 2 torta com algo dentro, lança.
    */
-  private async memoriaCom(
-    novos: { processos: Iterable<string>; documentos: Iterable<string> },
-    base?: unknown,
-  ): Promise<Record<string, unknown>> {
-    const k = chaveMemoriaSigilo(this.escopo.host, this.escopo.login);
-    const nova = somarMemoria(lerMemoria(base !== undefined ? base : (await this.area.obter(k))[k]), novos);
-    return nova ? { [k]: nova } : {};
+  private async memoria(): Promise<MemoriaSigilo> {
+    return lerMemoria(await this.lerChaves(false), this.prefixoMemoria, this.chaveMemoriaLegada);
+  }
+
+  /**
+   * O que este computador já soube sigiloso, para todos os escopos do usuário: o envelope que vai a outra
+   * pessoa raspa por isto também. Nunca é enviada. Lança se a memória não puder ser lida.
+   */
+  async sigilosConhecidos(): Promise<SigilosConhecidos> {
+    return conhecidosDe(await this.memoria());
+  }
+
+  /**
+   * Guarda `novos` na memória do sigilo com a `origem` (nada sai; as aprendidas têm teto; com `promover`, a
+   * aprendida vista aqui vira local). Cada número é uma chave: não reescreve o que outro contexto somou. Erro ao
+   * ler ou ao gravar lança.
+   */
+  async lembrarSigilo(novos: NumerosSigilosos, origem: OrigemSigilo, o: { promover?: boolean } = {}): Promise<void> {
+    const e = entradasParaGravar(await this.memoria(), novos, origem, this.prefixoMemoria, o);
+    if (Object.keys(e).length) await this.area.gravar(e);
+  }
+
+  /**
+   * O envelope do escopo (o de `exportar`) e o que a memória do sigilo sabe, lidos NUMA chamada ao storage: o
+   * que raspa é o estado que vai (uma gravação de outro contexto não cai entre ler a memória e ler as
+   * entidades). Lança se a memória não puder ser lida.
+   */
+  async exportarComConhecidos(agora: number = Date.now()): Promise<{ envelope: EnvelopeProjetos; conhecidos: SigilosConhecidos }> {
+    const tudo = await this.lerChaves(true);
+    const conhecidos = conhecidosDe(lerMemoria(tudo, this.prefixoMemoria, this.chaveMemoriaLegada));
+    return { envelope: this.envelopeDe(entidadesDe(tudo, this.base), agora), conhecidos };
   }
 
   /** Carimbo para gravações feitas fora da classe (mover entre escopos). */
@@ -230,7 +278,7 @@ export class RepositorioProjetos {
     const regs = carimbarRegistros(novos, c, this.gerarId);
     await this.area.gravar({
       ...itens,
-      ...(await this.marcasAoGravar(itens)),
+      ...(await this.marcasAoGravar(itens, regs)),
       ...this.entradas(
         this.registros,
         regs.map((r) => [r.id, r]),
@@ -242,10 +290,13 @@ export class RepositorioProjetos {
   /**
    * O sigilo gruda (modelo/sigilo.ts): as marcas que a gravação faz faltar (o número marcado agora
    * noutro projeto ou etapa, ou já conhecido na memória do sigilo; o documento da etapa que ficou
-   * sigilosa) vão na mesma gravação, sem mudar o carimbo dos itens marcados, e o que fica marcado
-   * entra na memória. Só lê o escopo quando a gravação mexe em vínculo ou documento.
+   * sigilosa) vão na mesma gravação, sem mudar o carimbo dos itens marcados. Na memória entra, como
+   * local, o que fica marcado e tudo o que o envelope rasparia do estado de agora (a gravação que marca já
+   * guarda o que o texto raspará, mesmo que nenhum texto seja montado antes de o processo mudar); o que os
+   * itens desta gravação marcam promove a aprendida a local. Só lê o escopo quando a gravação mexe em
+   * vínculo ou documento.
    */
-  private async marcasAoGravar(itens: Record<string, unknown>): Promise<Record<string, unknown>> {
+  private async marcasAoGravar(itens: Record<string, unknown>, regs: readonly Registro[]): Promise<Record<string, unknown>> {
     const doTipo = (prefixo: string) => Object.entries(itens).filter(([k]) => k.startsWith(prefixo));
     const ps = doTipo(this.projetos.prefixo);
     const es = doTipo(this.etapas.prefixo);
@@ -256,18 +307,44 @@ export class RepositorioProjetos {
       return jsonEstavel([o?.processo ?? null, o?.documento ?? null]);
     };
     if (!ps.concat(es).some(([k, v]) => doSigilo(antes[k]) !== doSigilo(v))) return {};
-    const [projetos, etapas, conhecidos] = await Promise.all([this.projetos.listar(), this.etapas.listar(), this.sigilosConhecidos()]);
+    const [projetos, etapas, registros, memoria] = await Promise.all([
+      this.projetos.listar(),
+      this.etapas.listar(),
+      this.registros.listar(),
+      this.memoriaParaGravar(),
+    ]);
+    const conhecidos = conhecidosDe(memoria);
     const final = { p: sobrepor(projetos, ps), e: sobrepor(etapas, es) };
     const m = marcasDeSigilo(final, { p: projetos, e: etapas }, conhecidos);
-    const marcados = marcadosNoEstado(
-      sobrepor(
-        final.p,
-        m.p.map((x) => [x.id, x]),
+    const p2 = sobrepor(
+      final.p,
+      m.p.map((x) => [x.id, x]),
+    );
+    const e2 = sobrepor(
+      final.e,
+      m.e.map((x) => [x.id, x]),
+    );
+    const corte = cortarSigilo({ p: p2, e: e2, h: [...registros, ...regs] }, sigiloDoEnvelope(p2, e2, conhecidos));
+    const marcados = marcadosNoEstado(p2, e2);
+    const locais = entradasParaGravar(
+      memoria,
+      {
+        processos: [...marcados.processos, ...corte.raspados.processos],
+        documentos: [...marcados.documentos, ...corte.raspados.documentos],
+      },
+      "local",
+      this.prefixoMemoria,
+    );
+    const escritos = new Set([...ps, ...es].map(([, v]) => (v as { id: string }).id));
+    const vistos = entradasParaGravar(
+      comEntradas(memoria, locais, this.prefixoMemoria),
+      marcadosNoEstado(
+        p2.filter((x) => escritos.has(x.id)),
+        e2.filter((x) => escritos.has(x.id)),
       ),
-      sobrepor(
-        final.e,
-        m.e.map((x) => [x.id, x]),
-      ),
+      "local",
+      this.prefixoMemoria,
+      { promover: true },
     );
     return {
       ...this.entradas(
@@ -278,8 +355,22 @@ export class RepositorioProjetos {
         this.etapas,
         m.e.map((x) => [x.id, x]),
       ),
-      ...(await this.memoriaCom(marcados, itens[chaveMemoriaSigilo(this.escopo.host, this.escopo.login)])),
+      ...locais,
+      ...vistos,
     };
+  }
+
+  /**
+   * A memória para a gravação local: a chave da rodada 2 torta não impede a edição (ela não é regravada, e a
+   * exportação continua parando por ela); erro do storage lança.
+   */
+  private async memoriaParaGravar(): Promise<MemoriaSigilo> {
+    try {
+      return await this.memoria();
+    } catch (e) {
+      if (!(e instanceof ErroMemoriaSigilo)) throw e;
+      return lerMemoria(await this.lerChaves(false), this.prefixoMemoria, "");
+    }
   }
 
   /** Os 300 registros mais recentes ficam (spec 5.4). `Area` não grava e remove juntos: é outra chamada. */
@@ -744,6 +835,10 @@ export class RepositorioProjetos {
 
   /** Envelope do escopo com TUDO (lápides inclusive). A privacidade dos sigilosos é do adaptador da sincronia (P4). */
   async exportar(agora: number = Date.now()): Promise<EnvelopeProjetos> {
+    return this.envelopeDe(await this.entidades(), agora);
+  }
+
+  private envelopeDe(entidades: Entidades, agora: number): EnvelopeProjetos {
     const env: EnvelopeProjetos = {
       formato: "seipro-projetos",
       versao: 1,
@@ -751,7 +846,7 @@ export class RepositorioProjetos {
       unidade: this.escopo.unidade,
       vis: this.escopo.vis,
       gerado: agora,
-      entidades: await this.entidades(),
+      entidades,
     };
     if (this.escopo.vis === "eu") env.login = this.escopo.login.trim().toLowerCase();
     return env;
@@ -798,17 +893,19 @@ export class RepositorioProjetos {
       itens = { ...itens, ...this.entradas(col, r.gravar) };
       return r.gravar;
     };
+    // Falha fechada: sem a memória do sigilo legível, a mescla não roda (o motor trata como erro comum).
     const [projetosAqui, etapasAqui, registrosAqui, memoria] = await Promise.all([
       this.projetos.listar(),
       this.etapas.listar(),
       this.registros.listar(),
-      this.sigilosConhecidos(),
+      this.memoria(),
     ]);
     // Memória do sigilo: o registro de mesmo carimbo que chega raspado ensina o número (o daqui fica como está).
     const aprendido = aprendidoDosRegistros(registrosAqui, (ent.h ?? []) as unknown[]);
+    const jaSabidos = conhecidosDe(memoria);
     const conhecidos: SigilosConhecidos = {
-      processos: new Set([...memoria.processos, ...aprendido.processos]),
-      documentos: new Set([...memoria.documentos, ...aprendido.documentos]),
+      processos: new Set([...jaSabidos.processos, ...aprendido.processos]),
+      documentos: new Set([...jaSabidos.documentos, ...aprendido.documentos]),
     };
     const projetosNovos = await mesclarCol(
       this.projetos,
@@ -832,7 +929,7 @@ export class RepositorioProjetos {
       (l, v) => alemDoTeto(l, v, (x) => (vivo(x) ? x.projeto : null), LIMITES.etapasPorProjeto),
       (v, l) => manterDocumentoSigiloso(manterNumeroSigiloso(v, l), l, sigilo.projetos.has(v.projeto), sigilo.vinculo),
     );
-    await mesclarCol(this.registros, ent.h, "h", registrosAlemDoTeto, registroDaqui);
+    const registrosNovos = await mesclarCol(this.registros, ent.h, "h", registrosAlemDoTeto, registroDaqui);
     await mesclarCol(this.modelos, ent.m, "m", (l, v) => alemDoTeto(l, v, (x) => (vivo(x) ? "" : null), LIMITES.modelos));
     // O sigilo gruda: as marcas que o estado mesclado pede (o número marcado do lado de fora, a marca que a cópia
     // igual de um colega traz) entram na mesma gravação, sem mudar o carimbo.
@@ -854,8 +951,9 @@ export class RepositorioProjetos {
       ),
     };
     soma.atualizados += [...marcas.p, ...marcas.e].filter((x) => !jaGravados.has(x.id)).length;
-    // A memória ganha o que ficou marcado no estado mesclado e o que os registros ensinaram (só grava se muda;
-    // fora do escopo, não acorda o `aoMudar`).
+    // A memória ganha, como local, o que já estava marcado aqui antes da mescla e, como aprendida (com teto), o
+    // que os registros ensinaram e o que ficou marcado no estado mesclado (fora do escopo: não acorda o `aoMudar`).
+    const locais = entradasParaGravar(memoria, marcadosNoEstado(projetosAqui, etapasAqui), "local", this.prefixoMemoria);
     const marcados = marcadosNoEstado(
       sobrepor(
         mesclado.p,
@@ -866,11 +964,27 @@ export class RepositorioProjetos {
         marcas.e.map((x) => [x.id, x]),
       ),
     );
-    const memoriaNova = await this.memoriaCom({
-      processos: [...aprendido.processos, ...marcados.processos],
-      documentos: [...aprendido.documentos, ...marcados.documentos],
-    });
-    itens = { ...itens, ...marcadas, ...memoriaNova };
+    // E o que o envelope rasparia do estado mesclado (um colega que perca a base depois, antes de algum texto ser
+    // montado aqui, não solta o número por este computador).
+    const pM = sobrepor(
+      mesclado.p,
+      marcas.p.map((x) => [x.id, x]),
+    );
+    const eM = sobrepor(
+      mesclado.e,
+      marcas.e.map((x) => [x.id, x]),
+    );
+    const corte = cortarSigilo({ p: pM, e: eM, h: sobrepor(registrosAqui, registrosNovos) }, sigiloDoEnvelope(pM, eM, conhecidos));
+    const aprendidas = entradasParaGravar(
+      comEntradas(memoria, locais, this.prefixoMemoria),
+      {
+        processos: [...aprendido.processos, ...marcados.processos, ...corte.raspados.processos],
+        documentos: [...aprendido.documentos, ...marcados.documentos, ...corte.raspados.documentos],
+      },
+      "aprendida",
+      this.prefixoMemoria,
+    );
+    itens = { ...itens, ...marcadas, ...locais, ...aprendidas };
     if (anotacoes) await this.salvar(itens, anotacoes.registros, anotacoes.carimbo);
     else if (Object.keys(itens).length) await this.area.gravar(itens);
     if (importouRegistros && !anotacoes?.registros.length) await this.podarHistorico();
@@ -952,43 +1066,29 @@ export class RepositorioProjetos {
       this.modelos.listar(),
       this.registros.listar(),
     ]);
-    const projetosDepois = ficam(this.projetos, projetos);
+    ficam(this.projetos, projetos);
     ficam(this.fases, fases);
-    const etapasDepois = ficam(this.etapas, etapas);
+    ficam(this.etapas, etapas);
     ficam(this.modelos, modelos);
     const mantidos = ficam(this.registros, regs);
-    const podados = new Set(excedentes(mantidos, LIMITES.historico));
-    for (const id of podados) chaves.push(this.registros.chave(id));
-    // Antes de as lápides saírem, o que elas marcam vai para a memória do sigilo (que segue raspando sem elas).
+    for (const id of excedentes(mantidos, LIMITES.historico)) chaves.push(this.registros.chave(id));
+    // Antes de as lápides saírem, tudo o que o envelope rasparia delas (vínculos, documentos e os registros pela
+    // etapa sigilosa) vai para a memória do sigilo, que segue raspando sem elas; o histórico daqui fica como está.
+    // Falha fechada: sem ler ou sem gravar a memória, lança e nada é podado.
+    const memoria = await this.memoria();
+    const conhecidos = conhecidosDe(memoria);
+    const corte = cortarSigilo({ p: projetos, e: etapas, h: regs }, sigiloDoEnvelope(projetos, etapas, conhecidos));
     const marcados = marcadosNoEstado(projetos, etapas);
-    const memoriaNova = await this.memoriaCom(marcados);
-    const memoria = await this.sigilosConhecidos();
-    const conhecidos: SigilosConhecidos = {
-      processos: new Set([...memoria.processos, ...marcados.processos]),
-      documentos: new Set([...memoria.documentos, ...marcados.documentos]),
-    };
-    // O que nem a memória cobre (o registro "documento" com um número antigo de uma etapa sigilosa que nunca foi
-    // marcado no documento): só o lado que sem a lápide a regra deixaria de raspar é raspado aqui, com o mesmo id
-    // e carimbo; o resto do histórico daqui fica com os números.
-    const antes = sigiloDoEnvelope(projetos, etapas, conhecidos);
-    const depois = sigiloDoEnvelope(projetosDepois, etapasDepois, conhecidos);
-    const raspados = mantidos
-      .filter((r) => !podados.has(r.id))
-      .flatMap((r) => {
-        const a = rasparRegistro(r, antes);
-        const d = rasparRegistro(r, depois);
-        if (a.antes === d.antes && a.depois === d.depois) return [];
-        const x = { ...r, antes: a.antes !== d.antes ? a.antes : r.antes, depois: a.depois !== d.depois ? a.depois : r.depois };
-        return [semVazios(x)];
-      });
-    if (raspados.length || Object.keys(memoriaNova).length)
-      await this.area.gravar({
-        ...memoriaNova,
-        ...this.entradas(
-          this.registros,
-          raspados.map((r) => [r.id, r]),
-        ),
-      });
+    const entradas = entradasParaGravar(
+      memoria,
+      {
+        processos: [...marcados.processos, ...corte.raspados.processos],
+        documentos: [...marcados.documentos, ...corte.raspados.documentos],
+      },
+      "local",
+      this.prefixoMemoria,
+    );
+    if (Object.keys(entradas).length) await this.area.gravar(entradas);
     if (chaves.length) await this.area.remover(chaves);
     return chaves.length;
   }
@@ -1099,6 +1199,13 @@ function registrosAlemDoTeto(locais: ReadonlyMap<string, Registro>, vencedoras: 
   for (const v of vencedoras) final.set(v.id, v);
   const chegando = new Set(vencedoras.map((v) => v.id));
   return new Set(excedentes([...final.values()], LIMITES.historico).filter((id) => chegando.has(id)));
+}
+
+/** As entidades de um escopo a partir das chaves lidas (`base` = `baseDoEscopo`). */
+function entidadesDe(tudo: Record<string, unknown>, base: string): Entidades {
+  const lista = Object.entries(tudo);
+  const de = <T>(t: string) => lista.filter(([k]) => k.startsWith(`${base}${t}/`)).map(([, v]) => v as T);
+  return { p: de<Projeto>("p"), f: de<Fase>("f"), e: de<Etapa>("e"), h: de<Registro>("h"), m: de<Modelo>("m") };
 }
 
 /** A lista com as versões que vão ser gravadas por cima (pelo id). */

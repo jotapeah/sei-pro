@@ -38,7 +38,11 @@ export const chaveSyncArquivo = (host: string, login: string): string => `projet
 export const chaveUsuarios = (host: string, idUnidade: string): string => `projetos/usuarios/${host}|u:${idUnidade}`;
 export const chaveImportacao = (host: string, login: string): string => `projetos/importacao/${host}|${login.trim().toLowerCase()}`;
 /**
- * Memória local do sigilo do usuário (modelo/memoriaSigilo.ts), para todos os escopos dele: fora de todo
- * escopo (`baseDoEscopo`), então nem a exportação, nem o arquivo, nem a sincronia a leem como dado.
+ * Memória local do sigilo do usuário (modelo/memoriaSigilo.ts), para todos os escopos dele: uma chave por
+ * número, `projetos/sigilo/<host>|<login>/p/<chave do processo>` e `.../d/<número do documento>`, com a
+ * origem no valor. Fora de todo escopo (`baseDoEscopo`): nem a exportação, nem o arquivo, nem a sincronia
+ * a leem como dado.
  */
-export const chaveMemoriaSigilo = (host: string, login: string): string => `projetos/sigilo/${host}|${login.trim().toLowerCase()}`;
+export const prefixoMemoriaSigilo = (host: string, login: string): string => `projetos/sigilo/${host}|${login.trim().toLowerCase()}/`;
+/** A chave única da memória na rodada 2 (antes das entradas por número): só lida, nunca gravada. */
+export const chaveMemoriaSigiloLegada = (host: string, login: string): string => `projetos/sigilo/${host}|${login.trim().toLowerCase()}`;

@@ -20,6 +20,10 @@
  * Um número que saiu de todo vínculo (o último processo marcado foi trocado), que
  * foi marcado no outro escopo ou que um colega devolveu raspado num registro de
  * mesmo carimbo (`aprendidoDosRegistros`) continua raspado.
+ *
+ * O corte (`cortarSigilo`) também devolve o que raspou: tudo o que o envelope
+ * raspa, por qualquer regra, entra na memória (rodada 3: o que o texto raspou uma
+ * vez continua raspado), e quem grava é o repositório ou o adaptador.
  */
 
 import type { DocumentoSei, Etapa, Projeto, Registro, Vinculo } from "./tipos";
@@ -102,6 +106,9 @@ export function sigiloDoEnvelope(
   }
   return { chaves, projetos: idsProjetos, etapas: idsEtapas, documentos, vinculo };
 }
+
+/** O vínculo sigiloso no texto: sem o número e sem o `idProcedimento`. */
+export const VINCULO_VAZIO: Vinculo = { protocolo: "", sigiloso: true };
 
 const marcarVinculo = (v: Vinculo): Vinculo => ({ ...v, sigiloso: true });
 const marcarDocumento = (d: DocumentoSei): DocumentoSei => ({ ...d, sigiloso: true });
@@ -217,6 +224,55 @@ export function aprendidoDosRegistros(
     }
   }
   return { processos, documentos };
+}
+
+/**
+ * O corte do envelope pela regra `s` (sem podar): projeto e etapa sigilosos com o vínculo vazio, etapa
+ * sigilosa e documento marcado sem o documento, registros raspados (`rasparRegistro`). Devolve também tudo o
+ * que raspou (chaves de processo e números de documento), para a memória do sigilo.
+ */
+export function cortarSigilo(
+  ent: { p: readonly Projeto[]; e: readonly Etapa[]; h: readonly Registro[] },
+  s: SigiloDoEnvelope,
+): { p: Projeto[]; e: Etapa[]; h: Registro[]; raspados: { processos: string[]; documentos: string[] } } {
+  const processos: string[] = [];
+  const documentos: string[] = [];
+  const doProcesso = (t: string | undefined) => {
+    const k = typeof t === "string" ? chaveProtocolo(t) : "";
+    if (k) processos.push(k);
+  };
+  const p = ent.p.map((x): Projeto => {
+    if (!s.projetos.has(x.id)) return x;
+    doProcesso(x.processo?.protocolo);
+    return { ...x, processo: VINCULO_VAZIO };
+  });
+  const e = ent.e.map((x): Etapa => {
+    const sigilosa = s.etapas.has(x.id);
+    let y = x;
+    if (y.documento && (sigilosa || y.documento.sigiloso)) {
+      if (y.documento.numero) documentos.push(y.documento.numero);
+      const { documento: _fora, ...resto } = y;
+      y = resto;
+    }
+    if (sigilosa && y.processo) {
+      doProcesso(y.processo.protocolo);
+      y = { ...y, processo: VINCULO_VAZIO };
+    }
+    return y;
+  });
+  const h = ent.h.map((r) => {
+    const x = rasparRegistro(r, s);
+    if (x !== r) {
+      for (const lado of ["antes", "depois"] as const) {
+        const t = r[lado];
+        if (!t || x[lado] === t) continue;
+        if (r.campo === "processo") doProcesso(t);
+        else documentos.push(t);
+      }
+    }
+    return x;
+  });
+  return { p, e, h, raspados: { processos, documentos } };
 }
 
 /** Cópia sem `antes`/`depois` indefinidos (a forma do registro gravado). */
