@@ -3,7 +3,8 @@
  * opcional (os da caixa + qualquer número); "Quem vê" em cartões (Toda a
  * unidade | Só eu); e, só no novo, "Começar": Em branco | De um modelo (modelo,
  * "Começa em" e a prévia em dias úteis). No editar, o rodapé ganha o menu com
- * Arquivar/Reativar, Duplicar, Salvar como modelo e Excluir.
+ * Arquivar/Reativar, Duplicar, Salvar como modelo, Redefinir plano original
+ * (só com etapa replanejada) e Excluir.
  */
 
 import { diferencaDias } from "@comum/datas/dias";
@@ -12,6 +13,7 @@ import type { AbrirModal } from "@comum/ui/dialogo";
 import { h } from "@comum/ui/dom";
 import { criarMenu, type EntradaMenu } from "@comum/ui/menu";
 import { LIMITES } from "../../modelo/constantes";
+import { planoParaRedefinir } from "../../modelo/linhaDeBase";
 import type { DataISO, Modelo, Vinculo, Vis } from "../../modelo/tipos";
 import { previaDoModelo } from "../../modelos/aplicar";
 import type { ProcessoDaCaixa } from "../../ponte/tipos";
@@ -48,6 +50,8 @@ export interface ContextoDialogoProjeto {
   reativar?: () => Promise<unknown>;
   duplicar?: () => Promise<unknown>;
   salvarComoModelo?: () => void;
+  /** "Redefinir plano original" (spec 5.4): só aparece com etapa replanejada (`planoParaRedefinir`). */
+  redefinirPlano?: () => Promise<unknown>;
   excluir?: () => Promise<unknown>;
 }
 
@@ -217,6 +221,9 @@ export function abrirDialogoProjeto(c: ContextoDialogoProjeto): { fechar(): void
             : { rotulo: "Reativar", icone: "restaurar", fazer: executar(c.reativar) },
           { rotulo: "Duplicar", icone: "copiar", fazer: executar(c.duplicar) },
           { rotulo: "Salvar como modelo…", icone: "camadas", fazer: () => c.salvarComoModelo?.() },
+          c.redefinirPlano && c.projeto?.etapas.some(planoParaRedefinir)
+            ? { rotulo: "Redefinir plano original", icone: "calendario", fazer: executar(c.redefinirPlano) }
+            : null,
           "-",
           { rotulo: "Excluir", icone: "lixeira", perigo: true, fazer: executar(c.excluir) },
         ],

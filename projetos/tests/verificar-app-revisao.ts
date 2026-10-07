@@ -7,12 +7,16 @@
 
 import { definirEmissorDeAviso } from "@comum/ui/aviso";
 import { abrirCamada } from "../src/app/componentes/camada";
+import type { EstadoSincronia } from "../src/app/sincronia";
 import { SEM_FASE } from "../src/modelo/constantes";
 import type { MudancasEtapa } from "../src/repositorio";
-import { digitar, escolherCombo, itemDoMenu, rastrearFoco, tecla, telaDoApp, texto } from "./apoioApp";
+import { digitar, escolherCombo, itemDoMenu, itensDoMenu, rastrearFoco, tecla, telaDoApp, texto } from "./apoioApp";
 import { HOSTIL } from "./cenarioGantt";
+import { HOJE } from "./fabrica";
 import { botao, checar, secao, tique } from "./util";
-import { abrirAba, balao, clicarLinha, etapasDoGantt, formProjeto, montar } from "./verificar-app";
+import { abrirAba, balao, clicarLinha, etapasDoGantt, formProjeto, montar, textoDoAviso } from "./verificar-app";
+
+const COTA = "O espaço do navegador para o SEI Pro está cheio. Arquive ou exclua projetos antigos.";
 
 export async function verificarAppRevisao(): Promise<void> {
   secao("app embutido: o Desfazer de acao feita dentro de dialogo vai para a pagina");
@@ -237,4 +241,159 @@ export async function verificarAppRevisao(): Promise<void> {
   await tique(100);
   checar("etapa excluida em outro lugar: o balao fecha", !balao(rg));
   rg.app.destruir();
+
+  secao("app: a sincronia muda o estado sem fechar o balao nem o filtro");
+  let avisarSinc: () => void = () => undefined;
+  let estado: EstadoSincronia = { rotulo: "pendente", dica: "Falta enviar", tom: "pendente" };
+  const provedor = {
+    estado: () => estado,
+    aoMudar: (cb: () => void) => {
+      avisarSinc = cb;
+      return () => undefined;
+    },
+  };
+  const sc = await montar({ sincronia: provedor });
+  abrirAba(sc, sc.ids.p);
+  await tique();
+  clicarLinha(sc, sc.ids.a);
+  const balaoAntes = balao(sc);
+  const cabecalho = sc.raiz.querySelector(".prj-cab");
+  const abaAntes = sc.raiz.querySelector(`[role='tab'][data-aba='${sc.ids.p}']`);
+  const desenhos = sc.g.a.linhas.length;
+  estado = { rotulo: "sincronizado", dica: "Tudo enviado", tom: "ok" };
+  avisarSinc();
+  const sinc = () => sc.raiz.querySelector(".prj-sinc");
+  checar(
+    "o indicador mostra o estado novo",
+    texto(sinc()) === "sincronizado" && sinc()?.getAttribute("title") === "Tudo enviado" && !!sinc()?.classList.contains("prj-sinc-ok"),
+  );
+  checar(
+    "o mesmo balao segue aberto e nada mais e redesenhado (abas, cabecalho, Gantt)",
+    !!balaoAntes &&
+      balao(sc) === balaoAntes &&
+      balaoAntes.isConnected &&
+      sc.raiz.querySelector(".prj-cab") === cabecalho &&
+      sc.raiz.querySelector(`[role='tab'][data-aba='${sc.ids.p}']`) === abaAntes &&
+      sc.g.a.linhas.length === desenhos,
+  );
+  botao(balao(sc) ?? sc.doc.createElement("div"), "Fechar")?.click();
+  sc.raiz.querySelector<HTMLButtonElement>(".prj-filtro")?.click();
+  estado = { rotulo: "erro", dica: "Sem sessão", tom: "erro" };
+  avisarSinc();
+  checar("o popover do filtro segue aberto", !!sc.doc.querySelector(".prj-filtro-pop") && texto(sinc()) === "erro");
+  sc.app.destruir();
+  estado = { rotulo: "pendente", dica: "Falta enviar", tom: "pendente" };
+  const scv = await montar({ vazio: true, sincronia: provedor });
+  estado = { rotulo: "sincronizado", dica: "Tudo enviado", tom: "ok" };
+  avisarSinc();
+  checar("no primeiro uso (sem projetos), o indicador tambem muda", texto(scv.raiz.querySelector(".prj-sinc")) === "sincronizado");
+  scv.app.destruir();
+
+  secao("app: Informar documento com o campo vazio tira o documento");
+  const idoc = await montar();
+  const comDoc = await idoc.un.criarEtapa({
+    projeto: idoc.ids.p,
+    nome: "Parecer",
+    inicio: "2026-10-13",
+    fim: "2026-10-16",
+    documento: { numero: "1234567" },
+  });
+  abrirAba(idoc, idoc.ids.p);
+  await tique(80);
+  clicarLinha(idoc, comDoc.id);
+  checar("balao da etapa com documento aberto", !!botao(balao(idoc) ?? idoc.doc.createElement("div"), "Concluir etapa"));
+  botao(balao(idoc) ?? idoc.doc.createElement("div"), "Concluir etapa")?.click();
+  await tique(80);
+  const avisoDoc = idoc.doc.querySelector<HTMLElement>(".spro-aviso");
+  checar("aviso de concluida com Informar documento", !!avisoDoc && !!botao(avisoDoc, "Informar documento"));
+  botao(avisoDoc ?? idoc.doc.createElement("div"), "Informar documento")?.click();
+  await tique();
+  const formDoc = () => idoc.doc.querySelector<HTMLElement>(".prj-form-documento");
+  const campoDoc = () => formDoc()?.querySelector<HTMLInputElement>("input[name='documento']") ?? null;
+  checar("o campo vem com o numero atual", campoDoc()?.value === "1234567");
+  digitar(campoDoc(), "");
+  botao(formDoc() ?? idoc.doc.createElement("div"), "Salvar")?.click();
+  await tique(80);
+  const semDoc = await idoc.un.obterEtapa(comDoc.id);
+  checar(
+    "salvar com o campo vazio tira o documento; a etapa continua concluida",
+    !!semDoc && !semDoc.documento && semDoc.concluidaEm === HOJE && !formDoc(),
+    semDoc,
+  );
+  idoc.app.destruir();
+
+  secao("app: sem projetos, o menu nao oferece Exportar nem Imprimir");
+  const vz = await montar({ vazio: true });
+  const itensVazio = itensDoMenu(vz.raiz, "Ajustes dos projetos");
+  checar(
+    "o menu do primeiro uso so com o que vale sem projeto",
+    itensVazio.length > 0 && !itensVazio.includes("Exportar planilha (CSV)") && !itensVazio.includes("Imprimir / salvar PDF"),
+    itensVazio,
+  );
+  vz.app.destruir();
+
+  secao("app: espaco do navegador cheio (cota do chrome.storage.local)");
+  const qt = await montar();
+  abrirAba(qt, qt.ids.p);
+  await tique();
+  const gravarDeVerdade = qt.area.gravar;
+  qt.area.gravar = async () => {
+    throw new Error("QUOTA_BYTES quota exceeded");
+  };
+  const campoNovo = qt.raiz.querySelector<HTMLInputElement>(".prj-lin-nova input");
+  if (campoNovo) campoNovo.value = "Nova etapa";
+  if (campoNovo) tecla(campoNovo, "Enter");
+  await tique(80);
+  checar("adicionar etapa: o aviso explica e sugere arquivar ou excluir", textoDoAviso(qt.doc) === COTA, textoDoAviso(qt.doc));
+  botao(qt.raiz, "Editar projeto")?.click();
+  digitar(formProjeto(qt)?.querySelector("input[name='nome']"), "Outro nome");
+  botao(formProjeto(qt) ?? qt.doc.createElement("div"), "Salvar")?.click();
+  await tique(80);
+  checar(
+    "no dialogo, a mesma mensagem (e o dialogo fica aberto)",
+    texto(formProjeto(qt)?.querySelector(".prj-erros")) === COTA,
+    texto(formProjeto(qt)?.querySelector(".prj-erros")),
+  );
+  qt.area.gravar = gravarDeVerdade;
+  qt.app.destruir();
+
+  secao("app: Redefinir plano original (menu do projeto)");
+  const rp = await montar();
+  // "Análise" já começou (05/10): mudar o término mantém o plano original e ela fica replanejada.
+  await rp.un.editarEtapa(rp.ids.b, { fim: "2026-10-16" }, HOJE);
+  abrirAba(rp, rp.ids.p);
+  await tique(80);
+  botao(rp.raiz, "Editar projeto")?.click();
+  const menuDoProjeto = () => formProjeto(rp) ?? rp.doc.createElement("div");
+  const itensP = itensDoMenu(menuDoProjeto(), "Mais ações do projeto");
+  checar("com etapa replanejada, o menu oferece Redefinir plano original", itensP.includes("Redefinir plano original"), itensP);
+  rp.t.confirmar = false;
+  itemDoMenu(menuDoProjeto(), "Mais ações do projeto", "Redefinir plano original");
+  await tique(80);
+  checar(
+    "confirmacao curta; desistir nao muda nada e o dialogo fica",
+    rp.t.confirmacoes.at(-1) ===
+      `Redefinir o plano original de “${HOSTIL}”? As datas atuais de 1 etapa replanejada passam a ser o plano.` &&
+      (await rp.un.obterEtapa(rp.ids.b))?.base?.fim === "2026-10-09" &&
+      !!formProjeto(rp),
+    rp.t.confirmacoes.at(-1),
+  );
+  rp.t.confirmar = true;
+  itemDoMenu(menuDoProjeto(), "Mais ações do projeto", "Redefinir plano original");
+  await tique(80);
+  const redefinida = await rp.un.obterEtapa(rp.ids.b);
+  checar(
+    "confirmado: o plano vira as datas atuais, o dialogo fecha e avisa",
+    redefinida?.base?.inicio === redefinida?.inicio &&
+      redefinida?.base?.fim === "2026-10-16" &&
+      !formProjeto(rp) &&
+      textoDoAviso(rp.doc) === "Plano original redefinido em 1 etapa.",
+    { base: redefinida?.base, aviso: textoDoAviso(rp.doc) },
+  );
+  botao(rp.raiz, "Editar projeto")?.click();
+  checar(
+    "sem etapa replanejada, o item nao aparece",
+    !!formProjeto(rp) && !itensDoMenu(menuDoProjeto(), "Mais ações do projeto").includes("Redefinir plano original"),
+  );
+  rp.app.destruir();
 }

@@ -23,6 +23,7 @@ import type { montarGantt } from "../gantt/montar";
 import { completarComDependentes, problemasDasMudancas } from "../modelo/dependencias";
 import { rotuloDaVis } from "../modelo/escopo";
 import { criteriosAtivos, type Eu, FILTRO_VAZIO, type FiltroEtapas, filtrarEtapas, filtroNoContexto } from "../modelo/filtro";
+import { planoParaRedefinir } from "../modelo/linhaDeBase";
 import { datasDaEtapaNova } from "../modelo/operacoes";
 import type { DataISO, Etapa, MudancaDeDatas, Vinculo, Vis } from "../modelo/tipos";
 import { ErroValidacao } from "../modelo/validacao";
@@ -42,6 +43,7 @@ import { alertasDaUnidade, carregarUnidade, type DadosUnidade, type ProjetoNaTel
 import { abrirArquivados, abrirInformarDocumento, pedirNomeDoModelo } from "./dialogos/apoio";
 import { abrirDialogoEtapa, type ResultadoEtapa } from "./dialogos/etapa";
 import { abrirDialogoProjeto, type ResultadoProjeto } from "./dialogos/projeto";
+import { cotaCheia, TEXTO_COTA_CHEIA } from "./erros";
 import { dataCurta, plural } from "./formato";
 import type { ParametrosImpressao } from "./impressao";
 import {
@@ -84,10 +86,12 @@ export interface DepsApp {
   conferirDiaMs?: number;
 }
 
-/** Erro de uma ação: a mensagem do repositório (ErroValidacao) ou a do erro. */
+/** Erro de uma ação: a mensagem do repositório (ErroValidacao), a da cota cheia (spec 9) ou a do erro. */
 const mensagem = (e: unknown): string => {
   const m = (e as { mensagens?: unknown })?.mensagens;
-  return Array.isArray(m) && m.length ? m.map(String).join(" ") : e instanceof Error ? e.message : String(e);
+  if (Array.isArray(m) && m.length) return m.map(String).join(" ");
+  if (cotaCheia(e)) return TEXTO_COTA_CHEIA;
+  return e instanceof Error ? e.message : String(e);
 };
 
 /** Mudança de preferências: o pedaço novo, ou uma função do que está gravado (reaplicada na fila). */
@@ -180,7 +184,7 @@ export class AppProjetos {
     // Fechado enquanto lia: não liga ouvintes nem relógio que ninguém vai desligar.
     if (this.destruido) return;
     for (const r of Object.values(this.d.repos)) this.paradas.push(r.aoMudar(() => this.agendar()));
-    this.paradas.push((this.d.sincronia ?? SEM_SINCRONIA).aoMudar(() => this.render()));
+    this.paradas.push((this.d.sincronia ?? SEM_SINCRONIA).aoMudar(() => this.atualizarSincronia()));
     // O painel fica aberto de um dia para o outro: hoje, atrasos e a linha do Gantt mudam à meia-noite.
     this.relogio = setInterval(() => this.conferirDia(), this.d.conferirDiaMs ?? 60_000);
     this.d.raiz.replaceChildren(h("div", { class: "prj" }, this.slotTopo, this.cartao, this.slotVazio));
@@ -303,6 +307,7 @@ export class AppProjetos {
       moverDependentes: this.prefs.moverDependentes,
       ordemEtapas: this.prefs.ordemEtapas,
       arquivados: this.dados.arquivados.length,
+      semProjetos: !this.dados.ativos.length,
       extensoes: this.d.extensoesMenu,
       aoMostrarLista: (v) => this.ajustar({ mostrarLista: v }),
       aoMoverDependentes: (v) => this.ajustar({ moverDependentes: v }),
@@ -311,6 +316,15 @@ export class AppProjetos {
       aoImprimir: () => this.imprimir(),
       aoArquivados: () => this.abrirArquivados(),
     }));
+  }
+
+  /**
+   * O estado da sincronia mudou (o P4 avisa a cada gravação): troca só o indicador ao lado das abas.
+   * Balão, popover do filtro e menu abertos ficam; o próximo desenho já sai com o estado novo.
+   */
+  private atualizarSincronia(): void {
+    if (this.destruido) return;
+    this.slotTopo.querySelector(".prj-sinc")?.replaceWith(indicadorDeSincronia((this.d.sincronia ?? SEM_SINCRONIA).estado()));
   }
 
   /** A linha das abas (com o estado da sincronia e o menu): o resto da tela fica como está. */
@@ -671,8 +685,23 @@ export class AppProjetos {
             avisar(`Modelo “${m.nome}” salvo.`);
           },
         }),
+      redefinirPlano: () => this.redefinirPlano(p),
       excluir: () => this.excluirProjeto(p),
     });
+  }
+
+  /**
+   * "Redefinir plano original" (spec 5.4): confirma e iguala o plano das etapas replanejadas às datas
+   * atuais. Sem "Desfazer": o repositório não regrava o plano antigo (a confirmação é a guarda).
+   * Desistir devolve `false`: o diálogo fica.
+   */
+  private async redefinirPlano(p: ProjetoNaTela): Promise<boolean> {
+    const n = p.etapas.filter(planoParaRedefinir).length;
+    const texto = `Redefinir o plano original de “${p.projeto.nome}”? As datas atuais de ${plural(n, "etapa replanejada", "etapas replanejadas")} passam a ser o plano.`;
+    if (!(await this.d.confirmar(texto, "Redefinir"))) return false;
+    const feitas = await this.repoDe(p.vis).redefinirPlanoOriginal(p.projeto.id);
+    avisar(`Plano original redefinido em ${plural(feitas, "etapa", "etapas")}.`);
+    return true;
   }
 
   /** O aviso do impacto de mudar "Quem vê" (spec 6.2). */
@@ -873,7 +902,8 @@ export class AppProjetos {
         const atual = await repo.obterEtapa(id);
         if (!atual) throw new ErroValidacao(["A etapa não existe mais."]);
         if (!atual.concluidaEm) throw new ErroValidacao([`“${atual.nome}” não está mais concluída.`]);
-        await repo.concluirEtapa(id, data, numero ? (numero === atual.documento?.numero ? atual.documento : { numero }) : undefined);
+        // Campo vazio tira o documento (`null`); o mesmo número guarda o título já conferido.
+        await repo.concluirEtapa(id, data, numero ? (numero === atual.documento?.numero ? atual.documento : { numero }) : null);
       },
     });
   }

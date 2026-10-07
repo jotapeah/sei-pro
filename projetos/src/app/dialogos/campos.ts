@@ -9,6 +9,7 @@ import { type Combo, criarCombo, type OpcaoCombo } from "@comum/ui/combobox";
 import { h, icone } from "@comum/ui/dom";
 import type { Vinculo } from "../../modelo/tipos";
 import type { DocumentoConferido, ProcessoDaCaixa } from "../../ponte/tipos";
+import { cotaCheia, TEXTO_COTA_CHEIA } from "../erros";
 
 type Filho = Node | string | null | undefined | false;
 
@@ -73,10 +74,11 @@ export function caixaDeErros(): { el: HTMLElement; mostrar(m: readonly string[])
   };
 }
 
-/** Mensagens de um erro do repositório (ErroValidacao) ou de qualquer outro. */
+/** Mensagens de um erro do repositório (ErroValidacao), da cota do navegador ou de qualquer outro. */
 export function mensagensDoErro(e: unknown): string[] {
   const m = (e as { mensagens?: unknown })?.mensagens;
   if (Array.isArray(m) && m.length) return m.map(String);
+  if (cotaCheia(e)) return [TEXTO_COTA_CHEIA];
   return [`Não foi possível salvar: ${e instanceof Error ? e.message : String(e)}`];
 }
 

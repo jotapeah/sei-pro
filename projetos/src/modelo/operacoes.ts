@@ -164,9 +164,12 @@ export function novaEtapa(d: DadosNovaEtapa, id: string, ordem: string, c: Carim
   });
 }
 
-/** Concluir com 1 clique: a data de hoje (spec 3.2); o documento é opcional. */
-export function concluir(e: Etapa, hoje: DataISO, c: Carimbo, documento?: DocumentoSei): Etapa {
-  return editar(e, { concluidaEm: hoje, documento: documento ?? e.documento }, c);
+/**
+ * Concluir com 1 clique: a data de hoje (spec 3.2); o documento é opcional (ausente = fica o que a
+ * etapa tinha; `null` = tira o documento, como "Informar documento" com o campo vazio).
+ */
+export function concluir(e: Etapa, hoje: DataISO, c: Carimbo, documento?: DocumentoSei | null): Etapa {
+  return editar(e, { concluidaEm: hoje, documento: documento === null ? undefined : (documento ?? e.documento) }, c);
 }
 
 export function reabrir(e: Etapa, c: Carimbo): Etapa {

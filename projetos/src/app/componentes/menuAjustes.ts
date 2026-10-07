@@ -22,6 +22,8 @@ export interface OpcoesMenuAjustes {
   moverDependentes: boolean;
   ordemEtapas: OrdemEtapas;
   arquivados: number;
+  /** Sem projeto ativo (primeiro uso, ou só arquivados): Exportar e Imprimir não têm o que levar. */
+  semProjetos?: boolean;
   extensoes?: ExtensoesMenu;
   aoMostrarLista(v: boolean): void;
   aoMoverDependentes(v: boolean): void;
@@ -65,8 +67,8 @@ export function criarMenuAjustes(estado: () => OpcoesMenuAjustes): HTMLButtonEle
           fazer: () => o.aoOrdenar(valor),
         })),
         "-",
-        { rotulo: "Exportar planilha (CSV)", icone: "planilha", fazer: o.aoExportar },
-        { rotulo: "Imprimir / salvar PDF", icone: "documento", fazer: o.aoImprimir },
+        o.semProjetos ? null : { rotulo: "Exportar planilha (CSV)", icone: "planilha", fazer: o.aoExportar },
+        o.semProjetos ? null : { rotulo: "Imprimir / salvar PDF", icone: "documento", fazer: o.aoImprimir },
         ...(ext.arquivo?.() ?? []),
         "-",
         ...(ext.fim?.() ?? []),

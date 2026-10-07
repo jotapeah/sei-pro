@@ -25,7 +25,7 @@ import {
   registrosDeFase,
   registrosDeProjeto,
 } from "./modelo/historico";
-import { aplicarDatas, baseInicial, redefinirBase, replanejada } from "./modelo/linhaDeBase";
+import { aplicarDatas, baseInicial, planoParaRedefinir, redefinirBase } from "./modelo/linhaDeBase";
 import {
   concluir,
   type DadosNovaEtapa,
@@ -535,7 +535,8 @@ export class RepositorioProjetos {
     return gravadas;
   }
 
-  async concluirEtapa(id: string, hoje: DataISO, documento?: DocumentoSei): Promise<Etapa> {
+  /** `documento`: ausente = fica o que a etapa tinha; `null` = tira (ver `concluir`). */
+  async concluirEtapa(id: string, hoje: DataISO, documento?: DocumentoSei | null): Promise<Etapa> {
     const atual = await this.obterEtapa(id);
     if (!atual) throw new ErroValidacao(["A etapa não existe mais."]);
     const c = this.carimbo();
@@ -575,7 +576,7 @@ export class RepositorioProjetos {
 
   /** "Redefinir plano original" (menu do projeto): a base de cada etapa replanejada passa a ser as datas atuais. */
   async redefinirPlanoOriginal(projeto: string): Promise<number> {
-    const alvos = (await this.etapasDoProjeto(projeto)).filter((e) => replanejada(e) || !e.base);
+    const alvos = (await this.etapasDoProjeto(projeto)).filter(planoParaRedefinir);
     if (!alvos.length) return 0;
     const c = this.carimbo();
     const gravadas = alvos.map((e) => editar(e, { base: e.base ? redefinirBase(e) : baseInicial(e.inicio, e.fim) }, c));

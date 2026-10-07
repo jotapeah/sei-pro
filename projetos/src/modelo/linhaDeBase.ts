@@ -35,6 +35,11 @@ export function replanejada(e: Pick<Etapa, "inicio" | "fim" | "base">): boolean 
   return !!e.base && (e.base.inicio !== e.inicio || e.base.fim !== e.fim);
 }
 
+/** O que "Redefinir plano original" muda: a etapa replanejada (ou sem plano, de dado antigo). */
+export function planoParaRedefinir(e: Pick<Etapa, "inicio" | "fim" | "base">): boolean {
+  return replanejada(e) || !e.base;
+}
+
 /** Dias úteis entre o término original e o atual (positivo = atrasou o plano). 0 sem base. */
 export function desvioUteis(e: Pick<Etapa, "fim" | "base">, feriados: ReadonlySet<DataISO> = FERIADOS): number {
   if (!e.base) return 0;

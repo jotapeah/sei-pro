@@ -175,6 +175,10 @@ export function verificarOperacoes(): void {
   const conc = concluir(e2, HOJE, C2, { numero: "1234567" });
   checar("concluir com a data de hoje e documento", conc.concluidaEm === HOJE && conc.documento?.numero === "1234567");
   checar("reabrir tira a conclusao", !("concluidaEm" in reabrir(conc, C2)));
+  checar(
+    "concluir sem documento guarda o que havia; com null tira (Informar documento com o campo vazio)",
+    concluir(conc, "2026-10-05", C2).documento?.numero === "1234567" && !("documento" in concluir(conc, "2026-10-05", C2, null)),
+  );
   checar("nova fase", novaFase("p1", " Instrução ", "f1", "a0", C).nome === "Instrução");
   checar(
     "porOrdem desempata pelo id",
