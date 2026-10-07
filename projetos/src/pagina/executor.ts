@@ -4,6 +4,9 @@
  * processo ou documento é o mesmo gesto do usuário. O que escreve no SEI (P4) é
  * só a sincronia dos Textos Padrão dos projetos (pagina/sincronia.ts), a pedido
  * do app ("Sincronizar agora", "Desligar e apagar do SEI" do texto pessoal).
+ * Os mesmos tratadores atendem o painel embutido e o lateral (P5), que também
+ * pede o "Abrir no painel" (`focarNoPainel`); os argumentos que podem vir de
+ * dado compartilhado são conferidos antes de chegar à pesquisa rápida.
  */
 
 import { abrirProcesso } from "@comum/pagina/abrir";
@@ -13,6 +16,7 @@ import type { Sobreposicao } from "@comum/painel/sobreposicao";
 import { ErroRpc, type Tratador } from "@comum/ponte/rpc";
 import { lerCaixaDaPagina } from "@nucleo/dominio/caixa";
 import { paginaDe } from "@nucleo/sessao/pagina";
+import { RE_DOCUMENTO, RE_ID_PROCEDIMENTO, RE_PROTOCOLO } from "../modelo/vinculos";
 import type { ContextoProjetos, DocumentoConferido, ProcessoDaCaixa, UsuarioDaUnidade } from "../ponte/tipos";
 import type { ProjetosDoAtividades } from "./atividades";
 import type { ResultadoSincronizar } from "./sincronia";
@@ -30,7 +34,29 @@ export interface DepsExecutor {
   sincronia?: { agora(): Promise<ResultadoSincronizar>; apagarPessoal(): Promise<boolean> } | null;
   /** P4: os projetos do servidor do Atividades (só com servidor configurado). */
   atividades?: (() => Promise<ProjetosDoAtividades>) | null;
+  /** P5: o "Abrir no painel" do lateral (pagina/foco.ts): rola até o painel ou vai ao Controle de Processos. */
+  focarNoPainel?: ((id: string, etapa?: string) => "painel" | Promise<"painel" | "navegou">) | null;
 }
+
+/**
+ * Os argumentos de abrir processo e documento podem vir de dado compartilhado (o Texto Padrão da unidade, que outra
+ * pessoa grava) e vão à pesquisa rápida: o número do processo na forma do vínculo (`RE_PROTOCOLO`: letras, dígitos,
+ * `. / -`, até 40; há SEI que escreve com letras), sem espaço no meio (o das pontas sai); o id do processo, se vier,
+ * só dígitos (até 20); o número SEI do documento, até 20 dígitos.
+ */
+function protocoloDoPedido(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  return t && RE_PROTOCOLO.test(t) ? t : null;
+}
+/** O id do processo: ausente ou vazio (só a pesquisa rápida), ou só dígitos; qualquer outra coisa é null (recusa). */
+function idDoPedido(v: unknown): string | null {
+  if (v === undefined || v === null || v === "") return "";
+  const t = typeof v === "string" ? v : typeof v === "number" && Number.isSafeInteger(v) && v >= 0 ? String(v) : null;
+  return t !== null && RE_ID_PROCEDIMENTO.test(t) ? t : null;
+}
+/** Id de projeto ou de etapa (texto curto, como o `focarProjeto` do app aceita). */
+const idCurto = (v: unknown): string | undefined => (typeof v === "string" && v.length > 0 && v.length <= 200 ? v : undefined);
 
 const SEM_SINCRONIA = "A sincronia pelo Texto Padrão só funciona numa tela do SEI com unidade.";
 
@@ -57,12 +83,16 @@ export function tratadoresProjetos(d: DepsExecutor): Record<string, Tratador> {
     ...tratadoresDoPainel(d),
     abrirProcesso: (args) => {
       const a = (args ?? {}) as { id?: unknown; protocolo?: unknown; novaAba?: unknown };
-      return abrirProcesso(d.doc, String(a.id ?? ""), String(a.protocolo ?? ""), a.novaAba === true);
+      const id = idDoPedido(a.id);
+      const protocolo = protocoloDoPedido(a.protocolo);
+      if (id === null || protocolo === null) throw new ErroRpc("ARGUMENTO_INVALIDO", "Este não é um número de processo do SEI.");
+      return abrirProcesso(d.doc, id, protocolo, a.novaAba === true);
     },
     // Documento: a pesquisa rápida com o número SEI, numa aba nova (a tela atual fica).
     abrirDocumento: (args) => {
-      const n = String((args as { numero?: unknown } | null)?.numero ?? "").replace(/\D/g, "");
-      if (!n) throw new ErroRpc("ARGUMENTO_INVALIDO", "Informe o número SEI do documento.");
+      const bruto = (args as { numero?: unknown } | null)?.numero;
+      const n = (typeof bruto === "string" || typeof bruto === "number" ? String(bruto) : "").replace(/\D/g, "");
+      if (!RE_DOCUMENTO.test(n)) throw new ErroRpc("ARGUMENTO_INVALIDO", "Informe o número SEI do documento (até 20 dígitos).");
       return abrirProcesso(d.doc, "", n, true);
     },
     conferirDocumento: (args) => d.conferir(String((args as { numero?: unknown } | null)?.numero ?? "")),
@@ -82,6 +112,14 @@ export function tratadoresProjetos(d: DepsExecutor): Record<string, Tratador> {
     importarAtividades: () => {
       if (!d.atividades) throw new ErroRpc("SEM_ATIVIDADES", "Não há servidor do Atividades configurado neste SEI.");
       return d.atividades();
+    },
+    // P5: o "Abrir no painel" do lateral (o id vem do app, mas o projeto pode ter vindo de um colega).
+    focarNoPainel: (args) => {
+      const a = (args ?? {}) as { id?: unknown; etapa?: unknown };
+      const id = idCurto(a.id);
+      if (!id) throw new ErroRpc("ARGUMENTO_INVALIDO", "Projeto inválido.");
+      if (!d.focarNoPainel) throw new ErroRpc("SEM_PAINEL", "Abra o Controle de Processos nesta aba para ver o projeto no painel.");
+      return d.focarNoPainel(id, idCurto(a.etapa));
     },
   };
 }

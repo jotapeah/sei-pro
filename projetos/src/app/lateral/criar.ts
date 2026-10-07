@@ -17,12 +17,15 @@ import type { Area } from "@comum/armazenamento/area";
 import type { DataISO } from "@comum/datas/dias";
 import type { Rpc } from "@comum/ponte/rpc";
 import { type AbrirModal, criarConfirmar } from "@comum/ui/dialogo";
-import { CHAVE_CONTADOR_PAINEL, TETO_CONTADOR_PAINEL } from "../../modelo/constantes";
 import type { Carimbo } from "../../modelo/tipos";
 import type { ContextoProjetos } from "../../ponte/tipos";
 import type { ArquivoLigado, DepsColaboracao } from "../colaboracao/colaboracao";
+import { gravadorDoContador } from "../contador";
 import { ligarApp } from "../ligacao";
 import type { AppDoLateral } from "./montagem";
+
+/** O contador mora em `app/contador.ts` (o content script do Controle de Processos grava o mesmo). */
+export { gravadorDoContador };
 
 /** O navegador do lateral (o main.ts põe o chrome.storage, os diálogos e o seletor de arquivo). */
 export interface NavegadorDoLateral {
@@ -75,25 +78,6 @@ export function modaisDaVez(abrir: AbrirModal): { abrirModal: AbrirModal; fechar
       abertos.clear();
       return lista.length;
     },
-  };
-}
-
-/**
- * O contador da aba "Projetos" do painel (`projetos/contadorPainel`): grava só quando muda, como inteiro de 0 até o
- * teto do selo (o shell mostra de 1 ao teto; 0 tira o número). Um por montagem: a primeira contagem da unidade
- * nova sempre grava (o content script de outra unidade pode ter gravado no meio). Gravação recusada tenta de novo
- * na próxima contagem, mesmo igual.
- */
-export function gravadorDoContador(area: Area, teto = TETO_CONTADOR_PAINEL): (n: number) => void {
-  let gravado: number | null = null;
-  return (n) => {
-    if (!Number.isFinite(n)) return;
-    const v = Math.min(teto, Math.max(0, Math.trunc(n)));
-    if (v === gravado) return;
-    gravado = v;
-    void area.gravar({ [CHAVE_CONTADOR_PAINEL]: v }).catch(() => {
-      if (gravado === v) gravado = null;
-    });
   };
 }
 

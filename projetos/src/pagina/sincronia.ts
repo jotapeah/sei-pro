@@ -201,13 +201,19 @@ export interface DepsLigarSincronia {
   janela: Pick<EventTarget, "addEventListener">;
   doc: Pick<EventTarget, "addEventListener"> & { readonly visibilityState: DocumentVisibilityState };
   atrasoEnvio?: number;
+  /**
+   * P5: ler o SEI (ao abrir e ao ganhar foco). Padrão: sim (o Controle de Processos). Nas outras telas de topo, não:
+   * só vai ao SEI o que mudou aqui (o lateral, a árvore) e a pendência de uma carga anterior.
+   */
+  puxar?: boolean;
 }
 
 /**
- * P4 (o main.ts do content script, na janela de topo do Controle de Processos): os dois Textos Padrão desta
- * unidade, lidos e gravados por esta aba. Lê ao abrir, puxa ao ganhar foco e ao voltar a ficar visível (no máximo
- * a cada 2 min), grava 15 s depois de mudar; trava por Web Locks quando a página tem (o "apagar" espera a vez).
- * null se não montou (o executor responde `SEM_SINCRONIA`); nada daqui lança nem deixa rejeição solta.
+ * O main.ts do content script, em toda janela de topo do SEI com unidade (P5; no P4, só no Controle de Processos):
+ * os dois Textos Padrão desta unidade, lidos e gravados por esta aba. No Controle de Processos lê ao abrir, puxa ao
+ * ganhar foco e ao voltar a ficar visível (no máximo a cada 2 min); nas outras telas (`puxar: false`) não lê. Em
+ * todas, grava 15 s depois de mudar; trava por Web Locks quando a página tem (o "apagar" espera a vez). null se não
+ * montou (o executor responde `SEM_SINCRONIA`); nada daqui lança nem deixa rejeição solta.
  */
 export function ligarSincronia(d: DepsLigarSincronia): SincroniaPagina | null {
   let s: SincroniaPagina;
@@ -229,7 +235,10 @@ export function ligarSincronia(d: DepsLigarSincronia): SincroniaPagina | null {
     console.warn("[SEI Pro] projetos: a sincronia não foi ligada:", e);
     return null;
   }
-  void s.iniciar({ puxar: true }).catch((e) => console.warn("[SEI Pro] projetos: sincronia", e));
+  const puxarJa = d.puxar ?? true;
+  void s.iniciar({ puxar: puxarJa }).catch((e) => console.warn("[SEI Pro] projetos: sincronia", e));
+  // Nas outras telas, só o envio: ler os colegas é do Controle de Processos.
+  if (!puxarJa) return s;
   const puxar = () => void s.puxar().catch(() => undefined);
   d.janela.addEventListener("focus", puxar);
   d.doc.addEventListener("visibilitychange", () => {

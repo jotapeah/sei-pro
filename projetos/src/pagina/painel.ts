@@ -112,21 +112,26 @@ export interface OpcoesAlertas {
   atraso?: number;
   /** Intervalo entre tentativas de pedir o alerta enquanto o app não ligou (até ~9 s). Padrão: 300 ms. */
   espera?: number;
+  /** P5: as etapas atrasadas a cada pintura (o contador da aba "Projetos" no painel lateral). */
+  aoContar?: (atrasadas: number) => void;
 }
 
 /**
  * Pílulas do título ligadas aos projetos: contam as etapas dos dois escopos da
  * unidade e se refazem a cada gravação (e ao voltar para a aba: o dia pode ter
  * virado). O clique abre o painel (se recolhido), rola até ele e pede ao app o
- * filtro; se o app ainda não ligou, tenta de novo por alguns segundos.
+ * filtro; se o app ainda não ligou, tenta de novo por alguns segundos. `parar`
+ * desliga os ouvintes e os relógios (painel desmontado).
  */
-export function ligarAlertas(montado: Pick<PainelMontado, "painel" | "corpo">, o: OpcoesAlertas): void {
+export function ligarAlertas(montado: Pick<PainelMontado, "painel" | "corpo">, o: OpcoesAlertas): { parar(): void } {
   const titulo = montado.painel.querySelector<HTMLElement>(`.${PREFIXO}-titulo`);
-  if (!titulo) return;
+  if (!titulo) return { parar: () => undefined };
+  let parado = false;
   const espera = o.espera ?? 300;
   let tentativa: ReturnType<typeof setTimeout> | null = null;
   const pedir = (tipo: TipoAlerta, restam: number) => {
     tentativa = null;
+    if (parado) return;
     const r = o.rpc();
     if (r) void r.chamar("alerta", { tipo }).catch(() => undefined);
     else if (restam > 0) tentativa = setTimeout(() => pedir(tipo, restam - 1), espera);
@@ -140,19 +145,35 @@ export function ligarAlertas(montado: Pick<PainelMontado, "painel" | "corpo">, o
   };
   let agendado: ReturnType<typeof setTimeout> | null = null;
   const pintar = () => {
+    if (parado) return;
     if (agendado) clearTimeout(agendado);
     agendado = setTimeout(() => {
       agendado = null;
       const hoje = o.hoje();
       void carregarUnidade(o.repos, hoje)
-        .then((d) => pintarAlertas(titulo, alertasDaUnidade(d.ativos, hoje), o.temaEscuro, aoClicar))
+        .then((d) => {
+          if (parado) return;
+          const a = alertasDaUnidade(d.ativos, hoje);
+          pintarAlertas(titulo, a, o.temaEscuro, aoClicar);
+          o.aoContar?.(a.atrasadas);
+        })
         .catch(() => undefined);
     }, o.atraso ?? 150);
   };
-  for (const r of Object.values(o.repos)) r.aoMudar(pintar);
+  const paradas = Object.values(o.repos).map((r) => r.aoMudar(pintar));
   const doc = montado.painel.ownerDocument;
-  doc.addEventListener("visibilitychange", () => {
+  const aoVoltar = () => {
     if (doc.visibilityState === "visible") pintar();
-  });
+  };
+  doc.addEventListener("visibilitychange", aoVoltar);
   pintar();
+  return {
+    parar() {
+      parado = true;
+      for (const p of paradas) p();
+      doc.removeEventListener("visibilitychange", aoVoltar);
+      if (agendado) clearTimeout(agendado);
+      if (tentativa) clearTimeout(tentativa);
+    },
+  };
 }

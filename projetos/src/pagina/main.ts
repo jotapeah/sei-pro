@@ -4,44 +4,56 @@
  * legado não carregar o sei-pro-projetos.js: o primeiro import (`./marcar`) é
  * um efeito que roda antes de todo o resto do pacote. Em todo frame, os Textos
  * Padrão de dados do SEI Pro saem do seletor de "Texto Padrão" ao gerar
- * documento (cosmético). Só a janela de topo do Controle de Processos faz o
- * resto: monta o painel embutido, atende o app pelo RPC, pinta as pílulas de
- * alerta no título e (P4) sincroniza os dois Textos Padrão da unidade
- * (pagina/sincronia.ts) e busca no servidor do Atividades a pedido do app.
- * (Caixa, árvore e lateral: P5.)
+ * documento (cosmético). Depois, com o DOM, decide pela tela (`qualTela`):
+ * - janela de topo de qualquer tela do SEI com unidade: os repositórios com o
+ *   dispositivo de verdade, a sincronia dos dois Textos Padrão da unidade
+ *   (pagina/sincronia.ts: lê só no Controle de Processos; nas outras telas só
+ *   envia o que mudou aqui, porque o lateral e a árvore gravam) e o lado da aba
+ *   do painel lateral (pagina/lateral.ts, chave host|login|u:<unidade>);
+ * - Controle de Processos (topo): o painel embutido, as pílulas (com o
+ *   contador da aba do lateral) e o "Abrir no painel" que o lateral deixou;
+ * - frames: nada ainda (a árvore do processo ganha o ícone, a faixa e o balão a
+ *   seguir); nenhum trabalho pesado roda neles.
  *
  * Nada daqui abre a árvore de um processo nem monta link do SEI: a conferência
  * do número SEI vai pela pesquisa rápida da própria tela, a lista de usuários é
- * a parcial (pagina/usuarios.ts) e o armazém dos Textos Padrão usa o link do
- * menu da tela (pagina/armazem.ts).
+ * a parcial (pagina/usuarios.ts), e o armazém dos Textos Padrão e a ida ao
+ * Controle de Processos usam o link do menu da tela.
  */
 
 // Primeiro de tudo (efeito de importação): a marca do <html> antes de qualquer outro módulo.
 import "./marcar";
-import { areaChrome } from "@comum/armazenamento/area";
+import { type Area, areaChrome } from "@comum/armazenamento/area";
+import { idDispositivo } from "@comum/armazenamento/dispositivo";
 import { hojeISO } from "@comum/datas/dias";
 import { lerOpcaoLegada } from "@comum/opcoes/legadas";
 import { corDoTemaSei, temaEscuroLegado } from "@comum/pagina/tema";
 import { avisoComAcoesNaPagina, avisoNaPagina } from "@comum/painel/aviso";
-import { ligarPortaDoPainel } from "@comum/painel/embutido";
+import { ligarPortaDoPainel, type PainelMontado } from "@comum/painel/embutido";
 import type { PortaRpc } from "@comum/ponte/rpc";
 import { ocultarTextosInternos } from "@comum/sincronia/controlePagina";
 import { Formulario } from "@nucleo/formulario/formulario";
+import { linkDoMenu } from "@nucleo/links/links";
 import { criarHttp } from "@nucleo/sessao/http";
 import { paginaDe } from "@nucleo/sessao/pagina";
+import { gravadorDoContador } from "../app/contador";
 import { carregarUnidade } from "../app/dados";
 import { gravarPreferencias, lerPreferencias } from "../app/preferencias";
 import { chaveUsuarios } from "../modelo/constantes";
 import { escoposDaUnidade } from "../modelo/escopo";
-import { CANAL_PROJETOS } from "../ponte/tipos";
+import type { Carimbo, Vis } from "../modelo/tipos";
+import { CANAL_LATERAL, CANAL_PROJETOS, type ContextoProjetos, chaveDaAba } from "../ponte/tipos";
 import { RepositorioProjetos } from "../repositorio";
 import { armazemDoTexto } from "./armazem";
 import { atividadesDaAba } from "./atividades";
 import { atividadesConfigurado, contextoProjetos } from "./contexto";
 import { conferirDocumento } from "./documento";
 import { tratadoresProjetos } from "./executor";
+import { atenderPedidoDoLateral, focoDaAba, type PainelDaAba } from "./foco";
+import { ligarLateralDaAba } from "./lateral";
 import { ligarAlertas, montarPainelProjetos, ordemDoPainel } from "./painel";
-import { ligarSincronia } from "./sincronia";
+import { ligarSincronia, type SincroniaPagina } from "./sincronia";
+import { qualTela } from "./tela";
 import { responsaveisUsados, usuariosDaCaixa, usuariosDaUnidade } from "./usuarios";
 
 const global = window as unknown as { __seiProProjetos?: boolean };
@@ -61,35 +73,41 @@ if (!global.__seiProProjetos) {
   else iniciar();
 }
 
+type Repos = Readonly<Record<Vis, RepositorioProjetos>>;
+
+/** O que esta janela de topo tem para o painel embutido e o lateral. */
+interface Aba {
+  ctx: ContextoProjetos;
+  unidade: { id: string; sigla: string; nome: string };
+  area: Area;
+  repos: Repos;
+  sincronia: SincroniaPagina | null;
+}
+
 async function principal(): Promise<void> {
+  // Nos frames, nada ainda (a árvore do processo vem a seguir): só a janela de topo segue.
   if (window !== window.top) return;
-  if (!document.querySelector("#frmProcedimentoControlar")) return;
   if (!(await lerOpcaoLegada("gerenciarprojetos"))) return;
   const ctx = contextoProjetos(
     document,
     { temaEscuro: temaEscuroLegado(localStorage), corTema: corDoTemaSei(document), atividades: atividadesConfigurado(localStorage) },
     location.href,
   );
+  // Sem unidade no cabeçalho (login, janelas sem a barra do SEI): nem sincronia nem lateral.
   if (!ctx?.unidade) return;
   const unidade = ctx.unidade;
+  const naCaixa = qualTela(document) === "caixa";
   const area = areaChrome(chrome.storage.local, "local");
-  const prefs = await lerPreferencias(area);
-  const montado = montarPainelProjetos(document, {
-    urlApp: chrome.runtime.getURL("html/projetos.html#modo=embutido"),
-    temaEscuro: ctx.temaEscuro,
-    recolhido: prefs.recolhido,
-    ordem: ordemDoPainel(localStorage),
-    aoRecolher: (r) => void gravarPreferencias(area, { recolhido: r }).catch(() => undefined),
-  });
-  if (!montado) return;
-  // Pílulas, responsáveis já usados e a mescla do que vem dos Textos Padrão (P4): o content script não edita projetos.
+  // P5: o content script também grava (os balões da caixa e da árvore): o carimbo leva o dispositivo de verdade,
+  // o mesmo do app (mesclagem e origem do sigilo).
+  const dispositivo = await idDispositivo(area);
+  const carimbo = (): Carimbo => ({ agora: Date.now(), dispositivo, por: ctx.login, nome: ctx.nome });
   const escopos = escoposDaUnidade(ctx.host, ctx.login, unidade.id);
-  const carimbo = () => ({ agora: Date.now(), dispositivo: "pagina", por: ctx.login, nome: ctx.nome });
-  const repos = {
+  const repos: Repos = {
     unidade: new RepositorioProjetos(area, escopos.unidade, carimbo),
     eu: new RepositorioProjetos(area, escopos.eu, carimbo),
   };
-  // P4: o texto da unidade e o pessoal (lê ao abrir o Controle de Processos, puxa ao focar, grava 15 s depois de mudar).
+  // Os dois Textos Padrão: o Controle de Processos lê ao abrir e ao ganhar foco; as outras telas só enviam.
   const sincronia = ligarSincronia({
     ctx,
     unidade,
@@ -99,18 +117,84 @@ async function principal(): Promise<void> {
     armazem: (vis) => armazemDoTexto(document, location.href, vis, ctx.login),
     janela: window,
     doc: document,
+    puxar: naCaixa,
   });
-  const http = criarHttp(location.href);
-  const tratadores = tratadoresProjetos({
+  const aba: Aba = { ctx, unidade, area, repos, sincronia };
+  const painel: Promise<PainelDaAba | null> = naCaixa
+    ? montarNaCaixa(aba).catch((e) => {
+        console.warn("[SEI Pro] projetos: painel", e);
+        return null;
+      })
+    : Promise.resolve(null);
+  // O lado da aba do lateral já (sem esperar o painel): a página recarregada volta antes do fim da carência.
+  ligarLateralDaAba({
     doc: document,
     ctx,
-    iframe: montado.iframe,
-    sobreposicao: montado.sobreposicao,
-    avisar: avisoNaPagina(document, ctx.temaEscuro, "spro-prj"),
-    avisarAcoes: avisoComAcoesNaPagina(document, ctx.temaEscuro, "spro-prj"),
-    sincronia,
+    area,
+    conectar: () => chrome.runtime.connect({ name: CANAL_LATERAL }) as unknown as PortaRpc,
+    tratadores: tratadores(aba, {
+      iframe: null,
+      focarNoPainel: focoDaAba({
+        painel,
+        naCaixa,
+        area,
+        chave: chaveDaAba(ctx),
+        agora: () => Date.now(),
+        link: () => linkDoMenu(paginaDe(document, location.href), "procedimento_controlar"),
+        ir: (u) => location.assign(u),
+      }),
+    }),
+  });
+}
+
+/** O painel embutido, as pílulas (com o contador do lateral) e o "Abrir no painel" que o lateral deixou. */
+async function montarNaCaixa(aba: Aba): Promise<PainelDaAba | null> {
+  const { ctx, area, repos } = aba;
+  const prefs = await lerPreferencias(area);
+  const montado = montarPainelProjetos(document, {
+    urlApp: chrome.runtime.getURL("html/projetos.html#modo=embutido"),
+    temaEscuro: ctx.temaEscuro,
+    recolhido: prefs.recolhido,
+    ordem: ordemDoPainel(localStorage),
+    aoRecolher: (r) => void gravarPreferencias(area, { recolhido: r }).catch(() => undefined),
+  });
+  if (!montado) return null;
+  // A cada carga do iframe, uma porta nova: o app só aceita a porta da própria aba (@comum/ponte/conexaoDaAba).
+  const porta = ligarPortaDoPainel(
+    montado,
+    () => chrome.runtime.connect({ name: CANAL_PROJETOS }) as unknown as PortaRpc,
+    tratadores(aba, { iframe: montado.iframe, montado }),
+  );
+  // As pílulas contam as atrasadas: o mesmo contador (e a mesma regra) que o app do lateral grava.
+  ligarAlertas(montado, { temaEscuro: ctx.temaEscuro, repos, rpc: porta.rpc, hoje: () => hojeISO(), aoContar: gravadorDoContador(area) });
+  const painel: PainelDaAba = { painel: montado.painel, corpo: montado.corpo, rpc: porta.rpc };
+  void atenderPedidoDoLateral(area, chaveDaAba(ctx), Date.now(), painel).catch(() => undefined);
+  return painel;
+}
+
+/** O que o app (do painel embutido ou do lateral) pede a esta aba. */
+function tratadores(
+  aba: Aba,
+  o: {
+    iframe: HTMLIFrameElement | null;
+    montado?: PainelMontado;
+    focarNoPainel?: (id: string, etapa?: string) => Promise<"painel" | "navegou">;
+  },
+) {
+  const { ctx, unidade, area, repos } = aba;
+  const http = criarHttp(location.href);
+  return tratadoresProjetos({
+    doc: document,
+    ctx,
+    iframe: o.iframe,
+    sobreposicao: o.montado?.sobreposicao,
+    // Os avisos na página são do painel embutido (o lateral mostra os seus).
+    avisar: o.montado ? avisoNaPagina(document, ctx.temaEscuro, "spro-prj") : null,
+    avisarAcoes: o.montado ? avisoComAcoesNaPagina(document, ctx.temaEscuro, "spro-prj") : null,
+    sincronia: aba.sincronia,
     // A mesma requisição do painel legado, com o login do SEI desta tela (a chave de outro usuário é recusada).
     atividades: atividadesDaAba(ctx, localStorage, chrome.runtime.getManifest().version, (u, i) => fetch(u, i)),
+    focarNoPainel: o.focarNoPainel ?? null,
     usuarios: async () => {
       const dados = await carregarUnidade(repos, hojeISO()).catch(() => null);
       return usuariosDaUnidade({
@@ -134,7 +218,4 @@ async function principal(): Promise<void> {
         n,
       ),
   });
-  // A cada carga do iframe, uma porta nova: o app só aceita a porta da própria aba (@comum/ponte/conexaoDaAba).
-  const porta = ligarPortaDoPainel(montado, () => chrome.runtime.connect({ name: CANAL_PROJETOS }) as unknown as PortaRpc, tratadores);
-  ligarAlertas(montado, { temaEscuro: ctx.temaEscuro, repos, rpc: porta.rpc, hoje: () => hojeISO() });
 }
