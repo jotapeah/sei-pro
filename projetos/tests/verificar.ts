@@ -24,6 +24,7 @@ import { verificarManifest } from "./verificar-manifest";
 import { verificarModelos } from "./verificar-modelos";
 import { verificarOperacoes } from "./verificar-operacoes";
 import { verificarRepositorio } from "./verificar-repositorio";
+import { verificarSincroniaRepo } from "./verificar-sincronia-repo";
 import { verificarSituacao } from "./verificar-situacao";
 import { verificarVendor } from "./verificar-vendor";
 
@@ -35,6 +36,7 @@ verificarOperacoes();
 verificarFiltro();
 await verificarRepositorio();
 await verificarEscopos();
+await verificarSincroniaRepo();
 await verificarModelos();
 await verificarVendor();
 verificarLinhas();

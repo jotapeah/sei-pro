@@ -10,6 +10,7 @@ import { Colecao, obterPorPrefixo } from "@comum/armazenamento/colecao";
 import { diferencaDias } from "@comum/datas/dias";
 import { novoId } from "@comum/id";
 import { indiceEntre, indiceValido } from "@comum/ordem/indice";
+import { jsonEstavel } from "@comum/sincronia/assinatura";
 import { mesclar, purgarLapides, type Versionada } from "@comum/sincronia/entidade";
 import { normalizarTexto } from "@comum/texto";
 import { dataNaFaixa, LIMITE_DIAS_ETAPA } from "./modelo/calendario";
@@ -600,11 +601,15 @@ export class RepositorioProjetos {
    */
   async criarProjetoDeModelo(d: DadosNovoProjeto, modelo: Modelo, inicio: DataISO): Promise<Projeto> {
     await this.exigirVagaDeProjeto();
+    if (!dataNaFaixa(inicio)) throw new ErroValidacao(["Use datas entre 2000 e 2100."]);
     const c = this.carimbo();
     const p = novoProjeto(d, this.gerarId(), indiceEntre(maiorOrdem(await this.projetos.listar()), null), c);
     const problemas = [...problemasDoProjeto(p), ...problemasDoModelo(modelo)];
     if (problemas.length) throw new ErroValidacao([...new Set(problemas)]);
     const { fases, etapas } = aplicarModelo(modelo, inicio, { projeto: p.id, carimbo: c, novoId: this.gerarId });
+    // O modelo empurra as datas em dias úteis: começando perto de 2100, a última etapa pode passar (e seria recusada lá fora).
+    if (etapas.some((e) => !dataNaFaixa(e.inicio) || !dataNaFaixa(e.fim)))
+      throw new ErroValidacao(["Com esse começo, o projeto passaria de 2100."]);
     const conflitos = violacoesDeDatas(etapas);
     if (conflitos.length) throw new ErroValidacao(conflitos);
     await this.salvar(
@@ -686,7 +691,11 @@ export class RepositorioProjetos {
    * fica; dos que passariam a contar, entram os primeiros pelo id) e os 300
    * registros mais recentes; o excedente é ignorado e contado em `excedentes`.
    * Vínculo sigiloso que chega vazio (sem número) mantém o número que este
-   * computador já tinha. Tudo vai num `area.gravar` só (um aviso em `aoMudar`);
+   * computador já tinha, e etapa sigilosa que chega sem documento mantém o
+   * documento daqui (o Texto Padrão não leva nenhum dos dois). O que a mescla
+   * deixaria igual ao que já está aqui não é regravado: a sincronia ouve as
+   * gravações, e regravar o mesmo a cada rodada viraria um laço de leituras.
+   * Tudo vai num `area.gravar` só (um aviso em `aoMudar`);
    * `anotacoes` (registros do histórico a criar junto, com o carimbo) entram nessa
    * mesma gravação. Registros antigos daqui além dos 300 são podados depois.
    */
@@ -709,21 +718,27 @@ export class RepositorioProjetos {
       soma.excedentes += r.excedentes;
       if (tipo === "h" && r.gravar.length) importouRegistros = true;
       itens = { ...itens, ...this.entradas(col, r.gravar) };
+      return r.gravar;
     };
-    await mesclarCol(
+    const projetosAqui = await this.projetos.listar();
+    const projetosNovos = await mesclarCol(
       this.projetos,
       ent.p,
       "p",
       (l, v) => alemDoTeto(l, v, (x) => (vivo(x) && x.arquivadoEm === undefined ? "" : null), LIMITES.projetosAtivos),
       manterNumeroSigiloso,
     );
+    // Projeto com processo sigiloso depois da mescla: as etapas dele sem processo próprio são sigilosas.
+    const projetosFinais = new Map(projetosAqui.map((x) => [x.id, x]));
+    for (const [id, x] of projetosNovos) projetosFinais.set(id, x);
+    const sigilosos = new Set([...projetosFinais.values()].filter((x) => x.processo?.sigiloso).map((x) => x.id));
     await mesclarCol(this.fases, ent.f, "f", () => new Set());
     await mesclarCol(
       this.etapas,
       ent.e,
       "e",
       (l, v) => alemDoTeto(l, v, (x) => (vivo(x) ? x.projeto : null), LIMITES.etapasPorProjeto),
-      manterNumeroSigiloso,
+      (v, l) => manterDocumentoSigiloso(manterNumeroSigiloso(v, l), l, sigilosos.has(v.projeto)),
     );
     await mesclarCol(this.registros, ent.h, "h", registrosAlemDoTeto);
     await mesclarCol(this.modelos, ent.m, "m", (l, v) => alemDoTeto(l, v, (x) => (vivo(x) ? "" : null), LIMITES.modelos));
@@ -753,7 +768,10 @@ export class RepositorioProjetos {
     for (const vencedor of vencedoras) {
       if (fora.has(vencedor.id)) continue;
       const atual = porId.get(vencedor.id);
-      gravar.push([vencedor.id, combinar(vencedor, atual)]);
+      const final = combinar(vencedor, atual);
+      // A cópia sem os dados sigilosos, com o mesmo carimbo, pode vencer o desempate e voltar igual ao local.
+      if (atual && jsonEstavel(final) === jsonEstavel(atual)) continue;
+      gravar.push([vencedor.id, final]);
       if (atual) atualizados += 1;
       else novos += 1;
     }
@@ -832,6 +850,17 @@ export function manterNumeroSigiloso<T extends { processo?: Vinculo }>(vencedor:
   if (!v?.sigiloso || v.protocolo || !l?.protocolo) return vencedor;
   if (v.idProcedimento && l.idProcedimento && v.idProcedimento !== l.idProcedimento) return vencedor;
   return { ...vencedor, processo: semVazios({ ...v, protocolo: l.protocolo, idProcedimento: v.idProcedimento ?? l.idProcedimento }) };
+}
+
+/**
+ * Etapa sigilosa (processo próprio sigiloso, ou sem processo próprio num projeto sigiloso) que chegou
+ * sem documento mantém o documento deste computador: o Texto Padrão não leva o número do documento de
+ * um processo sigiloso (sincronia/textoPadrao.ts), e quem tinha não pode perdê-lo na mescla.
+ */
+export function manterDocumentoSigiloso(vencedor: Etapa, local: Etapa | undefined, projetoSigiloso: boolean): Etapa {
+  if (vencedor.documento || !local?.documento) return vencedor;
+  const sigilosa = vencedor.processo ? vencedor.processo.sigiloso === true : projetoSigiloso;
+  return sigilosa ? { ...vencedor, documento: local.documento } : vencedor;
 }
 
 /** Dependência repetida sai (a Frappe desenharia a seta duas vezes). Só copia quando há o que tirar. */
@@ -914,20 +943,34 @@ function datasValidas(inicio: unknown, fim: unknown, emOrdem: boolean): boolean 
   return diferencaDias(inicio, fim) <= LIMITE_DIAS_ETAPA;
 }
 
-const baseValida = (x: unknown): boolean => opcional(x, (b) => objeto(b) && datasValidas(b.inicio, b.fim, true));
+/** A mesma regra da etapa: término antes do início não recusa (a base acompanha as datas no planejamento). */
+const baseValida = (x: unknown): boolean => opcional(x, (b) => objeto(b) && datasValidas(b.inicio, b.fim, false));
 
-/** `processo` opcional: objeto com `protocolo` texto, `idProcedimento` texto ou ausente, `sigiloso` booleano ou ausente. */
+/** Número de processo como o SEI escreve (dígitos, ponto, barra e hífen; vazio no sigiloso que veio do texto). */
+const RE_PROTOCOLO = /^[0-9./-]{0,40}$/;
+const RE_ID_PROCEDIMENTO = /^\d{1,20}$/;
+
+/**
+ * `processo` opcional: objeto com `protocolo` (forma de número de processo, até 40), `idProcedimento`
+ * só dígitos ou ausente, `sigiloso` booleano ou ausente. Vem do texto da unidade (de qualquer colega) e
+ * vai à pesquisa rápida quando alguém clica: nada além de número.
+ */
 function vinculoValido(v: unknown): boolean {
   if (v === undefined) return true;
   if (!objeto(v)) return false;
-  return texto(v.protocolo) && opcional(v.idProcedimento, texto) && opcional(v.sigiloso, (b) => typeof b === "boolean");
+  return (
+    texto(v.protocolo) &&
+    RE_PROTOCOLO.test(v.protocolo) &&
+    opcional(v.idProcedimento, (x) => texto(x) && RE_ID_PROCEDIMENTO.test(x)) &&
+    opcional(v.sigiloso, (b) => typeof b === "boolean")
+  );
 }
 
-/** `documento` opcional: `numero` texto, `titulo` texto ou ausente. */
+/** `documento` opcional: `numero` texto de até 40, `titulo` texto de até 200 ou ausente. */
 function documentoValido(d: unknown): boolean {
   if (d === undefined) return true;
   if (!objeto(d)) return false;
-  return texto(d.numero) && opcional(d.titulo, texto);
+  return textoAte(40)(d.numero) && opcional(d.titulo, textoAte(LIMITES.nome));
 }
 
 /**
