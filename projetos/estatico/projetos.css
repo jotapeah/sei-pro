@@ -939,3 +939,41 @@ html[data-modo="impressao"] .prj-gantt {
   margin: 8px 4px;
   color: var(--spro-suave);
 }
+
+/* ---------- P4: faixas e consentimentos do Texto Padrao ---------- */
+.prj-faixas {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.prj-faixas:empty {
+  display: none;
+}
+.prj-faixa {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  background: var(--spro-destaque-suave);
+  border: 1px solid color-mix(in srgb, var(--spro-destaque) 22%, transparent);
+  border-radius: var(--spro-raio-g);
+}
+.prj-faixa > span {
+  flex: 1 1 260px;
+}
+.prj-consentimento {
+  display: grid;
+  gap: 10px;
+  max-width: 520px;
+}
+.prj-consentimento p,
+.prj-consentimento ul {
+  margin: 0;
+}
+.prj-consentimento ul {
+  display: grid;
+  gap: 4px;
+  padding-left: 18px;
+}
