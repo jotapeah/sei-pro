@@ -5,6 +5,7 @@
  */
 
 import type { Area } from "@comum/armazenamento/area";
+import { CHAVE_CONTADOR_PROJETOS, TETO_CONTADOR_PROJETOS } from "@comum/painel/contadores";
 import { CHAVE_ABA, type DefAba, montarAbas } from "@comum/painel/shell";
 
 export { CHAVE_ABA };
@@ -27,15 +28,6 @@ export interface DepsShell {
 }
 
 export const CHAVE_CONTADOR = "favoritos/contadorPainel";
-/** O app dos projetos grava aqui as etapas atrasadas da unidade da aba (projetos/src/modelo/constantes.ts). */
-export const CHAVE_CONTADOR_PROJETOS = "projetos/contadorPainel";
-/**
- * O maior número de etapas atrasadas que existe: 2 escopos (Só eu e Toda a unidade) x 100 projetos ativos x 300
- * etapas (`LIMITES` em projetos/src/modelo/constantes.ts). Acima disso o valor do storage é torto e a aba fica sem
- * número. Literal, e não a conta: o esbuild não descarta `2 * 100 * 300` e a sobra entraria no bundle do
- * app, que importa daqui.
- */
-export const TETO_CONTADOR_PROJETOS = 60000;
 
 /** O que o manifest do pacote declara, só o que decide as abas. */
 export interface ManifestoDoPacote {
