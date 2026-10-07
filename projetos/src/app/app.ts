@@ -913,7 +913,6 @@ export class AppProjetos {
       unidade: this.d.ctx.unidade.id,
       projeto: p?.projeto.id ?? "todos",
       escala: p ? escalaDoProjeto(this.prefs, p.projeto.id) : this.prefs.escalaTodos,
-      lista: this.prefs.mostrarLista,
     });
   }
 }

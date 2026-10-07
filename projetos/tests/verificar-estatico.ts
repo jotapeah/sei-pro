@@ -57,6 +57,11 @@ export async function verificarEstatico(): Promise<void> {
     tokensAlheios.length === 0 && coresLiterais.length === 0,
     [...tokensAlheios, ...coresLiterais],
   );
+  const impressao = /@media print \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
+  checar(
+    "impressao leva os fundos (pilulas, barras, grupos da tabela): print-color-adjust exact",
+    /(^|[^-])print-color-adjust: exact/.test(impressao) && impressao.includes("-webkit-print-color-adjust: exact"),
+  );
   const regra = (seletor: string) => new RegExp(`\\.${seletor}\\s*[{,.:\\[ >]`).test(css);
   checar(
     "cabecalho da lista com a altura do cabecalho do Gantt",

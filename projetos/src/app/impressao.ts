@@ -3,6 +3,9 @@
  * `#modo=impressao&...`, numa janela nova, só leitura: título, o Gantt (da aba
  * aberta, na escala dela) e a tabela; depois abre a impressão do navegador.
  * Os parâmetros vão no endereço (a página da extensão lê o armazenamento direto).
+ * A impressão não tem a lista de etapas à esquerda (a tabela faz esse papel):
+ * o Gantt sai sempre como "sem lista", com o nome das fases nas barras. O
+ * parâmetro `lista` das primeiras versões do endereço é ignorado.
  */
 
 import { formatarData } from "@comum/datas/dias";
@@ -25,8 +28,6 @@ export interface ParametrosImpressao {
   /** "todos" ou o id do projeto. */
   projeto: string;
   escala: Escala;
-  /** Lista de etapas à esquerda do Gantt. */
-  lista: boolean;
 }
 
 export function hashDaImpressao(p: ParametrosImpressao): string {
@@ -37,7 +38,6 @@ export function hashDaImpressao(p: ParametrosImpressao): string {
     unidade: p.unidade,
     projeto: p.projeto,
     escala: p.escala,
-    lista: p.lista ? "1" : "0",
   });
   return `#${q.toString()}`;
 }
@@ -76,7 +76,7 @@ export function lerImpressao(hash: string): ParametrosImpressao | null {
   if (q.get("modo") !== "impressao" || !ehEscala(escala)) return null;
   if (!parteDaChave(host) || !parteDaChave(login) || !textoValido(projeto)) return null;
   if (unidade.length > TETO_PARAMETRO || !/^[0-9]+$/.test(unidade)) return null;
-  return { host, login, unidade, projeto, escala, lista: q.get("lista") === "1" };
+  return { host, login, unidade, projeto, escala };
 }
 
 export interface DepsImpressao {
@@ -91,6 +91,7 @@ export async function montarImpressao(raiz: HTMLElement, p: ParametrosImpressao,
   const dados = await carregarUnidade(d.repos, d.hoje);
   const montar = d.montarGantt ?? montarGantt;
   const area = h("div", { class: "prj-gantt" });
+  // Sem lista ao lado: com `mostrarLista`, a decoração esconderia o nome das fases (decorar.ts).
   const opcoes = { escala: p.escala, hoje: d.hoje, mostrarLista: false, moverDependentes: false, somenteLeitura: true };
   if (p.projeto === "todos") {
     raiz.replaceChildren(
@@ -140,7 +141,7 @@ export async function montarImpressao(raiz: HTMLElement, p: ParametrosImpressao,
       area,
       montarTabelaEtapas(linhas, { hoje: d.hoje, aoClicar: () => undefined }),
     );
-    montar(area, linhas, { ...opcoes, mostrarLista: p.lista });
+    montar(area, linhas, opcoes);
   }
   // As barras e os rótulos da Frappe se ajustam no quadro seguinte.
   setTimeout(() => d.imprimir(), 10);

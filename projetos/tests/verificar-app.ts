@@ -291,7 +291,7 @@ export async function verificarApp(): Promise<void> {
   itemDoMenu(a.raiz, "Ajustes dos projetos", "Imprimir / salvar PDF");
   checar(
     "imprimir manda os parametros da aba",
-    a.t.impressos[0]?.projeto === a.ids.p && a.t.impressos[0]?.escala === "Semana" && a.t.impressos[0]?.lista === false,
+    a.t.impressos[0]?.projeto === a.ids.p && a.t.impressos[0]?.escala === "Semana" && a.t.impressos[0]?.unidade === "110",
   );
 
   secao("app: excluir etapa e projeto com desfazer");

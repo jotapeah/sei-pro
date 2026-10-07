@@ -2,7 +2,9 @@ import { areaMemoria } from "@comum/armazenamento/area";
 import type { ProjetoNaTela } from "../src/app/dados";
 import { hashDaImpressao, lerImpressao, montarImpressao } from "../src/app/impressao";
 import { csvDosProjetos, nomeDoCsv } from "../src/arquivo/csv";
+import { idLinhaFase } from "../src/gantt/linhas";
 import { resumoDoProjeto } from "../src/modelo/resumo";
+import { area as areaDoGantt, esperarQuadro, instalarAmbienteGantt } from "./ambienteGantt";
 import { telaDoApp, texto } from "./apoioApp";
 import { ESCOPO_EU, ESCOPO_UN, novoRepo } from "./apoioRepositorio";
 import { HOSTIL } from "./cenarioGantt";
@@ -79,9 +81,13 @@ export async function verificarAppCsv(): Promise<void> {
   );
 
   secao("app: imprimir / salvar PDF");
-  const par = { host: "sei.x.gov.br", login: "ana", unidade: "110", projeto: "todos", escala: "Mês" as const, lista: true };
+  const par = { host: "sei.x.gov.br", login: "ana", unidade: "110", projeto: "todos", escala: "Mês" as const };
   const hash = hashDaImpressao(par);
   checar("parametros no endereco e de volta", JSON.stringify(lerImpressao(hash)) === JSON.stringify(par));
+  checar(
+    "o endereco nao leva mais a lista; o 'lista=1' das versoes anteriores e ignorado",
+    !hash.includes("lista") && JSON.stringify(lerImpressao(`${hash}&lista=1`)) === JSON.stringify(par),
+  );
   checar("endereco estranho nao imprime", lerImpressao("#modo=impressao&host=x") === null && lerImpressao("#modo=embutido") === null);
   // O hash vira a chave do armazenamento (projetos/<host>|<login>|u:<unidade>/...): nada que mude o escopo passa.
   const comHash = (troca: Record<string, string>) =>
@@ -167,4 +173,22 @@ export async function verificarAppCsv(): Promise<void> {
     { repos: { unidade: un, eu }, hoje: HOJE, montarGantt: ganttFalso().montar, imprimir: () => undefined },
   );
   checar("impressao: processo sigiloso do projeto nao aparece", !texto(doc4.getElementById("app")).includes("50300.000555"));
+
+  // A impressão não tem a lista à esquerda: o nome da fase fica no Gantt, mesmo com "lista=1" no endereço
+  // (o parâmetro das versões anteriores; com a lista, a decoração esconde o rótulo da fase).
+  const comFase = await un.criarProjeto({ nome: "Com fase" });
+  const fi = await un.criarFase(comFase.id, "Instrucao");
+  await un.criarEtapa({ projeto: comFase.id, fase: fi.id, nome: "Nota tecnica", inicio: "2026-10-05", fim: "2026-10-09" });
+  const docG = instalarAmbienteGantt();
+  const pG = lerImpressao(
+    `#modo=impressao&host=sei.x.gov.br&login=ana&unidade=110&projeto=${encodeURIComponent(comFase.id)}&escala=Semana&lista=1`,
+  );
+  if (pG) await montarImpressao(areaDoGantt(docG), pG, { repos: { unidade: un, eu }, hoje: HOJE, imprimir: () => undefined });
+  await esperarQuadro();
+  const rotuloFase = docG.querySelector(`.bar-wrapper[data-id="${idLinhaFase(fi.id)}"] .bar-label`);
+  checar(
+    "impressao com lista=1 no endereco: a barra da fase mostra o nome (nao ha lista ao lado)",
+    !!pG && rotuloFase?.textContent === "Instrucao" && rotuloFase.getAttribute("display") !== "none",
+    rotuloFase ? { texto: rotuloFase.textContent, display: rotuloFase.getAttribute("display") } : "sem rotulo da fase",
+  );
 }

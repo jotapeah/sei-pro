@@ -2593,6 +2593,11 @@ html[data-modo="impressao"] .prj-gantt {
   margin-bottom: 16px;
 }
 @media print {
+  /* Sem isto o navegador tira os fundos: pilulas de situacao, barras de progresso e grupos da tabela somem. */
+  html[data-modo="impressao"] {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
   html[data-modo="impressao"] #app {
     padding: 0;
   }
