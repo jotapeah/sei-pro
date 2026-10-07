@@ -28,14 +28,16 @@ import { type DataISO, diferencaDias, somarDias } from "@comum/datas/dias";
 import { indiceEntre, indiceValido } from "@comum/ordem/indice";
 import { jsonEstavel } from "@comum/sincronia/assinatura";
 import { hashCurto, normalizarTexto } from "@comum/texto";
+import { mensagemDoErro } from "../app/erros";
 import { dataNaFaixa, LIMITE_DIAS_ETAPA } from "../modelo/calendario";
 import { LIMITES, MAXIMO_PROJETOS_ATIVIDADES } from "../modelo/constantes";
 import { encontrarCiclo } from "../modelo/dependencias";
 import type { RegistroNovo } from "../modelo/historico";
 import type { Carimbo, DocumentoSei, Entidade, Entidades, Etapa, Fase, ItemChecklist, Projeto, Vinculo, Vis } from "../modelo/tipos";
-import { etiquetasLimpas, nomeLimpo } from "../modelo/validacao";
+import { ErroValidacao, etiquetasLimpas, nomeLimpo } from "../modelo/validacao";
 import { protocoloNoTexto, RE_DOCUMENTO, RE_ID_PROCEDIMENTO } from "../modelo/vinculos";
 import { entidadeValida, type RepositorioProjetos } from "../repositorio";
+import { CAMPOS_ETAPA, CAMPOS_PROJETO, escolher } from "./camposLegado";
 
 /** O dispositivo do que veio do Atividades: editado aqui, passa a ser o do computador (e a reimportação não mexe). */
 export const DISPOSITIVO_ATIVIDADES = "atividades";
@@ -84,51 +86,12 @@ export interface ProjetoLegado {
   etapas: EtapaLegada[];
 }
 
-/** Os campos que o mapeamento lê; o resto do que o servidor manda (config, compartilhamentos…) fica de fora. */
-const CAMPOS_PROJETO = [
-  "nome_projeto",
-  "sigla_unidade",
-  "tipo_projeto",
-  "processo_sei",
-  "id_procedimento",
-  "data_inicio",
-  "data_fim",
-  "ativo",
-] as const;
-const CAMPOS_ETAPA = [
-  "id_dependencia",
-  "nome_etapa",
-  "processo_sei",
-  "id_procedimento",
-  "responsavel",
-  "data_inicio_programado",
-  "data_fim_programado",
-  "data_inicio_progresso_automatico",
-  "observacoes",
-  "macroetapa",
-  "grupo",
-  "etiqueta",
-  "data_inicio_execucao",
-  "data_fim_execucao",
-  "progresso_execucao",
-  "documento_relacionado",
-  "documento_sei",
-  "id_demandas_titles",
-  "data_inicio",
-] as const;
-
 const objeto = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x);
 
 /** Id do legado: inteiro positivo, em número ou em texto (o PDO devolve texto). */
 function inteiro(x: unknown): number | null {
   const n = typeof x === "number" ? x : typeof x === "string" && /^\d{1,15}$/.test(x.trim()) ? Number(x.trim()) : Number.NaN;
   return Number.isSafeInteger(n) && n > 0 ? n : null;
-}
-
-function escolher<K extends string>(x: Record<string, unknown>, campos: readonly K[]): Partial<Record<K, unknown>> {
-  const saida: Partial<Record<K, unknown>> = {};
-  for (const k of campos) if (Object.hasOwn(x, k)) saida[k] = x[k];
-  return saida;
 }
 
 /** Corta em `max` unidades (é como o `entidadeValida` conta) sem partir um par substituto (emoji) ao meio. */
@@ -177,9 +140,12 @@ export function diaLegado(x: unknown): DataISO | undefined {
 }
 
 /**
- * "2026-10-06 14:00:00" → ms, na hora de Brasília (o backend fixa `America/Sao_Paulo`): o mesmo instante em
- * qualquer computador, senão quem importa em Manaus regravaria o que quem importou em Brasília gravou. Fixo em
- * -03:00 (o horário de verão de antes de 2019 desloca em uma hora, sem efeito aqui).
+ * "2026-10-06 14:00:00" → ms, lido sempre em -03:00 (Brasília). O motivo é ser o MESMO instante em qualquer
+ * computador: lido na hora local, quem importa em Manaus gravaria outro `criadoEm`/`arquivadoEm` e cada um
+ * regravaria o que o outro importou. A hora é a que o próprio backend usa para comparar: `functions.php`
+ * (listProjetos, o `ativo`) compara `data_fim` com `new DateTime()` no fuso do PHP, que o `index.php` fixa em
+ * `America/Sao_Paulo`; o MySQL não fixa `time_zone`, então o valor gravado é o relógio de quem gravou, na prática
+ * Brasília. O horário de verão de antes de 2019 desloca em uma hora, sem efeito aqui.
  */
 function instanteLegado(x: unknown): number | undefined {
   if (typeof x !== "string") return undefined;
@@ -213,7 +179,7 @@ export function projetosLegados(bruto: unknown): ProjetoLegado[] {
       const ide = inteiro(e.id_etapa);
       if (ide === null || etapasVistas.has(ide)) continue;
       etapasVistas.add(ide);
-      etapas.push({ ...escolher(e, CAMPOS_ETAPA), id_etapa: ide });
+      etapas.push({ ...escolher(e, CAMPOS_ETAPA), id_demandas_titles: e.id_demandas_titles, id_etapa: ide });
     }
     saida.push({ ...escolher(x, CAMPOS_PROJETO), id_projeto: id, etapas });
   }
@@ -272,19 +238,32 @@ function etiquetasDe(...valores: unknown[]): string[] {
   return etiquetasLimpas(brutas).slice(0, LIMITES.etiquetas);
 }
 
-/** As demandas viram itens do checklist ("Demanda: <nome>", feito com a data de entrega), até 50, ids sem repetir. */
+/**
+ * As demandas viram itens do checklist ("Demanda: <nome>", feito com a data de entrega), ids sem repetir. Até 50
+ * (o teto do checklist); com mais, as 49 primeiras e um 50º item que diz quantas ficaram só no Atividades (feito
+ * quando todas elas foram entregues): o corte não passa calado.
+ */
 function checklistDe(x: unknown): ItemChecklist[] {
   if (!Array.isArray(x)) return [];
+  const todas = x.filter(objeto);
+  const cabem = todas.length > LIMITES.checklistItens ? LIMITES.checklistItens - 1 : todas.length;
   const ids = new Set<string>();
   const saida: ItemChecklist[] = [];
-  for (const d of x) {
-    if (saida.length >= LIMITES.checklistItens) break;
-    if (!objeto(d)) continue;
+  for (const d of todas.slice(0, cabem)) {
     const nome = textoDe(d.nome_atividade, LIMITES.checklistTexto) || textoDe(d.assunto, LIMITES.checklistTexto) || "sem nome";
     let id = idDoLegado.item(d.id_demanda, saida.length);
     if (ids.has(id)) id = `${id}-${saida.length}`;
     ids.add(id);
     saida.push({ id, texto: cortar(`Demanda: ${nome}`, LIMITES.checklistTexto).trimEnd(), feito: diaLegado(d.data_entrega) !== undefined });
+  }
+  const resto = todas.slice(cabem);
+  if (resto.length) {
+    const quantas = resto.length === 1 ? "1 demanda" : `${resto.length} demandas`;
+    saida.push({
+      id: "atvd-mais",
+      texto: `… e mais ${quantas} no Atividades`,
+      feito: resto.every((d) => diaLegado(d.data_entrega) !== undefined),
+    });
   }
   return saida;
 }
@@ -303,13 +282,18 @@ function semCiclos(etapas: readonly Etapa[]): void {
   }
 }
 
+/** O nome do projeto como entra (e como o diálogo e o aviso o mostram). */
+function nomeDoProjeto(l: ProjetoLegado): string {
+  return textoDe(l.nome_projeto, LIMITES.nome) || `Projeto ${l.id_projeto}`;
+}
+
 /** O projeto legado como entidades novas (carimbo do Atividades), com as etapas em ordem de início. */
 export function mapearProjeto(l: ProjetoLegado, c: Carimbo, hoje: DataISO, ordem: string): Pick<Entidades, "p" | "f" | "e"> {
   const pid = idDoLegado.projeto(l.id_projeto);
   const carimbo = { atualizadoEm: c.agora, dispositivo: DISPOSITIVO_ATIVIDADES, ...(c.por ? { alteradoPor: c.por } : {}) };
   const projeto: Projeto = {
     id: pid,
-    nome: textoDe(l.nome_projeto, LIMITES.nome) || `Projeto ${l.id_projeto}`,
+    nome: nomeDoProjeto(l),
     etiquetas: etiquetasDe(l.tipo_projeto),
     ordem,
     criadoEm: instanteLegado(l.data_inicio) ?? 0,
@@ -404,7 +388,7 @@ export function itensParaImportar(lista: readonly ProjetoLegado[], agora: number
   return lista.map((l) => {
     const item: ItemImportavel = {
       id: l.id_projeto,
-      nome: textoDe(l.nome_projeto, LIMITES.nome) || `Projeto ${l.id_projeto}`,
+      nome: nomeDoProjeto(l),
       unidade: textoDe(l.sigla_unidade, 40),
       etapas: l.etapas.length,
       arquivado: arquivadoEm(l, agora) !== undefined,
@@ -424,6 +408,21 @@ export function legadosImportados(projetos: readonly Projeto[]): Set<number> {
   return ids;
 }
 
+/**
+ * Os ids do legado que só têm lápide (excluídos aqui, em qualquer escopo, e sem cópia viva em nenhum): a
+ * importação não os traz de volta, e o diálogo os mostra como "excluído aqui". `projetos` são os dos dois escopos,
+ * com as lápides (`entidades().p`); o projeto movido entre escopos tem lápide num e está vivo no outro: não conta.
+ */
+export function legadosExcluidos(projetos: readonly Projeto[]): Set<number> {
+  const vivos = legadosImportados(projetos);
+  const ids = new Set<number>();
+  for (const p of projetos) {
+    const id = p.origem?.atividades;
+    if (p.removidoEm !== undefined && typeof id === "number" && Number.isSafeInteger(id) && !vivos.has(id)) ids.add(id);
+  }
+  return ids;
+}
+
 export interface ResultadoImportacaoAtividades {
   /** Projetos que entraram pela primeira vez. */
   novos: number;
@@ -433,10 +432,16 @@ export interface ResultadoImportacaoAtividades {
   iguais: number;
   /** Ficaram no outro escopo ("Só eu" ou "Toda a unidade"), onde já estavam (contam também acima). */
   noOutroEscopo: number;
-  /** Excluídos aqui: não voltam (nem com etapa nova do servidor). */
+  /** Excluídos aqui, em qualquer dos dois escopos: não voltam (nem com etapa nova do servidor). */
   excluidosAqui: number;
-  /** Ficaram de fora inteiros: passariam do limite de 100 projetos ativos ou de 300 etapas por projeto. */
+  /** Ficaram de fora inteiros: a soma dos três abaixo. */
   ignorados: number;
+  /** Os nomes dos que passariam do limite de 100 projetos ativos. */
+  foraPorProjetos: string[];
+  /** Os nomes dos que têm mais de 300 etapas. */
+  foraPorEtapas: string[];
+  /** Os que viriam com dados que não passam na validação da sincronia (defesa: o mapeamento não os produz). */
+  invalidos: number;
 }
 
 const conteudo = (x: { atualizadoEm: number; dispositivo: string; alteradoPor?: string }): string => {
@@ -518,16 +523,19 @@ function loteDoProjeto(m: Pick<Entidades, "p" | "f" | "e">, s: Escopo, pid: stri
   };
 }
 
-/** Os tetos da spec 5.4 que o `importar` aplicaria, contados aqui (o projeto que não cabe fica de fora inteiro). */
-function cabe(lote: Escopo["lote"], s: Escopo, pid: string): boolean {
+/**
+ * Os tetos da spec 5.4 que o `importar` aplicaria, contados aqui (o projeto que não cabe fica de fora inteiro):
+ * o que estoura, ou null se cabe.
+ */
+function foraDoTeto(lote: Escopo["lote"], s: Escopo, pid: string): "projetos" | "etapas" | null {
   const novo = lote.p[0];
   if (novo && ativo(novo) && !ativo(s.p.get(pid))) {
     const ativos = [...s.p.values()].filter(ativo).length;
-    if (ativos >= LIMITES.projetosAtivos) return false;
+    if (ativos >= LIMITES.projetosAtivos) return "projetos";
   }
   const vivas = new Set([...s.e.values()].filter((x) => x.projeto === pid && vivo(x)).map((x) => x.id));
   for (const x of lote.e) if (vivo(x)) vivas.add(x.id);
-  return vivas.size <= LIMITES.etapasPorProjeto;
+  return vivas.size <= LIMITES.etapasPorProjeto ? null : "etapas";
 }
 
 function validos(lote: Escopo["lote"], agora: number): boolean {
@@ -539,11 +547,13 @@ function validos(lote: Escopo["lote"], agora: number): boolean {
 }
 
 /**
- * Grava os escolhidos: no escopo onde o projeto já está vivo (se já foi importado) ou no `destino`. Entra só o
- * que é novo ou mudou no servidor E não foi mexido aqui; o projeto excluído aqui não volta. O projeto que
- * passaria de um teto (100 ativos, 300 etapas) fica de fora inteiro, sem nada órfão. Cada escopo grava numa
- * chamada só (`importar` com `inteiro`: tudo ou nada, decidido na mesma leitura da gravação), "Toda a unidade"
- * primeiro: o repositório da unidade com o "Entendi" pergunta uma vez, e sem ele nada é gravado em lugar nenhum.
+ * Grava os escolhidos: no escopo onde o projeto está vivo (o destino primeiro; senão o outro) ou no `destino`. O
+ * excluído aqui, em QUALQUER escopo e sem cópia viva, não volta (nem pelo outro escopo). Entra só o que é novo ou
+ * mudou no servidor E não foi mexido aqui. O projeto que passaria de um teto (100 ativos, 300 etapas) fica de fora
+ * inteiro, sem nada órfão, e o resultado leva o nome dele. Cada escopo grava numa chamada só (`importar` com
+ * `inteiro`: tudo ou nada, decidido na mesma leitura da gravação), "Toda a unidade" primeiro: o repositório da
+ * unidade com o "Entendi" pergunta uma vez, e sem ele nada é gravado em lugar nenhum. Se a unidade gravou e o
+ * "Só eu" falhou, o erro diz que a parte da unidade já entrou (importar de novo completa, sem repetir nada).
  */
 export async function importarAtividades(
   repos: Readonly<Record<Vis, RepositorioProjetos>>,
@@ -551,31 +561,51 @@ export async function importarAtividades(
   destino: Vis,
   hoje: DataISO,
 ): Promise<ResultadoImportacaoAtividades> {
-  const r: ResultadoImportacaoAtividades = { novos: 0, atualizados: 0, iguais: 0, noOutroEscopo: 0, excluidosAqui: 0, ignorados: 0 };
+  const r: ResultadoImportacaoAtividades = {
+    novos: 0,
+    atualizados: 0,
+    iguais: 0,
+    noOutroEscopo: 0,
+    excluidosAqui: 0,
+    ignorados: 0,
+    foraPorProjetos: [],
+    foraPorEtapas: [],
+    invalidos: 0,
+  };
   const outro: Vis = destino === "unidade" ? "eu" : "unidade";
   const escopos: Record<Vis, Escopo> = { unidade: await escopo(repos.unidade), eu: await escopo(repos.eu) };
   for (const l of escolhidos) {
     const pid = idDoLegado.projeto(l.id_projeto);
-    const noOutro = !vivo(escopos[destino].p.get(pid)) && vivo(escopos[outro].p.get(pid));
-    if (noOutro) r.noOutroEscopo++;
-    const s = escopos[noOutro ? outro : destino];
-    const existente = s.p.get(pid);
-    if (existente && !vivo(existente)) {
+    const noDestino = escopos[destino].p.get(pid);
+    const noOutro = escopos[outro].p.get(pid);
+    let s: Escopo;
+    if (vivo(noDestino)) s = escopos[destino];
+    else if (vivo(noOutro)) {
+      s = escopos[outro];
+      r.noOutroEscopo++;
+    } else if (noDestino || noOutro) {
       r.excluidosAqui++;
       continue;
-    }
+    } else s = escopos[destino];
+    const nome = nomeDoProjeto(l);
     if (l.etapas.length > LIMITES.etapasPorProjeto) {
       r.ignorados++;
+      r.foraPorEtapas.push(nome);
       continue;
     }
+    const existente = s.p.get(pid);
     const ordem = existente?.ordem ?? indiceEntre(s.maiorOrdem, null);
     const lote = loteDoProjeto(mapearProjeto(l, s.c, hoje, ordem), s, pid);
     if (!lote.p.length && !lote.f.length && !lote.e.length) {
       r.iguais++;
       continue;
     }
-    if (!cabe(lote, s, pid) || !validos(lote, s.c.agora)) {
+    const teto = foraDoTeto(lote, s, pid);
+    if (teto || !validos(lote, s.c.agora)) {
       r.ignorados++;
+      if (teto === "projetos") r.foraPorProjetos.push(nome);
+      else if (teto === "etapas") r.foraPorEtapas.push(nome);
+      else r.invalidos++;
       continue;
     }
     for (const x of lote.p) s.p.set(x.id, x);
@@ -591,10 +621,22 @@ export async function importarAtividades(
       r.novos++;
     }
   }
+  let unidadeGravou = false;
   for (const vis of ["unidade", "eu"] as const) {
     const s = escopos[vis];
     if (!s.lote.p.length && !s.lote.f.length && !s.lote.e.length) continue;
-    await s.repo.importar(s.lote, s.registros.length ? { registros: s.registros, carimbo: s.c } : undefined, { inteiro: true });
+    try {
+      await s.repo.importar(s.lote, s.registros.length ? { registros: s.registros, carimbo: s.c } : undefined, { inteiro: true });
+    } catch (e) {
+      if (vis === "eu" && unidadeGravou) {
+        const m = mensagemDoErro(e);
+        throw new ErroValidacao([
+          `Os projetos de “Toda a unidade” já foram importados, mas os de “Só eu” não: ${/[.!?]$/.test(m) ? m : `${m}.`} Importe de novo para completar (o que já entrou não se repete).`,
+        ]);
+      }
+      throw e;
+    }
+    if (vis === "unidade") unidadeGravou = true;
   }
   return r;
 }

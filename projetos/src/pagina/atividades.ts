@@ -8,17 +8,23 @@
  * "Configurado" é a regra do contexto (`atividadesConfigurado`: a URL_API
  * preenchida, como a guarda do init.js); sem a chave (o login por host deixa
  * KEY_USER vazio), nada vai à rede. Se o servidor não responder, vale o que o
- * painel legado guardou (`configDataAtividadesPadraoPro_projetos`), salvo
- * quando a chave é de outro usuário (o guardado também seria dele). A ação
- * `view_projetos` do servidor está quebrada (devolve só o último projeto) e não
- * é usada.
+ * painel legado guardou (`configDataAtividadesPadraoPro_projetos`), mas só o do
+ * MESMO usuário: o índice do legado (`configDataAtividadesPadraoPro`) tem de
+ * listar "projetos" e o perfil guardado junto (`…_perfil.login`) tem de ser o
+ * login do SEI; o login é obrigatório. Quando a chave é de outro usuário, nem o
+ * guardado vale (também seria dele). A ação `view_projetos` do servidor está
+ * quebrada (devolve só o último projeto) e não é usada.
  *
  * A resposta é de fora: tem teto de tamanho (lido aos pedaços, sem esperar o
- * fim), de tempo e de projetos; a mensagem de erro do servidor vira uma linha
- * curta de texto. O que cada projeto traz é conferido do lado do app
+ * fim), de tempo e de projetos (o resultado diz quantos ficaram de fora); a
+ * mensagem de erro do servidor vira uma linha curta de texto; o redirecionamento
+ * não é seguido (a chave não vai a outro endereço). Ao app só vão os campos que
+ * a importação lê (`soOsCampos`: nada de com quem o projeto é compartilhado,
+ * `config` ou apelidos); o que cada um traz é conferido do lado do app
  * (importacao/atividades.ts).
  */
 
+import { soOsCampos } from "../importacao/camposLegado";
 import { MAXIMO_PROJETOS_ATIVIDADES } from "../modelo/constantes";
 import { atividadesConfigurado } from "./contexto";
 
@@ -35,10 +41,12 @@ export interface ProjetosDoAtividades {
   projetos: unknown[];
   /** Por que veio do guardado (o servidor falhou), para o diálogo explicar. */
   aviso?: string;
+  /** Quantos projetos passaram de `MAXIMO_PROJETOS_ATIVIDADES` e ficaram de fora (o diálogo avisa). */
+  cortados?: number;
 }
 
 export interface OpcoesBusca {
-  /** Login do SEI: a chave guardada tem de ser deste usuário (o painel legado confere igual). */
+  /** Login do SEI: a chave guardada tem de ser deste usuário (o painel legado confere igual). Obrigatório em `projetosDoAtividades`. */
   login?: string;
   /** Quanto esperar o servidor (padrão `LIMITE_ESPERA_MS`). */
   limiteMs?: number;
@@ -97,10 +105,35 @@ export function lerConfigAtividades(ls: Leitura): ConfigAtividades | null {
   return { url: url.href, chave: typeof c.KEY_USER === "string" ? c.KEY_USER.trim() : "", perfil };
 }
 
-/** O que o painel legado guardou da última carga (pode estar velho), até `MAXIMO_PROJETOS_ATIVIDADES`. */
-export function projetosDoCache(ls: Leitura): unknown[] | null {
+/** Até `MAXIMO_PROJETOS_ATIVIDADES`, só com os campos lidos, e quantos ficaram de fora. */
+function cortados(lista: readonly unknown[]): { projetos: unknown[]; cortados: number } {
+  return {
+    projetos: soOsCampos(lista.slice(0, MAXIMO_PROJETOS_ATIVIDADES)),
+    cortados: Math.max(0, lista.length - MAXIMO_PROJETOS_ATIVIDADES),
+  };
+}
+
+/**
+ * O que o painel legado guardou da última carga (pode estar velho): só quando o índice dele
+ * (`configDataAtividadesPadraoPro`, a lista das partes guardadas) lista "projetos".
+ */
+function lerGuardado(ls: Leitura): unknown[] | null {
+  const indice = json(ls, "configDataAtividadesPadraoPro");
+  if (!Array.isArray(indice) || !indice.includes("projetos")) return null;
   const v = json(ls, "configDataAtividadesPadraoPro_projetos");
-  return Array.isArray(v) ? v.slice(0, MAXIMO_PROJETOS_ATIVIDADES) : null;
+  return Array.isArray(v) ? v : null;
+}
+
+/** O guardado pelo painel legado (veja `lerGuardado`), até `MAXIMO_PROJETOS_ATIVIDADES` e só com os campos lidos. */
+export function projetosDoCache(ls: Leitura): unknown[] | null {
+  const v = lerGuardado(ls);
+  return v ? cortados(v).projetos : null;
+}
+
+/** De quem é o guardado: o login do perfil que o painel legado guardou junto ("" se não diz). */
+function donoDoGuardado(ls: Leitura): string {
+  const perfil = json(ls, "configDataAtividadesPadraoPro_perfil");
+  return objeto(perfil) && typeof perfil.login === "string" ? perfil.login : "";
 }
 
 /** Os campos que o legado manda (jQuery serializa `false` como "false"). */
@@ -132,7 +165,7 @@ function mensagemDoServidor(x: unknown): string {
 }
 
 /** Como o painel legado compara logins (`loginsEquivalentesPro`): minúsculas, e o que não é letra ou dígito vira "_". */
-function mesmoLogin(a: string, b: string): boolean {
+function loginsEquivalentes(a: string, b: string): boolean {
   const n = (s: string) =>
     s
       .trim()
@@ -175,7 +208,8 @@ async function textoComTeto(r: Response, limite: number): Promise<string> {
 
 /**
  * POST no servidor do Atividades; devolve `padrao.projetos` (lista vazia sem a capacidade de ver projetos), até
- * `MAXIMO_PROJETOS_ATIVIDADES`. Sem a chave, não vai à rede. Com `o.login`, a chave de outro usuário é recusada.
+ * `MAXIMO_PROJETOS_ATIVIDADES` e só com os campos lidos. Sem a chave, não vai à rede. Com `o.login`, a chave de
+ * outro usuário é recusada.
  */
 export async function buscarProjetosAtividades(
   cfg: ConfigAtividades,
@@ -183,6 +217,15 @@ export async function buscarProjetosAtividades(
   buscar: typeof fetch,
   o: OpcoesBusca = {},
 ): Promise<unknown[]> {
+  return (await buscarNoServidor(cfg, versaoSeiPro, buscar, o)).projetos;
+}
+
+async function buscarNoServidor(
+  cfg: ConfigAtividades,
+  versaoSeiPro: string,
+  buscar: typeof fetch,
+  o: OpcoesBusca,
+): Promise<{ projetos: unknown[]; cortados: number }> {
   if (!cfg.chave) throw new ErroAtividades(MENSAGEM_SEM_CHAVE);
   const limiteMs = o.limiteMs ?? LIMITE_ESPERA_MS;
   const controle = new AbortController();
@@ -195,6 +238,8 @@ export async function buscarProjetosAtividades(
       body: corpoDaRequisicao(cfg, versaoSeiPro).toString(),
       // A chave vai no corpo; os cookies do SEI nunca vão a outro servidor.
       credentials: "omit",
+      // Um redirecionamento levaria a chave (no corpo) a outro endereço: não segue.
+      redirect: "error",
       signal: controle.signal,
     });
     if (!r.ok) throw new ErroAtividades(`O servidor do Atividades respondeu ${r.status}.`);
@@ -217,32 +262,49 @@ export async function buscarProjetosAtividades(
   if (dados.status === 0 || dados.status === "0")
     throw new ErroAtividades(mensagemDoServidor(dados.status_txt) || "O servidor do Atividades recusou o acesso.");
   const padrao = objeto(dados.padrao) ? dados.padrao : {};
-  const perfil = objeto(padrao.perfil) ? padrao.perfil : {};
-  if (o.login && typeof perfil.login === "string" && perfil.login && !mesmoLogin(perfil.login, o.login)) {
-    const dele = mensagemDoServidor(perfil.login).slice(0, 60);
-    throw new ErroOutroUsuario(
-      `A chave do servidor do Atividades guardada neste navegador é de outro usuário (${dele}). No painel do Atividades, peça a sua chave de acesso.`,
-    );
+  // Como o painel legado: com o perfil na resposta, o login dele tem de ser o do SEI (sem login, também recusa).
+  if (o.login !== undefined && objeto(padrao.perfil)) {
+    const doServidor = typeof padrao.perfil.login === "string" ? padrao.perfil.login : "";
+    if (!loginsEquivalentes(doServidor, o.login)) {
+      const dele = mensagemDoServidor(doServidor).slice(0, 60);
+      throw new ErroOutroUsuario(
+        `A chave do servidor do Atividades guardada neste navegador é de outro usuário${dele ? ` (${dele})` : ""}. No painel do Atividades, peça a sua chave de acesso.`,
+      );
+    }
   }
-  return Array.isArray(padrao.projetos) ? padrao.projetos.slice(0, MAXIMO_PROJETOS_ATIVIDADES) : [];
+  return cortados(Array.isArray(padrao.projetos) ? padrao.projetos : []);
 }
 
-/** O servidor; se falhar, o guardado pelo painel legado; sem nenhum dos dois, o erro do servidor. */
+/**
+ * O servidor; se falhar, o guardado pelo painel legado, só se é do mesmo usuário (o perfil guardado junto diz o
+ * login; sem isso, ou de outro login, recusa: o guardado não contorna a conferência da chave); sem nenhum dos dois,
+ * o erro do servidor. O login do SEI é obrigatório.
+ */
 export async function projetosDoAtividades(
   ls: Leitura,
   versaoSeiPro: string,
   buscar: typeof fetch,
-  o: OpcoesBusca = {},
+  o: OpcoesBusca & { login: string },
 ): Promise<ProjetosDoAtividades> {
   if (!atividadesConfigurado(ls)) throw new ErroAtividades(MENSAGEM_SEM_SERVIDOR);
   try {
     const cfg = lerConfigAtividades(ls);
     if (!cfg) throw new ErroAtividades(MENSAGEM_ENDERECO);
-    return { fonte: "servidor", projetos: await buscarProjetosAtividades(cfg, versaoSeiPro, buscar, o) };
+    const r = await buscarNoServidor(cfg, versaoSeiPro, buscar, o);
+    return { fonte: "servidor", projetos: r.projetos, ...(r.cortados ? { cortados: r.cortados } : {}) };
   } catch (e) {
     if (e instanceof ErroOutroUsuario) throw e;
-    const guardados = projetosDoCache(ls);
+    const guardados = lerGuardado(ls);
     if (!guardados) throw e;
-    return { fonte: "cache", projetos: guardados, aviso: e instanceof Error ? e.message : String(e) };
+    const motivo = e instanceof Error ? e.message : String(e);
+    const dono = donoDoGuardado(ls);
+    if (!dono)
+      throw new ErroOutroUsuario(`${motivo} A lista guardada neste navegador pelo painel do Atividades não diz de quem é e não foi usada.`);
+    if (!loginsEquivalentes(dono, o.login))
+      throw new ErroOutroUsuario(
+        `${motivo} A lista guardada neste navegador pelo painel do Atividades é de outro usuário e não foi usada.`,
+      );
+    const c = cortados(guardados);
+    return { fonte: "cache", projetos: c.projetos, aviso: motivo, ...(c.cortados ? { cortados: c.cortados } : {}) };
   }
 }

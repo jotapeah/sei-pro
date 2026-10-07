@@ -2856,6 +2856,10 @@ html[data-modo="impressao"] .prj-gantt {
   background: var(--spro-fundo-2);
   border-radius: var(--spro-raio);
 }
+/* Mais de 1000 projetos no servidor: o aviso de que so os primeiros aparecem. */
+.prj-importar-cortados {
+  margin: 0;
+}
 
 /*
  * Frappe Gantt 1.2.2 (MIT, https://github.com/frappe/gantt): dist/frappe-gantt.css do pacote npm,

@@ -190,25 +190,101 @@ export async function verificarAtividadesPagina(): Promise<void> {
     (await buscarProjetosAtividades(c!, "1", mesmo.buscar, { login: "ana.lima" })).length === 1,
   );
 
-  const comCache = armazenamento({
-    configBasePro_atividades: { URL_API: "https://atividades.orgao.gov.br/api/", KEY_USER: "k" },
-    configDataAtividadesPadraoPro_projetos: [{ id_projeto: 7 }],
+  const semLogin = servidor({ status: 1, padrao: { perfil: { unidade: "SEPRO" }, projetos: [{ id_projeto: 1 }] } });
+  checar(
+    "perfil na resposta sem o login (como o painel antigo): recusa",
+    /outro usuário/.test((await lanca(() => buscarProjetosAtividades(c!, "1", semLogin.buscar, { login: "ana.lima" })))?.message ?? ""),
+  );
+  checar(
+    "a chave nao segue redirecionamento para outro endereco",
+    ok.pedidos[0]?.init?.redirect === "error",
+    ok.pedidos[0]?.init?.redirect,
+  );
+  const cheio = servidor({
+    status: 1,
+    padrao: {
+      projetos: [
+        {
+          id_projeto: 1,
+          nome_projeto: "P",
+          projetos_compartilhados: [{ nome_completo: "Fulano de Tal", id_user: 9 }],
+          config: { qualquer: 1 },
+          id_cadeia_valor: 3,
+          etapas: [
+            {
+              id_etapa: 2,
+              nome_etapa: "E",
+              config: [1],
+              id_demandas: [5],
+              id_demandas_titles: [{ id_demanda: 5, nome_atividade: "A", apelido: "fulano", requisicao_sei: "123", data_entrega: "x" }],
+            },
+          ],
+        },
+      ],
+    },
   });
-  const r = await projetosDoAtividades(comCache, "1", servidor(null, 500).buscar);
+  const [so] = (await buscarProjetosAtividades(c!, "1", cheio.buscar)) as Array<Record<string, unknown>>;
+  const etapaSo = (so?.etapas as Array<Record<string, unknown>> | undefined)?.[0];
+  const demandaSo = (etapaSo?.id_demandas_titles as Array<Record<string, unknown>> | undefined)?.[0];
+  checar(
+    "a aba devolve ao app so os campos que a importacao usa (sem compartilhamentos, config, apelido)",
+    !!so &&
+      Object.keys(so).sort().join() === "etapas,id_projeto,nome_projeto" &&
+      Object.keys(etapaSo ?? {})
+        .sort()
+        .join() === "id_demandas_titles,id_etapa,nome_etapa" &&
+      Object.keys(demandaSo ?? {})
+        .sort()
+        .join() === "data_entrega,id_demanda,nome_atividade",
+    [so && Object.keys(so), etapaSo && Object.keys(etapaSo), demandaSo && Object.keys(demandaSo)],
+  );
+
+  secao("pagina: o guardado pelo painel antigo (so o do mesmo usuario) e o login obrigatorio");
+  const LOGIN = { login: "ana.lima" };
+  const guardado = (projetos: unknown[], dono?: string, indice: unknown = ["perfil", "projetos"]) => ({
+    configDataAtividadesPadraoPro: indice,
+    configDataAtividadesPadraoPro_projetos: projetos,
+    ...(dono === undefined ? {} : { configDataAtividadesPadraoPro_perfil: { login: dono, unidade: "SEPRO" } }),
+  });
+  const SERVIDOR_K = { URL_API: "https://atividades.orgao.gov.br/api/", KEY_USER: "k" };
+  const comCache = armazenamento({ configBasePro_atividades: SERVIDOR_K, ...guardado([{ id_projeto: 7 }], "ana.lima") });
+  const r = await projetosDoAtividades(comCache, "1", servidor(null, 500).buscar, LOGIN);
   checar(
     "servidor falhou: o guardado pelo painel legado, com o motivo",
     r.fonte === "cache" && r.projetos.length === 1 && /500/.test(r.aviso ?? ""),
     r,
   );
   checar("cache le o array", projetosDoCache(comCache)?.length === 1);
-  const semNada = await lanca(() => projetosDoAtividades(cfg, "1", servidor(null, 500).buscar));
+  const semIndice = armazenamento({ configBasePro_atividades: SERVIDOR_K, ...guardado([{ id_projeto: 7 }], "ana.lima", ["perfil"]) });
+  const errSemIndice = await lanca(() => projetosDoAtividades(semIndice, "1", servidor(null, 500).buscar, LOGIN));
+  checar(
+    "o indice do painel antigo nao lista 'projetos': o guardado nao vale (fica o erro do servidor)",
+    projetosDoCache(semIndice) === null && /500/.test(errSemIndice?.message ?? ""),
+    errSemIndice?.message,
+  );
+  const deOutro = armazenamento({ configBasePro_atividades: SERVIDOR_K, ...guardado([{ id_projeto: 7 }], "bia.souza") });
+  const errDeOutro = await lanca(() => projetosDoAtividades(deOutro, "1", servidor(null, 500).buscar, LOGIN));
+  checar(
+    "servidor falhou e o guardado e de outro usuario: recusa (o guardado nao contorna a conferencia)",
+    /500/.test(errDeOutro?.message ?? "") && /outro usuário/.test(errDeOutro?.message ?? ""),
+    errDeOutro?.message,
+  );
+  const semDono = armazenamento({ configBasePro_atividades: SERVIDOR_K, ...guardado([{ id_projeto: 7 }]) });
+  const errSemDono = await lanca(() => projetosDoAtividades(semDono, "1", servidor(null, 500).buscar, LOGIN));
+  checar("guardado que nao diz de quem e: recusa", /não diz de quem é/.test(errSemDono?.message ?? ""), errSemDono?.message);
+  const mesmoDono = armazenamento({ configBasePro_atividades: SERVIDOR_K, ...guardado([{ id_projeto: 7 }], "Ana_Lima") });
+  checar(
+    "guardado do mesmo login escrito com '_': vale",
+    (await projetosDoAtividades(mesmoDono, "1", servidor(null, 500).buscar, LOGIN)).fonte === "cache",
+  );
+  const semNada = await lanca(() => projetosDoAtividades(cfg, "1", servidor(null, 500).buscar, LOGIN));
   checar("sem servidor e sem guardado: o erro", /500/.test(semNada?.message ?? ""));
   checar(
     "sem configuracao: explica",
-    /Não há servidor/.test((await lanca(() => projetosDoAtividades(armazenamento({}), "1", ok.buscar)))?.message ?? ""),
+    /Não há servidor/.test((await lanca(() => projetosDoAtividades(armazenamento({}), "1", ok.buscar, LOGIN)))?.message ?? ""),
   );
   const rede = servidor({ status: 1, padrao: { projetos: [] } });
-  const errSemChave = await lanca(() => projetosDoAtividades(semChave, "1", rede.buscar));
+  const errSemChave = await lanca(() => projetosDoAtividades(semChave, "1", rede.buscar, LOGIN));
   checar(
     "sem a chave: nada vai a rede e diz como conseguir a chave",
     /chave de acesso/.test(errSemChave?.message ?? "") && rede.pedidos.length === 0,
@@ -216,27 +292,42 @@ export async function verificarAtividadesPagina(): Promise<void> {
   );
   const semChaveComCache = armazenamento({
     configBasePro_atividades: { URL_API: BASE.URL_API, KEY_USER: "" },
-    configDataAtividadesPadraoPro_projetos: [{ id_projeto: 7 }],
+    ...guardado([{ id_projeto: 7 }], "ana.lima"),
   });
-  const rSemChave = await projetosDoAtividades(semChaveComCache, "1", rede.buscar);
+  const rSemChave = await projetosDoAtividades(semChaveComCache, "1", rede.buscar, LOGIN);
   checar(
     "sem a chave, com o guardado: o guardado, com o motivo",
     rSemChave.fonte === "cache" && /chave de acesso/.test(rSemChave.aviso ?? "") && rede.pedidos.length === 0,
   );
   const enderecoTorto = armazenamento({ configBasePro_atividades: { URL_API: "javascript:alert(1)", KEY_USER: "k" } });
-  const errTorto = await lanca(() => projetosDoAtividades(enderecoTorto, "1", rede.buscar));
+  const errTorto = await lanca(() => projetosDoAtividades(enderecoTorto, "1", rede.buscar, LOGIN));
   checar(
     "endereco guardado que nao e http(s): explica, sem ir a rede",
     /endereço/.test(errTorto?.message ?? "") && rede.pedidos.length === 0,
     errTorto?.message,
   );
-  const outroComCache = armazenamento({ configBasePro_atividades: BASE, configDataAtividadesPadraoPro_projetos: [{ id_projeto: 7 }] });
-  const errOutro = await lanca(() => projetosDoAtividades(outroComCache, "1", comLogin.buscar, { login: "ana.lima" }));
+  const outroComCache = armazenamento({ configBasePro_atividades: BASE, ...guardado([{ id_projeto: 7 }], "ana.lima") });
+  const errOutro = await lanca(() => projetosDoAtividades(outroComCache, "1", comLogin.buscar, LOGIN));
   checar(
     "chave de outro usuario: nem o guardado (que tambem seria dele)",
     /outro usuário/.test(errOutro?.message ?? ""),
     errOutro?.message,
   );
-  const rMudo = await projetosDoAtividades(comCache, "1", servidorMudo().buscar, { limiteMs: 20 });
+  const rMudo = await projetosDoAtividades(comCache, "1", servidorMudo().buscar, { ...LOGIN, limiteMs: 20 });
   checar("servidor que nao responde, com o guardado: o guardado", rMudo.fonte === "cache" && /não respondeu/.test(rMudo.aviso ?? ""));
+  const muitos = Array.from({ length: 1500 }, (_, i) => ({ id_projeto: i + 1, config: { x: i } }));
+  const rMuitos = await projetosDoAtividades(cfg, "1", servidor({ status: 1, padrao: { projetos: muitos } }).buscar, LOGIN);
+  const cacheMuitos = armazenamento({ configBasePro_atividades: SERVIDOR_K, ...guardado(muitos.slice(0, 1200), "ana.lima") });
+  const rCacheMuitos = await projetosDoAtividades(cacheMuitos, "1", servidor(null, 500).buscar, LOGIN);
+  checar(
+    "mais de 1000: o resultado diz quantos ficaram de fora (do servidor e do guardado), e o guardado tambem vai sem os campos a mais",
+    rMuitos.projetos.length === 1000 &&
+      rMuitos.cortados === 500 &&
+      rCacheMuitos.projetos.length === 1000 &&
+      rCacheMuitos.cortados === 200 &&
+      !("config" in ((rCacheMuitos.projetos[0] as Record<string, unknown>) ?? {})),
+    [rMuitos.cortados, rCacheMuitos.cortados],
+  );
+  // @ts-expect-error o login do SEI é obrigatório: sem ele, a chave de outro usuário não seria conferida.
+  await lanca(() => projetosDoAtividades(cfg, "1", ok.buscar));
 }

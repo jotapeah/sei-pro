@@ -8,7 +8,7 @@
  * se perde na reimportação; o "Entendi" da unidade vale para a importação.
  */
 
-import { areaMemoria } from "@comum/armazenamento/area";
+import { type Area, areaMemoria } from "@comum/armazenamento/area";
 import { jsonEstavel } from "@comum/sincronia/assinatura";
 import type { AbrirModal } from "@comum/ui/dialogo";
 import { comConsentimento, MENSAGEM_SEM_ENTENDI } from "../src/app/colaboracao/consentir";
@@ -19,6 +19,7 @@ import {
   idDoLegado,
   importarAtividades,
   itensParaImportar,
+  legadosExcluidos,
   legadosImportados,
   mapearProjeto,
   projetosLegados,
@@ -29,7 +30,7 @@ import { encontrarCiclo } from "../src/modelo/dependencias";
 import type { Entidades } from "../src/modelo/tipos";
 import { ErroValidacao } from "../src/modelo/validacao";
 import { chaveProtocolo } from "../src/modelo/vinculos";
-import { entidadeValida } from "../src/repositorio";
+import { entidadeValida, moverEntreEscopos } from "../src/repositorio";
 import { paraOTexto } from "../src/sincronia/textoPadrao";
 import { marcar, telaDoApp, texto } from "./apoioApp";
 import { ESCOPO_EU, ESCOPO_UN, novoRepo } from "./apoioRepositorio";
@@ -293,6 +294,36 @@ export async function verificarImportacaoAtividades(): Promise<void> {
       new Set(h71.checklist.map((i) => i.id)).size === h71.checklist.length,
   );
   checar(
+    "mais de 50 demandas: o 50o item avisa quantas ficaram no Atividades (80 - 49 = 31)",
+    h71?.checklist.at(-1)?.texto === "… e mais 31 demandas no Atividades" && h71.checklist.at(-2)?.texto.startsWith("Demanda: ") === true,
+    h71?.checklist.at(-1),
+  );
+  const demandas = (n: number) =>
+    mapearProjeto(
+      projetosLegados([
+        projetoLegado({
+          id_projeto: 75,
+          etapas: [
+            etapaLegada({
+              id_etapa: 76,
+              id_demandas_titles: Array.from({ length: n }, (_, i) => ({ id_demanda: i + 1, nome_atividade: `D${i}` })),
+            }),
+          ],
+        }),
+      ])[0]!,
+      C,
+      HOJE,
+      "a0",
+    ).e[0]?.checklist ?? [];
+  checar(
+    "exatamente 50 demandas: as 50, sem aviso; 51: o ultimo diz 'mais 2'",
+    demandas(50).length === 50 &&
+      demandas(50).at(-1)?.texto === "Demanda: D49" &&
+      demandas(51).length === 50 &&
+      demandas(51).at(-1)?.texto === "… e mais 2 demandas no Atividades",
+    [demandas(50).at(-1), demandas(51).at(-1)],
+  );
+  checar(
     "data impossivel: vale o dia do projeto; etapa de 20 anos: cortada no limite",
     h71?.inicio === "2026-02-20" &&
       h71.base !== undefined &&
@@ -407,6 +438,45 @@ export async function verificarImportacaoAtividades(): Promise<void> {
       rx.excluidosAqui === 1 && rx.novos === 0 && (await rs.unidade.obterProjeto("atvp43")) === undefined && e430 === undefined,
       rx,
     );
+    {
+      // A regra: vivo no destino → lá; vivo no outro → lá; lápide em QUALQUER escopo → não volta.
+      const a2 = areaMemoria();
+      const r2 = { unidade: novoRepo(ESCOPO_UN, a2, "u").repo, eu: novoRepo(ESCOPO_EU, a2, "e").repo };
+      await importarAtividades(r2, [lista[0]!], "eu", HOJE);
+      await r2.eu.removerProjeto("atvp42");
+      const rv = await importarAtividades(r2, [lista[0]!], "unidade", HOJE);
+      checar(
+        "excluido no 'Só eu' nao volta pela 'Toda a unidade' (nem projeto, nem etapa)",
+        rv.excluidosAqui === 1 &&
+          rv.novos === 0 &&
+          (await r2.unidade.obterProjeto("atvp42")) === undefined &&
+          (await r2.unidade.entidades()).e.length === 0,
+        rv,
+      );
+      await importarAtividades(r2, [lista[1]!], "unidade", HOJE);
+      await r2.unidade.removerProjeto("atvp43");
+      const rw = await importarAtividades(r2, [lista[1]!], "eu", HOJE);
+      checar(
+        "e o excluido na 'Toda a unidade' nao volta pelo 'Só eu'",
+        rw.excluidosAqui === 1 && (await r2.eu.obterProjeto("atvp43")) === undefined,
+        rw,
+      );
+      const movido = projetosLegados([projetoLegado({ id_projeto: 47 })]);
+      await importarAtividades(r2, movido, "unidade", HOJE);
+      await moverEntreEscopos(r2.unidade, r2.eu, "atvp47");
+      const rm = await importarAtividades(r2, movido, "unidade", HOJE);
+      checar(
+        "movido para o 'Só eu' (lapide na unidade, vivo no Só eu): vale o vivo, nao e excluido",
+        rm.excluidosAqui === 0 && rm.noOutroEscopo === 1 && (await r2.unidade.obterProjeto("atvp47")) === undefined,
+        rm,
+      );
+      const todos = [...(await r2.unidade.entidades()).p, ...(await r2.eu.entidades()).p];
+      checar(
+        "legadosExcluidos: as lapides sem copia viva, dos dois escopos (o movido nao)",
+        [...legadosExcluidos(todos)].sort().join() === "42,43",
+        [...legadosExcluidos(todos)],
+      );
+    }
     const faseInstrucao = idDoLegado.fase(42, "Instrução");
     await rs.unidade.removerFase(faseInstrucao);
     const comNova = completoCom(etapaLegada({ id_etapa: 4, nome_etapa: "Nova da Instrução", macroetapa: "Instrução" }));
@@ -475,6 +545,11 @@ export async function verificarImportacaoAtividades(): Promise<void> {
       rg.ignorados === 1 && tudo.p.length === 0 && tudo.f.length === 0 && tudo.e.length === 0,
       rg,
     );
+    checar(
+      "o resultado diz o nome do que ficou de fora por ter mais de 300 etapas",
+      rg.foraPorEtapas.join() === "Projeto 90" && rg.foraPorProjetos.length === 0,
+      rg,
+    );
     for (let i = 0; i < LIMITES.projetosAtivos - 1; i++) await rs.unidade.criarProjeto({ nome: `P${i}` });
     const tres = projetosLegados([
       projetoLegado({ id_projeto: 91, etapas: [etapaLegada({ id_etapa: 910 })] }),
@@ -496,6 +571,60 @@ export async function verificarImportacaoAtividades(): Promise<void> {
         !ids.has("atvp93") &&
         orfas.length === 0,
       { rt, orfas: orfas.map((x) => x.id) },
+    );
+    checar(
+      "o resultado diz os nomes do que ficou de fora pelo limite de 100 ativos",
+      rt.foraPorProjetos.join() === "Projeto 92,Projeto 93" && rt.foraPorEtapas.length === 0,
+      rt,
+    );
+  }
+  {
+    // Item daqui que não passa na validação (gravado por fora, com o carimbo 10 dias à frente): a versão nova ficaria
+    // acima dele, também fora da folga. O projeto fica de fora sozinho, contado como inválido.
+    const a = areaMemoria();
+    const rs = { unidade: novoRepo(ESCOPO_UN, a, "u").repo, eu: novoRepo(ESCOPO_EU, a, "e").repo };
+    await importarAtividades(rs, lista, "unidade", HOJE);
+    const p42 = (await rs.unidade.obterProjeto("atvp42"))!;
+    await a.gravar({ [rs.unidade.projetos.chave("atvp42")]: { ...p42, atualizadoEm: p42.atualizadoEm + 10 * 86_400_000 } });
+    const outroNome = projetosLegados([
+      { ...projetoCompleto(), nome_projeto: "Outro nome" },
+      projetoLegado({ id_projeto: 43, nome_projeto: "43 novo" }),
+    ]);
+    const ri = await importarAtividades(rs, outroNome, "unidade", HOJE);
+    checar(
+      "projeto que nao passaria na validacao: fica de fora sozinho (o outro entra), contado como invalido",
+      ri.invalidos === 1 &&
+        ri.ignorados === 1 &&
+        ri.atualizados === 1 &&
+        (await rs.unidade.obterProjeto("atvp42"))?.nome !== "Outro nome" &&
+        (await rs.unidade.obterProjeto("atvp43"))?.nome === "43 novo",
+      ri,
+    );
+  }
+  {
+    // A unidade grava primeiro; se o "Só eu" falha depois, a mensagem diz que a parte da unidade já entrou.
+    const aU = areaMemoria();
+    const aE = areaMemoria();
+    const quebrada: Area = {
+      obter: (k) => aE.obter(k),
+      gravar: async () => {
+        throw new Error("falha simulada ao gravar");
+      },
+      remover: (k) => aE.remover(k),
+      aoMudar: (cb) => aE.aoMudar(cb),
+    };
+    const unidade = novoRepo(ESCOPO_UN, aU, "u").repo;
+    const eu = novoRepo(ESCOPO_EU, quebrada, "e").repo;
+    await importarAtividades({ unidade, eu }, [lista[0]!], "unidade", HOJE);
+    const misto = projetosLegados([{ ...projetoCompleto(), nome_projeto: "Mudou no servidor" }, projetoLegado({ id_projeto: 46 })]);
+    const errP = await lanca(() => importarAtividades({ unidade, eu }, misto, "eu", HOJE));
+    checar(
+      "a unidade gravou e o 'Só eu' falhou: a mensagem diz que a parte da unidade ja entrou, e o motivo",
+      errP instanceof ErroValidacao &&
+        /“Toda a unidade” já/.test(errP.message) &&
+        /falha simulada/.test(errP.message) &&
+        (await unidade.obterProjeto("atvp42"))?.nome === "Mudou no servidor",
+      errP?.message,
     );
   }
   {
@@ -626,14 +755,35 @@ export async function verificarImportacaoAtividades(): Promise<void> {
     itens: [
       { id: 42, nome: HOSTIL, unidade: "SEPRO", etapas: 3, arquivado: false },
       { id: 50, nome: "Antigo", unidade: "SEPRO", etapas: 1, arquivado: true },
+      { id: 51, nome: "Excluido", unidade: "SEPRO", etapas: 7, arquivado: false },
     ],
     jaImportados: new Set([42]),
+    excluidos: new Set([51]),
     avisoCache: "O servidor do Atividades respondeu 500.",
+    cortados: 500,
     importar: async (ids, vis) => void pedidos.push({ ids, vis }),
   });
   const dlg = doc.body.querySelector(".prj-form-importar") as HTMLElement;
-  checar("avisa que veio do guardado", /não respondeu \(O servidor do Atividades respondeu 500\.\)/.test(texto(dlg)));
+  checar(
+    "avisa que veio do guardado",
+    texto(dlg).includes(
+      "Não foi possível buscar no servidor do Atividades (O servidor do Atividades respondeu 500.). Mostrando a última lista guardada neste navegador.",
+    ),
+    texto(dlg.querySelector(".prj-importar-cache")),
+  );
+  checar(
+    "avisa o corte dos 1000 projetos",
+    /1500 projetos/.test(texto(dlg.querySelector(".prj-importar-cortados"))) &&
+      /1000 primeiros/.test(texto(dlg.querySelector(".prj-importar-cortados"))),
+    texto(dlg.querySelector(".prj-importar-cortados")),
+  );
   const linhas = [...dlg.querySelectorAll(".prj-importar-item")];
+  const caixaExcluido = linhas[2]?.querySelector<HTMLInputElement>("input");
+  checar(
+    "excluido aqui: a linha diz que nao volta, desmarcada e desligada",
+    /excluído aqui: não volta/.test(texto(linhas[2])) && caixaExcluido?.checked === false && caixaExcluido.disabled === true,
+    texto(linhas[2]),
+  );
   checar(
     "os ativos ja marcados, o arquivado nao",
     linhas[0]!.querySelector<HTMLInputElement>("input")!.checked && !linhas[1]!.querySelector<HTMLInputElement>("input")!.checked,
@@ -727,7 +877,17 @@ export async function verificarImportacaoAtividades(): Promise<void> {
   }
 
   secao("atividades: o que o aviso diz depois de importar");
-  const base = { novos: 0, atualizados: 0, iguais: 0, noOutroEscopo: 0, excluidosAqui: 0, ignorados: 0 };
+  const base = {
+    novos: 0,
+    atualizados: 0,
+    iguais: 0,
+    noOutroEscopo: 0,
+    excluidosAqui: 0,
+    ignorados: 0,
+    foraPorProjetos: [] as string[],
+    foraPorEtapas: [] as string[],
+    invalidos: 0,
+  };
   checar(
     "novos e atualizados",
     mensagemDaImportacao({ ...base, novos: 2, atualizados: 1 }, "unidade") === "2 projetos importados e 1 atualizado.",
@@ -738,12 +898,40 @@ export async function verificarImportacaoAtividades(): Promise<void> {
     mensagemDaImportacao({ ...base, iguais: 3 }, "unidade") === "Nada mudou: os projetos escolhidos já estavam como no servidor.",
     mensagemDaImportacao({ ...base, iguais: 3 }, "unidade"),
   );
-  const tudoJunto = mensagemDaImportacao({ ...base, novos: 1, noOutroEscopo: 1, excluidosAqui: 1, ignorados: 2 }, "eu");
+  const tudoJunto = mensagemDaImportacao(
+    {
+      ...base,
+      novos: 1,
+      noOutroEscopo: 1,
+      excluidosAqui: 1,
+      ignorados: 9,
+      foraPorProjetos: ["A", "B", "C", "D", "E", "F", "G"],
+      foraPorEtapas: ["Grande"],
+      invalidos: 1,
+    },
+    "eu",
+  );
   checar(
-    "outro escopo, excluido aqui e o que ficou de fora",
+    "outro escopo, excluido aqui e o que ficou de fora, pelo nome e pelo motivo (ate 5 nomes)",
     tudoJunto ===
-      "1 projeto importado. 1 já estava em “Toda a unidade” e ficou lá. 1 excluído aqui não voltou. 2 ficaram de fora: passariam do limite de 100 projetos ativos ou de 300 etapas por projeto.",
+      "1 projeto importado. 1 já estava em “Toda a unidade” e ficou lá. 1 excluído aqui não voltou. Ficaram de fora pelo limite de 100 projetos ativos: “A”, “B”, “C”, “D”, “E” e mais 2 (arquive ou exclua algum e importe de novo). Ficou de fora por ter mais de 300 etapas: “Grande”. Um projeto veio com dados que não dá para usar e ficou de fora.",
     tudoJunto,
+  );
+  const umSo = mensagemDaImportacao(
+    { ...base, ignorados: 3, foraPorProjetos: ["x".repeat(200)], foraPorEtapas: ["P1", "P2"], invalidos: 0 },
+    "unidade",
+  );
+  checar(
+    "um so pelo limite (nome longo cortado); dois pelas etapas",
+    umSo ===
+      `Ficou de fora pelo limite de 100 projetos ativos: “${"x".repeat(59)}…” (arquive ou exclua algum e importe de novo). Ficaram de fora por terem mais de 300 etapas: “P1”, “P2”.`,
+    umSo,
+  );
+  checar(
+    "varios invalidos",
+    mensagemDaImportacao({ ...base, ignorados: 2, invalidos: 2 }, "unidade") ===
+      "2 projetos vieram com dados que não dá para usar e ficaram de fora.",
+    mensagemDaImportacao({ ...base, ignorados: 2, invalidos: 2 }, "unidade"),
   );
   checar(
     "legadosImportados ignora lapide e o que nao veio do Atividades",
