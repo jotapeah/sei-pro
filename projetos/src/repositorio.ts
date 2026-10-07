@@ -62,12 +62,12 @@ import {
 import {
   aprendidoDosRegistros,
   cortarSigilo,
-  type DoDispositivo,
   documentoSemNumero,
   juntarNumeros,
   marcadosNoEstado,
   marcasDeSigilo,
-  type NumerosPorOrigem,
+  type Numeros,
+  nenhumNumero,
   type SigilosConhecidos,
   sigiloDoEnvelope,
 } from "./modelo/sigilo";
@@ -198,21 +198,6 @@ export class RepositorioProjetos {
     return prefixoMemoriaSigilo(this.escopo.host, this.escopo.login);
   }
 
-  private disp: string | undefined;
-
-  /**
-   * O dispositivo deste computador (o do carimbo, lido uma vez): o que ele gravou é "local" na memória do sigilo;
-   * o que traz o carimbo de outro dispositivo é dado de colega ("aprendida").
-   */
-  get dispositivo(): string {
-    if (this.disp === undefined) this.disp = this.carimbo().dispositivo;
-    return this.disp;
-  }
-
-  private doDispositivo(dispositivo: string): DoDispositivo {
-    return (x) => x.dispositivo === dispositivo;
-  }
-
   private get chaveMemoriaLegada(): string {
     return chaveMemoriaSigiloLegada(this.escopo.host, this.escopo.login);
   }
@@ -254,19 +239,10 @@ export class RepositorioProjetos {
   }
 
   /**
-   * Guarda o que o texto raspou pela procedência (`cortarSigilo`): o que veio de item gravado por este dispositivo
-   * como local, o que veio de colega como aprendida (com o teto). Uma leitura e uma gravação; erro lança.
+   * As entradas da memória para `r`: `local` entra como local e promove a aprendida (esta gravação o causou:
+   * foi marcado aqui); `aprendida` entra como aprendida, enquanto houver vaga no teto.
    */
-  async lembrarRaspados(r: NumerosPorOrigem): Promise<void> {
-    const e = this.entradasPorOrigem(await this.memoria(), r);
-    if (Object.keys(e).length) await this.area.gravar(e);
-  }
-
-  /**
-   * As entradas da memória para `r`: `local` entra como local e promove a aprendida (o número está num item
-   * gravado aqui: foi visto aqui); `aprendida` entra como aprendida, enquanto houver vaga no teto.
-   */
-  private entradasPorOrigem(memoria: MemoriaSigilo, r: NumerosPorOrigem): Record<string, OrigemSigilo> {
+  private entradasPorOrigem(memoria: MemoriaSigilo, r: { local: Numeros; aprendida: Numeros }): Record<string, OrigemSigilo> {
     const locais = entradasParaGravar(memoria, r.local, "local", this.prefixoMemoria, { promover: true });
     const aprendidas = entradasParaGravar(comEntradas(memoria, locais, this.prefixoMemoria), r.aprendida, "aprendida", this.prefixoMemoria);
     return { ...locais, ...aprendidas };
@@ -312,11 +288,11 @@ export class RepositorioProjetos {
    * `aoMudar` avisa uma vez). A poda de excedentes (`Area` só remove em outra chamada) vem depois,
    * e só quando passa do limite.
    */
-  private async salvar(itens: Record<string, unknown>, novos: RegistroNovo[], c: Carimbo): Promise<void> {
+  private async salvar(itens: Record<string, unknown>, novos: RegistroNovo[], c: Carimbo, copia = false): Promise<void> {
     const regs = carimbarRegistros(novos, c, this.gerarId);
     await this.area.gravar({
       ...itens,
-      ...(await this.marcasAoGravar(itens, regs, c)),
+      ...(await this.marcasAoGravar(itens, regs, copia)),
       ...this.entradas(
         this.registros,
         regs.map((r) => [r.id, r]),
@@ -330,11 +306,18 @@ export class RepositorioProjetos {
    * noutro projeto ou etapa, ou já conhecido na memória do sigilo; o documento da etapa que ficou
    * sigilosa) vão na mesma gravação, sem mudar o carimbo dos itens marcados. Na memória entra o que fica
    * marcado e tudo o que o envelope rasparia do estado de agora (a gravação que marca já guarda o que o
-   * texto raspará, mesmo que nenhum texto seja montado antes de o processo mudar), pela procedência: o que
-   * está em item gravado por este dispositivo (o carimbo `c`) é local e promove a aprendida; o que está em
-   * item de colega é aprendida. Só lê o escopo quando a gravação mexe em vínculo ou documento.
+   * texto raspará, mesmo que nenhum texto seja montado antes de o processo mudar). Local (e promove a
+   * aprendida) é só o que ESTA gravação causou: o que passa a ser marcado ou raspado agora e antes não era,
+   * e o que fica marcado nos campos de vínculo e documento que ela mudou. O resto (dado de colega que já
+   * estava aqui) é aprendida, com o teto; e tudo é aprendida quando a gravação só copia (`copia`: o
+   * `importar` com anotações, que é o "Quem vê", e o "Duplicar", que copia o vínculo de outro projeto). Só lê
+   * o escopo quando a gravação mexe em vínculo ou documento.
    */
-  private async marcasAoGravar(itens: Record<string, unknown>, regs: readonly Registro[], c: Carimbo): Promise<Record<string, unknown>> {
+  private async marcasAoGravar(
+    itens: Record<string, unknown>,
+    regs: readonly Registro[],
+    copia: boolean,
+  ): Promise<Record<string, unknown>> {
     const doTipo = (prefixo: string) => Object.entries(itens).filter(([k]) => k.startsWith(prefixo));
     const ps = doTipo(this.projetos.prefixo);
     const es = doTipo(this.etapas.prefixo);
@@ -344,13 +327,25 @@ export class RepositorioProjetos {
       const o = x as { processo?: unknown; documento?: unknown } | undefined;
       return jsonEstavel([o?.processo ?? null, o?.documento ?? null]);
     };
-    if (!ps.concat(es).some(([k, v]) => doSigilo(antes[k]) !== doSigilo(v))) return {};
-    const [projetos, etapas, registros, memoria] = await Promise.all([
+    const mudados = new Set(
+      ps
+        .concat(es)
+        .filter(([k, v]) => doSigilo(antes[k]) !== doSigilo(v))
+        .map(([, v]) => (v as { id: string }).id),
+    );
+    if (!mudados.size) return {};
+    const [projetos, etapas, registros, lida] = await Promise.all([
       this.projetos.listar(),
       this.etapas.listar(),
       this.registros.listar(),
       this.memoriaParaGravar(),
     ]);
+    // O que esta mesma gravação já leva para a memória (o `importar` do "Quem vê" passa as entradas dele em
+    // `itens`) conta como se já estivesse lá: no teto das aprendidas e no que já se sabe.
+    const pendentes = Object.fromEntries(
+      Object.entries(itens).filter(([k, v]) => k.startsWith(this.prefixoMemoria) && (v === "local" || v === "aprendida")),
+    ) as Record<string, OrigemSigilo>;
+    const memoria = comEntradas(lida, pendentes, this.prefixoMemoria);
     const conhecidos = conhecidosDe(memoria);
     const final = { p: sobrepor(projetos, ps), e: sobrepor(etapas, es) };
     const m = marcasDeSigilo(final, { p: projetos, e: etapas }, conhecidos);
@@ -362,9 +357,23 @@ export class RepositorioProjetos {
       final.e,
       m.e.map((x) => [x.id, x]),
     );
-    const daqui = this.doDispositivo(c.dispositivo);
-    const corte = cortarSigilo({ p: p2, e: e2, h: [...registros, ...regs] }, sigiloDoEnvelope(p2, e2, conhecidos), daqui);
-    const marcados = marcadosNoEstado(p2, e2, daqui);
+    const corte = cortarSigilo({ p: p2, e: e2, h: [...registros, ...regs] }, sigiloDoEnvelope(p2, e2, conhecidos));
+    const depois = juntarNumeros(marcadosNoEstado(p2, e2), corte.raspados);
+    let local = nenhumNumero();
+    if (!copia) {
+      const corteAntes = cortarSigilo({ p: projetos, e: etapas, h: registros }, sigiloDoEnvelope(projetos, etapas, conhecidos));
+      const ja = juntarNumeros(marcadosNoEstado(projetos, etapas), corteAntes.raspados);
+      const jaP = new Set(ja.processos);
+      const jaD = new Set(ja.documentos);
+      const nosMudados = marcadosNoEstado(
+        p2.filter((x) => mudados.has(x.id)),
+        e2.filter((x) => mudados.has(x.id)),
+      );
+      local = juntarNumeros(
+        { processos: depois.processos.filter((n) => !jaP.has(n)), documentos: depois.documentos.filter((n) => !jaD.has(n)) },
+        nosMudados,
+      );
+    }
     return {
       ...this.entradas(
         this.projetos,
@@ -374,10 +383,7 @@ export class RepositorioProjetos {
         this.etapas,
         m.e.map((x) => [x.id, x]),
       ),
-      ...this.entradasPorOrigem(memoria, {
-        local: juntarNumeros(marcados.local, corte.raspados.local),
-        aprendida: juntarNumeros(marcados.aprendida, corte.raspados.aprendida),
-      }),
+      ...this.entradasPorOrigem(memoria, { local, aprendida: depois }),
     };
   }
 
@@ -574,6 +580,8 @@ export class RepositorioProjetos {
       },
       registrosDeProjeto(undefined, p),
       c,
+      // Copia o vínculo (talvez de um colega): não é marcar aqui.
+      true,
     );
     return p;
   }
@@ -895,9 +903,7 @@ export class RepositorioProjetos {
    * mesma gravação. Registros antigos daqui além dos 300 são podados depois.
    */
   async importar(ent: Partial<Entidades>, anotacoes?: { registros: RegistroNovo[]; carimbo: Carimbo }): Promise<ResultadoImportacao> {
-    const c = this.carimbo();
-    const agora = c.agora;
-    const daqui = this.doDispositivo(c.dispositivo);
+    const agora = this.carimbo().agora;
     const soma: ResultadoImportacao = { novos: 0, atualizados: 0, ignorados: 0, excedentes: 0 };
     let itens: Record<string, unknown> = {};
     let importouRegistros = false;
@@ -972,10 +978,10 @@ export class RepositorioProjetos {
       ),
     };
     soma.atualizados += [...marcas.p, ...marcas.e].filter((x) => !jaGravados.has(x.id)).length;
-    // A memória ganha o que já estava marcado aqui antes da mescla, o que ficou marcado no estado mesclado e o que
-    // o envelope rasparia dele (um colega que perca a base depois, antes de algum texto ser montado aqui, não solta o
-    // número por este computador), pela procedência do item; o que os registros ensinaram é aprendido (fora do
-    // escopo: não acorda o `aoMudar`).
+    // A memória ganha, como aprendida (com o teto: a mescla é dado de fora, e nada aqui foi marcado por este
+    // dispositivo), o que os registros ensinaram, o que já estava marcado aqui antes da mescla, o que ficou marcado no
+    // estado mesclado e o que o envelope rasparia dele (um colega que perca a base depois, antes de algum texto ser
+    // montado aqui, não solta o número por este computador). Fora do escopo: não acorda o `aoMudar`.
     const pM = sobrepor(
       mesclado.p,
       marcas.p.map((x) => [x.id, x]),
@@ -984,15 +990,14 @@ export class RepositorioProjetos {
       mesclado.e,
       marcas.e.map((x) => [x.id, x]),
     );
-    const antes = marcadosNoEstado(projetosAqui, etapasAqui, daqui);
-    const marcados = marcadosNoEstado(pM, eM, daqui);
-    const corte = cortarSigilo({ p: pM, e: eM, h: sobrepor(registrosAqui, registrosNovos) }, sigiloDoEnvelope(pM, eM, conhecidos), daqui);
+    const corte = cortarSigilo({ p: pM, e: eM, h: sobrepor(registrosAqui, registrosNovos) }, sigiloDoEnvelope(pM, eM, conhecidos));
     const daMemoria = this.entradasPorOrigem(memoria, {
-      local: juntarNumeros(antes.local, marcados.local, corte.raspados.local),
-      aprendida: juntarNumeros(aprendido, antes.aprendida, marcados.aprendida, corte.raspados.aprendida),
+      local: nenhumNumero(),
+      aprendida: juntarNumeros(aprendido, marcadosNoEstado(projetosAqui, etapasAqui), marcadosNoEstado(pM, eM), corte.raspados),
     });
     itens = { ...itens, ...marcadas, ...daMemoria };
-    if (anotacoes) await this.salvar(itens, anotacoes.registros, anotacoes.carimbo);
+    // Com anotações ("Quem vê"), a gravação leva os itens que vieram de fora: nada vira local por ela.
+    if (anotacoes) await this.salvar(itens, anotacoes.registros, anotacoes.carimbo, true);
     else if (Object.keys(itens).length) await this.area.gravar(itens);
     if (importouRegistros && !anotacoes?.registros.length) await this.podarHistorico();
     return soma;
@@ -1079,16 +1084,15 @@ export class RepositorioProjetos {
     const mantidos = ficam(this.registros, regs);
     for (const id of excedentes(mantidos, LIMITES.historico)) chaves.push(this.registros.chave(id));
     // Antes de as lápides saírem, tudo o que o envelope rasparia delas (vínculos, documentos e os registros pela
-    // etapa sigilosa) vai para a memória do sigilo, que segue raspando sem elas, pela procedência do item; o
-    // histórico daqui fica como está. Falha fechada: sem ler ou sem gravar a memória, lança e nada é podado.
+    // etapa sigilosa) vai para a memória do sigilo, que segue raspando sem elas; o histórico daqui fica como está.
+    // Como aprendida: o que este dispositivo marcou já entrou como local na gravação que o marcou. Falha fechada:
+    // sem ler ou sem gravar a memória, lança e nada é podado.
     const memoria = await this.memoria();
     const conhecidos = conhecidosDe(memoria);
-    const daqui = this.doDispositivo(this.dispositivo);
-    const corte = cortarSigilo({ p: projetos, e: etapas, h: regs }, sigiloDoEnvelope(projetos, etapas, conhecidos), daqui);
-    const marcados = marcadosNoEstado(projetos, etapas, daqui);
+    const corte = cortarSigilo({ p: projetos, e: etapas, h: regs }, sigiloDoEnvelope(projetos, etapas, conhecidos));
     const entradas = this.entradasPorOrigem(memoria, {
-      local: juntarNumeros(marcados.local, corte.raspados.local),
-      aprendida: juntarNumeros(marcados.aprendida, corte.raspados.aprendida),
+      local: nenhumNumero(),
+      aprendida: juntarNumeros(marcadosNoEstado(projetos, etapas), corte.raspados),
     });
     if (Object.keys(entradas).length) await this.area.gravar(entradas);
     if (chaves.length) await this.area.remover(chaves);

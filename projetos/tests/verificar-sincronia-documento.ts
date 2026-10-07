@@ -13,7 +13,7 @@ import { MotorTextoPadrao } from "@comum/sincronia/motor";
 import { gerarConteudoTexto, lerConteudoTexto } from "@comum/sincronia/textoPadraoCodec";
 import { prefixoMemoriaSigilo } from "../src/modelo/constantes";
 import type { Entidades, EnvelopeProjetos, Escopo, Etapa, Registro, Vis } from "../src/modelo/tipos";
-import { entidadeValida, manterDocumentoSigiloso, RepositorioProjetos } from "../src/repositorio";
+import { entidadeValida, manterDocumentoSigiloso, moverEntreEscopos, RepositorioProjetos } from "../src/repositorio";
 import { adaptadorProjetos, paraOTexto } from "../src/sincronia/textoPadrao";
 import { etapa, projeto } from "./fabrica";
 import { checar, secao } from "./util";
@@ -154,6 +154,44 @@ export async function verificarSincroniaDocumento(): Promise<void> {
       "a bia tirou o documento que tinha digitado: ele sai da ana tambem (nao e restaurado)",
       (await ana.un.obterEtapa(e3.id))?.documento === undefined && (await bia.un.obterEtapa(e3.id))?.documento === undefined,
       (await ana.un.obterEtapa(e3.id))?.documento,
+    );
+  }
+
+  secao("documento sigiloso pelo numero: a remocao propagada nao solta o numero (memoria e registros)");
+  {
+    const sei = noSei();
+    const ana = computador("ana", "pc-ana");
+    const bia = computador("bia", "pc-bia", AGORA + 5);
+    const pa = await ana.un.criarProjeto({ nome: "Apuração", processo: { protocolo: X, sigiloso: true } });
+    const e1 = await ana.un.criarEtapa({ projeto: pa.id, nome: "Oitiva", ...ETAPA });
+    await ana.un.concluirEtapa(e1.id, "2026-10-09", { numero: DOC });
+    await ana.rodada(ana.un, sei);
+    // A bia digita o DOC numa etapa comum dela (o registro "documento" leva o número, ela não sabe do sigilo).
+    const pb = await bia.un.criarProjeto({ nome: "Comum" });
+    const e3 = await bia.un.criarEtapa({ projeto: pb.id, nome: "Referência", ...ETAPA });
+    await bia.un.editarEtapa(e3.id, { documento: { numero: DOC } }, HOJE);
+    await bia.rodada(bia.un, sei);
+    for (let i = 0; i < 2; i++) for (const c of [ana, bia]) await c.rodada(c.un, sei);
+    await ana.un.editarEtapa(e3.id, { documento: undefined }, HOJE);
+    const gravadas: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      for (const c of [ana, bia]) {
+        const g = sei.gravadas;
+        await c.rodada(c.un, sei);
+        gravadas.push(sei.gravadas - g);
+      }
+    }
+    checar("a remocao chegou: a bia fica sem o documento", (await bia.un.obterEtapa(e3.id))?.documento === undefined);
+    checar(
+      "o numero segue na memoria das duas, e os registros com ele seguem raspados (nao volta ao texto)",
+      (await ana.un.sigilosConhecidos()).documentos.has(DOC) &&
+        (await bia.un.sigilosConhecidos()).documentos.has(DOC) &&
+        !(await jsonDe(sei.html)).includes(DOC),
+    );
+    checar(
+      "e o historico da bia continua com o numero dela; ninguem regrava depois da primeira volta",
+      (await bia.un.historico(pb.id)).some((r) => r.campo === "documento" && r.depois === DOC) && gravadas.slice(2).every((g) => g === 0),
+      gravadas,
     );
   }
 
@@ -403,6 +441,140 @@ export async function verificarSincroniaDocumento(): Promise<void> {
       "o numero e o documento do colega ficam como aprendidos; o marcado aqui, como local",
       v[k("p/50300000777202610")] === "aprendida" && v[k("d/4444444")] === "aprendida" && v[k("p/50300000002202611")] === "local",
       v,
+    );
+  }
+
+  secao("memoria do sigilo: local e so o que uma gravacao deste dispositivo causou (o campo dispositivo nao conta)");
+  {
+    // O texto editado à mão com o `dispositivo` da própria Ana (o id dela está em todo item que ela grava no texto).
+    const area = areaMemoria();
+    const PREF = prefixoMemoriaSigilo("sei.x.gov.br", "ana");
+    const cheia: Record<string, string> = {};
+    for (let i = 0; i < 20000; i++) cheia[`${PREF}p/${10_000_000_000 + i}`] = "aprendida";
+    await area.gravar(cheia);
+    const ana = computador("ana", "pc-ana", AGORA, area);
+    const forjadas = Array.from({ length: 500 }, (_, i) => ({
+      ...projeto({ id: `f${i}`, processo: { protocolo: String(30_000_000_000 + i), sigiloso: true } }),
+      atualizadoEm: AGORA - 1000,
+      removidoEm: AGORA - 1000,
+      criadoEm: AGORA - 2000,
+      dispositivo: "pc-ana",
+    }));
+    const env: EnvelopeProjetos = {
+      formato: "seipro-projetos",
+      versao: 1,
+      host: "sei.x.gov.br",
+      unidade: "110",
+      vis: "unidade",
+      gerado: AGORA,
+      entidades: { p: forjadas, f: [], e: [], h: [], m: [] },
+    };
+    const sei = noSei(await gerarConteudoTexto("x", env));
+    const conta = async () => {
+      const ks = (await area.chaves?.())?.filter((k) => k.startsWith(PREF)) ?? [];
+      return Object.values(await area.obter(ks)).filter((x) => x === "local").length;
+    };
+    await ana.rodada(ana.un, sei);
+    await ana.rodada(ana.un, sei);
+    await ana.un.limpar(AGORA + 365 * 86_400_000);
+    checar("500 lapides com o dispositivo da ana forjado: nenhuma vira local (mescla, texto e poda)", (await conta()) === 0, await conta());
+    await ana.un.criarProjeto({ nome: "Daqui", processo: { protocolo: X, sigiloso: true } });
+    checar("e a gravacao daqui que marca so guarda o numero dela como local", (await conta()) === 1, await conta());
+  }
+  {
+    // O registro da Ana com o número, que fica sigiloso porque um COLEGA marcou o processo: é aprendida.
+    const area = areaMemoria();
+    const PREF = prefixoMemoriaSigilo("sei.x.gov.br", "ana");
+    const ana = computador("ana", "pc-ana", AGORA, area);
+    const p = await ana.un.criarProjeto({ nome: "P1" });
+    await ana.un.editarProjeto(p.id, { processo: { protocolo: X } });
+    const atual = await ana.un.obterProjeto(p.id);
+    const marcadoPeloColega = { ...atual!, processo: { protocolo: "", sigiloso: true }, atualizadoEm: AGORA + 50, dispositivo: "pc-bia" };
+    await ana.un.importar({ p: [marcadoPeloColega] });
+    const k = `${PREF}p/50300000777202610`;
+    checar(
+      "o colega marcou: o numero do registro da ana entra como aprendida (este dispositivo nao marcou)",
+      (await area.obter(k))[k] === "aprendida",
+      (await area.obter(k))[k],
+    );
+    // A própria Ana marca outro número num projeto dela: local.
+    const q = await ana.un.criarProjeto({ nome: "P2" });
+    await ana.un.editarProjeto(q.id, { processo: { protocolo: "50300.000002/2026-11" } });
+    await ana.un.editarProjeto(q.id, { processo: { protocolo: "50300.000002/2026-11", sigiloso: true } });
+    const k2 = `${PREF}p/50300000002202611`;
+    checar("a ana marcou: local", (await area.obter(k2))[k2] === "local");
+  }
+  {
+    // Dado de colega que chega com o número (o colega não sabia), num projeto que o colega marcou: aprendida.
+    const area = areaMemoria();
+    const PREF = prefixoMemoriaSigilo("sei.x.gov.br", "ana");
+    const ana = computador("ana", "pc-ana", AGORA, area);
+    const doColega = {
+      ...projeto({ id: "c1", processo: { protocolo: X, sigiloso: true } }),
+      atualizadoEm: AGORA - 10,
+      dispositivo: "pc-bia",
+    };
+    const etapaDoColega = {
+      ...etapa({ id: "c2", projeto: "c1", documento: { numero: DOC } }),
+      atualizadoEm: AGORA - 10,
+      dispositivo: "pc-bia",
+    };
+    await ana.un.importar({ p: [doColega], e: [etapaDoColega] });
+    const k = (n: string) => `${PREF}${n}`;
+    const origem = async (n: string) => (await area.obter(k(n)))[k(n)];
+    checar("premissa: o numero e o documento do colega sao aprendidos", (await origem(`d/${DOC}`)) === "aprendida");
+    await ana.un.editarEtapa("c2", { nome: "Oitiva revisada" }, HOJE);
+    checar("editar aqui o nome da etapa do colega nao promove o documento dele", (await origem(`d/${DOC}`)) === "aprendida");
+    await ana.un.editarEtapa("c2", { documento: { numero: "5555555" } }, HOJE);
+    checar(
+      "trocar aqui o documento: o numero digitado aqui e local; o antigo, do colega, continua aprendido",
+      (await origem("d/5555555")) === "local" && (await origem(`d/${DOC}`)) === "aprendida",
+      [await origem("d/5555555"), await origem(`d/${DOC}`)],
+    );
+    // Duplicar o projeto do colega copia o vínculo marcado dele: não é marcar aqui, e não promove.
+    await ana.un.duplicarProjeto("c1");
+    checar(
+      "duplicar o projeto do colega nao promove o numero dele a local",
+      (await origem("p/50300000777202610")) === "aprendida",
+      await origem("p/50300000777202610"),
+    );
+    // "Quem vê": levar o projeto do colega para "Só eu" não promove o que é dele.
+    await moverEntreEscopos(ana.un, ana.eu, "c1");
+    checar(
+      "Quem ve: mover o projeto do colega nao promove o numero dele a local",
+      (await origem("p/50300000777202610")) === "aprendida" && (await origem(`d/${DOC}`)) === "aprendida",
+      [await origem("p/50300000777202610"), await origem(`d/${DOC}`)],
+    );
+  }
+
+  secao("memoria do sigilo: o Quem ve com as aprendidas quase cheias nao passa do teto");
+  {
+    const area = areaMemoria();
+    const PREF = prefixoMemoriaSigilo("sei.x.gov.br", "ana");
+    const ana = computador("ana", "pc-ana", AGORA, area);
+    const doColega = {
+      ...projeto({ id: "c1", processo: { protocolo: X, sigiloso: true } }),
+      atualizadoEm: AGORA - 10,
+      dispositivo: "pc-bia",
+    };
+    const etapas = ["50300.000011/2026-11", "50300.000012/2026-11", "50300.000013/2026-11"].map((protocolo, i) => ({
+      ...etapa({ id: `c${i + 2}`, projeto: "c1", processo: { protocolo, sigiloso: true } }),
+      atualizadoEm: AGORA - 10,
+      dispositivo: "pc-bia",
+    }));
+    await ana.un.importar({ p: [doColega], e: etapas });
+    // Os números do projeto saem da memória (como se não tivessem cabido) e as aprendidas ficam a 1 do teto.
+    const ks = (await area.chaves?.())?.filter((k) => k.startsWith(`${PREF}p/`)) ?? [];
+    await area.remover(ks);
+    const quase: Record<string, string> = {};
+    for (let i = 0; i < 19999; i++) quase[`${PREF}p/${10_000_000_000 + i}`] = "aprendida";
+    await area.gravar(quase);
+    await moverEntreEscopos(ana.un, ana.eu, "c1");
+    const v = Object.values(await area.obter((await area.chaves?.())?.filter((k) => k.startsWith(`${PREF}p/`)) ?? []));
+    checar(
+      "depois do Quem ve: no maximo 20000 aprendidas e nenhuma local",
+      v.filter((x) => x === "aprendida").length <= 20000 && !v.includes("local"),
+      { aprendidas: v.filter((x) => x === "aprendida").length, locais: v.filter((x) => x === "local").length },
     );
   }
 

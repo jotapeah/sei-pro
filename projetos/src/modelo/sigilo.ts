@@ -23,9 +23,10 @@
  *
  * O corte (`cortarSigilo`) também devolve o que raspou: tudo o que o envelope
  * raspa, por qualquer regra, entra na memória (rodada 3: o que o texto raspou uma
- * vez continua raspado), e quem grava é o repositório ou o adaptador. Separado
- * pela procedência (rodada 4): o que veio de item gravado por este dispositivo é
- * "local"; o que veio de dado de colega é "aprendida" (com o teto da memória).
+ * vez continua raspado), e quem grava é o repositório ou o adaptador. A origem
+ * (rodada 4) é decidida por quem grava, pela operação, nunca por um campo do item
+ * (o `dispositivo` vem no texto e qualquer um o copia): "local" é só o que uma
+ * gravação deste dispositivo causou; o resto é "aprendida" (com o teto).
  *
  * O documento de processo sigiloso vai ao texto como o marcador `DOCUMENTO_VAZIO`
  * (`{ numero: "", sigiloso: true }`, como o vínculo vazio do processo), e não sem
@@ -56,19 +57,6 @@ export interface Numeros {
   processos: string[];
   documentos: string[];
 }
-
-/**
- * Os números pela procedência do item que os trazia (rodada 4): `local` = item gravado por este dispositivo
- * (edição daqui, a caixa ou a árvore, o vínculo digitado e marcado aqui); `aprendida` = dado de colega,
- * inclusive o que o corte raspa de item que chegou de fora.
- */
-export interface NumerosPorOrigem {
-  local: Numeros;
-  aprendida: Numeros;
-}
-
-/** O item foi gravado por este dispositivo (`dispositivo` do carimbo): o repositório decide. */
-export type DoDispositivo = (x: { dispositivo?: unknown }) => boolean;
 
 export const nenhumNumero = (): Numeros => ({ processos: [], documentos: [] });
 
@@ -234,18 +222,14 @@ export function marcasDeSigilo(
   return { p: p2.filter((x, i) => x !== final.p[i]), e: e3.filter((x, i) => x !== final.e[i]) };
 }
 
-/**
- * O que o estado marca (vínculos e documentos `sigiloso: true`, vivos ou lápides): vai para a memória do sigilo,
- * pela procedência de cada item (`daqui`).
- */
-export function marcadosNoEstado(projetos: readonly Projeto[], etapas: readonly Etapa[], daqui: DoDispositivo): NumerosPorOrigem {
-  const saida: NumerosPorOrigem = { local: nenhumNumero(), aprendida: nenhumNumero() };
-  const de = (x: Projeto | Etapa) => (daqui(x) ? saida.local : saida.aprendida);
+/** O que o estado marca (vínculos e documentos `sigiloso: true`, vivos ou lápides): vai para a memória do sigilo. */
+export function marcadosNoEstado(projetos: readonly Projeto[], etapas: readonly Etapa[]): Numeros {
+  const saida = nenhumNumero();
   for (const x of [...projetos, ...etapas]) {
     const k = x.processo?.sigiloso === true && typeof x.processo.protocolo === "string" ? chaveProtocolo(x.processo.protocolo) : "";
-    if (k) de(x).processos.push(k);
+    if (k) saida.processos.push(k);
   }
-  for (const x of etapas) if (x.documento?.sigiloso === true && x.documento.numero) de(x).documentos.push(x.documento.numero);
+  for (const x of etapas) if (x.documento?.sigiloso === true && x.documento.numero) saida.documentos.push(x.documento.numero);
   return saida;
 }
 
@@ -281,18 +265,16 @@ export function aprendidoDosRegistros(
  * (`rasparRegistro`). Número de documento sigiloso é o que `s` conhece (marcado ou na memória) e, nesta mesma
  * montagem, o documento de etapa sigilosa e os números dos registros "documento" dela: o mesmo número sai de
  * qualquer etapa e de qualquer registro já na primeira vez, sem esperar a memória. Devolve também tudo o que
- * raspou (chaves de processo e números de documento), pela procedência do item que o trazia (`daqui`).
+ * raspou (chaves de processo e números de documento), para a memória do sigilo.
  */
 export function cortarSigilo(
   ent: { p: readonly Projeto[]; e: readonly Etapa[]; h: readonly Registro[] },
   s: SigiloDoEnvelope,
-  daqui: DoDispositivo,
-): { p: Projeto[]; e: Etapa[]; h: Registro[]; raspados: NumerosPorOrigem } {
-  const raspados: NumerosPorOrigem = { local: nenhumNumero(), aprendida: nenhumNumero() };
-  const de = (x: { dispositivo?: unknown }) => (daqui(x) ? raspados.local : raspados.aprendida);
-  const doProcesso = (x: { dispositivo?: unknown }, t: string | undefined) => {
+): { p: Projeto[]; e: Etapa[]; h: Registro[]; raspados: Numeros } {
+  const raspados = nenhumNumero();
+  const doProcesso = (t: string | undefined) => {
     const k = typeof t === "string" ? chaveProtocolo(t) : "";
-    if (k) de(x).processos.push(k);
+    if (k) raspados.processos.push(k);
   };
   const documentos = new Set(s.documentos);
   for (const x of ent.e) if (s.etapas.has(x.id) && x.documento?.numero) documentos.add(x.documento.numero);
@@ -303,7 +285,7 @@ export function cortarSigilo(
   const corte: SigiloDoEnvelope = { ...s, documentos };
   const p = ent.p.map((x): Projeto => {
     if (!corte.projetos.has(x.id)) return x;
-    doProcesso(x, x.processo?.protocolo);
+    doProcesso(x.processo?.protocolo);
     return { ...x, processo: VINCULO_VAZIO };
   });
   const e = ent.e.map((x): Etapa => {
@@ -311,11 +293,11 @@ export function cortarSigilo(
     let y = x;
     const d = y.documento;
     if (d && (sigilosa || d.sigiloso || documentos.has(d.numero))) {
-      if (d.numero) de(x).documentos.push(d.numero);
+      if (d.numero) raspados.documentos.push(d.numero);
       y = { ...y, documento: DOCUMENTO_VAZIO };
     }
     if (sigilosa && y.processo) {
-      doProcesso(x, y.processo.protocolo);
+      doProcesso(y.processo.protocolo);
       y = { ...y, processo: VINCULO_VAZIO };
     }
     return y;
@@ -326,8 +308,8 @@ export function cortarSigilo(
       for (const lado of ["antes", "depois"] as const) {
         const t = r[lado];
         if (!t || x[lado] === t) continue;
-        if (r.campo === "processo") doProcesso(r, t);
-        else de(r).documentos.push(t);
+        if (r.campo === "processo") doProcesso(t);
+        else raspados.documentos.push(t);
       }
     }
     return x;

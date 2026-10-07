@@ -32,14 +32,7 @@ import { nomeDeTextoInterno, type ValidacaoTexto, versaoMaisNova } from "@comum/
 import { chaveSyncTexto, DIAS_LAPIDE_EU, DIAS_LAPIDE_UNIDADE, FOLGA_RELOGIO_MS, LIMITES } from "../modelo/constantes";
 import { chaveEscopo } from "../modelo/escopo";
 import { excedentes } from "../modelo/historico";
-import {
-  cortarSigilo,
-  type DoDispositivo,
-  NADA_CONHECIDO,
-  type NumerosPorOrigem,
-  type SigilosConhecidos,
-  sigiloDoEnvelope,
-} from "../modelo/sigilo";
+import { cortarSigilo, NADA_CONHECIDO, type Numeros, type SigilosConhecidos, sigiloDoEnvelope } from "../modelo/sigilo";
 import type { Entidades, EnvelopeProjetos, Escopo, Vis } from "../modelo/tipos";
 import { entidadeValida, type RepositorioProjetos } from "../repositorio";
 
@@ -130,17 +123,15 @@ export function validarEnvelope(bruto: unknown, escopo: Escopo): ValidacaoTexto<
 
 /**
  * O envelope que vai ao Texto Padrão: sem números sigilosos e podado (lápides e histórico), e tudo o que o
- * corte raspou (chaves de processo e números de documento), pela procedência do item: `daqui` diz o que foi
- * gravado por este dispositivo (local); o resto é dado de colega (aprendida). `conhecidos` (a memória do
- * sigilo do usuário) soma-se à regra deduzida do envelope. Puro: quem grava o que foi raspado na memória é
- * quem monta o texto para gravar (o adaptador), antes da gravação.
+ * corte raspou (chaves de processo e números de documento). `conhecidos` (a memória do sigilo do usuário)
+ * soma-se à regra deduzida do envelope. Puro: quem grava o que foi raspado na memória é quem monta o texto
+ * para gravar (o adaptador), antes da gravação.
  */
 export function paraOTextoComRaspados(
   env: EnvelopeProjetos,
   agora: number,
   conhecidos: SigilosConhecidos = NADA_CONHECIDO,
-  daqui: DoDispositivo = () => false,
-): { envelope: EnvelopeProjetos; raspados: NumerosPorOrigem } {
+): { envelope: EnvelopeProjetos; raspados: Numeros } {
   const dias = env.vis === "unidade" ? DIAS_LAPIDE_UNIDADE : DIAS_LAPIDE_EU;
   const ent = env.entidades;
   // A regra sobre tudo, antes da poda: a marca de uma lápide que sai ainda vale para os outros.
@@ -151,7 +142,6 @@ export function paraOTextoComRaspados(
   const corte = cortarSigilo(
     { p: purgarLapides(ent.p, agora, dias), e: purgarLapides(ent.e, agora, dias), h: vivosH.filter((r) => !fora.has(r.id)) },
     sigilo,
-    daqui,
   );
   return {
     envelope: {
@@ -237,17 +227,12 @@ export function adaptadorProjetos(d: DepsAdaptador): AdaptadorTexto<EnvelopeProj
     async exportar({ remoto, agora }) {
       // Entidades e memória do sigilo numa leitura só (o que raspa é o estado que vai); se a memória não puder ser
       // lida, lança (falha comum: o texto não é gravado e o motor tenta de novo depois).
-      const { envelope: local, conhecidos } = await d.repo.exportarComConhecidos(agora);
-      const dispositivo = d.repo.dispositivo;
-      const { envelope, raspados } = paraOTextoComRaspados(
-        comOsDoFuturo(local, remoto, agora),
-        agora,
-        conhecidos,
-        (x) => x.dispositivo === dispositivo,
-      );
-      // O que o texto raspou fica raspado: vai para a memória ANTES da gravação, como local o que veio de item
-      // gravado aqui e como aprendida o que veio de colega; se não puder ser guardado, lança.
-      await d.repo.lembrarRaspados(raspados);
+      const { envelope: daqui, conhecidos } = await d.repo.exportarComConhecidos(agora);
+      const { envelope, raspados } = paraOTextoComRaspados(comOsDoFuturo(daqui, remoto, agora), agora, conhecidos);
+      // O que o texto raspou fica raspado: vai para a memória ANTES da gravação; se não puder ser guardado, lança.
+      // Como aprendida (com o teto): o que este dispositivo marcou já entrou como local na gravação que o marcou, e
+      // o resto é dado de colega (o campo `dispositivo` dos itens vem no texto e não prova nada).
+      await d.repo.lembrarSigilo(raspados, "aprendida");
       return envelope;
     },
     assinatura: assinaturaProjetos,
