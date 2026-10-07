@@ -67,4 +67,6 @@ await verificarManifest();
 // do pacote (com noUncheckedIndexedAccess) não seguir o import.
 const suitePagina = "./pagina/verificar-pagina";
 await ((await import(suitePagina)) as { verificarPagina(): Promise<void> }).verificarPagina();
+const suiteSincroniaPagina = "./pagina/verificar-sincronia-pagina";
+await ((await import(suiteSincroniaPagina)) as { verificarSincroniaPagina(): Promise<void> }).verificarSincroniaPagina();
 resumo();
