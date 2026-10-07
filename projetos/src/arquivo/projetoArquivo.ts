@@ -14,13 +14,18 @@
  * marcado ou conhecido pela memória vai como o marcador `{ numero: "", sigiloso: true }` (quem recebe vê
  * "Processo sigiloso" e "Documento de processo sigiloso", sem número e sem link). O `idProcedimento` não vai em
  * vínculo nenhum: é o id interno do SEI de quem envia, e na caixa de quem recebe o mesmo id pode ser outro
- * processo (o número abre pela pesquisa rápida). Sem histórico, sem carimbos, sem lápides e sem a memória; a
- * ordem das fases e das etapas é a posição na lista.
+ * processo (o número abre pela pesquisa rápida). Do responsável vai só o nome (o login é de um colega de quem
+ * envia). Sem histórico, sem carimbos, sem lápides e sem a memória; a ordem das fases e das etapas é a posição na
+ * lista. Para fora, só `arquivoDoProjeto` monta o arquivo: o corte puro fica interno (ninguém liga o corte só pela
+ * regra, sem a memória).
  *
  * Receber cria uma CÓPIA com ids novos no escopo escolhido (não mescla com o original), numa gravação só, com o
- * registro de criação. Cada item é refeito campo a campo (o que sobra no arquivo não entra, a ordem é refeita) e
- * o arquivo inteiro é recusado se algum item vier torto (tipo errado, data impossível, id repetido, dependência
- * em ciclo, texto longo).
+ * registro de criação, tudo ou nada (`importar` com `inteiro`: o teto de projetos é decidido na leitura da
+ * própria gravação). Cada item é refeito campo a campo (o que sobra no arquivo não entra, a ordem é refeita, o
+ * login do responsável e o `idProcedimento` ficam de fora, e número marcado sigiloso vira o vínculo vazio e o
+ * marcador) e o arquivo inteiro é recusado se algum item vier torto (tipo errado, data impossível, id repetido,
+ * dependência em ciclo, texto longo). A leitura do arquivo escolhido já ensaia essa montagem: o arquivo torto nem
+ * abre o diálogo, e a prévia mostra o que seria gravado (nome limpo, datas validadas).
  */
 
 import { novoId } from "@comum/id";
@@ -28,10 +33,10 @@ import { indiceEntre, indiceValido } from "@comum/ordem/indice";
 import { versaoMaisNova } from "@comum/sincronia/textoPadraoCodec";
 import { LIMITES } from "../modelo/constantes";
 import { encontrarCiclo } from "../modelo/dependencias";
-import { rotuloDaVis } from "../modelo/escopo";
 import { registrosDeProjeto } from "../modelo/historico";
+import { ErroMemoriaSigilo } from "../modelo/memoriaSigilo";
 import { novaEtapa, novaFase, novoProjeto, porOrdem, semVazios } from "../modelo/operacoes";
-import type { Numeros, SigilosConhecidos } from "../modelo/sigilo";
+import { DOCUMENTO_VAZIO, type Numeros, type SigilosConhecidos, VINCULO_VAZIO } from "../modelo/sigilo";
 import type {
   DataISO,
   DocumentoSei,
@@ -46,7 +51,7 @@ import type {
   Vinculo,
 } from "../modelo/tipos";
 import { ErroValidacao, problemasDoProjeto } from "../modelo/validacao";
-import { entidadeValida, type RepositorioProjetos } from "../repositorio";
+import { entidadeValida, mensagemDoLimite, type RepositorioProjetos } from "../repositorio";
 import { FORMATO, paraOTextoComRaspados } from "../sincronia/textoPadrao";
 
 export const FORMATO_PROJETO = "seipro-projeto";
@@ -55,11 +60,14 @@ export const VERSAO_PROJETO = 1;
 export const LIMITE_ARQUIVO_PROJETO = 5 * 1024 * 1024;
 export const TIPO_ARQUIVO_PROJETO = "application/json";
 
-const PARA_ENVIAR = "Peça a quem enviou o arquivo “.seipro-projeto.json” de “Enviar projeto por arquivo…”.";
+const PARA_ENVIAR = "Peça a quem enviou um arquivo gerado em “Enviar projeto por arquivo…” (o nome termina em .seipro-projeto.json).";
 export const MENSAGEM_NAO_E_PROJETO = `Este arquivo não é um projeto enviado pelo SEI Pro. ${PARA_ENVIAR}`;
 export const MENSAGEM_GRANDE = `O arquivo passa de 5 MB e não é um projeto enviado pelo SEI Pro. ${PARA_ENVIAR}`;
 export const MENSAGEM_COPIA_DE_TUDO =
   "Este arquivo é a cópia de todos os projetos, não um projeto enviado. Para trazê-la, use “Importar de um arquivo…” em Sincronização.";
+/** A memória do sigilo ilegível no envio (a genérica do `ErroMemoriaSigilo` fala em "nada foi gravado"). */
+export const MENSAGEM_MEMORIA_ENVIO =
+  "Não foi possível ler a lista de processos sigilosos deste computador. Nenhum arquivo foi gerado; tente de novo.";
 export const MENSAGEM_MAIS_NOVO = "Este projeto foi enviado de uma versão mais nova do SEI Pro. Atualize a extensão e tente de novo.";
 export const MENSAGEM_TORTO =
   "O arquivo tem itens inválidos (talvez tenha sido editado); nada foi recebido. Peça a quem enviou um arquivo novo.";
@@ -116,7 +124,8 @@ function etapaNoArquivo(e: Etapa): EtapaNoArquivo {
     fim: e.fim,
     marco: e.marco,
     dependeDe: [...e.dependeDe],
-    responsavel: e.responsavel ? semVazios({ nome: e.responsavel.nome, login: e.responsavel.login }) : undefined,
+    // Só o nome: o login é de um colega de quem envia, e o arquivo vai a outra pessoa.
+    responsavel: e.responsavel ? { nome: e.responsavel.nome } : undefined,
     medida: e.medida,
     progresso: e.progresso,
     checklist: e.checklist.map((i) => ({ id: i.id, texto: i.texto, feito: i.feito })),
@@ -131,10 +140,10 @@ function etapaNoArquivo(e: Etapa): EtapaNoArquivo {
 
 /**
  * O projeto `id` do envelope do escopo (com lápides e histórico), como vai no arquivo, e o que o corte raspou.
- * Puro. A regra corre sobre o escopo inteiro e soma `conhecidos` (a memória do sigilo: obrigatória, para nenhum
- * chamador cortar só pela regra deduzida); é o corte do Texto Padrão (`paraOTextoComRaspados`).
+ * Puro e INTERNO (só `arquivoDoProjeto` o chama, com a memória lida junto do escopo). A regra corre sobre o escopo
+ * inteiro e soma `conhecidos` (a memória do sigilo); é o corte do Texto Padrão (`paraOTextoComRaspados`).
  */
-export function envelopeDoProjeto(
+function envelopeDoProjeto(
   escopo: EnvelopeProjetos,
   id: string,
   conhecidos: SigilosConhecidos,
@@ -167,16 +176,24 @@ export function envelopeDoProjeto(
 /**
  * O arquivo do "Enviar projeto": o nome e o conteúdo (JSON). Escopo e memória do sigilo numa leitura só; o que
  * raspou vai para a memória ANTES (como aprendida, como no Texto Padrão). Lança sem gerar nada: `ErroMemoriaSigilo`
- * (a memória não lê), o erro do storage (não grava) ou `ErroValidacao` (o projeto sumiu, grande demais).
+ * com `MENSAGEM_MEMORIA_ENVIO` (a memória não lê), o erro do storage (não grava) ou `ErroValidacao` (o projeto
+ * sumiu, grande demais).
  */
 export async function arquivoDoProjeto(
   repo: RepositorioProjetos,
   id: string,
   agora: number = Date.now(),
 ): Promise<{ nome: string; conteudo: string }> {
-  const { envelope: escopo, conhecidos } = await repo.exportarComConhecidos(agora);
-  const { envelope, raspados } = envelopeDoProjeto(escopo, id, conhecidos, agora);
-  await repo.lembrarSigilo(raspados, "aprendida");
+  let envelope: EnvelopeProjeto;
+  try {
+    const lido = await repo.exportarComConhecidos(agora);
+    const cortado = envelopeDoProjeto(lido.envelope, id, lido.conhecidos, agora);
+    await repo.lembrarSigilo(cortado.raspados, "aprendida");
+    envelope = cortado.envelope;
+  } catch (e) {
+    if (e instanceof ErroMemoriaSigilo) throw Object.assign(new ErroMemoriaSigilo(e.cause), { message: MENSAGEM_MEMORIA_ENVIO });
+    throw e;
+  }
   const conteudo = JSON.stringify(envelope);
   if (conteudo.length > LIMITE_ARQUIVO_PROJETO)
     throw new ErroValidacao(["O projeto passa de 5 MB e não cabe num arquivo. Encurte as observações e os checklists e tente de novo."]);
@@ -210,7 +227,8 @@ export function lerEnvelopeDoProjeto(bruto: unknown): EnvelopeProjeto | null {
 
 /**
  * O texto do arquivo escolhido → o envelope, ou `ErroValidacao` com o que fazer: grande demais (antes de ler),
- * JSON quebrado ou de outro formato, a cópia de todos os projetos (essa vai pelo "Importar"), versão mais nova.
+ * JSON quebrado ou de outro formato, a cópia de todos os projetos (essa vai pelo "Importar"), versão mais nova, ou
+ * item torto (a montagem do `receber` é ensaiada aqui: o arquivo que não seria recebido nem abre o diálogo).
  */
 export function lerArquivoDoProjeto(texto: string): EnvelopeProjeto {
   if (texto.length > LIMITE_ARQUIVO_PROJETO) throw new ErroValidacao([MENSAGEM_GRANDE]);
@@ -224,6 +242,7 @@ export function lerArquivoDoProjeto(texto: string): EnvelopeProjeto {
   if (objeto(bruto) && bruto.formato === FORMATO) throw new ErroValidacao([MENSAGEM_COPIA_DE_TUDO]);
   const env = lerEnvelopeDoProjeto(bruto);
   if (!env) throw new ErroValidacao([MENSAGEM_NAO_E_PROJETO]);
+  if (!ensaiar(env)) throw new ErroValidacao([MENSAGEM_TORTO]);
   return env;
 }
 
@@ -236,22 +255,21 @@ export interface PreviaRecebido {
   fim?: DataISO;
 }
 
+/** A prévia do que seria gravado (a montagem ensaiada: nome limpo, datas validadas); o envelope torto lança. */
 export function previaDoRecebido(env: EnvelopeProjeto): PreviaRecebido {
-  const datas = env.etapas
-    .flatMap((e) => [e.inicio, e.fim])
-    .filter((d): d is DataISO => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d));
-  datas.sort();
-  return { nome: env.projeto.nome, etapas: env.etapas.length, fases: env.fases.length, inicio: datas[0], fim: datas.at(-1) };
+  const m = ensaiar(env);
+  if (!m) throw new ErroValidacao([MENSAGEM_TORTO]);
+  const inicios = m.etapas.map((e) => e.inicio).sort();
+  const fins = m.etapas.map((e) => e.fim).sort();
+  return { nome: m.p.nome, etapas: m.etapas.length, fases: m.fases.length, inicio: inicios[0], fim: fins.at(-1) };
 }
 
 /** Cria a cópia com ids novos no repositório (escopo) escolhido; o arquivo torto não grava nada. */
 export async function receberProjeto(repo: RepositorioProjetos, env: EnvelopeProjeto, gerarId: () => string = novoId): Promise<Projeto> {
   const todos = await repo.projetos.listar();
   const ativos = todos.filter((p) => p.removidoEm === undefined && p.arquivadoEm === undefined);
-  if (ativos.length >= LIMITES.projetosAtivos)
-    throw new ErroValidacao([
-      `Limite de ${LIMITES.projetosAtivos} projetos ativos em “${rotuloDaVis(repo.escopo.vis)}”. Arquive ou exclua algum.`,
-    ]);
+  // Só para a mensagem vir antes do "Entendi"; quem decide é o `importar` com `inteiro`, na leitura da gravação.
+  if (ativos.length >= LIMITES.projetosAtivos) throw new ErroValidacao([mensagemDoLimite(repo.escopo.vis)]);
   const c = repo.carimboAtual();
   const maior = todos
     .map((p) => p.ordem)
@@ -262,7 +280,7 @@ export async function receberProjeto(repo: RepositorioProjetos, env: EnvelopePro
   const montado = montar(env, pid, maior ?? null, c, gerarId);
   if (!montado) throw new ErroValidacao([MENSAGEM_TORTO]);
   const { p, fases, etapas } = montado;
-  await repo.importar({ p: [p], f: fases, e: etapas }, { registros: registrosDeProjeto(undefined, p), carimbo: c });
+  await repo.importar({ p: [p], f: fases, e: etapas }, { registros: registrosDeProjeto(undefined, p), carimbo: c }, { inteiro: true });
   const recebido = await repo.obterProjeto(pid);
   if (!recebido) throw new ErroValidacao(["Não foi possível receber o projeto."]);
   return recebido;
@@ -298,28 +316,27 @@ const textos = (x: unknown): string[] => umaLista(x).map(umTexto);
 /** Ausente = undefined; presente, tem de passar em `ler`. */
 const opcional = <T>(x: unknown, ler: (v: unknown) => T): T | undefined => (x === undefined ? undefined : ler(x));
 
-/** O vínculo recebido, campo a campo: sem o `idProcedimento` (o id interno do SEI de quem enviou). */
+/**
+ * O vínculo recebido, campo a campo: sem o `idProcedimento` (o id interno do SEI de quem enviou). O marcado
+ * sigiloso vira o vínculo vazio, mesmo com número: um arquivo legítimo nunca o traz.
+ */
 function vinculoRecebido(x: unknown): Vinculo {
   const o = umObjeto(x);
   const protocolo = umTexto(o.protocolo);
-  return opcional(o.sigiloso, umBooleano) ? { protocolo, sigiloso: true } : { protocolo };
+  return opcional(o.sigiloso, umBooleano) ? { ...VINCULO_VAZIO } : { protocolo };
 }
 
+/** O documento recebido: o marcado sigiloso vira o marcador (sem número e sem título), como no vínculo. */
 function documentoRecebido(x: unknown): DocumentoSei {
   const o = umObjeto(x);
-  return semVazios({
-    numero: umTexto(o.numero),
-    titulo: opcional(o.titulo, umTexto),
-    sigiloso: opcional(o.sigiloso, umBooleano) ? true : undefined,
-  });
+  const numero = umTexto(o.numero);
+  const titulo = opcional(o.titulo, umTexto);
+  return opcional(o.sigiloso, umBooleano) ? { ...DOCUMENTO_VAZIO } : semVazios({ numero, titulo });
 }
 
+/** Do responsável, só o nome (o arquivo não leva o login; o que vier de fora não entra). */
 function responsavelRecebido(x: unknown): Responsavel {
-  const o = umObjeto(x);
-  const login = opcional(o.login, umTexto);
-  // O `entidadeValida` não põe teto no login: aqui ele tem o do nome (o arquivo é de fora).
-  exigir(login === undefined || login.length <= LIMITES.nome);
-  return semVazios({ nome: umTexto(o.nome), login });
+  return { nome: umTexto(umObjeto(x).nome) };
 }
 
 function baseRecebida(x: unknown): LinhaDeBase {
@@ -338,6 +355,18 @@ function idsNovos(itens: readonly Record<string, unknown>[], gerarId: () => stri
   return m;
 }
 
+/** A montagem sem gravar (ids e carimbo de ensaio): a leitura do arquivo e a prévia usam. */
+function ensaiar(env: EnvelopeProjeto): Montado | null {
+  let n = 0;
+  return montar(env, "ensaio", null, { agora: 0, dispositivo: "ensaio" }, () => `ensaio${++n}`);
+}
+
+interface Montado {
+  p: Projeto;
+  fases: Fase[];
+  etapas: Etapa[];
+}
+
 /** As entidades novas, ou null se algum item do arquivo é torto. A ordem é a posição na lista do arquivo. */
 function montar(
   env: EnvelopeProjeto,
@@ -345,7 +374,7 @@ function montar(
   maior: string | null,
   c: ReturnType<RepositorioProjetos["carimboAtual"]>,
   gerarId: () => string,
-): { p: Projeto; fases: Fase[]; etapas: Etapa[] } | null {
+): Montado | null {
   try {
     const bruto = env as unknown as {
       projeto: Record<string, unknown>;

@@ -395,10 +395,7 @@ export class RepositorioProjetos {
 
   private async exigirVagaDeProjeto(): Promise<void> {
     const ativos = (await this.projetos.listar()).filter((p) => vivo(p) && p.arquivadoEm === undefined);
-    if (ativos.length >= LIMITES.projetosAtivos)
-      throw new ErroValidacao([
-        `Limite de ${LIMITES.projetosAtivos} projetos ativos em “${rotuloDaVis(this.escopo.vis)}”. Arquive ou exclua algum.`,
-      ]);
+    if (ativos.length >= LIMITES.projetosAtivos) throw new ErroValidacao([mensagemDoLimite(this.escopo.vis)]);
   }
 
   async obterProjeto(id: string): Promise<Projeto | undefined> {
@@ -920,10 +917,19 @@ export class RepositorioProjetos {
    * Tudo vai num `area.gravar` só (um aviso em `aoMudar`);
    * `anotacoes` (registros do histórico a criar junto, com o carimbo) entram nessa
    * mesma gravação. Registros antigos daqui além dos 300 são podados depois.
+   * Com `inteiro` (o "Receber projeto", que é tudo ou nada), qualquer item ignorado
+   * (torto ou além de um teto) faz lançar `ErroValidacao` sem gravar nada: o teto é
+   * decidido pela mesma leitura que a gravação usa, e uma aba que criou o 100º
+   * projeto no meio não deixa fases e etapas sem projeto no escopo.
    */
-  async importar(ent: Partial<Entidades>, anotacoes?: { registros: RegistroNovo[]; carimbo: Carimbo }): Promise<ResultadoImportacao> {
+  async importar(
+    ent: Partial<Entidades>,
+    anotacoes?: { registros: RegistroNovo[]; carimbo: Carimbo },
+    opcoes: { inteiro?: boolean } = {},
+  ): Promise<ResultadoImportacao> {
     const agora = this.carimbo().agora;
     const soma: ResultadoImportacao = { novos: 0, atualizados: 0, ignorados: 0, excedentes: 0 };
+    let projetosExcedentes = 0;
     let itens: Record<string, unknown> = {};
     let importouRegistros = false;
     // Uma leitura só: o escopo e a memória do sigilo. Falha fechada: sem a memória legível, a mescla não roda (o
@@ -944,6 +950,7 @@ export class RepositorioProjetos {
       soma.atualizados += r.atualizados;
       soma.ignorados += r.ignorados;
       soma.excedentes += r.excedentes;
+      if (tipo === "p") projetosExcedentes += r.excedentes;
       if (tipo === "h" && r.gravar.length) importouRegistros = true;
       itens = { ...itens, ...this.entradas(col, r.gravar) };
       return r.gravar;
@@ -977,6 +984,13 @@ export class RepositorioProjetos {
     );
     const registrosNovos = mesclarCol(this.registros, registrosAqui, ent.h, "h", registrosAlemDoTeto, registroDaqui);
     mesclarCol(this.modelos, aqui.m, ent.m, "m", (l, v) => alemDoTeto(l, v, (x) => (vivo(x) ? "" : null), LIMITES.modelos));
+    // Tudo ou nada: decidido antes de qualquer gravação, sobre a mesma leitura.
+    if (opcoes.inteiro && soma.ignorados)
+      throw new ErroValidacao([
+        projetosExcedentes
+          ? mensagemDoLimite(this.escopo.vis)
+          : "Nada foi gravado: há itens inválidos ou além dos limites (300 etapas por projeto, 50 modelos).",
+      ]);
     // O sigilo gruda: as marcas que o estado mesclado pede (o número marcado do lado de fora, a marca que a cópia
     // igual de um colega traz) entram na mesma gravação, sem mudar o carimbo.
     const mesclado = { p: sobrepor(projetosAqui, projetosNovos), e: sobrepor(etapasAqui, etapasNovas) };
@@ -1373,6 +1387,11 @@ export function entidadeValida(x: unknown, tipo: keyof Entidades, agora?: number
   }
 }
 
+/** O limite de projetos ativos num escopo, com o que fazer. */
+export function mensagemDoLimite(vis: Escopo["vis"]): string {
+  return `Limite de ${LIMITES.projetosAtivos} projetos ativos em “${rotuloDaVis(vis)}”. Arquive ou exclua algum.`;
+}
+
 /** Junta o índice dos escopos da unidade (o painel e a caixa mostram os dois). */
 export async function indiceDosEscopos(repos: readonly RepositorioProjetos[]): Promise<Map<string, VinculoProcesso[]>> {
   const dados = await Promise.all(repos.map(async (r) => ({ vis: r.escopo.vis, ...(await r.dados()) })));
@@ -1394,10 +1413,7 @@ export async function moverEntreEscopos(origem: RepositorioProjetos, destino: Re
   if (!p) throw new ErroValidacao(["O projeto não existe mais."]);
   if (p.arquivadoEm === undefined) {
     const ativos = (await destino.dados()).projetos.filter((x) => x.arquivadoEm === undefined);
-    if (ativos.length >= LIMITES.projetosAtivos)
-      throw new ErroValidacao([
-        `Limite de ${LIMITES.projetosAtivos} projetos ativos em “${rotuloDaVis(destino.escopo.vis)}”. Arquive ou exclua algum.`,
-      ]);
+    if (ativos.length >= LIMITES.projetosAtivos) throw new ErroValidacao([mensagemDoLimite(destino.escopo.vis)]);
   }
   const d = await origem.dados();
   const fases = d.fases.filter((f) => f.projeto === id);

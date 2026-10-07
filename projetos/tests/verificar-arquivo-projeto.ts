@@ -12,13 +12,16 @@ import { montarCabecalho } from "../src/app/componentes/cabecalho";
 import type { ProjetoNaTela } from "../src/app/dados";
 import { abrirEnviarProjeto, abrirReceberProjeto } from "../src/app/dialogos/arquivoProjeto";
 import { abrirDialogoProjeto } from "../src/app/dialogos/projeto";
+import * as moduloArquivo from "../src/arquivo/projetoArquivo";
 import {
   arquivoDoProjeto,
   type EnvelopeProjeto,
-  envelopeDoProjeto,
   LIMITE_ARQUIVO_PROJETO,
   lerArquivoDoProjeto,
   lerEnvelopeDoProjeto,
+  MENSAGEM_MEMORIA_ENVIO,
+  MENSAGEM_NAO_E_PROJETO,
+  MENSAGEM_TORTO,
   nomeDoArquivoDoProjeto,
   previaDoRecebido,
   receberProjeto,
@@ -26,8 +29,8 @@ import {
 import { prefixoMemoriaSigilo } from "../src/modelo/constantes";
 import { ErroMemoriaSigilo } from "../src/modelo/memoriaSigilo";
 import { resumoDoProjeto } from "../src/modelo/resumo";
-import { NADA_CONHECIDO, vinculoSemNumero } from "../src/modelo/sigilo";
-import type { Vis } from "../src/modelo/tipos";
+import { vinculoSemNumero } from "../src/modelo/sigilo";
+import type { Entidades, Vis } from "../src/modelo/tipos";
 import { ErroValidacao } from "../src/modelo/validacao";
 import { chaveProtocolo } from "../src/modelo/vinculos";
 import { MODELOS_EMBUTIDOS } from "../src/modelos/embutidos";
@@ -118,6 +121,7 @@ export async function verificarArquivoProjeto(): Promise<void> {
     fim: "2026-10-16",
     dependeDe: [e1.id],
     checklist: [{ id: "c1", texto: "Revisar", feito: true }],
+    responsavel: { nome: "Bia Souza", login: "bia.souza" },
   });
   const morta = await repo.criarEtapa({ projeto: p.id, nome: "Excluída", inicio: "2026-10-06", fim: "2026-10-06" });
   await repo.removerEtapa(morta.id);
@@ -157,6 +161,13 @@ export async function verificarArquivoProjeto(): Promise<void> {
       env.etapas[1]?.checklist[0]?.texto === "Revisar",
   );
   checar(
+    "do responsavel vai so o nome: o login nao sai (cru e decodificado)",
+    !json.includes("bia.souza") &&
+      !textosDoJson(JSON.parse(json)).some((t) => t.includes("bia.souza")) &&
+      JSON.stringify(env.etapas[1]?.responsavel) === '{"nome":"Bia Souza"}',
+    env.etapas[1]?.responsavel,
+  );
+  checar(
     "nome do arquivo e formato",
     arq.nome === "Sindicância.seipro-projeto.json" && env.formato === "seipro-projeto" && env.gerado === 5,
   );
@@ -168,14 +179,11 @@ export async function verificarArquivoProjeto(): Promise<void> {
       !/[<>"]/.test(nomeDoArquivoDoProjeto(HOSTIL)),
     nomeDoArquivoDoProjeto(HOSTIL),
   );
-  const escopoP = await repo.exportar(5);
-  // O puro exige a memoria: o tsc recusa a chamada sem ela (nao ha "regra deduzida so" por engano).
-  // @ts-expect-error falta o argumento `conhecidos`
-  const semMemoria = () => envelopeDoProjeto(escopoP, p.id);
-  void semMemoria;
   checar(
-    "o puro com NADA_CONHECIDO ainda corta pela regra do escopo",
-    !JSON.stringify(envelopeDoProjeto(escopoP, p.id, NADA_CONHECIDO, 5).envelope).includes("000777"),
+    "para fora, so o arquivoDoProjeto: o corte puro nao e exportado (ninguem liga o corte so pela regra)",
+    typeof moduloArquivo.arquivoDoProjeto === "function" &&
+      !Object.keys(moduloArquivo).some((k) => /^(envelopeDoProjeto|NADA_CONHECIDO|paraTeste)$|conhecidos|corte/i.test(k)),
+    Object.keys(moduloArquivo),
   );
 
   secao("enviar projeto: o sigilo pela memoria e pelo escopo inteiro (o arquivo vai a outra pessoa)");
@@ -284,9 +292,17 @@ export async function verificarArquivoProjeto(): Promise<void> {
   falha.ler = true;
   const erroLer = await lanca(() => arquivoDoProjeto(rf, pf.id, 9));
   checar(
-    "memoria que nao le: o envio falha com a mensagem do ErroMemoriaSigilo",
-    erroLer instanceof ErroMemoriaSigilo && erroLer.message === new ErroMemoriaSigilo().message,
+    "memoria que nao le: o envio falha (ErroMemoriaSigilo) dizendo que nenhum arquivo foi gerado",
+    erroLer instanceof ErroMemoriaSigilo &&
+      erroLer.message === MENSAGEM_MEMORIA_ENVIO &&
+      MENSAGEM_MEMORIA_ENVIO ===
+        "Não foi possível ler a lista de processos sigilosos deste computador. Nenhum arquivo foi gerado; tente de novo.",
     erroLer,
+  );
+  checar(
+    "a mensagem generica (texto, arquivo, copia) continua a mesma",
+    new ErroMemoriaSigilo().message ===
+      "Não foi possível ler a lista de processos sigilosos deste computador. Nada foi gravado; tente de novo.",
   );
   falha.ler = false;
   falha.gravar = true;
@@ -313,7 +329,7 @@ export async function verificarArquivoProjeto(): Promise<void> {
   await tique();
   checar(
     "no dialogo: nenhum arquivo baixado, a mensagem aparece e o dialogo fica aberto",
-    baixados.length === 0 && texto(dlgF.querySelector(".prj-erros")) === new ErroMemoriaSigilo().message && mF.abertos.at(-1)!.aberto,
+    baixados.length === 0 && texto(dlgF.querySelector(".prj-erros")) === MENSAGEM_MEMORIA_ENVIO && mF.abertos.at(-1)!.aberto,
     texto(dlgF.querySelector(".prj-erros")),
   );
   falha.ler = false;
@@ -429,10 +445,6 @@ export async function verificarArquivoProjeto(): Promise<void> {
     ],
   });
   await recusa("progresso como texto: recusado", { ...lido!, etapas: [{ ...ea0, progresso: "50" }] });
-  await recusa("login do responsavel enorme: recusado", {
-    ...lido!,
-    etapas: [{ ...ea0, responsavel: { nome: "Ana", login: "x".repeat(5000) } }],
-  });
   await recusa("etiqueta que nao e texto: recusado", { ...lido!, projeto: { ...lido!.projeto, etiquetas: [{}] } });
   const enfeitado = {
     ...lido!,
@@ -443,7 +455,7 @@ export async function verificarArquivoProjeto(): Promise<void> {
         ...ea0,
         ordem: "z".repeat(100_000),
         documento: { numero: "1234", titulo: "Ofício", lixo: "y".repeat(1000) },
-        responsavel: { nome: "Ana", lixo: "w" },
+        responsavel: { nome: "Ana", login: "x".repeat(5000), lixo: "w" },
         base: { inicio: ea0.inicio, fim: ea0.fim, lixo: "v" },
         origem: { atividades: 7 },
         atualizadoEm: 9e15,
@@ -457,11 +469,12 @@ export async function verificarArquivoProjeto(): Promise<void> {
   const etapasL = dl.etapas.filter((x) => x.projeto === limpo.id);
   const brutoL = JSON.stringify([limpo, ...dl.fases.filter((x) => x.projeto === limpo.id), ...etapasL]);
   checar(
-    "campos de sobra e ordem enorme nao entram (refeitos campo a campo; ordem nova)",
+    "campos de sobra, login do responsavel e ordem enorme nao entram (refeitos campo a campo; ordem nova)",
     etapasL.length === 2 &&
       !/lixo|extra|origem|xxxx|yyyy|qqqq|zzzz/.test(brutoL) &&
       etapasL.every((x) => x.ordem.length < 20 && x.atualizadoEm < 9e15) &&
-      etapasL[0]?.nome === "Oitiva",
+      etapasL[0]?.nome === "Oitiva" &&
+      JSON.stringify(etapasL[0]?.responsavel) === '{"nome":"Ana"}',
     brutoL,
   );
   checar(
@@ -469,6 +482,74 @@ export async function verificarArquivoProjeto(): Promise<void> {
     limpo.processo?.protocolo === "50300.000222/2026-02" && limpo.processo.idProcedimento === undefined,
     limpo.processo,
   );
+
+  const comNumeroMarcado = {
+    ...lido!,
+    projeto: { ...lido!.projeto, processo: { protocolo: "50300.000333/2026-03", sigiloso: true } },
+    etapas: [
+      {
+        ...ea0,
+        processo: { protocolo: "50300.000444/2026-04", sigiloso: true },
+        documento: { numero: "5556667", titulo: "Ofício reservado", sigiloso: true },
+      },
+      ea1,
+    ],
+  };
+  const normal = await receberProjeto(destino, comNumeroMarcado as EnvelopeProjeto);
+  const etapasN = (await destino.dados()).etapas.filter((x) => x.projeto === normal.id);
+  const brutoN = JSON.stringify([normal, ...etapasN, ...(await destino.historico(normal.id))]);
+  checar(
+    "numero marcado sigiloso no arquivo (um legitimo nunca traz) vira o vinculo vazio e o marcador",
+    vinculoSemNumero(normal.processo) &&
+      vinculoSemNumero(etapasN[0]?.processo) &&
+      JSON.stringify(etapasN[0]?.documento) === '{"numero":"","sigiloso":true}' &&
+      !/000333|000444|5556667|reservado/.test(brutoN),
+    brutoN,
+  );
+
+  secao("receber projeto: o teto de projetos decide na mesma leitura da gravacao (corrida)");
+  {
+    const { repo: cru } = novoRepo(ESCOPO_UN, areaMemoria(), "r");
+    for (let i = 0; i < 99; i++) await cru.criarProjeto({ nome: `P${i}` });
+    const antes = await cru.entidades();
+    // Outra aba cria o 100º entre o pré-teste do receber e a gravação (o "Entendi" é o ponto do meio).
+    const corrida = comConsentimento(cru, async () => {
+      await cru.criarProjeto({ nome: "O centésimo, criado no meio" });
+      return true;
+    });
+    const err = await lanca(() => receberProjeto(corrida, lido!));
+    const depois = await cru.entidades();
+    checar(
+      "o 100o criado no meio: erro do limite e nenhuma fase, etapa ou registro do recebido",
+      err instanceof ErroValidacao &&
+        /Limite de 100 projetos ativos/.test(err.mensagens.join(" ")) &&
+        depois.p.length === 100 &&
+        depois.f.length === 0 &&
+        depois.e.length === 0 &&
+        depois.h.length === antes.h.length + 1,
+      { err, p: depois.p.length, f: depois.f.length, e: depois.e.length, h: depois.h.length - antes.h.length },
+    );
+    const { repo: r2, area: a2 } = novoRepo(ESCOPO_UN, areaMemoria(), "w");
+    const c2 = r2.carimboAtual();
+    const meio = {
+      p: [
+        { id: "bom1", nome: "Bom", etiquetas: [], ordem: "a0", criadoEm: c2.agora, atualizadoEm: c2.agora, dispositivo: "d" },
+        { id: "torto1", nome: 42 },
+      ],
+    } as unknown as Partial<Entidades>;
+    const errInteiro = await lanca(() => r2.importar(meio, undefined, { inteiro: true }));
+    checar(
+      "importar inteiro: um item recusado e nada gravado",
+      errInteiro instanceof ErroValidacao && Object.keys(await a2.obter(null)).length === 0,
+      errInteiro,
+    );
+    const solto = await r2.importar(meio);
+    checar(
+      "sem a opcao, o importar segue como antes (grava o valido e conta o ignorado)",
+      solto.ignorados === 1 && (await r2.dados()).projetos.length === 1,
+      solto,
+    );
+  }
 
   secao("receber projeto: o arquivo escolhido (texto) e as mensagens");
   const bom = lerArquivoDoProjeto(`${String.fromCharCode(0xfeff)}${json}`);
@@ -488,6 +569,33 @@ export async function verificarArquivoProjeto(): Promise<void> {
     "versao mais nova: manda atualizar",
     /Atualize/.test(mensagem(JSON.stringify({ ...env, versao: 2 }))),
     mensagem(JSON.stringify({ ...env, versao: 2 })),
+  );
+  checar(
+    "a mensagem diz como o arquivo certo e gerado",
+    MENSAGEM_NAO_E_PROJETO.endsWith(
+      "Peça a quem enviou um arquivo gerado em “Enviar projeto por arquivo…” (o nome termina em .seipro-projeto.json).",
+    ),
+    MENSAGEM_NAO_E_PROJETO,
+  );
+  const comData = JSON.stringify({ ...env, etapas: [{ ...env.etapas[0]!, inicio: "45/13/2026" }] });
+  checar("data impossivel: recusada ja na leitura (o dialogo nem abre)", mensagem(comData) === MENSAGEM_TORTO, mensagem(comData));
+  const nomeEnorme = JSON.stringify({ ...env, projeto: { ...env.projeto, nome: "n".repeat(LIMITE_ARQUIVO_PROJETO - 2000) } });
+  checar(
+    "nome de quase 5 MB: recusado na leitura (nao chega a previa)",
+    nomeEnorme.length <= LIMITE_ARQUIVO_PROJETO && mensagem(nomeEnorme) === MENSAGEM_TORTO,
+    mensagem(nomeEnorme).slice(0, 200),
+  );
+  const espacado = lerArquivoDoProjeto(JSON.stringify({ ...env, projeto: { ...env.projeto, nome: "  Sindicância   nova " } }));
+  checar(
+    "a previa mostra o nome ja limpo e as datas validadas",
+    previaDoRecebido(espacado).nome === "Sindicância nova" &&
+      previaDoRecebido(espacado).inicio === "2026-10-06" &&
+      previaDoRecebido(espacado).fim === "2026-10-16",
+    previaDoRecebido(espacado),
+  );
+  checar(
+    "previa de envelope torto: erro (nunca um nome ou uma data que nao passaria)",
+    (await lanca(() => previaDoRecebido(JSON.parse(comData) as EnvelopeProjeto))) instanceof ErroValidacao,
   );
   checar(
     "grande demais: recusado antes de ler",
@@ -575,4 +683,16 @@ export async function verificarArquivoProjeto(): Promise<void> {
   botao(rec, "Receber projeto")?.click();
   await tique();
   checar("recebeu: fecha", !m.abertos.at(-1)!.aberto);
+  abrirReceberProjeto({
+    abrirModal: m.abrirModal,
+    sigla: "SEPRO",
+    previa: { nome: "Plano simples", etapas: 5, fases: 0, inicio: "2026-10-06", fim: "2026-10-16" },
+    receber: async () => undefined,
+  });
+  const semFases = texto(m.abertos.at(-1)!.conteudo.querySelector(".prj-previa"));
+  checar(
+    "sem fases: '5 etapas · de ...' (sem 'em 0 fases')",
+    /5 etapas · de 06\/10\/2026/.test(semFases) && !/fase/.test(semFases),
+    semFases,
+  );
 }

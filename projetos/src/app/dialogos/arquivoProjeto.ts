@@ -103,6 +103,8 @@ export function abrirReceberProjeto(c: {
   const erros = caixaDeErros();
   const p = c.previa;
   const periodo = p.inicio && p.fim ? ` · de ${dataLonga(p.inicio)} a ${dataLonga(p.fim)}` : "";
+  // "5 etapas em 2 fases"; sem fases, só "5 etapas".
+  const emFases = p.fases ? ` em ${plural(p.fases, "fase", "fases")}` : "";
   const cartoes = h(
     "div",
     { class: "prj-opcoes", role: "radiogroup", "aria-label": "Receber em" },
@@ -122,12 +124,7 @@ export function abrirReceberProjeto(c: {
   const conteudo = h(
     "div",
     { class: "prj-form prj-form-receber" },
-    h(
-      "div",
-      { class: "prj-previa" },
-      h("b", {}, p.nome),
-      h("span", {}, ` ${plural(p.etapas, "etapa", "etapas")} em ${plural(p.fases, "fase", "fases")}${periodo}`),
-    ),
+    h("div", { class: "prj-previa" }, h("b", {}, p.nome), h("span", {}, ` ${plural(p.etapas, "etapa", "etapas")}${emFases}${periodo}`)),
     campo("Receber em", cartoes, { dica: "Vira um projeto novo (uma cópia): não junta com o original de quem enviou." }),
     erros.el,
     h(
