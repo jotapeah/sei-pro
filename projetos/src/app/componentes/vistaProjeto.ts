@@ -2,8 +2,9 @@
  * Vista do projeto em Gantt (tela 1, variante B): a lista de etapas à
  * esquerda, alinhada às barras (cabeçalho 64 px, linha 36 px: `MEDIDAS`), e o
  * Gantt à direita. Linhas de fase recolhem; passar o mouse numa linha realça a
- * barra e vice-versa; a última linha cria a etapa ao teclar Enter. Atualizar
- * não remonta a Frappe (a rolagem fica); esconder a lista ou mudar "mover
+ * barra e vice-versa; a última linha cria a etapa ao teclar Enter (o texto só
+ * sai do campo quando o app aceita, e sobrevive aos redesenhos). Atualizar não
+ * remonta a Frappe (a rolagem fica); esconder a lista ou mudar "mover
  * dependentes" remonta.
  */
 
@@ -30,7 +31,11 @@ export interface AcoesVistaProjeto {
   montarGantt?: typeof montarGantt;
   aoClicarEtapa(id: string, ancora: Element): void;
   aoAlternarFase(faseId: string): void;
-  aoAdicionar(nome: string): void;
+  /**
+   * Enter na última linha. O campo só é limpo quando o app aceita (o valor ou a promessa diferente de
+   * `false`); enquanto a resposta não chega, outro Enter não pede de novo.
+   */
+  aoAdicionar(nome: string): Promise<boolean> | boolean | undefined;
   validar(mudancas: MudancaDeDatas[]): string | null;
   aoMudarDatas(mudancas: MudancaDeDatas[]): void;
   aoRecusar(mensagem: string): void;
@@ -55,6 +60,8 @@ export class VistaProjeto {
   private controle: ControleGantt | null = null;
   /** Etapa sob o mouse: o redesenho (Frappe e coluna) apaga o realce e o mouse nao se mexe. */
   private realcado: string | null = null;
+  /** Uma etapa nova pedida ao app e ainda sem resposta. */
+  private criando = false;
 
   constructor(
     private d: DadosVistaProjeto,
@@ -121,12 +128,30 @@ export class VistaProjeto {
   private desenharColuna(): HTMLElement {
     const nova = h("input", { type: "text", placeholder: "Adicionar etapa… (Enter)", "aria-label": "Adicionar etapa", maxlength: "200" });
     nova.addEventListener("keydown", (ev) => {
-      if ((ev as KeyboardEvent).key !== "Enter") return;
+      const k = ev as KeyboardEvent;
+      if (k.key !== "Enter" || k.isComposing) return;
       ev.preventDefault();
       const nome = nova.value.trim();
-      if (!nome) return;
-      nova.value = "";
-      this.acoes.aoAdicionar(nome);
+      if (!nome || this.criando) return;
+      this.criando = true;
+      let resposta: ReturnType<AcoesVistaProjeto["aoAdicionar"]>;
+      try {
+        resposta = this.acoes.aoAdicionar(nome);
+      } catch {
+        this.criando = false;
+        return;
+      }
+      void Promise.resolve(resposta)
+        .then((aceito) => {
+          if (aceito === false) return;
+          // A coluna pode ter sido redesenhada enquanto o app gravava: limpa o campo que está na tela.
+          const campo = this.campoNovo();
+          if (campo && campo.value.trim() === nome) campo.value = "";
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          this.criando = false;
+        });
     });
     return h(
       "div",
@@ -151,11 +176,30 @@ export class VistaProjeto {
     this.realcarLinha(id);
   }
 
+  private campoNovo(): HTMLInputElement | null {
+    return this.coluna?.querySelector<HTMLInputElement>(".prj-lin-nova input") ?? null;
+  }
+
+  /** O que está digitado na última linha (e o foco) passa para a coluna redesenhada. */
+  private guardarCampoNovo(): () => void {
+    const antigo = this.campoNovo();
+    const valor = antigo?.value ?? "";
+    const foco = !!antigo && antigo.ownerDocument.activeElement === antigo;
+    return () => {
+      const campo = this.campoNovo();
+      if (!campo) return;
+      if (valor) campo.value = valor;
+      if (foco) campo.focus({ preventScroll: true });
+    };
+  }
+
   private montar(): void {
+    const restaurar = this.guardarCampoNovo();
     this.controle?.destruir();
     this.coluna = this.d.mostrarLista ? this.desenharColuna() : null;
     this.el.classList.toggle("prj-sem-lista", !this.d.mostrarLista);
     this.el.replaceChildren(...(this.coluna ? [this.coluna] : []), this.area);
+    restaurar();
     const montar = this.acoes.montarGantt ?? montarGantt;
     this.controle = montar(this.area, this.d.linhas, {
       escala: this.d.escala,
@@ -183,9 +227,11 @@ export class VistaProjeto {
     if (escalaMudou) this.controle?.trocarEscala(d.escala);
     this.controle?.atualizar(d.linhas);
     if (this.d.mostrarLista) {
+      const restaurar = this.guardarCampoNovo();
       const nova = this.desenharColuna();
       this.coluna?.replaceWith(nova);
       this.coluna = nova;
+      restaurar();
     }
     this.reaplicarRealce();
   }

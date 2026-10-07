@@ -6,7 +6,7 @@ import { tecla, telaDoApp, texto } from "./apoioApp";
 import { cenario, HOSTIL } from "./cenarioGantt";
 import { HOJE } from "./fabrica";
 import { ganttFalso } from "./ganttFalso";
-import { checar, disparar, secao } from "./util";
+import { checar, disparar, secao, tique } from "./util";
 
 const { fases, etapas } = cenario();
 const linhas = (recolhidas: string[] = []) =>
@@ -25,7 +25,7 @@ export async function verificarAppVista(): Promise<void> {
     montarGantt: g.montar,
     aoClicarEtapa: (id) => feitos.push(`clique:${id}`),
     aoAlternarFase: (id) => feitos.push(`fase:${id}`),
-    aoAdicionar: (nome) => feitos.push(`nova:${nome}`),
+    aoAdicionar: (nome) => void feitos.push(`nova:${nome}`),
     validar: () => null,
     aoMudarDatas: () => undefined,
     aoRecusar: () => undefined,
@@ -70,6 +70,47 @@ export async function verificarAppVista(): Promise<void> {
     "Enter cria com o nome (vazio nao cria)",
     feitos.at(-1) === "nova:Parecer final" && feitos.filter((f) => f.startsWith("nova:")).length === 1,
   );
+
+  secao("app: campo da etapa nova so limpa quando o app aceita");
+  const ga = ganttFalso();
+  const pedidos: string[] = [];
+  let responder: (aceito: boolean) => void = () => undefined;
+  const va = new VistaProjeto(dados(), {
+    montarGantt: ga.montar,
+    aoClicarEtapa: () => undefined,
+    aoAlternarFase: () => undefined,
+    aoAdicionar: (nome) => {
+      pedidos.push(nome);
+      return new Promise<boolean>((r) => {
+        responder = r;
+      });
+    },
+    validar: () => null,
+    aoMudarDatas: () => undefined,
+    aoRecusar: () => undefined,
+    aoFalharGantt: () => undefined,
+  });
+  telaDoApp().getElementById("app")!.append(va.el);
+  const campoNovo = () => va.el.querySelector<HTMLInputElement>(".prj-lin-nova input")!;
+  campoNovo().value = "Parecer";
+  tecla(campoNovo(), "Enter");
+  tecla(campoNovo(), "Enter");
+  checar(
+    "Enter pede ao app e o texto fica ate a resposta (sem pedir duas vezes)",
+    pedidos.join() === "Parecer" && campoNovo().value === "Parecer",
+    pedidos,
+  );
+  responder(false);
+  await tique();
+  checar("recusado: o texto fica para corrigir", campoNovo().value === "Parecer");
+  va.atualizar(dados({ escala: "Mês" }));
+  checar("redesenho nao apaga o que esta digitado", campoNovo().value === "Parecer");
+  tecla(campoNovo(), "Enter");
+  va.atualizar(dados());
+  responder(true);
+  await tique();
+  checar("aceito: limpa o campo, mesmo depois de redesenhar", pedidos.length === 2 && campoNovo().value === "", pedidos);
+  va.destruir();
 
   secao("app: vista do projeto atualiza sem remontar o Gantt");
   const recolhida = linhas(["f1"]);
