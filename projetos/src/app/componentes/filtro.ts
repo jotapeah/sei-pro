@@ -6,7 +6,7 @@
  */
 
 import { normalizarTexto } from "@comum/texto";
-import { criarCombo, type OpcaoCombo } from "@comum/ui/combobox";
+import { type Combo, criarCombo, type OpcaoCombo } from "@comum/ui/combobox";
 import { h, icone } from "@comum/ui/dom";
 import { SEM_FASE } from "../../modelo/constantes";
 import {
@@ -92,34 +92,22 @@ export function criarBotaoFiltro(o: OpcoesFiltro): BotaoFiltro {
     o.aoMudar(f);
   };
   const conteudo = h("div", {});
-  const desenhar = () => {
+  const caixaChips = h("div", { class: "prj-chips" });
+  const caixaLimpar = h("div", { class: "prj-filtro-limpar-caixa" });
+  let combos: Array<{ combo: Combo; valor: () => readonly string[] }> = [];
+  /** Só os chips, o "Limpar filtro" e os valores dos combos: os combos ficam (a lista aberta é ancorada neles). */
+  const repintar = () => {
     const n = contarChips(o.etapas, o.hoje);
     const alternar = (s: ChipSituacao) =>
       mudar({ ...filtro, situacoes: filtro.situacoes.includes(s) ? filtro.situacoes.filter((x) => x !== s) : [...filtro.situacoes, s] });
-    const campo = (rotulo: string, opcoes: OpcaoCombo[], valor: readonly string[], aoMudar: (v: string[]) => void) =>
-      criarCombo({ rotulo, opcoes, valor: [...valor], multiplo: true, vazio: rotulo, aoMudar, larguraLista: 240 }).el;
-    const fases: OpcaoCombo[] | null = o.fases
-      ? [...o.fases.map((f) => ({ valor: f.id, rotulo: f.nome })), { valor: SEM_FASE, rotulo: "Sem fase" }]
-      : null;
-    conteudo.replaceChildren(
-      h("h4", {}, "Mostrar"),
-      h(
-        "div",
-        { class: "prj-chips" },
-        ...CHIPS.map(([s, rotulo, cor]) => chip(`${rotulo} · ${n[s]}`, cor, filtro.situacoes.includes(s), () => alternar(s))),
-        chip("Concluídas", "var(--spro-ok)", filtro.mostrarConcluidas, () =>
-          mudar({ ...filtro, mostrarConcluidas: !filtro.mostrarConcluidas }),
-        ),
-        chip("Só as minhas", "var(--spro-novidade)", filtro.soMinhas, () => mudar({ ...filtro, soMinhas: !filtro.soMinhas })),
+    caixaChips.replaceChildren(
+      ...CHIPS.map(([s, rotulo, cor]) => chip(`${rotulo} · ${n[s]}`, cor, filtro.situacoes.includes(s), () => alternar(s))),
+      chip("Concluídas", "var(--spro-ok)", filtro.mostrarConcluidas, () =>
+        mudar({ ...filtro, mostrarConcluidas: !filtro.mostrarConcluidas }),
       ),
-      h("h4", {}, "Por campo"),
-      h(
-        "div",
-        { class: "prj-filtro-campos" },
-        campo("Responsável", opcoesResponsavel(o.etapas), filtro.responsaveis, (v) => mudar({ ...filtro, responsaveis: v })),
-        fases ? campo("Fase", fases, filtro.fases, (v) => mudar({ ...filtro, fases: v })) : null,
-        campo("Etiqueta", opcoesEtiqueta(o.etapas), filtro.etiquetas, (v) => mudar({ ...filtro, etiquetas: v })),
-      ),
+      chip("Só as minhas", "var(--spro-novidade)", filtro.soMinhas, () => mudar({ ...filtro, soMinhas: !filtro.soMinhas })),
+    );
+    caixaLimpar.replaceChildren(
       ...(criteriosAtivos(filtro)
         ? [
             h(
@@ -130,6 +118,54 @@ export function criarBotaoFiltro(o: OpcoesFiltro): BotaoFiltro {
           ]
         : []),
     );
+    for (const c of combos) {
+      const v = c.valor();
+      const atual = c.combo.valor();
+      if (v.length !== atual.length || v.some((x, k) => x !== atual[k])) c.combo.definir([...v], false);
+    }
+  };
+  /** Monta tudo (ao abrir o popover). */
+  const desenhar = () => {
+    const campo = (rotulo: string, opcoes: OpcaoCombo[], valor: () => readonly string[], aoMudar: (v: string[]) => void) => {
+      const combo = criarCombo({ rotulo, opcoes, valor: [...valor()], multiplo: true, vazio: rotulo, aoMudar, larguraLista: 240 });
+      combos.push({ combo, valor });
+      return combo.el;
+    };
+    const fases: OpcaoCombo[] | null = o.fases
+      ? [...o.fases.map((f) => ({ valor: f.id, rotulo: f.nome })), { valor: SEM_FASE, rotulo: "Sem fase" }]
+      : null;
+    combos = [];
+    conteudo.replaceChildren(
+      h("h4", {}, "Mostrar"),
+      caixaChips,
+      h("h4", {}, "Por campo"),
+      h(
+        "div",
+        { class: "prj-filtro-campos" },
+        campo(
+          "Responsável",
+          opcoesResponsavel(o.etapas),
+          () => filtro.responsaveis,
+          (v) => mudar({ ...filtro, responsaveis: v }),
+        ),
+        fases
+          ? campo(
+              "Fase",
+              fases,
+              () => filtro.fases,
+              (v) => mudar({ ...filtro, fases: v }),
+            )
+          : null,
+        campo(
+          "Etiqueta",
+          opcoesEtiqueta(o.etapas),
+          () => filtro.etiquetas,
+          (v) => mudar({ ...filtro, etiquetas: v }),
+        ),
+      ),
+      caixaLimpar,
+    );
+    repintar();
   };
   const fechar = () => camada?.fechar();
   el.addEventListener("click", () => {
@@ -152,7 +188,7 @@ export function criarBotaoFiltro(o: OpcoesFiltro): BotaoFiltro {
     definir(f) {
       filtro = f;
       pintarBotao();
-      if (camada) desenhar();
+      if (camada) repintar();
     },
     fechar,
   };

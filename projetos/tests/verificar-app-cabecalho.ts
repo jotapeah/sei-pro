@@ -139,8 +139,33 @@ export async function verificarAppCabecalho(): Promise<void> {
   await tique();
   checar("o combo da fase fica dentro do popover e ele nao fecha", atual.fases.join() === "f1" && !!pop());
   checar("combo de etiqueta", opcoesDoCombo(pop()!, "Etiqueta").join() === "TI");
+  {
+    const btn = combo(pop()!, "Etiqueta")!;
+    btn.click();
+    const lista = () => docF.querySelectorAll(".spro-combo-pop");
+    const op = docF.querySelector<HTMLElement>('.spro-combo-pop [role="option"][data-valor="TI"]')!;
+    op.click();
+    await tique();
+    checar(
+      "escolher direto: popover aberto, lista presa a botao vivo, chips e contagem atualizados",
+      atual.etiquetas.join() === "TI" &&
+        !!pop() &&
+        lista().length === 1 &&
+        btn.isConnected &&
+        combo(pop()!, "Etiqueta") === btn &&
+        btn.getAttribute("aria-expanded") === "true" &&
+        texto(f.el) === "Filtro · 4",
+      { n: lista().length, viva: btn.isConnected, exp: btn.getAttribute("aria-expanded"), botao: texto(f.el) },
+    );
+    btn.click();
+    checar("fechar a lista pelo mesmo botao", lista().length === 0 && !!pop());
+  }
   botao(pop()!, "Limpar filtro")!.click();
   checar("limpar volta ao vazio", JSON.stringify(atual) === JSON.stringify(FILTRO_VAZIO) && texto(f.el) === "Filtro");
+  checar(
+    "limpar mantem o combo vivo e zerado",
+    combo(pop()!, "Etiqueta")?.isConnected === true && !texto(combo(pop()!, "Etiqueta")).includes("TI"),
+  );
   tecla(pop()!, "Escape");
   checar("Esc fecha", !pop());
   const semFase = criarBotaoFiltro({ filtro: FILTRO_VAZIO, etapas: lista2, hoje: HOJE, aoMudar: () => undefined });
