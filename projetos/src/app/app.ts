@@ -282,7 +282,16 @@ export class AppProjetos {
     return this.d.repos[vis];
   }
 
-  /** Processos da caixa (uma leitura por carga do app; a que falhou não fica guardada). */
+  /**
+   * A aba do SEI recarregou na mesma unidade (o lateral mantém o app pela carência) ou outra aba da mesma unidade
+   * ficou na frente: a caixa pode ser outra, e o próximo diálogo relê os processos. Nada aberto é tocado (um diálogo
+   * já aberto fica com a lista que leu).
+   */
+  aoVoltarAba(): void {
+    this.processosMemo = null;
+  }
+
+  /** Processos da caixa (uma leitura por carga do app ou volta da aba; a que falhou não fica guardada). */
   private processos(): Promise<ProcessoDaCaixa[]> {
     this.processosMemo ??= this.d.rpc.chamar<ProcessoDaCaixa[]>("processosDaCaixa").catch(() => {
       this.processosMemo = null;

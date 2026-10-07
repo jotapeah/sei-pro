@@ -28,7 +28,7 @@ import { type AppDoLateral, MontagemLateral, type PonteDoLateral } from "../src/
 import { CHAVE_CONTADOR_PAINEL, CHAVE_LATERAL, CHAVE_PREFERENCIAS, LIMITES, TETO_CONTADOR_PAINEL } from "../src/modelo/constantes";
 import { baseDoEscopo, escoposDaUnidade } from "../src/modelo/escopo";
 import { CHAVE_FOCO, type ContextoProjetos, chaveDaAba, lerPedidoDeFoco, VALIDADE_FOCO } from "../src/ponte/tipos";
-import { itemDoMenu, itensDoMenu, telaDoApp, texto } from "./apoioApp";
+import { itemDoMenu, itensDoMenu, opcoesDoCombo, telaDoApp, texto } from "./apoioApp";
 import { novoRepo } from "./apoioRepositorio";
 import { HOJE } from "./fabrica";
 import { botao, checar, lanca, secao, tique } from "./util";
@@ -159,7 +159,7 @@ function painelLateral(o: { carenciaMs?: number } = {}) {
   });
   const pedidos: string[] = [];
   /** Uma aba do SEI desta janela: conecta ao ver o anúncio e se apresenta com a chave do contexto. */
-  const abrirAba = (id: number, c: ContextoProjetos, foco: number) => {
+  const abrirAba = (id: number, c: ContextoProjetos, foco: number, caixa: unknown[] = []) => {
     const rotulo = `aba${id}:${chaveDaAba(c)}`;
     const responde = (op: string, valor: unknown) => () => {
       pedidos.push(`${rotulo}:${op}`);
@@ -175,7 +175,7 @@ function painelLateral(o: { carenciaMs?: number } = {}) {
       },
       tratadores: {
         contexto: responde("contexto", c),
-        processosDaCaixa: responde("processosDaCaixa", []),
+        processosDaCaixa: responde("processosDaCaixa", caixa),
         usuariosDaUnidade: responde("usuariosDaUnidade", []),
         focarNoPainel: responde("focarNoPainel", "rolou"),
       },
@@ -215,6 +215,7 @@ function ponteReal(o: { carenciaMs: number; abertos?: Record<string, number> }) 
     ouvirConexoes: (cb) => void ouvintes.push(cb),
   });
   const eventos: string[] = [];
+  const voltas: string[] = [];
   const rpcs: Array<Pick<Rpc, "chamar">> = [];
   const pedidos: string[] = [];
   const montagem = new MontagemLateral({
@@ -230,6 +231,7 @@ function ponteReal(o: { carenciaMs: number; abertos?: Record<string, number> }) 
       raiz.replaceChildren(doc.createTextNode(`app ${k}`));
       return {
         focarProjeto: () => true,
+        aoVoltarAba: () => void voltas.push(k),
         destruir: () => {
           eventos.push(`desmonta ${k}`);
           return o.abertos?.[k] ?? 0;
@@ -270,7 +272,7 @@ function ponteReal(o: { carenciaMs: number; abertos?: Record<string, number> }) 
     montagem.parar();
     await ponte.encerrar();
   };
-  return { raiz, montagem, eventos, rpcs, pedidos, abrirAba, avisos, iniciar, encerrar };
+  return { raiz, montagem, eventos, voltas, rpcs, pedidos, abrirAba, avisos, iniciar, encerrar };
 }
 
 /** As ações do cartão da agenda (o clique no cartão alterna). */
@@ -734,6 +736,11 @@ export async function verificarAppLateralPonte(): Promise<void> {
       r.eventos.join() === "monta 110" && texto(r.raiz) === "app 110" && semAbaNoMeio?.codigo === "SEM_ABA",
       { eventos: r.eventos, tela: texto(r.raiz), semAbaNoMeio },
     );
+    checar(
+      "e diz que o SEI esta carregando (nao que a aba fechou)",
+      semAbaNoMeio?.message === "O SEI está carregando a página; tente de novo em instantes.",
+      semAbaNoMeio?.message,
+    );
     r.abrirAba(1, ctx("110"));
     await tique(40);
     checar(
@@ -741,6 +748,7 @@ export async function verificarAppLateralPonte(): Promise<void> {
       r.eventos.join() === "monta 110" && texto(r.raiz) === "app 110" && r.avisos().length === 0,
       { eventos: r.eventos, avisos: r.avisos() },
     );
+    checar("a volta da aba avisa o app (a caixa da pagina nova pode ser outra)", r.voltas.join() === "110", r.voltas);
     const voltou = await lanca(() => r.rpcs[0]!.chamar("processosDaCaixa"));
     checar(
       "o RPC do app passa a ir para a pagina nova da mesma chave",
@@ -800,6 +808,12 @@ export async function verificarAppLateralPonte(): Promise<void> {
     await tique(30);
     const durante = texto(r.raiz);
     await tique(100);
+    const depoisDaCarencia = await lanca(() => r.rpcs[0]!.chamar("processosDaCaixa"));
+    checar(
+      "depois da carencia o app saiu: o RPC dele recusa com a mensagem de aba fechada",
+      depoisDaCarencia?.codigo === "SEM_ABA" && /não está mais aberta/.test(depoisDaCarencia.message ?? ""),
+      depoisDaCarencia?.message,
+    );
     checar(
       "aba fechada: o app fica durante a carencia; depois, o aviso de sem aba (e desmonta), sem toast",
       durante === "app 110" &&
@@ -842,6 +856,92 @@ export async function verificarAppLateralPonte(): Promise<void> {
       r.eventos.join() === "monta 110,desmonta 110" && !r.avisos().length,
       r.eventos,
     );
+  }
+
+  secao("lateral: higiene do timer da carencia (um por queda, nenhum depois da volta, das trocas e do parar)");
+  {
+    // Só os timers da carência (a duração dela, única nesta prova) entram na conta.
+    const CAR = 237;
+    const vivos = new Set<unknown>();
+    const st = globalThis.setTimeout;
+    const ct = globalThis.clearTimeout;
+    const g = globalThis as unknown as { setTimeout: unknown; clearTimeout: unknown };
+    g.setTimeout = (f: (...a: unknown[]) => void, ms?: number, ...resto: unknown[]) => {
+      const t = st(() => {
+        vivos.delete(t);
+        f(...resto);
+      }, ms);
+      if (ms === CAR) vivos.add(t);
+      return t;
+    };
+    g.clearTimeout = (t: ReturnType<typeof setTimeout>) => {
+      vivos.delete(t);
+      ct(t);
+    };
+    try {
+      const r = ponteReal({ carenciaMs: CAR });
+      await r.iniciar();
+      let a = r.abrirAba(1, ctx("110"));
+      await tique(40);
+      a.fechar();
+      await tique(30);
+      const naQueda = vivos.size;
+      a = r.abrirAba(1, ctx("110"));
+      await tique(40);
+      const aposVolta = vivos.size;
+      await tique(100);
+      // ~170 ms depois da 1a queda: cai de novo; a 2a carência conta do zero (o app fica até o fim dela).
+      a.fechar();
+      await tique(130);
+      const noMeio2 = r.eventos.join();
+      const timersNoMeio2 = vivos.size;
+      await tique(200);
+      checar(
+        "volta e cai de novo: um timer por queda, zero na volta, e a 2a carencia conta do zero",
+        naQueda === 1 && aposVolta === 0 && timersNoMeio2 === 1 && noMeio2 === "monta 110" && r.eventos.join() === "monta 110,desmonta 110",
+        { naQueda, aposVolta, timersNoMeio2, noMeio2, eventos: r.eventos },
+      );
+      await r.encerrar();
+
+      const t = ponteReal({ carenciaMs: CAR, abertos: { "110": 1, "220": 2 } });
+      await t.iniciar();
+      let b = t.abrirAba(1, ctx("110"));
+      await tique(40);
+      b.fechar();
+      await tique(20);
+      const t1 = vivos.size;
+      b = t.abrirAba(1, ctx("220"));
+      await tique(40);
+      const t2 = vivos.size;
+      const av1 = t.avisos();
+      b.fechar();
+      await tique(20);
+      b = t.abrirAba(1, ctx("330"));
+      await tique(40);
+      const t3 = vivos.size;
+      const av2 = t.avisos();
+      b.fechar();
+      await tique(20);
+      const t4 = vivos.size;
+      await t.encerrar();
+      const t5 = vivos.size;
+      await tique(300);
+      checar(
+        "trocas seguidas na carencia e parar: um timer por queda, zero depois de cada troca e do parar",
+        t1 === 1 && t2 === 0 && t3 === 0 && t4 === 1 && t5 === 0,
+        { t1, t2, t3, t4, t5 },
+      );
+      checar(
+        "e um aviso por troca, com as siglas certas, e o parar no meio nao desmonta de novo",
+        JSON.stringify(av1) === JSON.stringify([MUDOU]) &&
+          JSON.stringify(av2) === JSON.stringify(["Você mudou para a U330. O que estava aberto na U220 foi fechado sem gravar."]) &&
+          t.eventos.join() === "monta 110,desmonta 110,monta 220,desmonta 220,monta 330,desmonta 330",
+        { av1, av2, eventos: t.eventos },
+      );
+    } finally {
+      g.setTimeout = st;
+      g.clearTimeout = ct;
+    }
   }
 
   secao("lateral: concluir que termina depois de desmontar nao deixa aviso com acao");
@@ -1050,4 +1150,34 @@ export async function verificarAppLateralPonte(): Promise<void> {
   );
   q.montagem.parar();
   await q.ponte.encerrar();
+
+  secao("lateral de ponta a ponta: a recarga da mesma chave traz a caixa nova para o proximo dialogo (app real)");
+  const P1 = "50300.000001/2026-11";
+  const w = painelLateral({ carenciaMs: 300 });
+  w.montagem.iniciar();
+  await w.ponte.iniciar();
+  // A aba está na árvore de um processo: a caixa não está na tela (nenhum processo).
+  const w1 = w.abrirAba(1, ctx("110"), 1, []);
+  await tique(80);
+  const formProjeto = () => w.doc.querySelector<HTMLElement>(".prj-form-projeto");
+  w.raiz.querySelector<HTMLElement>("button[aria-label='Novo projeto']")!.click();
+  await tique(30);
+  const antesW = opcoesDoCombo(formProjeto()!, "Processo SEI");
+  botao(w.doc.querySelector("dialog.spro-dialogo")!, "Fechar")!.click();
+  await tique(20);
+  // O usuário volta ao Controle de Processos: o SEI recarrega a mesma aba, agora com o processo na caixa.
+  w1.fechar();
+  await tique(30);
+  w.abrirAba(1, ctx("110"), 2, [{ protocolo: P1, idProcedimento: "1", sigiloso: false }]);
+  await tique(80);
+  w.raiz.querySelector<HTMLElement>("button[aria-label='Novo projeto']")!.click();
+  await tique(30);
+  const depoisW = opcoesDoCombo(formProjeto()!, "Processo SEI");
+  checar(
+    "antes nao havia processo; depois da recarga o Novo projeto oferece o processo da caixa nova",
+    !antesW.includes(P1) && depoisW.includes(P1) && w.pedidos.filter((x) => x.endsWith(":processosDaCaixa")).length === 2,
+    { antesW, depoisW, pedidos: w.pedidos },
+  );
+  w.montagem.parar();
+  await w.ponte.encerrar();
 }

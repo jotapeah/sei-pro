@@ -131,6 +131,7 @@ export function criarAppDoLateral(n: NavegadorDoLateral): (ctx: ContextoProjetos
     return {
       focarProjeto: (id, etapa) => app.focarProjeto(id, etapa),
       aoGanharFoco: () => colab.aoGanharFoco(),
+      aoVoltarAba: () => app.aoVoltarAba(),
       destruir: () => {
         // Primeiro o app (a resposta "não" de um diálogo fechado agora não redesenha nada), depois os diálogos.
         ligado.destruir();

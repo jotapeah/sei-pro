@@ -46,6 +46,8 @@ export interface PonteDoLateral {
 export interface AppDoLateral {
   focarProjeto(id: string, etapa?: string): boolean;
   aoGanharFoco?(): void;
+  /** A aba da mesma chave voltou (a página recarregou) ou outra da mesma unidade ficou na frente: a caixa pode ser outra. */
+  aoVoltarAba?(): void;
   /** Desmonta; devolve quantos diálogos abertos fechou sem gravar (nada: 0). */
   destruir(): number;
 }
@@ -82,6 +84,8 @@ interface Fechados {
 }
 
 const MENSAGEM_SEM_ABA = "A aba do SEI destes projetos não está mais aberta nesta janela. Abra o SEI na unidade e tente de novo.";
+/** O pedido feito durante a carência: a aba está recarregando (o mais comum é uma navegação no SEI). */
+const MENSAGEM_CARREGANDO = "O SEI está carregando a página; tente de novo em instantes.";
 
 /**
  * O aviso do que a troca fechou: outra unidade diz para qual mudou; mesma sigla com outra chave (outro usuário, outro
@@ -158,7 +162,10 @@ export class MontagemLateral {
 
   private chamarNa<T>(vez: Vez, op: string, args?: unknown, prazo?: number): Promise<T> {
     const a = vez.viva && !this.parado ? this.d.ponte.daChave(vez.chave) : null;
-    return a ? a.rpc.chamar<T>(op, args, prazo) : Promise.reject(new ErroRpc("SEM_ABA", MENSAGEM_SEM_ABA));
+    if (a) return a.rpc.chamar<T>(op, args, prazo);
+    // Na carência do app montado a aba está recarregando: o código é o mesmo (quem chama decide por ele), o texto não.
+    const carregando = vez.viva && !this.parado && this.carencia !== null && this.montado?.vez === vez;
+    return Promise.reject(new ErroRpc("SEM_ABA", carregando ? MENSAGEM_CARREGANDO : MENSAGEM_SEM_ABA));
   }
 
   /** Desmonta o app; o que ele fechou fica guardado para o aviso da próxima montagem. */
@@ -210,8 +217,12 @@ export class MontagemLateral {
       return;
     }
     this.cancelarCarencia();
-    // A mesma chave (voltou da recarga, ou outra aba da mesma unidade): nada muda.
-    if (this.montado && this.montado.vez.chave === chave) return;
+    // A mesma chave (voltou da recarga, ou outra aba da mesma unidade): nada muda (diálogos, balão, o que foi
+    // digitado), só a caixa da página pode ser outra: o app relê a lista de processos na próxima vez que precisar.
+    if (this.montado && this.montado.vez.chave === chave) {
+      this.montado.app.aoVoltarAba?.();
+      return;
+    }
     this.desmontar();
     const ctx = await a.rpc.chamar<ContextoProjetos>("contexto");
     if (this.parado) return;
