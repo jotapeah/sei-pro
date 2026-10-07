@@ -394,4 +394,22 @@ export async function verificarAppEtapa(): Promise<void> {
   botao(v4.f(), "Salvar")!.click();
   await tique();
   checar("e salvar segue herdando (sem processo proprio)", !!v4.salvos[0] && v4.salvos[0].processo === undefined, v4.salvos[0]?.processo);
+
+  secao("app: dialogo da etapa recusa numero de documento invalido");
+  const di = cena({ etapa: air });
+  const cdi = () => di.doc.querySelector<HTMLElement>(".prj-form-etapa");
+  digitar(cdi()?.querySelector("input[name='documento']"), "12a");
+  botao(cdi()!, "Salvar")!.click();
+  await tique();
+  checar(
+    "'12a': 'Número de documento inválido.' e nada salvo",
+    texto(cdi()?.querySelector(".prj-erros")) === "Número de documento inválido." && di.salvos.length === 0,
+    texto(cdi()?.querySelector(".prj-erros")),
+  );
+  const dj = cena({ etapa: air });
+  const cdj = () => dj.doc.querySelector(".prj-form-etapa") as HTMLElement;
+  digitar(cdj().querySelector("input[name='documento']"), " 1240001 ");
+  botao(cdj(), "Salvar")!.click();
+  await tique();
+  checar("' 1240001 ': salva o numero sem os espacos", dj.salvos[0]?.documento?.numero === "1240001", dj.salvos[0]?.documento);
 }

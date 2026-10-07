@@ -28,6 +28,7 @@ import {
   campoDocumento,
   campoProcesso,
   DICA_DOCUMENTO_SEM_NUMERO,
+  ERRO_DOCUMENTO,
   ERRO_PROTOCOLO,
   linhaDeCampos,
   mensagensDoErro,
@@ -427,6 +428,7 @@ export function abrirDialogoEtapa(c: ContextoDialogoEtapa): { fechar(): void } {
     const m: string[] = [];
     if (!nome.value.trim()) m.push("Informe o nome da etapa.");
     if (proc.invalido()) m.push(ERRO_PROTOCOLO);
+    if (documento.invalido()) m.push(ERRO_DOCUMENTO);
     const i = dataDeFormulario(inicio.value);
     const f = marco.checked ? i : dataDeFormulario(fim.value);
     if (!i) m.push("Informe uma data de início válida (entre 2000 e 2100).");

@@ -7,7 +7,9 @@
  * sigiloso em todos, comparado pelos dígitos (`chaveProtocolo`): "50300.000777/2026-10"
  * sem marca num projeto é sigiloso se outro o marcou. Etapa sigilosa = processo
  * próprio sigiloso, ou nenhum processo próprio num projeto sigiloso. Documento
- * marcado sigiloso não vai, e o número dele é sigiloso nos registros.
+ * marcado sigiloso não vai, e o número dele é sigiloso nos registros; documento
+ * se compara pela `chaveDocumento` (dígitos sem os zeros à esquerda: "01234567"
+ * é o mesmo que "1234567"), e a chave vazia nunca é sigilosa por número.
  *
  * O sigilo gruda (rodada 1 da Tarefa 4): o que a regra deduz vira marca GRAVADA
  * no vínculo e no documento daqui (`marcasDeSigilo`), sem mudar o carimbo (todo
@@ -37,14 +39,14 @@
  */
 
 import type { DocumentoSei, Etapa, Projeto, Registro, Vinculo } from "./tipos";
-import { chaveProtocolo } from "./vinculos";
+import { chaveDocumento, chaveProtocolo } from "./vinculos";
 
 /** O que vai no texto no lugar do número de um processo sigiloso (o histórico novo já nasce assim: historico.ts). */
 export const SIGILOSO_PROCESSO = "processo sigiloso";
 /** O que vai no texto no lugar do número de um documento de processo sigiloso. */
 export const SIGILOSO_DOCUMENTO = "documento de processo sigiloso";
 
-/** O que este computador já sabe sigiloso (a memória do sigilo): chaves de processo e números de documento. */
+/** O que este computador já sabe sigiloso (a memória do sigilo): chaves de processo e de documento (`chaveDocumento`). */
 export interface SigilosConhecidos {
   processos: ReadonlySet<string>;
   documentos: ReadonlySet<string>;
@@ -52,7 +54,7 @@ export interface SigilosConhecidos {
 
 export const NADA_CONHECIDO: SigilosConhecidos = { processos: new Set(), documentos: new Set() };
 
-/** Chaves de processo e números de documento (o que entra na memória do sigilo). */
+/** Chaves de processo e de documento (`chaveDocumento`): o que entra na memória do sigilo. */
 export interface Numeros {
   processos: string[];
   documentos: string[];
@@ -75,7 +77,7 @@ export interface SigiloDoEnvelope {
   projetos: ReadonlySet<string>;
   /** Ids das etapas sigilosas por esta regra. */
   etapas: ReadonlySet<string>;
-  /** Números dos documentos marcados sigilosos (em qualquer etapa, viva ou lápide), mais os já conhecidos. */
+  /** Chaves (`chaveDocumento`) dos documentos marcados sigilosos (em qualquer etapa, viva ou lápide), mais os já conhecidos. */
   documentos: ReadonlySet<string>;
   /** O vínculo é sigiloso: marcado, ou o mesmo número (pelos dígitos) marcado noutro lugar. */
   vinculo(v: Vinculo | undefined): boolean;
@@ -122,7 +124,8 @@ export function sigiloDoEnvelope(
   const documentos = new Set<string>(conhecidos.documentos);
   for (const x of etapas) {
     const d = documentoDe(x);
-    if (d?.sigiloso === true && d.numero) documentos.add(d.numero);
+    const k = d?.sigiloso === true ? chaveDocumento(d.numero) : "";
+    if (k) documentos.add(k);
     if (!objeto(x) || typeof x.id !== "string") continue;
     const v = vinculoDe(x);
     if (v ? vinculo(v) : typeof x.projeto === "string" && idsProjetos.has(x.projeto)) idsEtapas.add(x.id);
@@ -183,7 +186,8 @@ function documentoDaMesmaVersao(x: Etapa, outras: readonly unknown[]): Etapa {
   for (const o of outras) {
     if (!mesmaVersao(x, o)) continue;
     const od = documentoDe(o);
-    if (od?.sigiloso === true && (od.numero === "" || od.numero === d.numero)) return { ...x, documento: marcarDocumento(d) };
+    if (od?.sigiloso === true && (od.numero === "" || chaveDocumento(od.numero) === chaveDocumento(d.numero)))
+      return { ...x, documento: marcarDocumento(d) };
   }
   return x;
 }
@@ -222,9 +226,13 @@ export function marcasDeSigilo(
     if (sigilosa && y.documento && !y.documento.sigiloso) y = { ...y, documento: marcarDocumento(y.documento) };
     return y;
   });
-  const documentos = new Set([...s.documentos, ...e2.flatMap((x) => (x.documento?.sigiloso ? [x.documento.numero] : []))]);
+  // A chave vazia (o marcador, o número vazio sem a marca) não marca nada pelo número.
+  const documentos = new Set([...s.documentos, ...e2.flatMap((x) => (x.documento?.sigiloso ? [chaveDocumento(x.documento.numero)] : []))]);
+  documentos.delete("");
   const e3 = e2.map((x) =>
-    x.documento && !x.documento.sigiloso && documentos.has(x.documento.numero) ? { ...x, documento: marcarDocumento(x.documento) } : x,
+    x.documento && !x.documento.sigiloso && documentos.has(chaveDocumento(x.documento.numero))
+      ? { ...x, documento: marcarDocumento(x.documento) }
+      : x,
   );
   return { p: p2.filter((x, i) => x !== final.p[i]), e: e3.filter((x, i) => x !== final.e[i]) };
 }
@@ -247,7 +255,8 @@ export function marcadosNoEstado(
   }
   for (const x of etapas) {
     if (campos && !campos.documento(x)) continue;
-    if (x.documento?.sigiloso === true && x.documento.numero) saida.documentos.push(x.documento.numero);
+    const k = x.documento?.sigiloso === true ? chaveDocumento(x.documento.numero) : "";
+    if (k) saida.documentos.push(k);
   }
   return saida;
 }
@@ -272,7 +281,8 @@ export function aprendidoDosRegistros(
       const aqui = l[lado];
       if (typeof aqui !== "string" || !aqui) continue;
       if (l.campo === "processo" && o[lado] === SIGILOSO_PROCESSO && chaveProtocolo(aqui)) processos.push(chaveProtocolo(aqui));
-      if (l.campo === "documento" && o[lado] === SIGILOSO_DOCUMENTO && aqui !== SIGILOSO_DOCUMENTO) documentos.push(aqui);
+      if (l.campo === "documento" && o[lado] === SIGILOSO_DOCUMENTO && aqui !== SIGILOSO_DOCUMENTO && chaveDocumento(aqui))
+        documentos.push(chaveDocumento(aqui));
     }
   }
   return { processos, documentos };
@@ -298,11 +308,12 @@ export function cortarSigilo(
     if (k) raspados.processos.push(k);
   };
   const documentos = new Set(s.documentos);
-  for (const x of ent.e) if (s.etapas.has(x.id) && x.documento?.numero) documentos.add(x.documento.numero);
+  for (const x of ent.e) if (s.etapas.has(x.id) && x.documento?.numero) documentos.add(chaveDocumento(x.documento.numero));
   for (const r of ent.h) {
     if (r.campo !== "documento" || !s.etapas.has(r.alvo)) continue;
-    for (const t of [r.antes, r.depois]) if (t && t !== SIGILOSO_DOCUMENTO) documentos.add(t);
+    for (const t of [r.antes, r.depois]) if (t && t !== SIGILOSO_DOCUMENTO) documentos.add(chaveDocumento(t));
   }
+  documentos.delete("");
   const corte: SigiloDoEnvelope = { ...s, documentos };
   const p = ent.p.map((x): Projeto => {
     if (!corte.projetos.has(x.id)) return x;
@@ -314,8 +325,8 @@ export function cortarSigilo(
     const conta = contar(x);
     let y = x;
     const d = y.documento;
-    if (d && (sigilosa || d.sigiloso || documentos.has(d.numero))) {
-      if (d.numero && conta) raspados.documentos.push(d.numero);
+    if (d && (sigilosa || d.sigiloso || documentos.has(chaveDocumento(d.numero)))) {
+      if (chaveDocumento(d.numero) && conta) raspados.documentos.push(chaveDocumento(d.numero));
       y = { ...y, documento: DOCUMENTO_VAZIO };
     }
     if (sigilosa && y.processo) {
@@ -331,7 +342,7 @@ export function cortarSigilo(
         const t = r[lado];
         if (!t || x[lado] === t) continue;
         if (r.campo === "processo") doProcesso(t);
-        else raspados.documentos.push(t);
+        else if (chaveDocumento(t)) raspados.documentos.push(chaveDocumento(t));
       }
     }
     return x;
@@ -361,7 +372,7 @@ export function rasparRegistro(r: Registro, s: SigiloDoEnvelope): Registro {
   }
   if (r.campo === "documento") {
     const daEtapa = s.etapas.has(r.alvo);
-    const lado = (t: string | undefined) => (t && (daEtapa || s.documentos.has(t)) ? SIGILOSO_DOCUMENTO : t);
+    const lado = (t: string | undefined) => (t && (daEtapa || s.documentos.has(chaveDocumento(t))) ? SIGILOSO_DOCUMENTO : t);
     const antes = lado(r.antes);
     const depois = lado(r.depois);
     return antes === r.antes && depois === r.depois ? r : semIndefinidos({ ...r, antes, depois });

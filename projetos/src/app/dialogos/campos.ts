@@ -9,7 +9,7 @@ import { type Combo, criarCombo, type OpcaoCombo } from "@comum/ui/combobox";
 import { h, icone } from "@comum/ui/dom";
 import { vinculoSemNumero } from "../../modelo/sigilo";
 import type { Vinculo } from "../../modelo/tipos";
-import { RE_ID_PROCEDIMENTO, RE_PROTOCOLO } from "../../modelo/vinculos";
+import { RE_DOCUMENTO, RE_ID_PROCEDIMENTO, RE_PROTOCOLO } from "../../modelo/vinculos";
 import type { DocumentoConferido, ProcessoDaCaixa } from "../../ponte/tipos";
 import { cotaCheia, TEXTO_COTA_CHEIA } from "../erros";
 
@@ -223,17 +223,33 @@ export function campoProcesso(o: {
 export const DICA_DOCUMENTO_SEM_NUMERO =
   "Documento de processo sigiloso: o número não está neste computador. Deixe em branco para mantê-lo; um número digitado o substitui.";
 
+export const ERRO_DOCUMENTO = "Número de documento inválido.";
+
+/**
+ * O número de documento digitado ou colado, sem os espaços das pontas (a regra que o repositório aceita de um
+ * colega: vazio, ou só dígitos de 1 a 20, `RE_DOCUMENTO`). Colado com rótulo ("SEI nº 1240001"), vale o ÚNICO
+ * pedaço separado por espaço que passa. Nenhum ou mais de um: `null` (inválido). Nada é tirado do meio de um
+ * pedaço: "1.234.567" e "12a" não viram outro número.
+ */
+function documentoLimpo(t: string): string | null {
+  const inteiro = t.trim();
+  if (!inteiro || RE_DOCUMENTO.test(inteiro)) return inteiro;
+  const pedacos = inteiro.split(/\s+/).filter((p) => RE_DOCUMENTO.test(p));
+  return pedacos.length === 1 ? (pedacos[0] as string) : null;
+}
+
 /**
  * Campo do número SEI com a conferência pela pesquisa rápida (sem abrir a árvore). `semNumero`: a etapa só tem
  * o marcador do texto (documento de processo sigiloso cujo número este computador não tem): o campo vem vazio
- * e diz isso no lugar do "Número SEI".
+ * e diz isso no lugar do "Número SEI". `invalido()`: o texto não passa na regra (o diálogo mostra
+ * `ERRO_DOCUMENTO` e não salva); `numero()` é então vazio.
  */
 export function campoDocumento(
   valor: string,
   conferir?: (numero: string) => Promise<DocumentoConferido | null>,
   aoMudar?: () => void,
   o: { semNumero?: boolean } = {},
-): { el: HTMLElement; numero(): string } {
+): { el: HTMLElement; numero(): string; invalido(): boolean } {
   const input = h("input", {
     type: "text",
     class: "spro-campo",
@@ -244,7 +260,7 @@ export function campoDocumento(
     value: valor,
   });
   const ok = h("div", { class: "prj-docok", hidden: true });
-  const numero = () => input.value.replace(/\D/g, "");
+  const numero = () => documentoLimpo(input.value) ?? "";
   let pedido = 0;
   input.addEventListener("change", () => {
     aoMudar?.();
@@ -269,5 +285,5 @@ export function campoDocumento(
         if (meu === pedido) ok.hidden = true;
       });
   });
-  return { el: h("div", {}, input, ok), numero };
+  return { el: h("div", {}, input, ok), numero, invalido: () => documentoLimpo(input.value) === null };
 }

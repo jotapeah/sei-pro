@@ -98,7 +98,7 @@ import {
   problemasDoModelo,
   problemasDoProjeto,
 } from "./modelo/validacao";
-import { indiceDeProcessos, RE_ID_PROCEDIMENTO, RE_PROTOCOLO, type VinculoProcesso } from "./modelo/vinculos";
+import { indiceDeProcessos, RE_DOCUMENTO, RE_ID_PROCEDIMENTO, RE_PROTOCOLO, type VinculoProcesso } from "./modelo/vinculos";
 import { aplicarModelo } from "./modelos/aplicar";
 import { modeloDoProjeto } from "./modelos/salvar";
 
@@ -1307,11 +1307,20 @@ function vinculoValido(v: unknown): boolean {
   );
 }
 
-/** `documento` opcional: `numero` texto de até 40, `titulo` texto de até 200 ou ausente. */
+/**
+ * `documento` opcional: `numero` vazio (sem documento, ou o marcador do documento de processo sigiloso) ou só
+ * dígitos, de 1 a 20 (`RE_DOCUMENTO`, a regra do diálogo); `titulo` texto de até 200 ou ausente. Vem do texto da
+ * unidade: um `{ numero: " " }` editado à mão viraria "Documento SEI  " com link.
+ */
 function documentoValido(d: unknown): boolean {
   if (d === undefined) return true;
   if (!objeto(d)) return false;
-  return textoAte(40)(d.numero) && opcional(d.titulo, textoAte(LIMITES.nome)) && opcional(d.sigiloso, (b) => typeof b === "boolean");
+  return (
+    texto(d.numero) &&
+    (d.numero === "" || RE_DOCUMENTO.test(d.numero)) &&
+    opcional(d.titulo, textoAte(LIMITES.nome)) &&
+    opcional(d.sigiloso, (b) => typeof b === "boolean")
+  );
 }
 
 /**

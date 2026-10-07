@@ -13,7 +13,7 @@ import type { DataISO, Etapa } from "../../modelo/tipos";
 import type { DocumentoConferido } from "../../ponte/tipos";
 import type { ProjetoNaTela } from "../dados";
 import { dataDeFormulario, dataLonga } from "../formato";
-import { caixaDeErros, campo, campoDocumento, DICA_DOCUMENTO_SEM_NUMERO, linhaDeCampos, mensagensDoErro } from "./campos";
+import { caixaDeErros, campo, campoDocumento, DICA_DOCUMENTO_SEM_NUMERO, ERRO_DOCUMENTO, linhaDeCampos, mensagensDoErro } from "./campos";
 
 /**
  * Reativar e Excluir tiram o projeto da lista quando a promessa resolve. A confirmação (ou o
@@ -73,7 +73,7 @@ export function abrirArquivados(c: {
 
 /**
  * "Informar documento": o número e a data da conclusão. `salvar` recebe o número digitado (undefined = campo
- * vazio); quando a etapa só tem o marcador do texto (documento de processo sigiloso sem o número), o diálogo
+ * vazio; o que não passa na regra do número não salva: "Número de documento inválido."); quando a etapa só tem o marcador do texto (documento de processo sigiloso sem o número), o diálogo
  * diz isso, e quem chama mantém o marcador com o campo vazio.
  */
 export function abrirInformarDocumento(c: {
@@ -93,7 +93,9 @@ export function abrirInformarDocumento(c: {
   salvar.addEventListener("click", async () => {
     if (ocupado) return;
     const d = dataDeFormulario(data.value);
-    if (!d) return erros.mostrar(["Informe uma data válida (entre 2000 e 2100)."]);
+    const m = [...(doc.invalido() ? [ERRO_DOCUMENTO] : []), ...(d ? [] : ["Informe uma data válida (entre 2000 e 2100)."])];
+    erros.mostrar(m);
+    if (m.length || !d) return;
     ocupado = true;
     try {
       await c.salvar(doc.numero() || undefined, d);

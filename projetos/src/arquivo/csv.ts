@@ -1,7 +1,9 @@
 /**
  * "Exportar planilha (CSV)" (spec 3.1): uma linha por etapa dos projetos da
  * aba aberta, com o filtro aplicado. Processo sigiloso sai em branco (spec 9),
- * inclusive quando a etapa herdaria o do projeto. `gerarCsv` (sei-comum) põe
+ * inclusive quando a etapa herdaria o do projeto; o número do documento de
+ * etapa sigilosa (processo próprio sigiloso, ou nenhum num projeto sigiloso) ou
+ * marcado sigiloso também. `gerarCsv` (sei-comum) põe
  * o BOM, o separador ";" e neutraliza fórmulas (= + - @).
  */
 
@@ -37,6 +39,13 @@ const CABECALHO = [
 /** O número do processo, ou vazio se é sigiloso. */
 const numero = (v: Vinculo | undefined): string => (v && !v.sigiloso ? v.protocolo : "");
 
+/** O número do documento, ou vazio se ele está marcado sigiloso ou a etapa é sigilosa. */
+function numeroDoDocumento(p: ProjetoNaTela, e: Etapa): string {
+  const d = e.documento;
+  const sigilosa = e.processo ? e.processo.sigiloso === true : p.projeto.processo?.sigiloso === true;
+  return d && !d.sigiloso && !sigilosa ? d.numero : "";
+}
+
 function linhaDaEtapa(p: ProjetoNaTela, e: Etapa, hoje: DataISO): string[] {
   const fase = p.fases.find((f) => f.id === e.fase)?.nome ?? "";
   const situacao = e.marco ? ROTULO_MARCO[situacaoMarco(e, hoje)] : ROTULO_SITUACAO[situacaoEtapa(e, hoje)];
@@ -54,7 +63,7 @@ function linhaDaEtapa(p: ProjetoNaTela, e: Etapa, hoje: DataISO): string[] {
     situacao,
     String(progressoDaEtapa(e, hoje)),
     e.concluidaEm ? formatarData(e.concluidaEm) : "",
-    e.documento?.numero ?? "",
+    numeroDoDocumento(p, e),
     e.etiquetas.join(", "),
     e.observacoes ?? "",
   ];

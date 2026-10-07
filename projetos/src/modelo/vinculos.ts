@@ -20,6 +20,17 @@ export function chaveProtocolo(protocolo: string): string {
 }
 
 /**
+ * A chave do número de documento SEI: só os dígitos, sem os zeros à esquerda ("01234567" e "1234567" são o mesmo
+ * documento; "000" é o documento "0"). A memória do sigilo, as marcas, o corte e a raspagem comparam por ela.
+ */
+export function chaveDocumento(numero: string): string {
+  return numero.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+}
+
+/** Número de documento SEI guardado e compartilhado: só dígitos, de 1 a 20 (o vazio é "sem documento" ou o marcador). */
+export const RE_DOCUMENTO = /^\d{1,20}$/;
+
+/**
  * Forma do número de processo guardado e compartilhado: letras, dígitos, ponto, barra e hífen, até 40
  * (há SEI que escreve com letras, como o do RJ: "SEI-150016/000123/2021"; vazio no sigiloso que veio do
  * texto). Sem espaço nem `<>"'&`: o número vai à pesquisa rápida quando alguém clica.

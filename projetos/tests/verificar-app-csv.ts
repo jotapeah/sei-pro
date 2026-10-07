@@ -83,6 +83,25 @@ export async function verificarAppCsv(): Promise<void> {
     comMarcador.endsWith(";01/10/2026;;;"),
     comMarcador,
   );
+  const docsSig = csvDosProjetos(
+    [
+      {
+        ...p,
+        etapas: [
+          etapa({ id: "s1", processo: { protocolo: "50300.009999/2026-01", sigiloso: true }, documento: { numero: "1240011" } }),
+          etapa({ id: "s2", documento: { numero: "1240012", sigiloso: true } }),
+          etapa({ id: "s3", documento: { numero: "1240013" } }),
+        ],
+      },
+      { ...sig, etapas: [etapa({ id: "s4", projeto: "p2", documento: { numero: "1240014" } })] },
+    ],
+    HOJE,
+  );
+  checar(
+    "o documento de etapa sigilosa (processo proprio ou herdado do projeto) ou marcado sigiloso sai em branco; o comum fica",
+    !docsSig.includes("1240011") && !docsSig.includes("1240012") && docsSig.includes("1240013") && !docsSig.includes("1240014"),
+    docsSig,
+  );
   const sigSemEtapas = csvDosProjetos([{ ...sig, etapas: [] }], HOJE)
     .slice(1)
     .split("\r\n");

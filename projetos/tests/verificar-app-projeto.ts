@@ -483,4 +483,44 @@ export async function verificarAppProjeto(): Promise<void> {
     JSON.stringify(salvosV.at(-1)?.processo) === JSON.stringify({ protocolo: "50300.000002/2026-11" }),
     salvosV.at(-1)?.processo,
   );
+
+  secao("app: numero de documento aceito em Informar documento (vazio, ou so digitos de 1 a 20)");
+  const docI = telaDoApp();
+  const mi = modais(docI);
+  const docsI: string[] = [];
+  const informar = async (valor: string) => {
+    docI.querySelector(".prj-form-documento")?.remove();
+    abrirInformarDocumento({
+      abrirModal: mi.abrirModal,
+      etapa: etapa({ id: "x", concluidaEm: "2026-10-06" }),
+      hoje: HOJE,
+      salvar: async (numero, data) => void docsI.push(`${numero}:${data}`),
+    });
+    const f = docI.querySelector(".prj-form-documento")!;
+    digitar(f.querySelector("input[name='documento']"), valor);
+    botao(f, "Salvar")!.click();
+    await tique();
+    return texto(docI.querySelector(".prj-form-documento .prj-erros"));
+  };
+  for (const ruim of ["abc", "12a", "1.234.567", "1".repeat(21), "SEI 1240001 e 1240002"]) {
+    const n = docsI.length;
+    const erro = await informar(ruim);
+    checar(`"${ruim}": "Número de documento inválido." e nada salvo`, erro === "Número de documento inválido." && docsI.length === n, {
+      erro,
+      salvo: docsI.at(-1),
+    });
+  }
+  for (const [valor, salvo] of [
+    ["  1240001  ", "1240001"],
+    ["SEI nº 1240001", "1240001"],
+    ["1".repeat(20), "1".repeat(20)],
+    ["", "undefined"],
+  ] as const) {
+    const n = docsI.length;
+    const erro = await informar(valor);
+    checar(`"${valor}": salva ${salvo}`, erro === "" && docsI.length === n + 1 && docsI.at(-1) === `${salvo}:2026-10-06`, {
+      erro,
+      salvo: docsI.at(-1),
+    });
+  }
 }

@@ -5,7 +5,9 @@
  * deduzida (`sigiloDoEnvelope`): o que o texto raspou uma vez continua raspado.
  *
  * - Nunca é enviada: fica sob `prefixoMemoriaSigilo(host, login)` = `projetos/sigilo/<host>|<login>/`,
- *   fora de todo escopo, UMA CHAVE POR NÚMERO (`p/<chave>`, `d/<número>`), com a origem no valor. Gravar
+ *   fora de todo escopo, UMA CHAVE POR NÚMERO (`p/<chave do processo>`, `d/<chave do documento>`, a
+ *   `chaveDocumento`: sem os zeros à esquerda; a entrada antiga escrita com eles é lida pela chave), com a
+ *   origem no valor. Gravar
  *   uma entrada nunca reescreve as outras: dois contextos (o app e a aba) somando ao mesmo tempo não se
  *   apagam (com uma chave só, a última gravação levava o que a outra tinha somado).
  * - Origem (decidida por quem grava, pela operação; nunca por um campo do item, que vem no texto e qualquer um
@@ -35,6 +37,7 @@
  */
 
 import type { SigilosConhecidos } from "./sigilo";
+import { chaveDocumento } from "./vinculos";
 
 export const TETO_APRENDIDAS = 20_000;
 
@@ -91,14 +94,17 @@ export function lerMemoria(itens: Record<string, unknown>, prefixo: string, lega
         ["processos", processos],
         ["documentos", documentos],
       ] as const) {
-        for (const n of numerosDaLegada(v, campo)) pos(m, n, "local");
+        for (const n of numerosDaLegada(v, campo)) {
+          const k = campo === "documentos" ? chaveDocumento(n) : n;
+          if (k) pos(m, k, "local");
+        }
       }
       continue;
     }
     if (!k.startsWith(prefixo)) continue;
     const resto = k.slice(prefixo.length);
     const conjunto = resto.startsWith("p/") ? processos : resto.startsWith("d/") ? documentos : null;
-    const numero = resto.slice(2);
+    const numero = conjunto === documentos ? chaveDocumento(resto.slice(2)) : resto.slice(2);
     // Tipo que esta versão não conhece (de uma versão mais nova) ou número vazio: nada a usar aqui, e nunca é regravado.
     if (!conjunto || !numero) continue;
     pos(conjunto, numero, v === "aprendida" ? "aprendida" : "local");
@@ -142,7 +148,9 @@ export function entradasParaGravar(
   ] as const) {
     const m = new Map(atual[campo]);
     let aprendidas = [...m.values()].filter((x) => x === "aprendida").length;
-    for (const n of novos[campo]) {
+    for (const bruto of novos[campo]) {
+      // O documento entra pela chave (o mesmo número escrito com zero à esquerda é a mesma entrada).
+      const n = campo === "documentos" && typeof bruto === "string" ? chaveDocumento(bruto) : bruto;
       if (!numeroValido(n)) continue;
       const ja = m.get(n);
       if (origem === "local") {
