@@ -6,11 +6,11 @@
  * com a memória do sigilo); a memória ilegível não derruba a aba.
  */
 
-import { areaMemoria } from "@comum/armazenamento/area";
+import { type Area, areaMemoria } from "@comum/armazenamento/area";
 import { definirConsentimento } from "@comum/sincronia/consentimento";
 import type { ConferenciaTexto, ResultadoGravacao, StatusSync } from "@comum/sincronia/motor";
 import { gerarConteudoTexto, lerConteudoTexto } from "@comum/sincronia/textoPadraoCodec";
-import { chaveMemoriaSigiloLegada } from "../../src/modelo/constantes";
+import { prefixoMemoriaSigilo } from "../../src/modelo/constantes";
 import { ErroMemoriaSigilo } from "../../src/modelo/memoriaSigilo";
 import type { EnvelopeProjetos, Vis } from "../../src/modelo/tipos";
 import { INTERVALO_PUXAR, SincroniaPagina } from "../../src/pagina/sincronia";
@@ -53,8 +53,12 @@ function textoNoSei(html: string | null = null) {
   return t;
 }
 
-function montar(textos: Record<Vis, ReturnType<typeof textoNoSei>>, inicial: Record<string, unknown> = {}) {
-  const area = areaMemoria(inicial);
+function montar(
+  textos: Record<Vis, ReturnType<typeof textoNoSei>>,
+  inicial: Record<string, unknown> = {},
+  embrulhar: (a: Area) => Area = (a) => a,
+) {
+  const area = embrulhar(areaMemoria(inicial));
   const sync = areaMemoria();
   const relogio = { agora: AGORA };
   const repo = (vis: Vis) =>
@@ -171,11 +175,19 @@ export async function verificarSincroniaPagina(): Promise<void> {
 
   secao("pagina: a memoria do sigilo ilegivel nao derruba a aba");
   {
-    const LEGADA = chaveMemoriaSigiloLegada(HOST, "ana");
+    const MEMORIA = `${prefixoMemoriaSigilo(HOST, "ana")}p/50300000777202610`;
     const un2 = textoNoSei(await gerarConteudoTexto("Dados", doColega()));
     const eu2 = textoNoSei(null);
-    // A chave da rodada 2 torta e com conteúdo: a memória não pode ser lida (falha fechada).
-    const m2 = montar({ unidade: un2, eu: eu2 }, { [LEGADA]: { processos: SIGILO } });
+    // O storage não consegue ler a memória do sigilo (falha fechada): a única forma de ela ficar ilegível.
+    const falha = { ler: true };
+    const m2 = montar({ unidade: un2, eu: eu2 }, { [MEMORIA]: "local" }, (a) => ({
+      ...a,
+      async obter(ch?: string | string[] | null) {
+        const ks = ch === null || ch === undefined ? ["projetos/sigilo/"] : typeof ch === "string" ? [ch] : ch;
+        if (falha.ler && ks.some((k) => k.startsWith("projetos/sigilo/"))) throw new Error("falha simulada ao ler o storage");
+        return a.obter(ch);
+      },
+    }));
     await m2.consentir("unidade", "ligado");
     let caiu: unknown = null;
     try {
@@ -192,7 +204,6 @@ export async function verificarSincroniaPagina(): Promise<void> {
         st.mensagem === new ErroMemoriaSigilo().message &&
         un2.lidas >= 1 &&
         un2.gravadas === 0 &&
-        (await m2.area.obter(null))[LEGADA] !== undefined &&
         !(await m2.repos.unidade.entidades()).p.some((p) => p.id === "pc1"),
       { caiu, st, lidas: un2.lidas, gravadas: un2.gravadas },
     );
@@ -209,7 +220,7 @@ export async function verificarSincroniaPagina(): Promise<void> {
       caiuAgora === null && r3?.unidade.estado === "erro" && r3.eu === null && un2.gravadas === 0,
       { caiuAgora, r3 },
     );
-    await m2.area.gravar({ [LEGADA]: { processos: ["50300000777202610"], documentos: [] } });
+    falha.ler = false;
     const r4 = await m2.s.agora();
     checar(
       "com a memoria legivel de novo, a rodada seguinte le e mescla",

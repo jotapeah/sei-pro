@@ -14,14 +14,7 @@ import { jsonEstavel } from "@comum/sincronia/assinatura";
 import { mesclar, purgarLapides, type Versionada } from "@comum/sincronia/entidade";
 import { normalizarTexto } from "@comum/texto";
 import { dataNaFaixa, LIMITE_DIAS_ETAPA } from "./modelo/calendario";
-import {
-  chaveMemoriaSigiloLegada,
-  DIAS_LAPIDE_EU,
-  DIAS_LAPIDE_UNIDADE,
-  FOLGA_RELOGIO_MS,
-  LIMITES,
-  prefixoMemoriaSigilo,
-} from "./modelo/constantes";
+import { DIAS_LAPIDE_EU, DIAS_LAPIDE_UNIDADE, FOLGA_RELOGIO_MS, LIMITES, prefixoMemoriaSigilo } from "./modelo/constantes";
 import { problemasDasMudancas, validarDependencias, violacoesDeDatas } from "./modelo/dependencias";
 import { baseDoEscopo, chaveMeta, prefixoDe, rotuloDaVis } from "./modelo/escopo";
 import {
@@ -37,7 +30,6 @@ import { aplicarDatas, baseInicial, planoParaRedefinir, redefinirBase } from "./
 import {
   comEntradas,
   conhecidosDe,
-  daMemoria,
   ErroMemoriaSigilo,
   entradasParaGravar,
   lerMemoria,
@@ -198,26 +190,26 @@ export class RepositorioProjetos {
     return prefixoMemoriaSigilo(this.escopo.host, this.escopo.login);
   }
 
-  private get chaveMemoriaLegada(): string {
-    return chaveMemoriaSigiloLegada(this.escopo.host, this.escopo.login);
-  }
-
-  /** Numa chamada só ao storage: as chaves da memória do sigilo e, com `escopo`, as do escopo. */
-  private async lerChaves(escopo: boolean): Promise<Record<string, unknown>> {
-    const quer = (k: string) => (escopo && k.startsWith(this.base)) || daMemoria(k, this.prefixoMemoria, this.chaveMemoriaLegada);
-    if (this.area.chaves) {
-      const ks = (await this.area.chaves()).filter(quer);
-      return ks.length ? this.area.obter(ks) : {};
-    }
-    return Object.fromEntries(Object.entries(await this.area.obter(null)).filter(([k]) => quer(k)));
-  }
-
   /**
-   * A memória do sigilo agora (modelo/memoriaSigilo.ts), de todos os escopos do usuário. Falha fechada: erro do
-   * storage, ou a chave da rodada 2 torta com algo dentro, lança.
+   * Numa chamada só ao storage: as chaves da memória do sigilo e, com `escopo`, as do escopo. Falha fechada: o
+   * erro do storage vira `ErroMemoriaSigilo` (a mensagem diz que nada foi gravado), e quem lê não grava nada.
    */
+  private async lerChaves(escopo: boolean): Promise<Record<string, unknown>> {
+    const quer = (k: string) => (escopo && k.startsWith(this.base)) || k.startsWith(this.prefixoMemoria);
+    try {
+      if (this.area.chaves) {
+        const ks = (await this.area.chaves()).filter(quer);
+        return ks.length ? await this.area.obter(ks) : {};
+      }
+      return Object.fromEntries(Object.entries(await this.area.obter(null)).filter(([k]) => quer(k)));
+    } catch (e) {
+      throw new ErroMemoriaSigilo(e);
+    }
+  }
+
+  /** A memória do sigilo agora (modelo/memoriaSigilo.ts), de todos os escopos do usuário. Lança `ErroMemoriaSigilo` se não lê. */
   private async memoria(): Promise<MemoriaSigilo> {
-    return lerMemoria(await this.lerChaves(false), this.prefixoMemoria, this.chaveMemoriaLegada);
+    return lerMemoria(await this.lerChaves(false), this.prefixoMemoria);
   }
 
   /**
@@ -255,7 +247,7 @@ export class RepositorioProjetos {
    */
   async exportarComConhecidos(agora: number = Date.now()): Promise<{ envelope: EnvelopeProjetos; conhecidos: SigilosConhecidos }> {
     const tudo = await this.lerChaves(true);
-    const conhecidos = conhecidosDe(lerMemoria(tudo, this.prefixoMemoria, this.chaveMemoriaLegada));
+    const conhecidos = conhecidosDe(lerMemoria(tudo, this.prefixoMemoria));
     return { envelope: this.envelopeDe(entidadesDe(tudo, this.base), agora), conhecidos };
   }
 
@@ -339,7 +331,7 @@ export class RepositorioProjetos {
       this.projetos.listar(),
       this.etapas.listar(),
       this.registros.listar(),
-      this.memoriaParaGravar(),
+      this.memoria(),
     ]);
     // O que esta mesma gravação já leva para a memória (o `importar` do "Quem vê" passa as entradas dele em
     // `itens`) conta como se já estivesse lá: no teto das aprendidas e no que já se sabe.
@@ -385,19 +377,6 @@ export class RepositorioProjetos {
       ),
       ...this.entradasPorOrigem(memoria, { local, aprendida: depois }),
     };
-  }
-
-  /**
-   * A memória para a gravação local: a chave da rodada 2 torta não impede a edição (ela não é regravada, e a
-   * exportação continua parando por ela); erro do storage lança.
-   */
-  private async memoriaParaGravar(): Promise<MemoriaSigilo> {
-    try {
-      return await this.memoria();
-    } catch (e) {
-      if (!(e instanceof ErroMemoriaSigilo)) throw e;
-      return lerMemoria(await this.lerChaves(false), this.prefixoMemoria, "");
-    }
   }
 
   /** Os 300 registros mais recentes ficam (spec 5.4). `Area` não grava e remove juntos: é outra chamada. */
@@ -950,7 +929,7 @@ export class RepositorioProjetos {
     // Uma leitura só: o escopo e a memória do sigilo. Falha fechada: sem a memória legível, a mescla não roda (o
     // motor trata como erro comum).
     const tudo = await this.lerChaves(true);
-    const memoria = lerMemoria(tudo, this.prefixoMemoria, this.chaveMemoriaLegada);
+    const memoria = lerMemoria(tudo, this.prefixoMemoria);
     const aqui = entidadesDe(tudo, this.base);
     const mesclarCol = <T extends Versionada>(
       col: Colecao<T>,

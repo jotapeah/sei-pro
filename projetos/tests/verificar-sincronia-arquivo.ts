@@ -1,8 +1,9 @@
 /**
  * Arquivo, cópias diárias e Exportar/Importar (spec 6.2): todos os escopos do
  * usuário num SEI (inclusive os números sigilosos, que são dele), mescla na
- * leitura, o que é de outro usuário fica, e restaurar traz de volta só o que
- * estava ativo na cópia. E a memória do sigilo do usuário (decisão da Tarefa 6):
+ * leitura, o que é de outro usuário fica, e restaurar RECUPERA o que sumiu
+ * depois da cópia (o ausente ou excluído aqui), sem voltar no tempo o que está
+ * vivo. E a memória do sigilo do usuário (decisão da Tarefa 6):
  * o arquivo é dele, então ela vai junto num campo próprio e volta como "local"
  * num perfil novo, e um número que só sobrou nos registros não volta ao Texto
  * Padrão depois de importar ou restaurar.
@@ -10,10 +11,11 @@
 
 import { type Area, areaMemoria } from "@comum/armazenamento/area";
 import { SincroniaArquivo } from "@comum/sincronia/arquivo";
+import { jsonEstavel } from "@comum/sincronia/assinatura";
 import { copiasEmMemoria } from "@comum/sincronia/copias";
-import { chaveMemoriaSigiloLegada, prefixoMemoriaSigilo } from "../src/modelo/constantes";
-import { lerMemoria } from "../src/modelo/memoriaSigilo";
-import type { Escopo } from "../src/modelo/tipos";
+import { prefixoMemoriaSigilo } from "../src/modelo/constantes";
+import { ErroMemoriaSigilo, lerMemoria, TETO_APRENDIDAS } from "../src/modelo/memoriaSigilo";
+import type { Escopo, Projeto } from "../src/modelo/tipos";
 import { RepositorioProjetos } from "../src/repositorio";
 import {
   adaptadorArquivoProjetos,
@@ -22,6 +24,7 @@ import {
   exportarTudo,
   fazerCopiaDoDia,
   importarTudo,
+  LIMITE_LOCAIS_ARQUIVO,
   lerEnvelopeArquivo,
   nomeDoArquivo,
   restaurarCopia,
@@ -40,6 +43,8 @@ const OUTRO = "50300.000002/2026-11";
 const ETAPA = { inicio: "2026-10-06", fim: "2026-10-09" } as const;
 const HOJE = "2026-10-06";
 const DOC = "1234567";
+/** A mensagem do erro de leitura da memória do sigilo (rodada 1: genérica, para o texto, o arquivo e a cópia). */
+const MENSAGEM_MEMORIA = "Não foi possível ler a lista de processos sigilosos deste computador. Nada foi gravado; tente de novo.";
 
 function repos(area: ReturnType<typeof areaMemoria>, relogio = { agora: AGORA }) {
   const carimbo = () => ({ agora: ++relogio.agora, dispositivo: "pc-ana", por: "ana", nome: "Ana" });
@@ -51,7 +56,7 @@ function repos(area: ReturnType<typeof areaMemoria>, relogio = { agora: AGORA })
 /** A memória do sigilo da ana na área, número → origem. */
 async function memoriaDaAna(area: Area): Promise<{ p: Map<string, string>; d: Map<string, string>; chaves: number }> {
   const tudo = await area.obter(null);
-  const m = lerMemoria(tudo, prefixoMemoriaSigilo(HOST, "ana"), chaveMemoriaSigiloLegada(HOST, "ana"));
+  const m = lerMemoria(tudo, prefixoMemoriaSigilo(HOST, "ana"));
   const chaves = Object.keys(tudo).filter((k) => k.startsWith(prefixoMemoriaSigilo(HOST, "ana"))).length;
   return { p: new Map(m.processos), d: new Map(m.documentos), chaves };
 }
@@ -69,6 +74,21 @@ function areaQueNaoGravaMemoria(): Area & { gravacoes: number } {
     },
   };
   return a;
+}
+
+/** Área com uma entrada na memória do sigilo da ana que o storage não consegue ler enquanto `falha.ler`. */
+function areaQueNaoLeMemoria(): Area & { falha: { ler: boolean } } {
+  const base = areaMemoria({ [`${prefixoMemoriaSigilo(HOST, "ana")}p/111`]: "local" });
+  const falha = { ler: true };
+  return {
+    ...base,
+    falha,
+    async obter(ch?: string | string[] | null) {
+      const ks = ch === null || ch === undefined ? ["projetos/sigilo/"] : typeof ch === "string" ? [ch] : ch;
+      if (falha.ler && ks.some((k) => k.startsWith("projetos/sigilo/"))) throw new Error("falha simulada ao ler o storage");
+      return base.obter(ch);
+    },
+  };
 }
 
 export async function verificarSincroniaArquivo(): Promise<void> {
@@ -126,6 +146,42 @@ export async function verificarSincroniaArquivo(): Promise<void> {
     "o que e de outro login fica de fora",
     daBia.novos === 0 && (await escoposDoUsuario(outraArea, { host: HOST, login: "bia" })).length === 0,
   );
+  {
+    const areaH = areaMemoria();
+    const deOutroSei = await importarTudo(
+      areaH,
+      {
+        ...env,
+        escopos: env.escopos.map((s) => ({ ...s, escopo: { ...s.escopo, host: "outro.gov.br" } })),
+        sigilo: env.sigilo?.map((x) => ({ ...x, host: "outro.gov.br" })),
+      },
+      DONO,
+      repos(areaH).carimbo,
+    );
+    checar(
+      "o que e de outro SEI (mesmo login) fica de fora: nem os projetos nem a memoria do sigilo",
+      deOutroSei.novos === 0 && (await areaH.chaves!()).length === 0,
+      await areaH.chaves!(),
+    );
+  }
+  {
+    const areaD = areaMemoria();
+    const base = env.escopos.find((s) => s.escopo.vis === "unidade" && s.escopo.unidade === "110")!;
+    const torto = {
+      ...env,
+      sigilo: undefined,
+      escopos: [
+        { ...base, escopo: { ...base.escopo, unidade: "110/un/p" } },
+        { ...base, escopo: { ...base.escopo, vis: "todos" } },
+      ],
+    } as unknown as EnvelopeArquivo;
+    const rD = await importarTudo(areaD, torto, DONO, repos(areaD).carimbo).catch((e: Error) => e.name);
+    checar(
+      "escopo com barra ou visibilidade torta direto no importarTudo (sem passar pela leitura): ignorado, nada gravado",
+      typeof rD === "object" && rD.novos === 0 && (await areaD.chaves!()).length === 0,
+      { rD, chaves: await areaD.chaves!() },
+    );
+  }
   {
     const comTorto = JSON.parse(JSON.stringify(env)) as EnvelopeArquivo;
     (comTorto.escopos[0]!.entidades.p as unknown[]).push(null, { id: "torto", nome: 7 });
@@ -237,7 +293,107 @@ export async function verificarSincroniaArquivo(): Promise<void> {
     restaurados,
   );
 
+  await verificarRestaurarRecupera();
+
   await verificarMemoriaNoArquivo();
+}
+
+/**
+ * Rodada 1: restaurar uma cópia RECUPERA o que sumiu (o item da cópia ausente aqui ou com lápide, recarimbado para
+ * vencer a lápide); o que está vivo aqui fica como está, mesmo diferente da cópia (a edição de um colega depois da
+ * cópia não é desfeita). O número devolvido é o que voltou de fato.
+ */
+async function verificarRestaurarRecupera(): Promise<void> {
+  secao("restaurar recupera o que sumiu, nao volta no tempo");
+  const area = areaMemoria();
+  const { carimbo, de } = repos(area);
+  const un = de({});
+  const p1 = await un.criarProjeto({ nome: "P1" });
+  const e1a = await un.criarEtapa({ projeto: p1.id, nome: "E1a", ...ETAPA });
+  const e1b = await un.criarEtapa({ projeto: p1.id, nome: "E1b", ...ETAPA });
+  const p2 = await un.criarProjeto({ nome: "P2" });
+  const f2 = await un.criarFase(p2.id, "Instrução");
+  const e2a = await un.criarEtapa({ projeto: p2.id, nome: "E2a", fase: f2.id, ...ETAPA });
+  const e2b = await un.criarEtapa({ projeto: p2.id, nome: "E2b", ...ETAPA });
+  const modelo = await un.salvarComoModelo(p1.id, "Modelo do P1");
+  const copias = copiasEmMemoria<EnvelopeArquivo>();
+  await fazerCopiaDoDia(area, DONO, copias, HOJE, carimbo);
+  const [copia] = await copias.listar(DONO);
+  // Depois da cópia: a Bia renomeia o P1 (chega pelo texto da unidade, com o carimbo dela) ...
+  const atualP1 = (await un.obterProjeto(p1.id))!;
+  const daBia: Projeto = {
+    ...atualP1,
+    nome: "P1 (renomeado pela Bia)",
+    atualizadoEm: carimbo().agora,
+    dispositivo: "pc-bia",
+    alteradoPor: "bia",
+  };
+  await un.importar({ p: [daBia] });
+  // ... e a Ana edita uma etapa, exclui o P2 (com a fase e as etapas), uma etapa do P1 e o modelo, e cria o P3.
+  await un.editarEtapa(e1a.id, { nome: "E1a revisada" }, HOJE);
+  await un.removerProjeto(p2.id);
+  await un.removerEtapa(e1b.id);
+  await un.removerModelo(modelo.id);
+  const p3 = await un.criarProjeto({ nome: "P3" });
+  const vivosAntes = jsonEstavel([await un.obterProjeto(p1.id), await un.obterEtapa(e1a.id), await un.obterProjeto(p3.id)]);
+  const n = await restaurarCopia(area, copia!, DONO, carimbo);
+  const d = await un.dados();
+  checar(
+    "o P1 fica com o nome que a Bia deu depois da copia, e a etapa editada depois fica editada",
+    (await un.obterProjeto(p1.id))?.nome === "P1 (renomeado pela Bia)" && (await un.obterEtapa(e1a.id))?.nome === "E1a revisada",
+  );
+  checar(
+    "nada vivo e recarimbado (P1, a etapa editada e o P3 ficam exatamente como estavam)",
+    jsonEstavel([await un.obterProjeto(p1.id), await un.obterEtapa(e1a.id), await un.obterProjeto(p3.id)]) === vivosAntes,
+  );
+  checar(
+    "o P2 volta com a fase e as etapas dele",
+    d.projetos.some((x) => x.id === p2.id) &&
+      d.fases.some((x) => x.id === f2.id) &&
+      d.etapas.some((x) => x.id === e2a.id) &&
+      d.etapas.some((x) => x.id === e2b.id),
+    d,
+  );
+  checar(
+    "a etapa excluida depois da copia volta (o projeto dela estava vivo)",
+    d.etapas.some((x) => x.id === e1b.id),
+  );
+  checar(
+    "o modelo excluido depois da copia volta",
+    d.modelos.some((x) => x.id === modelo.id),
+  );
+  checar(
+    "e o criado depois da copia fica",
+    d.projetos.some((x) => x.id === p3.id),
+  );
+  checar("o numero devolvido e o que voltou de fato: P2, a fase, as duas etapas, a etapa do P1 e o modelo", n === 6, n);
+  checar("restaurar de novo nao traz mais nada (tudo ja esta vivo)", (await restaurarCopia(area, copia!, DONO, carimbo)) === 0);
+
+  secao("restaurar: copia torta no IndexedDB nao restaura nada nem lanca TypeError");
+  {
+    const areaT = areaMemoria();
+    const quebrada = { ...copia!, envelope: { formato: "seipro-projetos" } as unknown as EnvelopeArquivo };
+    const r1 = await restaurarCopia(areaT, quebrada, DONO, carimbo).then(
+      (x) => x,
+      (e: Error) => e.name,
+    );
+    checar(
+      "envelope sem escopos: erro que diz o que houve (nao TypeError) e nada gravado",
+      r1 === "ErroValidacao" && (await areaT.chaves!()).length === 0,
+      r1,
+    );
+    const comNulo = JSON.parse(JSON.stringify(copia!)) as typeof copia & object;
+    for (const s of comNulo.envelope.escopos) (s.entidades.p as unknown[]).unshift(null, 7, { id: 3 });
+    const r2 = await restaurarCopia(areaT, comNulo, DONO, carimbo).then(
+      (x) => x,
+      (e: Error) => `${e.name}: ${e.message}`,
+    );
+    checar(
+      "itens tortos na copia: ficam de fora, sem TypeError, e o resto volta",
+      typeof r2 === "number" && r2 >= 1 && (await new RepositorioProjetos(areaT, un.escopo, carimbo).dados()).projetos.length >= 1,
+      r2,
+    );
+  }
 }
 
 /**
@@ -288,7 +444,19 @@ async function verificarMemoriaNoArquivo(): Promise<void> {
         minha.documentos.includes(DOC),
       env.sigilo,
     );
-    checar("e nada da memoria entra nas entidades dos escopos", !JSON.stringify(env.escopos).includes("projetos/sigilo"));
+    const iguais = await Promise.all(
+      env.escopos.map(
+        async (s) =>
+          Object.keys(s).sort().join() === "entidades,escopo" &&
+          Object.keys(s.escopo).sort().join() === "host,login,unidade,vis" &&
+          jsonEstavel(s.entidades) === jsonEstavel(await new RepositorioProjetos(a.area, s.escopo, carimbo).entidades()),
+      ),
+    );
+    checar(
+      "a memoria fica so no campo sigilo: cada escopo leva exatamente as entidades do repositorio, sem nada a mais",
+      Object.keys(env).sort().join() === "escopos,formato,gerado,sigilo,tipo,versao" && iguais.length === 1 && iguais.every(Boolean),
+      { chaves: Object.keys(env), iguais },
+    );
 
     // Sem o campo (um arquivo de antes), o perfil novo não sabe do sigilo: o número dos registros iria ao texto.
     const { sigilo: _sem, ...semCampo } = env;
@@ -379,6 +547,64 @@ async function verificarMemoriaNoArquivo(): Promise<void> {
     );
   }
 
+  secao("memoria do sigilo no arquivo: uma entrada so, a do dono, e no maximo 5000 locais novas por importacao");
+  {
+    const vazio = (sigilo: unknown): EnvelopeArquivo =>
+      ({ formato: "seipro-projetos", versao: 1, tipo: "copia", gerado: AGORA, escopos: [], sigilo }) as EnvelopeArquivo;
+    const entrada = (host: string, login: string, processos: string[], documentos: string[] = []) => ({
+      versao: VERSAO_SIGILO,
+      host,
+      login,
+      processos,
+      documentos,
+    });
+    const areaV = areaMemoria();
+    const lidoV = lerEnvelopeArquivo(
+      JSON.parse(
+        JSON.stringify(
+          vazio([
+            entrada(HOST, "bia", ["30000000001"]),
+            entrada("outro.gov.br", "ana", ["30000000002"]),
+            entrada(HOST, "ANA", ["30000000003"], ["0444"]),
+            entrada(HOST, "ana", ["30000000004"]),
+          ]),
+        ),
+      ),
+    );
+    await importarTudo(areaV, lidoV!, DONO, repos(areaV).carimbo);
+    const memV = await memoriaDaAna(areaV);
+    checar(
+      "varias entradas: so a primeira do dono (host e login, sem caixa) e devolvida; a de outro login, a de outro SEI e a segunda do dono ficam de fora",
+      [...memV.p.keys()].join() === "30000000003" &&
+        memV.d.get("444") === "local" &&
+        !Object.keys(await areaV.obter(null)).some((k) => k.includes("|bia/") || k.includes("outro.gov.br")),
+      { p: [...memV.p.keys()], chaves: await areaV.chaves!() },
+    );
+
+    const forjado = vazio([
+      entrada(
+        HOST,
+        "ana",
+        Array.from({ length: TETO_SIGILO_ARQUIVO }, (_, i) => String(10_000_000_000 + i)),
+      ),
+    ]);
+    const lidoF = lerEnvelopeArquivo(JSON.parse(JSON.stringify(forjado)));
+    const areaF = areaMemoria({ [`${prefixoMemoriaSigilo(HOST, "ana")}p/111`]: "aprendida" });
+    await importarTudo(areaF, lidoF!, DONO, repos(areaF).carimbo);
+    const memF = await memoriaDaAna(areaF);
+    const contar = (o: string) => [...memF.p.values()].filter((x) => x === o).length;
+    checar(
+      "arquivo forjado de 200000 numeros: entram 5000 como local e o resto como aprendida, so ate o teto de 20000",
+      LIMITE_LOCAIS_ARQUIVO === 5000 &&
+        lidoF?.sigilo?.[0]?.processos.length === 200_000 &&
+        contar("local") === 5000 &&
+        contar("aprendida") === TETO_APRENDIDAS &&
+        memF.p.get("111") === "aprendida" &&
+        memF.chaves === 5000 + TETO_APRENDIDAS,
+      { locais: contar("local"), aprendidas: contar("aprendida"), chaves: memF.chaves },
+    );
+  }
+
   secao("memoria do sigilo no arquivo: campo torto e ignorado sem derrubar a importacao");
   {
     const { a, carimbo } = await origem();
@@ -452,16 +678,25 @@ async function verificarMemoriaNoArquivo(): Promise<void> {
   {
     const { a, carimbo } = await origem();
     const env = await exportarTudo(a.area, DONO, carimbo);
-    const ilegivel = areaMemoria({ [chaveMemoriaSigiloLegada(HOST, "ana")]: { processos: 7 } });
+    const ilegivel = areaQueNaoLeMemoria();
     const erroLer = await importarTudo(ilegivel, env, DONO, carimbo).then(
       () => null,
-      (e: Error) => e.name,
+      (e: Error) => e,
     );
     checar(
-      "memoria ilegivel: a importacao falha e nada dos projetos e gravado",
-      erroLer === "ErroMemoriaSigilo" && (await escoposDoUsuario(ilegivel, DONO)).length === 0,
+      "memoria ilegivel (erro do storage): a importacao falha com a mensagem generica e nada dos projetos e gravado",
+      erroLer instanceof ErroMemoriaSigilo &&
+        erroLer.message === MENSAGEM_MEMORIA &&
+        new ErroMemoriaSigilo().message === MENSAGEM_MEMORIA &&
+        (await escoposDoUsuario(ilegivel, DONO)).length === 0,
       erroLer,
     );
+    {
+      // A chave única da rodada 2 (só existiu nesta branch) não é mais lida: torta, não impede nada.
+      const comAntiga = areaMemoria({ "projetos/sigilo/sei.x.gov.br|ana": { processos: 7 } });
+      const r = await importarTudo(comAntiga, env, DONO, carimbo).catch((e: Error) => e.name);
+      checar("a chave unica antiga da memoria nao e mais lida (torta, nao impede a importacao)", typeof r === "object" && r.novos >= 1, r);
+    }
     const semGravar = areaQueNaoGravaMemoria();
     const erroGravar = await importarTudo(semGravar, env, DONO, carimbo).then(
       () => null,

@@ -8,7 +8,7 @@
 import { type Area, areaMemoria } from "@comum/armazenamento/area";
 import { type DestinoTexto, MotorTextoPadrao, type StatusSync } from "@comum/sincronia/motor";
 import { gerarConteudoTexto, lerConteudoTexto } from "@comum/sincronia/textoPadraoCodec";
-import { chaveMemoriaSigiloLegada, prefixoMemoriaSigilo } from "../src/modelo/constantes";
+import { prefixoMemoriaSigilo } from "../src/modelo/constantes";
 import { baseDoEscopo } from "../src/modelo/escopo";
 import { ErroMemoriaSigilo, entradasParaGravar, lerMemoria, TETO_APRENDIDAS } from "../src/modelo/memoriaSigilo";
 import type { EnvelopeProjetos, Registro } from "../src/modelo/tipos";
@@ -468,37 +468,45 @@ async function verificarRaspadoFicaRaspado(): Promise<void> {
     );
   }
 
-  secao("memoria do sigilo falha fechada: valor torto na chave da rodada 2");
+  secao("memoria do sigilo: a chave unica da rodada 2 (so existiu nesta branch) nao e mais lida");
   {
     const LEGADA = "projetos/sigilo/sei.x.gov.br|ana";
     const area = areaMemoria();
     const { repo } = novoRepo(ESCOPO_UN, area, "t", { agora: AGORA });
-    const p = await repo.criarProjeto({ nome: "P1", processo: { protocolo: SIGILO } });
-    await repo.editarProjeto(p.id, { processo: { protocolo: OUTRO } });
-    // Só a memória antiga sabia do sigilo do número (no registro do vínculo trocado), e ela está torta.
-    await area.remover(Object.keys(await area.obter(null)).filter((k) => k.startsWith("projetos/sigilo/")));
-    await area.gravar({ [LEGADA]: { processos: "50300000777202610", documentos: [] } });
+    await repo.criarProjeto({ nome: "P1", processo: { protocolo: SIGILO, sigiloso: true } });
+    await area.gravar({ [LEGADA]: { processos: "torta", documentos: 7 } });
     const sei = noSei(null);
     const s1 = await motorDe(repo, area, sei).sincronizar({ forcar: true });
     checar(
-      "torto com conteudo: nao trata como vazio; a rodada falha e o texto nao e gravado",
-      s1.estado === "erro" && sei.gravadas === 0 && !!s1.mensagem,
+      "torta, ela nao impede a rodada (a memoria ilegivel agora e so erro do storage) e o numero continua fora do texto",
+      s1.estado === "ok" && sei.gravadas === 1 && !(await jsonDoTexto(sei.html)).includes("000777"),
       s1,
     );
-    await area.gravar({ [LEGADA]: { processos: ["50300000777202610"], documentos: [] } });
-    const s2 = await motorDe(repo, area, sei).sincronizar({ forcar: true });
-    checar(
-      "legivel: o que ela sabe vale (o numero sai raspado do registro)",
-      s2.estado === "ok" && sei.gravadas === 1 && !(await jsonDoTexto(sei.html)).includes("000777"),
-      s2,
+    checar("e ela nao entra na memoria", !(await repo.sigilosConhecidos()).processos.has("torta"));
+  }
+
+  secao("memoria do sigilo falha fechada: o erro do storage ao ler vira o erro da memoria, com a mensagem generica");
+  {
+    const base = areaMemoria();
+    const quando = { ler: false, gravar: false };
+    const area = areaQueFalha(base, quando);
+    const { repo } = novoRepo(ESCOPO_UN, area, "h", { agora: AGORA });
+    await repo.criarProjeto({ nome: "Apuração", processo: { protocolo: SIGILO, sigiloso: true } });
+    quando.ler = true;
+    const sei = noSei(null);
+    const s1 = await motorDe(repo, area, sei).sincronizar({ forcar: true });
+    const lancado = await repo.sigilosConhecidos().then(
+      () => null,
+      (e: unknown) => e,
     );
-    const area2 = areaMemoria();
-    const { repo: r2 } = novoRepo(ESCOPO_UN, area2, "t", { agora: AGORA });
-    await r2.criarProjeto({ nome: "P2" });
-    await area2.gravar({ [LEGADA]: {} });
-    const sei2 = noSei(null);
-    const s3 = await motorDe(r2, area2, sei2).sincronizar({ forcar: true });
-    checar("torto sem nada dentro: nada a perder, segue como vazia", s3.estado === "ok" && sei2.gravadas === 1, s3);
+    checar(
+      "a rodada para com a mensagem que diz o que fazer, e o texto nao e gravado",
+      s1.estado === "erro" &&
+        s1.mensagem === "Não foi possível ler a lista de processos sigilosos deste computador. Nada foi gravado; tente de novo." &&
+        sei.gravadas === 0 &&
+        lancado instanceof ErroMemoriaSigilo,
+      { s1, lancado },
+    );
   }
 
   secao("memoria do sigilo: dois contextos guardando ao mesmo tempo nao perdem nada");
@@ -637,39 +645,28 @@ async function verificarMemoriaDoSigilo(): Promise<void> {
   secao("memoria do sigilo: a forma guardada (uma chave por numero, com a origem)");
   {
     checar(
-      "o prefixo documentado: projetos/sigilo/<host>|<login em minusculas>/ (e a chave unica da rodada 2, so lida)",
-      prefixoMemoriaSigilo("sei.x.gov.br", " Ana ") === PREFIXO_MEMORIA &&
-        chaveMemoriaSigiloLegada("sei.x.gov.br", " Ana ") === "projetos/sigilo/sei.x.gov.br|ana",
+      "o prefixo documentado: projetos/sigilo/<host>|<login em minusculas>/",
+      prefixoMemoriaSigilo("sei.x.gov.br", " Ana ") === PREFIXO_MEMORIA,
     );
-    const LEG = "projetos/sigilo/sei.x.gov.br|ana";
     const m = lerMemoria(
       {
         [`${PREFIXO_MEMORIA}p/123`]: "local",
         [`${PREFIXO_MEMORIA}p/456`]: "aprendida",
         [`${PREFIXO_MEMORIA}d/789`]: 42,
         [`${PREFIXO_MEMORIA}p/`]: "local",
-        [LEG]: { processos: ["555"], documentos: [] },
+        "projetos/sigilo/sei.x.gov.br|ana": { processos: ["555"], documentos: [] },
       },
       PREFIXO_MEMORIA,
-      LEG,
     );
     checar(
-      "a origem de cada numero; valor torto fica como local (o numero esta na chave: nada se perde); a chave antiga legivel vale como local",
+      "a origem de cada numero; valor torto fica como local (o numero esta na chave: nada se perde); a chave unica antiga nao e lida",
       m.processos.get("123") === "local" &&
         m.processos.get("456") === "aprendida" &&
         m.documentos.get("789") === "local" &&
-        m.processos.get("555") === "local" &&
-        m.processos.size === 3,
+        !m.processos.has("555") &&
+        m.processos.size === 2,
       [...m.processos, ...m.documentos],
     );
-    let torta: unknown = null;
-    try {
-      lerMemoria({ [LEG]: { processos: "50300000777202610" } }, PREFIXO_MEMORIA, LEG);
-    } catch (e) {
-      torta = e;
-    }
-    checar("a chave antiga torta e com conteudo: lanca (nao trata como vazia)", torta instanceof ErroMemoriaSigilo, torta);
-    checar("a chave antiga torta sem nada dentro: vazia", lerMemoria({ [LEG]: { x: [] } }, PREFIXO_MEMORIA, LEG).processos.size === 0);
     checar(
       "somar o que ja esta: nada a gravar",
       Object.keys(entradasParaGravar(m, { processos: ["123", "456"], documentos: [] }, "aprendida", PREFIXO_MEMORIA)).length === 0,

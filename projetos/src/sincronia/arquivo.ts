@@ -5,14 +5,20 @@
  * Exportar/Importar manual. Ler sempre MESCLA (vence o mais recente por
  * entidade); o que o arquivo tem de outro SEI ou de outro login fica.
  *
+ * Restaurar uma cópia RECUPERA o que sumiu depois dela (o item ausente aqui ou
+ * com lápide); não volta no tempo: o que está vivo aqui fica como está, mesmo
+ * que difira da cópia (a edição de um colega na unidade não é desfeita).
+ *
  * O arquivo é do próprio usuário: leva também a memória do sigilo dele
- * (modelo/memoriaSigilo.ts), no campo `sigilo` do envelope, uma entrada por
- * usuário (host|login) com versão própria. Num perfil novo (outro navegador, a
- * extensão reinstalada), importar ou restaurar a devolve como "local", sem tirar
- * nem mudar o que já estava lá: um número que só sobrou nos registros do
- * histórico (o processo trocado, a lápide podada) continua fora do Texto Padrão.
- * Sem o campo (arquivo de antes), a importação segue; entrada torta é ignorada;
- * a memória que não lê ou não grava faz a importação e a exportação falharem
+ * (modelo/memoriaSigilo.ts), no campo `sigilo` do envelope (a entrada dele, por
+ * host|login, com versão própria). Num perfil novo (outro navegador, a extensão
+ * reinstalada), importar ou restaurar a devolve sem tirar nem mudar o que já
+ * estava lá: um número que só sobrou nos registros do histórico (o processo
+ * trocado, a lápide podada) continua fora do Texto Padrão. Só UMA entrada é
+ * aceita, a do dono, e só as primeiras `LIMITE_LOCAIS_ARQUIVO` (5000) novas
+ * entram como "local"; o resto entra como "aprendida", sob o teto dela. Sem o
+ * campo (arquivo de antes), a importação segue; entrada torta é ignorada; a
+ * memória que não lê ou não grava faz a importação e a exportação falharem
  * (falha fechada, como no Texto Padrão).
  *
  * A mecânica do arquivo (File System Access, handle no IndexedDB do módulo,
@@ -33,10 +39,12 @@ import {
   fazerCopiaDoDia as fazerCopiaComum,
   recarimbarAtivos,
 } from "@comum/sincronia/copias";
-import { chaveMemoriaSigiloLegada, chaveSyncArquivo, prefixoMemoriaSigilo } from "../modelo/constantes";
+import type { Versionada } from "@comum/sincronia/entidade";
+import { chaveSyncArquivo, prefixoMemoriaSigilo } from "../modelo/constantes";
 import { chaveEscopo } from "../modelo/escopo";
-import { entradasParaGravar, lerMemoria, type MemoriaSigilo } from "../modelo/memoriaSigilo";
+import { comEntradas, ErroMemoriaSigilo, entradasParaGravar, lerMemoria, type MemoriaSigilo } from "../modelo/memoriaSigilo";
 import type { Carimbo, Entidades, Escopo } from "../modelo/tipos";
+import { ErroValidacao } from "../modelo/validacao";
 import { RepositorioProjetos, type ResultadoImportacao } from "../repositorio";
 import { TETOS_ENVELOPE } from "./textoPadrao";
 
@@ -55,6 +63,11 @@ export const VERSAO_SIGILO = 1;
 export const TETO_SIGILO_ARQUIVO = 200_000;
 /** Entradas (usuários) no campo `sigilo`; acima disso o campo é tratado como torto. */
 const TETO_DONOS_SIGILO = 100;
+/**
+ * Números NOVOS que uma importação ou restauração grava como "local" (sem teto); os que passam disso entram como
+ * "aprendida", sob o teto de 20000. Um arquivo forjado não enche a memória sem limite.
+ */
+export const LIMITE_LOCAIS_ARQUIVO = 5000;
 
 export interface EscopoNoArquivo {
   escopo: Escopo;
@@ -121,12 +134,18 @@ const repoDe = (area: Area, e: Escopo, carimbo: () => Carimbo) => new Repositori
 const numeroDaMemoria = (x: unknown): x is string => typeof x === "string" && x.length > 0 && x.length <= 64;
 
 /**
- * A memória do sigilo do usuário (de todos os escopos dele), numa leitura. A chave única da rodada 2 é o começo
- * de todas as entradas (`<legada>/p/…`): um prefixo pega as duas formas. Lança se não puder ser lida.
+ * A memória do sigilo do usuário (de todos os escopos dele), numa leitura. O erro do storage vira
+ * `ErroMemoriaSigilo` (falha fechada: quem lê não grava nada).
  */
 async function memoriaDoDono(area: Area, d: Dono): Promise<MemoriaSigilo> {
-  const legada = chaveMemoriaSigiloLegada(d.host, d.login);
-  return lerMemoria(await obterPorPrefixo(area, legada), prefixoMemoriaSigilo(d.host, d.login), legada);
+  const prefixo = prefixoMemoriaSigilo(d.host, d.login);
+  let itens: Record<string, unknown>;
+  try {
+    itens = await obterPorPrefixo(area, prefixo);
+  } catch (e) {
+    throw new ErroMemoriaSigilo(e);
+  }
+  return lerMemoria(itens, prefixo);
 }
 
 /**
@@ -216,17 +235,56 @@ export function lerEnvelopeArquivo(bruto: unknown): EnvelopeArquivo | null {
 }
 
 /**
- * Devolve à memória do sigilo deste usuário o que as entradas dele no arquivo trazem, como "local" (o arquivo é
- * dele): só entra o que falta; o que já está (local ou aprendida) fica como está, e as aprendidas não mudam
- * (nem de número, nem de teto). Lança se a memória não lê ou não grava.
+ * Devolve à memória do sigilo deste usuário o que o arquivo traz dele. Uma entrada só: a primeira do dono (a de
+ * outro login ou SEI, e uma segunda do dono, ficam de fora). O arquivo é dele: as primeiras
+ * `LIMITE_LOCAIS_ARQUIVO` novas entram como "local", e o resto como "aprendida" (sob o teto dela). O que já está
+ * (local ou aprendida) fica como está: nada sai e nada é promovido. Lança se a memória não lê ou não grava.
  */
 async function devolverSigilo(area: Area, sigilo: unknown, d: Dono): Promise<void> {
-  const meus = (lerSigilo(sigilo) ?? []).filter((s) => mesmoDono(s, d));
-  if (!meus.length) return;
-  const novos = { processos: meus.flatMap((s) => s.processos), documentos: meus.flatMap((s) => s.documentos) };
-  const entradas = entradasParaGravar(await memoriaDoDono(area, d), novos, "local", prefixoMemoriaSigilo(d.host, d.login));
+  const minha = (lerSigilo(sigilo) ?? []).find((s) => mesmoDono(s, d));
+  if (!minha) return;
+  const prefixo = prefixoMemoriaSigilo(d.host, d.login);
+  const memoria = await memoriaDoDono(area, d);
+  // Todas as novas, na ordem do arquivo (processos e depois documentos); as primeiras ficam locais.
+  const novas = Object.keys(entradasParaGravar(memoria, minha, "local", prefixo));
+  const locais = Object.fromEntries(novas.slice(0, LIMITE_LOCAIS_ARQUIVO).map((k) => [k, "local" as const]));
+  const sobra = { processos: [] as string[], documentos: [] as string[] };
+  for (const k of novas.slice(LIMITE_LOCAIS_ARQUIVO)) {
+    const resto = k.slice(prefixo.length);
+    (resto.startsWith("p/") ? sobra.processos : sobra.documentos).push(resto.slice(2));
+  }
+  const aprendidas = entradasParaGravar(comEntradas(memoria, locais, prefixo), sobra, "aprendida", prefixo);
+  const entradas = { ...locais, ...aprendidas };
   if (Object.keys(entradas).length) await area.gravar(entradas);
 }
+
+/**
+ * Os escopos do envelope que são deste usuário neste SEI, conferidos de novo (quem chama pode não ter passado pela
+ * leitura): host e login do dono, unidade sem barra, visibilidade conhecida e entidades num objeto. Refeitos campo
+ * a campo, com o login em minúsculas.
+ */
+function escoposDoDono(
+  env: { escopos?: unknown },
+  d: Dono,
+): Array<{ escopo: Escopo; entidades: Partial<Record<keyof Entidades, unknown>> }> {
+  const saida: Array<{ escopo: Escopo; entidades: Partial<Record<keyof Entidades, unknown>> }> = [];
+  for (const x of Array.isArray(env.escopos) ? (env.escopos as unknown[]) : []) {
+    const s = x as Partial<Record<keyof EscopoNoArquivo, unknown>> | null;
+    const e = s?.escopo as Partial<Record<keyof Escopo, unknown>> | undefined;
+    const ent = s?.entidades;
+    if (!e || !texto(e.host) || !texto(e.login) || !unidadeValida(e.unidade) || (e.vis !== "unidade" && e.vis !== "eu")) continue;
+    if (!mesmoDono({ host: e.host, login: e.login }, d) || !ent || typeof ent !== "object") continue;
+    saida.push({
+      escopo: { host: d.host, login: d.login.trim().toLowerCase(), unidade: e.unidade, vis: e.vis },
+      entidades: ent as Partial<Record<keyof Entidades, unknown>>,
+    });
+  }
+  return saida;
+}
+
+/** As listas de um escopo como o `importar` as recebe (o que não é lista vira vazia; cada item ele confere). */
+const listasDe = (ent: Partial<Record<keyof Entidades, unknown>>): Partial<Entidades> =>
+  Object.fromEntries(LISTAS.map((k) => [k, Array.isArray(ent[k]) ? ent[k] : []])) as Partial<Entidades>;
 
 /**
  * Mescla o que é deste usuário neste SEI (o de outros fica no arquivo, intocado). A memória do sigilo vem
@@ -235,10 +293,8 @@ async function devolverSigilo(area: Area, sigilo: unknown, d: Dono): Promise<voi
 export async function importarTudo(area: Area, env: EnvelopeArquivo, d: Dono, carimbo: () => Carimbo): Promise<ResultadoImportacao> {
   await devolverSigilo(area, env.sigilo, d);
   const soma: ResultadoImportacao = { novos: 0, atualizados: 0, ignorados: 0, excedentes: 0 };
-  for (const s of env.escopos) {
-    if (!mesmoDono(s.escopo, d)) continue;
-    const e: Escopo = { host: s.escopo.host, login: s.escopo.login.trim().toLowerCase(), unidade: s.escopo.unidade, vis: s.escopo.vis };
-    const r = await repoDe(area, e, carimbo).importar(s.entidades);
+  for (const s of escoposDoDono(env, d)) {
+    const r = await repoDe(area, s.escopo, carimbo).importar(listasDe(s.entidades));
     soma.novos += r.novos;
     soma.atualizados += r.atualizados;
     soma.ignorados += r.ignorados;
@@ -336,26 +392,61 @@ export function fazerCopiaDoDia(
   });
 }
 
+/** Um item com id (o da cópia ou do arquivo pode vir torto: `null`, número, sem id). */
+const comId = (x: unknown): x is Versionada =>
+  !!x && typeof x === "object" && !Array.isArray(x) && typeof (x as { id?: unknown }).id === "string";
+
 /**
- * Restaurar não "volta no tempo": traz de volta o que estava ATIVO na cópia (projetos, fases, etapas
- * e modelos), com carimbo novo para vencer exclusões posteriores, e deixa em paz o que entrou depois.
- * O histórico mescla como está (só acrescenta). A memória do sigilo da cópia volta como no `importarTudo`.
+ * Os itens ATIVOS na cópia que aqui sumiram (ausentes ou com lápide), recarimbados para vencer a lápide. O que está
+ * vivo aqui não entra (fica como está, mesmo que difira da cópia).
+ */
+function sumidos(daCopia: unknown, aqui: readonly Versionada[], c: Carimbo): Versionada[] {
+  const vivos = new Set(aqui.filter((x) => x.removidoEm === undefined).map((x) => x.id));
+  const lista = Array.isArray(daCopia) ? (daCopia as unknown[]) : [];
+  return recarimbarAtivos(
+    lista.filter(comId).filter((x) => !vivos.has(x.id)),
+    c,
+  );
+}
+
+/** Os registros do histórico da cópia que aqui não existem: entram como vieram (registro não muda depois de gravado). */
+function ausentes(daCopia: unknown, aqui: readonly Versionada[]): Versionada[] {
+  const ids = new Set(aqui.map((x) => x.id));
+  return (Array.isArray(daCopia) ? (daCopia as unknown[]) : []).filter(comId).filter((x) => !ids.has(x.id));
+}
+
+/**
+ * Restaurar uma cópia RECUPERA, não volta no tempo: entram só os projetos, fases, etapas e modelos que estavam
+ * ativos na cópia e aqui sumiram (ausentes ou excluídos depois dela), recarimbados para vencer a lápide (o projeto
+ * excluído volta com as fases e as etapas que foram junto); os registros do histórico que faltam entram como vieram.
+ * O que está vivo aqui fica como está, mesmo que difira da cópia (a edição de um colega depois da cópia não é
+ * desfeita) e não é recarimbado. A memória do sigilo da cópia volta como no `importarTudo`. A cópia vem do
+ * IndexedDB e passa pela mesma leitura do arquivo: torta, nada é restaurado (`ErroValidacao`). Devolve quantos
+ * itens voltaram de fato (os escolhidos que estão vivos depois da mescla).
  */
 export async function restaurarCopia(area: Area, copia: CopiaProjetos, d: Dono, carimbo: () => Carimbo): Promise<number> {
+  const env = lerEnvelopeArquivo((copia as { envelope?: unknown } | null)?.envelope);
+  if (!env) throw new ErroValidacao(["Esta cópia está danificada e não pode ser restaurada. Escolha a de outro dia."]);
   const c = carimbo();
-  const env: EnvelopeArquivo = {
-    ...copia.envelope,
-    escopos: copia.envelope.escopos.map((s) => ({
-      escopo: s.escopo,
-      entidades: {
-        p: recarimbarAtivos(s.entidades.p, c),
-        f: recarimbarAtivos(s.entidades.f, c),
-        e: recarimbarAtivos(s.entidades.e, c),
-        h: s.entidades.h,
-        m: recarimbarAtivos(s.entidades.m, c),
-      },
-    })),
-  };
-  const r = await importarTudo(area, env, d, () => c);
-  return r.novos + r.atualizados;
+  await devolverSigilo(area, env.sigilo, d);
+  let voltaram = 0;
+  for (const s of escoposDoDono(env, d)) {
+    const repo = repoDe(area, s.escopo, () => c);
+    const aqui = await repo.entidades();
+    const escolhidos: Record<keyof Entidades, Versionada[]> = {
+      p: sumidos(s.entidades.p, aqui.p, c),
+      f: sumidos(s.entidades.f, aqui.f, c),
+      e: sumidos(s.entidades.e, aqui.e, c),
+      h: ausentes(s.entidades.h, aqui.h),
+      m: sumidos(s.entidades.m, aqui.m, c),
+    };
+    if (LISTAS.every((k) => escolhidos[k].length === 0)) continue;
+    await repo.importar(escolhidos as unknown as Partial<Entidades>);
+    const depois = await repo.entidades();
+    for (const k of LISTAS) {
+      const ids = new Set(escolhidos[k].map((x) => x.id));
+      voltaram += (depois[k] as Versionada[]).filter((x) => ids.has(x.id) && x.removidoEm === undefined).length;
+    }
+  }
+  return voltaram;
 }

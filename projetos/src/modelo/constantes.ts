@@ -44,5 +44,3 @@ export const chaveImportacao = (host: string, login: string): string => `projeto
  * a leem como dado.
  */
 export const prefixoMemoriaSigilo = (host: string, login: string): string => `projetos/sigilo/${host}|${login.trim().toLowerCase()}/`;
-/** A chave única da memória na rodada 2 (antes das entradas por número): só lida, nunca gravada. */
-export const chaveMemoriaSigiloLegada = (host: string, login: string): string => `projetos/sigilo/${host}|${login.trim().toLowerCase()}`;

@@ -30,10 +30,11 @@
  *   aqui volta a ir no texto gravado daqui quando o colega troca o processo, e os dois regravam o texto a cada
  *   rodada (o vai-e-volta da rodada 1), até o número ser marcado aqui. Fechar isso pediria um índice local dos
  *   registros criados aqui.
- * - Falha fechada: a leitura que não dá (erro do storage) lança; a chave única da rodada 2
- *   (`chaveMemoriaSigiloLegada`) é lida como locais, e se estiver torta com algo dentro lança
- *   `ErroMemoriaSigilo` (só a torta sem nada dentro conta como vazia). Numa entrada por número, o valor torto
- *   não perde nada (o número está na chave): ela conta como local.
+ * - Falha fechada: a leitura que não dá (erro do storage) vira `ErroMemoriaSigilo` (quem lê o storage a
+ *   embrulha: o repositório e o arquivo), com uma mensagem que serve ao texto, ao arquivo e à cópia, e nada é
+ *   gravado. É a única forma de a memória ficar ilegível: numa entrada por número, o valor torto não perde nada
+ *   (o número está na chave) e conta como local. A chave única da rodada 2 da Tarefa 4 (`projetos/sigilo/<host>|<login>`,
+ *   sem a barra) só existiu na branch de desenvolvimento e não é lida.
  */
 
 import type { SigilosConhecidos } from "./sigilo";
@@ -53,10 +54,13 @@ export interface NumerosSigilosos {
   documentos: Iterable<string>;
 }
 
-/** A memória do sigilo não pôde ser lida: a sincronia para (não monta o texto sem ela). */
+/**
+ * A memória do sigilo não pôde ser lida (erro do storage): nada que dependa dela é gravado (o texto, o arquivo, a
+ * cópia, a mescla). `causa` é o erro original do storage.
+ */
 export class ErroMemoriaSigilo extends Error {
-  constructor() {
-    super("A memória do sigilo dos projetos neste navegador está ilegível. A sincronia parou para não enviar número de processo sigiloso.");
+  constructor(causa?: unknown) {
+    super("Não foi possível ler a lista de processos sigilosos deste computador. Nada foi gravado; tente de novo.", { cause: causa });
     this.name = "ErroMemoriaSigilo";
   }
 }
@@ -64,43 +68,14 @@ export class ErroMemoriaSigilo extends Error {
 /** Número que cabe numa entrada: texto de 1 a 64 caracteres (os de verdade têm até 40). */
 const numeroValido = (x: unknown): x is string => typeof x === "string" && x.length > 0 && x.length <= 64;
 
-/** Há algo que poderia ser um número (texto ou número em qualquer nível)? */
-function temConteudo(x: unknown): boolean {
-  if (typeof x === "string") return x.length > 0;
-  if (typeof x === "number") return true;
-  if (Array.isArray(x)) return x.some(temConteudo);
-  if (x && typeof x === "object") return Object.values(x).some(temConteudo);
-  return false;
-}
-
-/** As chaves do storage que são da memória deste usuário (as entradas e a chave única da rodada 2). */
-export function daMemoria(chave: string, prefixo: string, legada: string): boolean {
-  return chave === legada || chave.startsWith(prefixo);
-}
-
-/**
- * A memória a partir das chaves lidas do storage (`itens` pode ter outras: são ignoradas). Lança
- * `ErroMemoriaSigilo` se a chave única da rodada 2 estiver torta com algo dentro.
- */
-export function lerMemoria(itens: Record<string, unknown>, prefixo: string, legada: string): MemoriaSigilo {
+/** A memória a partir das chaves lidas do storage (`itens` pode ter outras: são ignoradas). Nunca lança. */
+export function lerMemoria(itens: Record<string, unknown>, prefixo: string): MemoriaSigilo {
   const processos = new Map<string, OrigemSigilo>();
   const documentos = new Map<string, OrigemSigilo>();
   const pos = (m: Map<string, OrigemSigilo>, n: string, o: OrigemSigilo) => {
     if (m.get(n) !== "local") m.set(n, o);
   };
   for (const [k, v] of Object.entries(itens)) {
-    if (k === legada) {
-      for (const [campo, m] of [
-        ["processos", processos],
-        ["documentos", documentos],
-      ] as const) {
-        for (const n of numerosDaLegada(v, campo)) {
-          const k = campo === "documentos" ? chaveDocumento(n) : n;
-          if (k) pos(m, k, "local");
-        }
-      }
-      continue;
-    }
     if (!k.startsWith(prefixo)) continue;
     const resto = k.slice(prefixo.length);
     const conjunto = resto.startsWith("p/") ? processos : resto.startsWith("d/") ? documentos : null;
@@ -110,21 +85,6 @@ export function lerMemoria(itens: Record<string, unknown>, prefixo: string, lega
     pos(conjunto, numero, v === "aprendida" ? "aprendida" : "local");
   }
   return { processos, documentos };
-}
-
-/** Os números de uma lista da chave única da rodada 2; torta com conteúdo lança. */
-function numerosDaLegada(v: unknown, campo: "processos" | "documentos"): string[] {
-  if (v === undefined || v === null) return [];
-  const o = v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
-  const forma =
-    !!o &&
-    Object.keys(o).every((k) => k === "processos" || k === "documentos" || !temConteudo(o[k])) &&
-    ["processos", "documentos"].every((k) => o[k] === undefined || (Array.isArray(o[k]) && (o[k] as unknown[]).every(numeroValido)));
-  if (!forma) {
-    if (temConteudo(v)) throw new ErroMemoriaSigilo();
-    return [];
-  }
-  return ((o[campo] as string[] | undefined) ?? []).slice();
 }
 
 /**

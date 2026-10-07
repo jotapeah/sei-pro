@@ -453,7 +453,7 @@ export async function verificarSincroniaSigilo(): Promise<void> {
     );
     checar("a marca vale para o mesmo numero com zero a esquerda", m.e[0]?.documento?.sigiloso === true, m.e);
     const PREF = prefixoMemoriaSigilo("sei.x.gov.br", "ana");
-    const mem = lerMemoria({ [`${PREF}d/0${DOC}`]: "aprendida", [`${PREF}d/000`]: "local" }, PREF, "x");
+    const mem = lerMemoria({ [`${PREF}d/0${DOC}`]: "aprendida", [`${PREF}d/000`]: "local" }, PREF);
     checar(
       "a memoria le a entrada antiga com zero a esquerda pela chave (e '000' e o documento '0')",
       mem.documentos.get(DOC) === "aprendida" && mem.documentos.get("0") === "local" && mem.documentos.size === 2,
