@@ -1,10 +1,13 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createContext, runInContext } from "node:vm";
 import { areaMemoria } from "@comum/armazenamento/area";
 import { avisoComAcoesNaPagina } from "@comum/painel/aviso";
+import { icone } from "@comum/ui/dom";
 import { ErroSei } from "@nucleo/sessao/erros";
 import type { Pagina } from "@nucleo/sessao/http";
+import { build } from "esbuild";
 import { escoposDaUnidade } from "../../src/modelo/escopo";
 import { atividadesConfigurado, contextoProjetos } from "../../src/pagina/contexto";
 import { conferirDocumento } from "../../src/pagina/documento";
@@ -22,6 +25,55 @@ const PASTA_PAGINA = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "
 
 const nomes = (l: readonly UsuarioDaUnidade[]) => l.map((u) => u.login ?? u.nome).join();
 
+/** A primeira linha `import` de src/pagina/main.ts (depois do comentário de cabeçalho). */
+function primeiroImport(): string {
+  const codigo = readFileSync(join(PASTA_PAGINA, "main.ts"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  return codigo.split("\n").find((l) => l.startsWith("import")) ?? "";
+}
+
+/**
+ * Empacota o content script como o build.mjs (IIFE, minificado) e o avalia numa VM em que marcar o
+ * <html> interrompe a avaliação. Conta quantas datas (AAAA-MM-DD) já tinham entrado num Set até ali:
+ * o calendário de feriados de 2000 a 2100 põe umas 1.400; com a marca primeiro, nenhuma.
+ */
+async function marcaNoPacote(): Promise<{ atributo?: string; feriadosAntes?: number; erro?: string }> {
+  const r = await build({
+    entryPoints: [join(PASTA_PAGINA, "main.ts")],
+    bundle: true,
+    minify: true,
+    write: false,
+    format: "iife",
+    charset: "ascii",
+    target: ["chrome116", "firefox115"],
+    logLevel: "silent",
+    loader: { ".css": "text" },
+  });
+  const contexto = createContext({}) as Record<string, unknown>;
+  runInContext(
+    "globalThis.__feriados = 0; const add = Set.prototype.add; Set.prototype.add = function (v) {" +
+      ' if (typeof v === "string" && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(v)) globalThis.__feriados++; return add.call(this, v); };',
+    contexto,
+  );
+  const saida: { atributo?: string; feriadosAntes?: number; erro?: string } = {};
+  contexto.window = contexto;
+  contexto.document = {
+    documentElement: {
+      setAttribute(nome: string) {
+        saida.atributo = nome;
+        saida.feriadosAntes = contexto.__feriados as number;
+        throw new Error("marcado");
+      },
+    },
+  };
+  try {
+    runInContext(r.outputFiles[0]?.text ?? "", contexto);
+    saida.erro = "o pacote nao marcou o <html>";
+  } catch (e) {
+    if (saida.atributo === undefined) saida.erro = String(e);
+  }
+  return saida;
+}
+
 export async function verificarPagina(): Promise<void> {
   secao("pagina: marca para o legado e contexto");
   const { doc, pagina } = telaSei("sei41/caixa.html");
@@ -29,6 +81,13 @@ export async function verificarPagina(): Promise<void> {
   checar(
     "marca o <html> (o init.js le)",
     ATRIBUTO_ATIVO === "data-seipro-projetos" && doc.documentElement.hasAttribute("data-seipro-projetos"),
+  );
+  checar("main.ts: o primeiro import e o modulo que marca", /^import\s+["']\.\/marcar["'];/m.test(primeiroImport()), primeiroImport());
+  const ordem = await marcaNoPacote();
+  checar(
+    "pacote do content script: a marca vem antes de qualquer outro modulo (nenhum feriado calculado antes)",
+    ordem.atributo === ATRIBUTO_ATIVO && ordem.feriadosAntes === 0,
+    ordem,
   );
   const ctx = contextoProjetos(doc, { temaEscuro: true, corTema: "#155b9c", atividades: false }, pagina.url);
   checar(
@@ -86,6 +145,25 @@ export async function verificarPagina(): Promise<void> {
   botao(titulo, "2 vencem nesta semana")!.click();
   botao(titulo, "1 atrasada")!.click();
   checar("clique avisa o tipo", tipos.join() === "semana,atrasadas");
+  // As formas de um ícone (path d, circle cx/cy/r): a pílula usa o do @comum (tela aprovada: alerta e relógio).
+  const formas = (svg: Element | null | undefined) =>
+    [...(svg?.querySelectorAll("path, circle") ?? [])]
+      .map((f) => ["d", "cx", "cy", "r"].map((a) => f.getAttribute(a) ?? "").join(" "))
+      .join("|");
+  const pAtrasadas = titulo.querySelector(".spro-prj-atrasadas");
+  const pSemana = titulo.querySelector(".spro-prj-semana");
+  checar(
+    "pilulas com os icones da tela (alerta nas atrasadas, relogio na semana), so decorativos",
+    formas(pAtrasadas?.querySelector("svg")) === formas(icone("alerta")) &&
+      formas(pSemana?.querySelector("svg")) === formas(icone("relogio")) &&
+      formas(icone("alerta")) !== formas(icone("relogio")) &&
+      pAtrasadas?.querySelector("svg")?.getAttribute("aria-hidden") === "true",
+  );
+  const estiloAlertas = docP.getElementById("spro-prj-alertas-estilo")?.textContent ?? "";
+  checar(
+    "caixa das pilulas escondida de verdade quando vazia (a pagina do SEI nao tem a regra [hidden] da base)",
+    /\.spro-prj-alertas\[hidden\]\s*\{\s*display:\s*none/.test(estiloAlertas),
+  );
   pintarAlertas(titulo, { atrasadas: 0, semana: 0 }, false, () => undefined);
   checar(
     "sem alertas, sem pilulas (e sem caixa vazia ocupando lugar)",

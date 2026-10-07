@@ -1,7 +1,8 @@
 /**
  * Content script do gestor de projetos (mundo isolado, todos os frames,
  * document_start). Primeiro marca o documento, de forma síncrona, para o
- * legado não carregar o sei-pro-projetos.js. No P3, só a janela de topo do
+ * legado não carregar o sei-pro-projetos.js: o primeiro import (`./marcar`) é
+ * um efeito que roda antes de todo o resto do pacote. No P3, só a janela de topo do
  * Controle de Processos faz algo: monta o painel embutido, atende o app pelo
  * RPC e pinta as pílulas de alerta no título. (Caixa, árvore e lateral: P5.)
  *
@@ -10,6 +11,8 @@
  * usuários é a parcial (pagina/usuarios.ts).
  */
 
+// Primeiro de tudo (efeito de importação): a marca do <html> antes de qualquer outro módulo.
+import "./marcar";
 import { areaChrome } from "@comum/armazenamento/area";
 import { hojeISO } from "@comum/datas/dias";
 import { lerOpcaoLegada } from "@comum/opcoes/legadas";
@@ -29,11 +32,8 @@ import { RepositorioProjetos } from "../repositorio";
 import { atividadesConfigurado, contextoProjetos } from "./contexto";
 import { conferirDocumento } from "./documento";
 import { tratadoresProjetos } from "./executor";
-import { marcarAtivo } from "./marca";
 import { ligarAlertas, montarPainelProjetos, ordemDoPainel } from "./painel";
 import { responsaveisUsados, usuariosDaCaixa, usuariosDaUnidade } from "./usuarios";
-
-marcarAtivo(document);
 
 const global = window as unknown as { __seiProProjetos?: boolean };
 if (!global.__seiProProjetos) {

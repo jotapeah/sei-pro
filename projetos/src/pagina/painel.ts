@@ -30,8 +30,11 @@ function instalarEstilo(doc: Document): void {
   s.id = `${PREFIXO}-alertas-estilo`;
   s.textContent = [
     `.${PREFIXO}-alertas{display:inline-flex;gap:6px;margin-left:10px}`,
+    // A página do SEI não tem a regra [hidden] da base do SEI Pro: sem isto, a classe acima venceria.
+    `.${PREFIXO}-alertas[hidden]{display:none}`,
     `.${PREFIXO}-pilula{display:inline-flex;align-items:center;gap:4px;min-height:24px;padding:0 10px;font:600 12.5px/1 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;border:0;border-radius:999px;cursor:pointer}`,
     `.${PREFIXO}-pilula:focus-visible{outline:2px solid #1a73e8;outline-offset:1px}`,
+    `.${PREFIXO}-pilula svg{flex:none}`,
     `.${PREFIXO}-atrasadas{color:#b42318;background:rgb(209 53 43 / 12%)}`,
     `.${PREFIXO}-semana{color:#8a4b08;background:rgb(180 92 10 / 13%)}`,
     `.${PREFIXO}-escuro .${PREFIXO}-atrasadas{color:#ff7d73;background:rgb(255 125 115 / 16%)}`,
@@ -79,8 +82,14 @@ export function pintarAlertas(
     titulo.append(caixa);
   }
   caixa.classList.toggle(`${PREFIXO}-escuro`, temaEscuro);
+  // Os ícones da tela aprovada: alerta nas atrasadas, relógio na semana (decorativos: o texto diz tudo).
   const pilula = (tipo: TipoAlerta, texto: string, dica: string) =>
-    h("button", { type: "button", class: `${PREFIXO}-pilula ${PREFIXO}-${tipo}`, title: dica, onclick: () => aoClicar(tipo) }, texto);
+    h(
+      "button",
+      { type: "button", class: `${PREFIXO}-pilula ${PREFIXO}-${tipo}`, title: dica, onclick: () => aoClicar(tipo) },
+      icone(tipo === "atrasadas" ? "alerta" : "relogio", 13),
+      texto,
+    );
   caixa.replaceChildren(
     ...(a.atrasadas
       ? [pilula("atrasadas", `${a.atrasadas} ${a.atrasadas === 1 ? "atrasada" : "atrasadas"}`, "Mostra as etapas atrasadas")]
