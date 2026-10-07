@@ -128,6 +128,10 @@ export function verificarAppBalao(): void {
     "concluida: data da conclusao, sem regua nem nota de medida",
     texto(bo.el).includes("Concluída em 09/09/2026") && !bo.el.querySelector("input[type='range']") && !texto(bo.el).includes("pelo tempo"),
   );
+  checar(
+    "concluida: so Reabrir, sem Concluir nem Marcar como cumprido (nao reconclui)",
+    !!botao(bo.el, "Reabrir") && !botao(bo.el, "Concluir etapa") && !botao(bo.el, "Marcar como cumprido"),
+  );
   botao(bo.el, "Reabrir")!.click();
   checar("reabrir", co.feitos.join() === "reabrir");
   bo.fechar();

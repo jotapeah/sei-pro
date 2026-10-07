@@ -24,11 +24,15 @@ export function contextoProjetos(
   return ctx;
 }
 
-/** Servidor do Atividades configurado: o legado grava `configBasePro_atividades` com URL_API e KEY_USER. */
+/**
+ * Servidor do Atividades configurado: o legado grava `configBasePro_atividades` com URL_API (e KEY_USER,
+ * que fica vazio no login por host). Basta a URL_API preenchida: é a mesma regra da guarda do init.js
+ * (`servidorAtividadesConfiguradoPro`), que decide se o legado carrega; as duas não podem divergir.
+ */
 export function atividadesConfigurado(armazenamento: Pick<Storage, "getItem">): boolean {
   try {
-    const c = JSON.parse(armazenamento.getItem("configBasePro_atividades") ?? "null") as { URL_API?: unknown; KEY_USER?: unknown } | null;
-    return !!c && typeof c.URL_API === "string" && !!c.URL_API && !!c.KEY_USER;
+    const c = JSON.parse(armazenamento.getItem("configBasePro_atividades") ?? "null") as { URL_API?: unknown } | null;
+    return !!c && typeof c === "object" && typeof c.URL_API === "string" && c.URL_API !== "";
   } catch {
     return false;
   }

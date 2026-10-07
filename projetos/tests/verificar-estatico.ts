@@ -40,6 +40,10 @@ export async function verificarEstatico(): Promise<void> {
       html.includes('id="app"'),
   );
   checar(
+    "o app inteiro nao e regiao viva (cada redesenho seria lido); os avisos ja tem role=status",
+    !/<div id="app"[^>]*aria-live/.test(html) && !html.includes("aria-live"),
+  );
+  checar(
     "pagina so ASCII",
     [...html].every((c) => c.charCodeAt(0) <= 0x7f),
   );

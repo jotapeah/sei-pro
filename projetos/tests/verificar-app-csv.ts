@@ -74,6 +74,14 @@ export async function verificarAppCsv(): Promise<void> {
     l2,
   );
   checar("processo sigiloso do projeto em branco", (linhas[3] ?? "").startsWith("Sigiloso;Só eu;;"));
+  const sigSemEtapas = csvDosProjetos([{ ...sig, etapas: [] }], HOJE)
+    .slice(1)
+    .split("\r\n");
+  checar(
+    "projeto sigiloso sem etapas: uma linha, com o processo em branco",
+    sigSemEtapas.length === 2 && sigSemEtapas[1] === `Sigiloso;Só eu;${";".repeat(13)}` && !sigSemEtapas.join().includes("50300.000777"),
+    sigSemEtapas,
+  );
   checar(
     "nome do arquivo sem acento nem espaco",
     nomeDoCsv("Revisão da Resolução nº 5.432", HOJE) === "projeto-revisao-da-resolucao-n-5-432-2026-10-06.csv" &&
@@ -173,6 +181,26 @@ export async function verificarAppCsv(): Promise<void> {
     { repos: { unidade: un, eu }, hoje: HOJE, montarGantt: ganttFalso().montar, imprimir: () => undefined },
   );
   checar("impressao: processo sigiloso do projeto nao aparece", !texto(doc4.getElementById("app")).includes("50300.000555"));
+  await un.criarEtapa({
+    projeto: sg.id,
+    nome: "Etapa reservada",
+    inicio: "2026-10-05",
+    fim: "2026-10-09",
+    processo: { protocolo: "50300.000556/2026-56", sigiloso: true },
+  });
+  const doc5 = telaDoApp();
+  const g5 = ganttFalso();
+  await montarImpressao(
+    doc5.getElementById("app")!,
+    { ...par, projeto: "todos" },
+    { repos: { unidade: un, eu }, hoje: HOJE, montarGantt: g5.montar, imprimir: () => undefined },
+  );
+  const todos5 = texto(doc5.getElementById("app"));
+  checar(
+    "impressao do Todos: o projeto sigiloso aparece, sem o numero (nem o da etapa)",
+    todos5.includes("Reservado") && !todos5.includes("50300.000555") && !todos5.includes("50300.000556"),
+    todos5,
+  );
 
   // A impressão não tem a lista à esquerda: o nome da fase fica no Gantt, mesmo com "lista=1" no endereço
   // (o parâmetro das versões anteriores; com a lista, a decoração esconde o rótulo da fase).

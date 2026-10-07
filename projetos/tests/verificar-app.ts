@@ -605,6 +605,10 @@ export async function verificarApp(): Promise<void> {
   await tique();
   clicarLinha(k, k.ids.b);
   await k.un.concluirEtapa(k.ids.b, "2026-10-01");
+  checar(
+    "o balao aberto antes ainda oferece Concluir (a prova nao passa no vazio)",
+    !!botao(balao(k) ?? k.doc.createElement("div"), "Concluir etapa"),
+  );
   botao(balao(k) ?? k.doc.body, "Concluir etapa")?.click();
   await tique(80);
   checar(
@@ -612,18 +616,22 @@ export async function verificarApp(): Promise<void> {
     (await k.un.obterEtapa(k.ids.b))?.concluidaEm === "2026-10-01" && !aviso(k.doc),
   );
   clicarLinha(k, k.ids.a);
+  checar("balao da etapa A com Concluir", !!botao(balao(k) ?? k.doc.createElement("div"), "Concluir etapa"));
   botao(balao(k) ?? k.doc.body, "Concluir etapa")?.click();
   await tique(80);
   await k.un.concluirEtapa(k.ids.a, "2026-10-02");
+  checar("o aviso da conclusao com Desfazer", !!botao(aviso(k.doc) ?? k.doc.createElement("div"), "Desfazer"));
   botao(aviso(k.doc) ?? k.doc.body, "Desfazer")?.click();
   await tique(80);
   checar("Desfazer nao reabre a conclusao que ja nao e a de hoje", (await k.un.obterEtapa(k.ids.a))?.concluidaEm === "2026-10-02");
   const revisao = await k.un.criarEtapa({ projeto: k.ids.p, nome: "Revisão", inicio: "2026-10-13", fim: "2026-10-14" });
   await tique(80);
   clicarLinha(k, revisao.id);
+  checar("balao da Revisao com Concluir", !!botao(balao(k) ?? k.doc.createElement("div"), "Concluir etapa"));
   botao(balao(k) ?? k.doc.body, "Concluir etapa")?.click();
   await tique(80);
   await k.un.reabrirEtapa(revisao.id);
+  checar("o aviso da conclusao com Informar documento", !!botao(aviso(k.doc) ?? k.doc.createElement("div"), "Informar documento"));
   botao(aviso(k.doc) ?? k.doc.body, "Informar documento")?.click();
   await tique(80);
   checar(
@@ -758,8 +766,10 @@ export async function verificarApp(): Promise<void> {
       pf.escalas[f.ids.p] === "Mês",
     pf,
   );
+  checar("o botao Lista esta na tela", !!botao(f.raiz, "Lista"));
   botao(f.raiz, "Lista")?.click();
   await tique();
+  checar("a vista Lista ficou (a pilula volta ao Gantt a partir dela)", !!botao(f.raiz, "Lista")?.matches("[aria-pressed='true']"));
   f.app.aplicarAlerta("atrasadas");
   await tique();
   checar(

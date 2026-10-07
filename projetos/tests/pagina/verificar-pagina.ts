@@ -103,12 +103,38 @@ export async function verificarPagina(): Promise<void> {
   checar("sem usuario no cabecalho, sem contexto", contextoProjetos(instalarDom(), { temaEscuro: false, atividades: false }) === null);
   const loja = (v: string | null) => ({ getItem: () => v });
   checar(
-    "servidor do Atividades: so com URL_API e KEY_USER",
+    "servidor do Atividades: URL_API preenchida basta (o login por host grava KEY_USER vazio)",
     atividadesConfigurado(loja('{"URL_API":"https://x/api","KEY_USER":"k"}')) &&
-      !atividadesConfigurado(loja('{"URL_API":"https://x/api"}')) &&
+      atividadesConfigurado(loja('{"URL_API":"https://x/api","KEY_USER":"","CLIENT_ID":"c"}')) &&
+      atividadesConfigurado(loja('{"URL_API":"https://x/api"}')) &&
+      !atividadesConfigurado(loja('{"URL_API":"","KEY_USER":"k"}')) &&
       !atividadesConfigurado(loja("nao e json")) &&
       !atividadesConfigurado(loja(null)),
   );
+  // A mesma regra da guarda do init.js (servidorAtividadesConfiguradoPro), que decide se o legado carrega.
+  const init = readFileSync(join(PASTA_PAGINA, "..", "..", "..", "dist", "js", "init.js"), "utf8");
+  const guarda = init.match(/function servidorAtividadesConfiguradoPro\(\) \{[\s\S]*?\n {12}\}\n/)?.[0] ?? "";
+  const doInit = (v: string | null): boolean => {
+    const ctxVm = createContext({ localStorage: { getItem: () => v }, resultado: undefined as unknown });
+    runInContext(`${guarda}\nresultado = servidorAtividadesConfiguradoPro();`, ctxVm);
+    return ctxVm.resultado === true;
+  };
+  const casos = [
+    null,
+    "",
+    "null",
+    "{}",
+    "nao e json",
+    "[]",
+    '{"URL_API":""}',
+    '{"URL_API":5}',
+    '{"URL_API":"https://x/api"}',
+    '{"URL_API":"https://x/api","KEY_USER":""}',
+    '{"URL_API":"https://x/api","KEY_USER":"k"}',
+    '{"KEY_USER":"k"}',
+  ];
+  const divergem = casos.filter((v) => doInit(v) !== atividadesConfigurado(loja(v)));
+  checar("app e init.js: a mesma definicao de servidor do Atividades", guarda !== "" && divergem.length === 0, divergem);
 
   secao("pagina: painel no Controle de Processos");
   const { doc: docP } = telaSei("sei41/caixa.html");
