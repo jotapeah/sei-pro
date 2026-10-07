@@ -1,5 +1,6 @@
 import { resumo } from "./util";
 import { verificarAbertura } from "./verificar-abertura";
+import { verificarAreaChrome } from "./verificar-area-chrome";
 import { verificarArmazenamento } from "./verificar-armazenamento";
 import { verificarArquivo } from "./verificar-arquivo";
 import { verificarAvatar } from "./verificar-avatar";
@@ -30,6 +31,7 @@ verificarDatas();
 verificarUi();
 verificarAviso();
 await verificarArmazenamento();
+await verificarAreaChrome();
 verificarEntidade();
 await verificarOpcoes();
 await verificarRpc();

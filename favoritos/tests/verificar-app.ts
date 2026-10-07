@@ -1,4 +1,5 @@
 import { areaMemoria } from "@comum/armazenamento/area";
+import { instalarChromeStorage } from "../../sei-comum/tests/chromeFalso";
 import { type AbrirModal, AppFavoritos, type DepsApp } from "../src/app/app";
 import { chaveMigracao, chaveUltimaUnidade } from "../src/modelo/constantes";
 import { escoposDoContexto } from "../src/modelo/escopo";
@@ -536,6 +537,25 @@ export async function verificarApp(): Promise<void> {
   await pg.area.gravar({ [chaveProgresso(CTX.host, CTX.login)]: { feitos: 5, total: 5, fim: true, quando: Date.now() } });
   await tique(40);
   checar("no fim a faixa some", !faixaP());
+
+  secao("app: progresso do Atualizar pelo chrome.storage de verdade (formato do Chrome, areaChrome)");
+  const chrome = instalarChromeStorage();
+  try {
+    const pc = montar({ area: chrome.local });
+    await pc.app.iniciar();
+    await chrome.local.gravar({
+      [chaveProgresso(CTX.host, CTX.login)]: { feitos: 3, total: 5, atual: "50300.000003/2026-03", quando: Date.now() },
+    });
+    await tique(40);
+    const faixaC = () => pc.raiz.querySelector(".fav-progresso");
+    checar("o andamento gravado pela aba aparece no app", /3 de 5/.test(faixaC()?.textContent ?? ""), faixaC()?.textContent);
+    await chrome.local.gravar({ [chaveProgresso(CTX.host, CTX.login)]: { feitos: 5, total: 5, fim: true, quando: Date.now() } });
+    await tique(40);
+    checar("e some no fim", !faixaC());
+    pc.app.destruir();
+  } finally {
+    chrome.restaurar();
+  }
 
   secao("app: documentos favoritos no item");
   const df = montar();

@@ -1,4 +1,5 @@
 import { areaMemoria } from "@comum/armazenamento/area";
+import { instalarChromeStorage } from "../../sei-comum/tests/chromeFalso";
 import { escoposDoContexto } from "../src/modelo/escopo";
 import { atualizarForaDaUnidade, ControleAtualizar, type ProgressoAtualizacao, pedirCancelamento } from "../src/pagina/atualizar";
 import { RepositorioFavoritos } from "../src/repositorio";
@@ -109,4 +110,29 @@ export async function verificarAtualizar(): Promise<void> {
   );
   await ctlA.iniciar();
   checar("o pedido de cancelar chega a aba que roda, por onde quer que tenha sido feito", lidos4.length === 1, lidos4);
+
+  secao("atualizar: cancelar pelo chrome.storage de verdade (formato do Chrome, areaChrome)");
+  const chrome = instalarChromeStorage();
+  try {
+    const lidos5: string[] = [];
+    const ctlB = new ControleAtualizar(
+      () => ({
+        ...deps,
+        repos: [unidade],
+        localizar: async (p: string) => (({ P2: "2", P8: "8" }) as Record<string, string>)[p] ?? "x",
+        lerProcesso: async (p: string) => {
+          lidos5.push(p);
+          await pedirCancelamento(chrome.local, "sei.exemplo", "ana");
+          await tique(5);
+          return { qtdDocumentos: 1, abertoNaUnidade: false };
+        },
+      }),
+      async () => undefined,
+      { area: chrome.local, host: "sei.exemplo", login: "ana" },
+    );
+    await ctlB.iniciar();
+    checar("o Cancelar gravado no storage do Chrome interrompe a atualizacao", lidos5.length === 1, lidos5);
+  } finally {
+    chrome.restaurar();
+  }
 }

@@ -18,6 +18,22 @@ export interface Area {
   aoMudar(cb: (m: Mudancas) => void): () => void;
 }
 
+/**
+ * O `onChanged` do Chrome fala `{ newValue, oldValue }`; os módulos leem `{ novo, antigo }` (o formato do
+ * `areaMemoria`). Só os campos presentes: a chave removida chega sem `novo` (e a chave nova, sem `antigo`), e um
+ * `null` gravado continua `novo: null`.
+ */
+function traduzirMudancas(m: Record<string, chrome.storage.StorageChange>): Mudancas {
+  const saida: Mudancas = {};
+  for (const [chave, c] of Object.entries(m)) {
+    const t: { novo?: unknown; antigo?: unknown } = {};
+    if (c && "newValue" in c) t.novo = c.newValue;
+    if (c && "oldValue" in c) t.antigo = c.oldValue;
+    saida[chave] = t;
+  }
+  return saida;
+}
+
 export function areaChrome(area: chrome.storage.StorageArea, nome: "local" | "sync" | "session"): Area {
   return {
     obter: (chaves = null) => area.get(chaves) as Promise<Record<string, unknown>>,
@@ -31,7 +47,7 @@ export function areaChrome(area: chrome.storage.StorageArea, nome: "local" | "sy
         : undefined,
     aoMudar(cb) {
       const ouvinte = (m: Record<string, chrome.storage.StorageChange>, n: string) => {
-        if (n === nome) cb(m as Mudancas);
+        if (n === nome) cb(traduzirMudancas(m));
       };
       chrome.storage.onChanged.addListener(ouvinte);
       return () => chrome.storage.onChanged.removeListener(ouvinte);
