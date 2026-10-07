@@ -157,9 +157,11 @@ export async function verificarSincroniaTexto(): Promise<void> {
     saida.entidades.p[0],
   );
   checar("o mesmo processo noutra etapa (sem a marca) tambem vai vazio", saida.entidades.e[1]?.processo?.protocolo === "");
+  // Rodada 4 da Tarefa 4: no lugar do documento vai o marcador, sem o número e sem o título.
+  const marcador = (d: unknown) => JSON.stringify(d) === JSON.stringify({ numero: "", sigiloso: true });
   checar(
-    "documento de etapa sigilosa (herdada do projeto ou propria) nao vai",
-    saida.entidades.e[0]?.documento === undefined && saida.entidades.e[1]?.documento === undefined,
+    "documento de etapa sigilosa (herdada do projeto ou propria) nao vai: vai so o marcador",
+    marcador(saida.entidades.e[0]?.documento) && marcador(saida.entidades.e[1]?.documento),
   );
   checar("documento de etapa comum vai", saida.entidades.e[2]?.documento?.numero === "1111111");
   checar(

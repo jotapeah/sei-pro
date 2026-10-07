@@ -74,6 +74,15 @@ export async function verificarAppCsv(): Promise<void> {
     l2,
   );
   checar("processo sigiloso do projeto em branco", (linhas[3] ?? "").startsWith("Sigiloso;Só eu;;"));
+  const comMarcador =
+    csvDosProjetos([{ ...p, etapas: [etapa({ id: "mk", concluidaEm: "2026-10-01", documento: { numero: "", sigiloso: true } })] }], HOJE)
+      .slice(1)
+      .split("\r\n")[1] ?? "";
+  checar(
+    "o marcador (documento de processo sigiloso sem o numero) sai em branco na coluna do documento",
+    comMarcador.endsWith(";01/10/2026;;;"),
+    comMarcador,
+  );
   const sigSemEtapas = csvDosProjetos([{ ...sig, etapas: [] }], HOJE)
     .slice(1)
     .split("\r\n");

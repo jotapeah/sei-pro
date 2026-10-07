@@ -16,12 +16,23 @@ import { h, icone } from "@comum/ui/dom";
 import { duracaoUteis, LIMITE_DIAS_ETAPA } from "../../modelo/calendario";
 import { LIMITES } from "../../modelo/constantes";
 import { chaveResponsavel } from "../../modelo/filtro";
+import { documentoSemNumero } from "../../modelo/sigilo";
 import type { DataISO, DocumentoSei, Etapa, ItemChecklist, Medida, Registro, Responsavel, Vinculo } from "../../modelo/tipos";
 import type { DocumentoConferido, ProcessoDaCaixa, UsuarioDaUnidade } from "../../ponte/tipos";
 import type { ProjetoNaTela } from "../dados";
 import { dataCurta, dataDeFormulario, resumoDoUltimoRegistro, textoDiasUteis, textoDoRegistro } from "../formato";
 import { iconeProjetos } from "../icones";
-import { caixaDeErros, campo, campoDocumento, campoProcesso, ERRO_PROTOCOLO, linhaDeCampos, mensagensDoErro, secao } from "./campos";
+import {
+  caixaDeErros,
+  campo,
+  campoDocumento,
+  campoProcesso,
+  DICA_DOCUMENTO_SEM_NUMERO,
+  ERRO_PROTOCOLO,
+  linhaDeCampos,
+  mensagensDoErro,
+  secao,
+} from "./campos";
 
 export interface ResultadoEtapa {
   nome: string;
@@ -280,7 +291,9 @@ export function abrirDialogoEtapa(c: ContextoDialogoEtapa): { fechar(): void } {
     processos: c.processos,
     aoMudar: () => secProc.resumir(),
   });
-  const documento = campoDocumento(e?.documento?.numero ?? "", c.conferirDocumento, () => secProc.resumir());
+  // Só o marcador do texto (documento de processo sigiloso sem o número): o campo vazio o mantém ao salvar.
+  const semNumero = documentoSemNumero(e?.documento);
+  const documento = campoDocumento(e?.documento?.numero ?? "", c.conferirDocumento, () => secProc.resumir(), { semNumero });
   const numeroDoc = () => documento.numero();
   const secProc = secao(
     "processo",
@@ -289,13 +302,13 @@ export function abrirDialogoEtapa(c: ContextoDialogoEtapa): { fechar(): void } {
     () => {
       const v = proc.vinculo() ?? doProjetoProc;
       const n = numeroDoc();
-      return `${v?.protocolo || "sem processo"} · ${n ? `SEI ${n}` : "sem documento"}`;
+      return `${v?.protocolo || "sem processo"} · ${n ? `SEI ${n}` : semNumero ? "documento de processo sigiloso" : "sem documento"}`;
     },
     h(
       "div",
       { class: "prj-sec-pilha" },
       campo("Processo", proc.combo.el, { dica: "Por padrão, o processo do projeto." }),
-      campo("Documento relacionado", documento.el, { opcional: "(número SEI)" }),
+      campo("Documento relacionado", documento.el, { opcional: "(número SEI)", dica: semNumero ? DICA_DOCUMENTO_SEM_NUMERO : undefined }),
     ),
   );
 
@@ -443,6 +456,7 @@ export function abrirDialogoEtapa(c: ContextoDialogoEtapa): { fechar(): void } {
     const v = proc.vinculo();
     if (v) r.processo = v;
     if (n) r.documento = n === e?.documento?.numero ? e.documento : { numero: n };
+    else if (semNumero) r.documento = e?.documento;
     if (obs.value.trim()) r.observacoes = obs.value.trim();
     return r;
   };

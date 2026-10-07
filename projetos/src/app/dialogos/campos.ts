@@ -209,18 +209,27 @@ export function campoProcesso(o: {
   };
 }
 
-/** Campo do número SEI com a conferência pela pesquisa rápida (sem abrir a árvore). */
+/** A explicação do campo quando a etapa só tem o marcador do texto (documento de processo sigiloso sem o número). */
+export const DICA_DOCUMENTO_SEM_NUMERO =
+  "Documento de processo sigiloso: o número não está neste computador. Deixe em branco para mantê-lo; um número digitado o substitui.";
+
+/**
+ * Campo do número SEI com a conferência pela pesquisa rápida (sem abrir a árvore). `semNumero`: a etapa só tem
+ * o marcador do texto (documento de processo sigiloso cujo número este computador não tem): o campo vem vazio
+ * e diz isso no lugar do "Número SEI".
+ */
 export function campoDocumento(
   valor: string,
   conferir?: (numero: string) => Promise<DocumentoConferido | null>,
   aoMudar?: () => void,
+  o: { semNumero?: boolean } = {},
 ): { el: HTMLElement; numero(): string } {
   const input = h("input", {
     type: "text",
     class: "spro-campo",
     name: "documento",
     inputmode: "numeric",
-    placeholder: "Número SEI",
+    placeholder: o.semNumero ? "Documento de processo sigiloso" : "Número SEI",
     maxlength: "30",
     value: valor,
   });

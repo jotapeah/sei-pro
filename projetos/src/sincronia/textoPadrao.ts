@@ -7,15 +7,18 @@
  * a privacidade dos sigilosos, a poda e a assinatura.
  *
  * Privacidade (spec 5.4): o número de processo sigiloso nunca vai (o vínculo
- * vai vazio, marcado sigiloso), nem o documento de etapa sigilosa (processo
- * próprio sigiloso, ou nenhum processo próprio num projeto sigiloso); registros
+ * vai vazio, marcado sigiloso), nem o número do documento de etapa sigilosa
+ * (processo próprio sigiloso, ou nenhum processo próprio num projeto sigiloso):
+ * o documento vai como o marcador `{ numero: "", sigiloso: true }`; registros
  * antigos do histórico com o número de um processo que hoje é sigiloso vão com
  * "processo sigiloso". O que é sigiloso vem de `sigiloDoEnvelope`, a mesma
  * regra que a mescla de volta usa (`importar`): quem tem os números os mantém
  * (`manterNumeroSigiloso`, `manterDocumentoSigiloso`) e a própria cópia que
  * volta do texto não é regravada. A marca gravada (o sigilo gruda,
- * `marcasDeSigilo`) vale também: documento marcado não vai, nem o número dele
- * nos registros, mesmo que a etapa tenha deixado de ser sigilosa.
+ * `marcasDeSigilo`) e a memória do sigilo valem também: documento marcado ou de
+ * número conhecido como sigiloso vai como o marcador, em qualquer etapa, e o
+ * número dele não vai nos registros, mesmo que a etapa tenha deixado de ser
+ * sigilosa.
  *
  * Poda na exportação: lápides de mais de 180 dias (unidade) ou 90 (pessoal) e
  * o histórico além dos 300 registros mais recentes ficam de fora.
@@ -29,7 +32,14 @@ import { nomeDeTextoInterno, type ValidacaoTexto, versaoMaisNova } from "@comum/
 import { chaveSyncTexto, DIAS_LAPIDE_EU, DIAS_LAPIDE_UNIDADE, FOLGA_RELOGIO_MS, LIMITES } from "../modelo/constantes";
 import { chaveEscopo } from "../modelo/escopo";
 import { excedentes } from "../modelo/historico";
-import { cortarSigilo, NADA_CONHECIDO, type SigilosConhecidos, sigiloDoEnvelope } from "../modelo/sigilo";
+import {
+  cortarSigilo,
+  type DoDispositivo,
+  NADA_CONHECIDO,
+  type NumerosPorOrigem,
+  type SigilosConhecidos,
+  sigiloDoEnvelope,
+} from "../modelo/sigilo";
 import type { Entidades, EnvelopeProjetos, Escopo, Vis } from "../modelo/tipos";
 import { entidadeValida, type RepositorioProjetos } from "../repositorio";
 
@@ -120,15 +130,17 @@ export function validarEnvelope(bruto: unknown, escopo: Escopo): ValidacaoTexto<
 
 /**
  * O envelope que vai ao Texto Padrão: sem números sigilosos e podado (lápides e histórico), e tudo o que o
- * corte raspou (chaves de processo e números de documento). `conhecidos` (a memória do sigilo do usuário)
- * soma-se à regra deduzida do envelope. Puro: quem grava o que foi raspado na memória é quem monta o texto
- * para gravar (o adaptador), antes da gravação.
+ * corte raspou (chaves de processo e números de documento), pela procedência do item: `daqui` diz o que foi
+ * gravado por este dispositivo (local); o resto é dado de colega (aprendida). `conhecidos` (a memória do
+ * sigilo do usuário) soma-se à regra deduzida do envelope. Puro: quem grava o que foi raspado na memória é
+ * quem monta o texto para gravar (o adaptador), antes da gravação.
  */
 export function paraOTextoComRaspados(
   env: EnvelopeProjetos,
   agora: number,
   conhecidos: SigilosConhecidos = NADA_CONHECIDO,
-): { envelope: EnvelopeProjetos; raspados: { processos: string[]; documentos: string[] } } {
+  daqui: DoDispositivo = () => false,
+): { envelope: EnvelopeProjetos; raspados: NumerosPorOrigem } {
   const dias = env.vis === "unidade" ? DIAS_LAPIDE_UNIDADE : DIAS_LAPIDE_EU;
   const ent = env.entidades;
   // A regra sobre tudo, antes da poda: a marca de uma lápide que sai ainda vale para os outros.
@@ -139,6 +151,7 @@ export function paraOTextoComRaspados(
   const corte = cortarSigilo(
     { p: purgarLapides(ent.p, agora, dias), e: purgarLapides(ent.e, agora, dias), h: vivosH.filter((r) => !fora.has(r.id)) },
     sigilo,
+    daqui,
   );
   return {
     envelope: {
@@ -224,10 +237,17 @@ export function adaptadorProjetos(d: DepsAdaptador): AdaptadorTexto<EnvelopeProj
     async exportar({ remoto, agora }) {
       // Entidades e memória do sigilo numa leitura só (o que raspa é o estado que vai); se a memória não puder ser
       // lida, lança (falha comum: o texto não é gravado e o motor tenta de novo depois).
-      const { envelope: daqui, conhecidos } = await d.repo.exportarComConhecidos(agora);
-      const { envelope, raspados } = paraOTextoComRaspados(comOsDoFuturo(daqui, remoto, agora), agora, conhecidos);
-      // O que o texto raspou fica raspado: vai para a memória ANTES da gravação; se não puder ser guardado, lança.
-      await d.repo.lembrarSigilo(raspados, "local");
+      const { envelope: local, conhecidos } = await d.repo.exportarComConhecidos(agora);
+      const dispositivo = d.repo.dispositivo;
+      const { envelope, raspados } = paraOTextoComRaspados(
+        comOsDoFuturo(local, remoto, agora),
+        agora,
+        conhecidos,
+        (x) => x.dispositivo === dispositivo,
+      );
+      // O que o texto raspou fica raspado: vai para a memória ANTES da gravação, como local o que veio de item
+      // gravado aqui e como aprendida o que veio de colega; se não puder ser guardado, lança.
+      await d.repo.lembrarRaspados(raspados);
       return envelope;
     },
     assinatura: assinaturaProjetos,

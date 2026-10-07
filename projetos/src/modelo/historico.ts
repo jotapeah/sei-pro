@@ -2,10 +2,13 @@
  * Histórico de alterações (spec 5.4): cada edição local vira registros por
  * campo relevante. Os valores são texto (datas em "AAAA-MM-DD"; a tela formata).
  * Processo sigiloso entra como "processo sigiloso": o registro vai para o
- * Texto Padrão da unidade e o número não pode ir junto.
+ * Texto Padrão da unidade e o número não pode ir junto. O documento que só
+ * tem o marcador do texto (documento de processo sigiloso sem o número) entra
+ * como "documento de processo sigiloso", nunca vazio.
  */
 
-import type { CampoHistorico, Carimbo, Etapa, Fase, Projeto, Registro, Vinculo } from "./tipos";
+import { documentoSemNumero, SIGILOSO_DOCUMENTO } from "./sigilo";
+import type { CampoHistorico, Carimbo, DocumentoSei, Etapa, Fase, Projeto, Registro, Vinculo } from "./tipos";
 import { chaveProtocolo } from "./vinculos";
 
 export interface RegistroNovo {
@@ -29,6 +32,10 @@ export function textoDoVinculo(v: Vinculo | undefined): string | undefined {
   if (!v) return undefined;
   return v.sigiloso ? SIGILOSO : v.protocolo || undefined;
 }
+
+/** O número do documento; o marcador do texto vira o texto fixo; o número vazio sem a marca é "sem documento". */
+const textoDoDocumento = (d: DocumentoSei | undefined): string | undefined =>
+  documentoSemNumero(d) ? SIGILOSO_DOCUMENTO : d?.numero || undefined;
 
 const chaveDoVinculo = (v: Vinculo | undefined): string => (v && typeof v.protocolo === "string" ? chaveProtocolo(v.protocolo) : "");
 
@@ -94,7 +101,7 @@ export function registrosDeEtapa(antes: Etapa | undefined, depois: Etapa | undef
       : undefined;
   if ([...a.dependeDe].sort().join() !== [...d.dependeDe].sort().join()) reg("dependencias", deps(a.dependeDe), deps(d.dependeDe));
   reg("processo", ...textosDoVinculo(a.processo, d.processo));
-  reg("documento", a.documento?.numero, d.documento?.numero);
+  reg("documento", textoDoDocumento(a.documento), textoDoDocumento(d.documento));
   const datasIguais = a.inicio === d.inicio && a.fim === d.fim;
   const textoBase = (e: Etapa) => (e.base ? `${e.base.inicio}/${e.base.fim}` : undefined);
   if (datasIguais) reg("base", textoBase(a), textoBase(d));

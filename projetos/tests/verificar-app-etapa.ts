@@ -309,4 +309,37 @@ export async function verificarAppEtapa(): Promise<void> {
   );
   checar("sem rejeicao solta", soltas.length === 0, soltas);
   process.off("unhandledRejection", ouvir);
+
+  secao("app: dialogo da etapa com o documento de processo sigiloso sem o numero (o marcador do texto)");
+  const sigilosa = { ...air, documento: { numero: "", sigiloso: true } };
+  const sg = cena({ etapa: sigilosa });
+  const csg = () => sg.doc.querySelector(".prj-form-etapa") as HTMLElement;
+  const resumoProc = () => texto(csg().querySelector(".prj-sec[data-secao='processo'] .prj-sec-res"));
+  checar(
+    "o resumo diz 'documento de processo sigiloso' (nada de 'SEI ' vazio) e o campo vem vazio",
+    resumoProc().endsWith("· documento de processo sigiloso") &&
+      csg().querySelector<HTMLInputElement>("input[name='documento']")?.value === "",
+    resumoProc(),
+  );
+  checar(
+    "o campo explica que o numero nao esta neste computador",
+    texto(csg().querySelector(".prj-sec[data-secao='processo']")).includes("Documento de processo sigiloso"),
+  );
+  botao(csg(), "Salvar")!.click();
+  await tique();
+  checar(
+    "salvar sem mexer no campo mantem o marcador (nao apaga o numero de quem o tem)",
+    JSON.stringify(sg.salvos[0]?.documento) === JSON.stringify({ numero: "", sigiloso: true }),
+    sg.salvos[0]?.documento,
+  );
+  const sg2 = cena({ etapa: sigilosa });
+  const csg2 = () => sg2.doc.querySelector(".prj-form-etapa") as HTMLElement;
+  digitar(csg2().querySelector("input[name='documento']"), "1240001");
+  botao(csg2(), "Salvar")!.click();
+  await tique();
+  checar(
+    "um numero digitado substitui o marcador",
+    JSON.stringify(sg2.salvos[0]?.documento) === JSON.stringify({ numero: "1240001" }),
+    sg2.salvos[0]?.documento,
+  );
 }

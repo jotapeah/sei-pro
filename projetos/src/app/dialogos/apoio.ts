@@ -8,11 +8,12 @@ import { hojeISO } from "@comum/datas/dias";
 import type { AbrirModal } from "@comum/ui/dialogo";
 import { h, icone } from "@comum/ui/dom";
 import { LIMITES } from "../../modelo/constantes";
+import { documentoSemNumero } from "../../modelo/sigilo";
 import type { DataISO, Etapa } from "../../modelo/tipos";
 import type { DocumentoConferido } from "../../ponte/tipos";
 import type { ProjetoNaTela } from "../dados";
 import { dataDeFormulario, dataLonga } from "../formato";
-import { caixaDeErros, campo, campoDocumento, linhaDeCampos, mensagensDoErro } from "./campos";
+import { caixaDeErros, campo, campoDocumento, DICA_DOCUMENTO_SEM_NUMERO, linhaDeCampos, mensagensDoErro } from "./campos";
 
 /**
  * Reativar e Excluir tiram o projeto da lista quando a promessa resolve. A confirmação (ou o
@@ -70,6 +71,11 @@ export function abrirArquivados(c: {
   return c.abrirModal({ titulo: "Projetos arquivados", icone: "pasta", conteudo: raiz });
 }
 
+/**
+ * "Informar documento": o número e a data da conclusão. `salvar` recebe o número digitado (undefined = campo
+ * vazio); quando a etapa só tem o marcador do texto (documento de processo sigiloso sem o número), o diálogo
+ * diz isso, e quem chama mantém o marcador com o campo vazio.
+ */
 export function abrirInformarDocumento(c: {
   abrirModal: AbrirModal;
   etapa: Etapa;
@@ -78,7 +84,8 @@ export function abrirInformarDocumento(c: {
   salvar(numero: string | undefined, concluidaEm: DataISO): Promise<void>;
 }): { fechar(): void } {
   const erros = caixaDeErros();
-  const doc = campoDocumento(c.etapa.documento?.numero ?? "", c.conferirDocumento);
+  const semNumero = documentoSemNumero(c.etapa.documento);
+  const doc = campoDocumento(c.etapa.documento?.numero ?? "", c.conferirDocumento, undefined, { semNumero });
   const data = h("input", { type: "date", class: "spro-campo", name: "concluida", value: c.etapa.concluidaEm ?? c.hoje });
   let modal: { fechar(): void } | null = null;
   const salvar = h("button", { type: "button", class: "spro-botao primario" }, "Salvar");
@@ -100,7 +107,7 @@ export function abrirInformarDocumento(c: {
   const conteudo = h(
     "div",
     { class: "prj-form prj-form-documento" },
-    campo("Número SEI", doc.el),
+    campo("Número SEI", doc.el, { dica: semNumero ? DICA_DOCUMENTO_SEM_NUMERO : undefined }),
     linhaDeCampos(campo("Concluída em", data), salvar),
     erros.el,
   );

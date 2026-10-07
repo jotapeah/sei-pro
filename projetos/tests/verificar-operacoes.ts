@@ -269,6 +269,22 @@ export function verificarOperacoes(): void {
       "textosDoVinculo: tirar o vinculo sigiloso",
       textosDoVinculo({ protocolo: X, sigiloso: true }, undefined)[0] === "processo sigiloso",
     );
+    // O marcador do texto (documento de processo sigiloso sem o número): no histórico, o texto fixo, nunca vazio.
+    const marcador = { ...antes, documento: { numero: "", sigiloso: true } };
+    const doDoc = (a: typeof antes, d: typeof antes) => registrosDeEtapa(a, d, apoio).find((r) => r.campo === "documento");
+    checar(
+      "documento: do marcador para um numero, o antes e 'documento de processo sigiloso'",
+      doDoc(marcador, { ...antes, documento: { numero: "555" } })?.antes === "documento de processo sigiloso",
+      doDoc(marcador, { ...antes, documento: { numero: "555" } }),
+    );
+    checar(
+      "documento: tirar o marcador registra o texto fixo no antes",
+      doDoc(marcador, { ...antes, documento: undefined })?.antes === "documento de processo sigiloso",
+    );
+    checar(
+      "documento: numero vazio sem a marca e como sem documento (nenhum registro)",
+      doDoc({ ...antes, documento: undefined }, { ...antes, documento: { numero: "" } }) === undefined,
+    );
   }
   checar("dependencias pelos nomes", regs.find((r) => r.campo === "dependencias")?.depois === "Nota");
   checar(

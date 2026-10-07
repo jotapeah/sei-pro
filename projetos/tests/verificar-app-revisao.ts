@@ -322,6 +322,39 @@ export async function verificarAppRevisao(): Promise<void> {
   );
   idoc.app.destruir();
 
+  secao("app: Informar documento da etapa que so tem o marcador (documento de processo sigiloso)");
+  const imar = await montar();
+  const comMarcador = await imar.un.criarEtapa({
+    projeto: imar.ids.p,
+    nome: "Oitiva",
+    inicio: "2026-10-13",
+    fim: "2026-10-16",
+    documento: { numero: "", sigiloso: true },
+  });
+  abrirAba(imar, imar.ids.p);
+  await tique(80);
+  clicarLinha(imar, comMarcador.id);
+  botao(balao(imar) ?? imar.doc.createElement("div"), "Concluir etapa")?.click();
+  await tique(80);
+  botao(imar.doc.querySelector<HTMLElement>(".spro-aviso") ?? imar.doc.createElement("div"), "Informar documento")?.click();
+  await tique();
+  const formMar = () => imar.doc.querySelector<HTMLElement>(".prj-form-documento");
+  checar(
+    "o dialogo explica que e documento de processo sigiloso e o campo vem vazio",
+    texto(formMar()).includes("Documento de processo sigiloso") &&
+      formMar()?.querySelector<HTMLInputElement>("input[name='documento']")?.value === "",
+    texto(formMar()),
+  );
+  botao(formMar() ?? imar.doc.createElement("div"), "Salvar")?.click();
+  await tique(80);
+  const mantido = await imar.un.obterEtapa(comMarcador.id);
+  checar(
+    "salvar com o campo vazio mantem o marcador (nao apaga o numero de quem o tem); a etapa continua concluida",
+    JSON.stringify(mantido?.documento) === JSON.stringify({ numero: "", sigiloso: true }) && mantido?.concluidaEm === HOJE && !formMar(),
+    mantido,
+  );
+  imar.app.destruir();
+
   secao("app: sem projetos, o menu nao oferece Exportar nem Imprimir");
   const vz = await montar({ vazio: true });
   const itensVazio = itensDoMenu(vz.raiz, "Ajustes dos projetos");

@@ -2,9 +2,10 @@
  * Balão da etapa (tela 1): o dia a dia sem abrir formulário. Situação (com os
  * dias úteis de atraso), nome, "Fase · Responsável", datas e duração em dias
  * úteis, aviso de replanejamento, checklist, documento e processo (links que
- * abrem no SEI), régua de progresso (só com medida manual) e as ações:
- * Concluir / Marcar como cumprido / Reabrir, Editar e o menu (duplicar, mover
- * de fase, histórico, excluir). Esc ou clique fora fecha. A régua grava só
+ * abrem no SEI; o documento de processo sigiloso cujo número este computador
+ * não tem aparece só como texto, sem link), régua de progresso (só com medida
+ * manual) e as ações: Concluir / Marcar como cumprido / Reabrir, Editar e o
+ * menu (duplicar, mover de fase, histórico, excluir). Esc ou clique fora fecha. A régua grava só
  * quando o usuário para de mexer (cada seta do teclado é um `change`) ou
  * quando o balão fecha.
  */
@@ -15,6 +16,7 @@ import { diasUteisDeAtraso } from "../../modelo/alertas";
 import { duracaoUteis } from "../../modelo/calendario";
 import { desvioUteis, replanejada } from "../../modelo/linhaDeBase";
 import { progressoDaEtapa } from "../../modelo/progresso";
+import { documentoSemNumero } from "../../modelo/sigilo";
 import { situacaoEtapa } from "../../modelo/situacao";
 import type { DataISO, Etapa, Vinculo } from "../../modelo/tipos";
 import type { ProjetoNaTela } from "../dados";
@@ -58,6 +60,31 @@ const link = (texto: string, titulo: string, fazer: (ev: MouseEvent) => void) =>
     },
     texto,
   );
+
+/**
+ * O documento da etapa: o número como link; o marcador do texto (documento de processo sigiloso sem o número)
+ * só como texto, sem número e sem link; o número vazio sem a marca é "sem documento" e não aparece.
+ */
+function linhaDoDocumento(e: Etapa, a: AcoesBalao): HTMLElement | null {
+  const d = e.documento;
+  if (documentoSemNumero(d))
+    return linha(
+      icone("cadeado", 15),
+      h(
+        "span",
+        { title: "O número deste documento não está neste computador: o SEI Pro não o envia aos colegas." },
+        "Documento de processo sigiloso",
+      ),
+    );
+  if (!d?.numero) return null;
+  const numero = d.numero;
+  return linha(
+    icone("documento", 15),
+    link(d.titulo ? `${d.titulo} (SEI ${numero})` : `Documento SEI ${numero}`, "Abrir o documento no SEI", () =>
+      a.aoAbrirDocumento(numero),
+    ),
+  );
+}
 
 function datas(e: Etapa): HTMLElement {
   if (e.marco) return linha(icone("calendario", 15), dataLonga(e.inicio));
@@ -150,16 +177,7 @@ export function conteudoDoBalao(d: DadosBalao, a: AcoesBalao, fechar: () => void
     datas(e),
     e.concluidaEm ? linha(icone("check", 15), `Concluída em ${dataLonga(e.concluidaEm)}`) : null,
     e.checklist.length ? linha(iconeProjetos("checklist", 15), `Checklist: ${feitos} de ${e.checklist.length} itens`) : null,
-    e.documento
-      ? linha(
-          icone("documento", 15),
-          link(
-            e.documento.titulo ? `${e.documento.titulo} (SEI ${e.documento.numero})` : `Documento SEI ${e.documento.numero}`,
-            "Abrir o documento no SEI",
-            () => a.aoAbrirDocumento(e.documento!.numero),
-          ),
-        )
-      : null,
+    linhaDoDocumento(e, a),
     processo?.protocolo
       ? linha(
           icone(processo.sigiloso ? "cadeado" : "pasta", 15),

@@ -1,14 +1,15 @@
 /**
  * O que a sincronia pede ao repositório (P4): a importação não regrava o que
  * ficaria igual (senão cada rodada ouviria a própria gravação e leria de novo,
- * sem fim), o documento de etapa sigilosa que chega vazio fica, a linha de base
+ * sem fim), o documento de etapa sigilosa que chega como o marcador (sem o número)
+ * fica com o número daqui, a linha de base
  * segue a regra da etapa e o modelo não passa de 2100.
  */
 
 import { areaMemoria } from "@comum/armazenamento/area";
 import { LIMITE_DIAS_ETAPA } from "../src/modelo/calendario";
 import { sigiloDoEnvelope } from "../src/modelo/sigilo";
-import type { Entidades, Etapa, Projeto, Registro, Vinculo } from "../src/modelo/tipos";
+import type { DocumentoSei, Entidades, Etapa, Projeto, Registro, Vinculo } from "../src/modelo/tipos";
 import { chaveProtocolo } from "../src/modelo/vinculos";
 import { MODELOS_EMBUTIDOS } from "../src/modelos/embutidos";
 import { entidadeValida, manterDocumentoSigiloso, moverEntreEscopos } from "../src/repositorio";
@@ -20,10 +21,14 @@ import { checar, lanca, secao } from "./util";
 const semNumero = <T extends { processo?: { protocolo: string; sigiloso?: boolean } }>(x: T): T =>
   x.processo?.sigiloso ? { ...x, processo: { protocolo: "", sigiloso: true } } : x;
 
+/** O que o Texto Padrão leva do documento de processo sigiloso (rodada 4 da Tarefa 4): o marcador, sem o número. */
+const MARCADOR: DocumentoSei = { numero: "", sigiloso: true };
+const comMarcador = (x: Etapa): Etapa => (x.documento ? { ...x, documento: MARCADOR } : x);
+
 /**
  * O corte que o envelope da Tarefa 4 faz (decisão 10): um número marcado sigiloso em qualquer projeto ou
- * etapa é sigiloso em todos; o vínculo vai vazio, a etapa sigilosa vai sem documento e os registros
- * antigos com o número vão com o texto fixo. Mesmos carimbos.
+ * etapa é sigiloso em todos; o vínculo vai vazio, o documento da etapa sigilosa vai como o marcador (sem o
+ * número; rodada 4) e os registros antigos com o número vão com o texto fixo. Mesmos carimbos.
  */
 function comoOTexto(ent: Entidades): Entidades {
   const chaves = new Set<string>();
@@ -39,9 +44,7 @@ function comoOTexto(ent: Entidades): Entidades {
     p: ent.p.map((x) => (sigiloso(x.processo) ? { ...x, processo: vazio } : x)),
     e: ent.e.map((x) => {
       const y = sigiloso(x.processo) ? { ...x, processo: vazio } : x;
-      if (!etapaSigilosa(x)) return y;
-      const { documento: _d, ...resto } = y;
-      return resto as Etapa;
+      return etapaSigilosa(x) ? comMarcador(y) : y;
     }),
     h: ent.h.map((r): Registro => {
       if (r.campo === "processo") return { ...r, antes: doProcesso(r.antes), depois: doProcesso(r.depois) };
@@ -71,15 +74,8 @@ export async function verificarSincroniaRepo(): Promise<void> {
   const ent = await repo.entidades();
   let avisos = 0;
   const parar = repo.aoMudar(() => avisos++);
-  // A cópia que foi ao Texto Padrão: mesmos carimbos, sem o número do processo e sem o documento.
-  const doTexto = {
-    ...ent,
-    p: ent.p.map(semNumero),
-    e: ent.e.map((x) => {
-      const { documento: _d, ...resto } = x;
-      return resto as Etapa;
-    }),
-  };
+  // A cópia que foi ao Texto Padrão: mesmos carimbos, sem o número do processo e com o marcador no documento.
+  const doTexto = { ...ent, p: ent.p.map(semNumero), e: ent.e.map(comMarcador) };
   const r1 = await repo.importar(doTexto);
   checar(
     "a propria copia do Texto Padrao volta: nada gravado e nenhum aviso (sem laco de rodadas)",
@@ -103,7 +99,8 @@ export async function verificarSincroniaRepo(): Promise<void> {
     atualizadoEm: (local as Etapa).atualizadoEm + 50,
     dispositivo: "dev-b",
   };
-  delete (colega as Partial<Etapa>).documento;
+  // O colega só tem o marcador (o texto não levou o número): ele vai junto, e o número daqui fica.
+  colega.documento = MARCADOR;
   await repo.importar({ e: [colega] });
   const depois = await repo.obterEtapa(e.id);
   checar(
@@ -112,7 +109,7 @@ export async function verificarSincroniaRepo(): Promise<void> {
     depois,
   );
   {
-    // Só parte mudou: a cópia de A (sem documento, mesmo carimbo) vence o desempate e volta igual; B mudou de verdade.
+    // Só parte mudou: a cópia de A (com o marcador, mesmo carimbo) vence o desempate e volta igual; B mudou de verdade.
     const base = areaMemoria();
     const gravacoes: string[][] = [];
     const espiao = {
@@ -131,9 +128,9 @@ export async function verificarSincroniaRepo(): Promise<void> {
     gravacoes.length = 0;
     let avisos5 = 0;
     const parar5 = r5.aoMudar(() => avisos5++);
-    const { documento: _semDoc, ...copiaA } = a;
+    const copiaA = comMarcador(a);
     const bColega: Etapa = { ...b, nome: "B revisada", atualizadoEm: b.atualizadoEm + 50, dispositivo: "dev-b" };
-    const r5r = await r5.importar({ p: ent5.p.map(semNumero), e: [copiaA as Etapa, bColega], h: ent5.h });
+    const r5r = await r5.importar({ p: ent5.p.map(semNumero), e: [copiaA, bColega], h: ent5.h });
     checar(
       "so parte mudou: grava so ela, numa gravacao, e avisa uma vez",
       r5r.novos === 0 &&
@@ -148,17 +145,17 @@ export async function verificarSincroniaRepo(): Promise<void> {
   }
   const comum = etapa({ id: "x1", projeto: "p9", documento: { numero: "999" }, atualizadoEm: 10 });
   const semDoc = etapa({ id: "x1", projeto: "p9", atualizadoEm: 20 });
-  checar("etapa comum: o colega tirou o documento e ele sai", manterDocumentoSigiloso(semDoc, comum, false).documento === undefined);
-  const propria = etapa({ id: "x2", processo: { protocolo: "", sigiloso: true }, atualizadoEm: 20 });
+  checar("etapa comum: o colega tirou o documento e ele sai", manterDocumentoSigiloso(semDoc, comum).documento === undefined);
+  const propria = etapa({ id: "x2", processo: { protocolo: "", sigiloso: true }, documento: MARCADOR, atualizadoEm: 20 });
   const propriaLocal = etapa({ id: "x2", processo: { protocolo: "50300.1/2026-1", sigiloso: true }, documento: { numero: "55" } });
   checar(
-    "processo proprio sigiloso: o documento daqui fica",
-    manterDocumentoSigiloso(propria, propriaLocal, false).documento?.numero === "55",
+    "processo proprio sigiloso, o documento chega como o marcador: o documento daqui fica",
+    manterDocumentoSigiloso(propria, propriaLocal).documento?.numero === "55",
   );
   const propriaComum = etapa({ id: "x3", processo: { protocolo: "50300.2/2026-1" }, atualizadoEm: 20 });
   checar(
     "processo proprio NAO sigiloso num projeto sigiloso: vale o que chegou",
-    manterDocumentoSigiloso(propriaComum, etapa({ id: "x3", documento: { numero: "66" } }), true).documento === undefined,
+    manterDocumentoSigiloso(propriaComum, etapa({ id: "x3", documento: { numero: "66" } })).documento === undefined,
   );
 
   secao("sincronia no repositorio: linha de base com a regra da etapa");
@@ -229,8 +226,8 @@ export async function verificarSincroniaRepo(): Promise<void> {
     if (colega)
       texto.e = texto.e.map((x) => ({ ...x, nome: `${x.nome} renomeada`, atualizadoEm: x.atualizadoEm + 50, dispositivo: "dev-b" }));
     checar(
-      `${caso}: o texto nao leva os documentos (premissa)`,
-      texto.e.every((x) => x.documento === undefined) && texto.p.every((x) => x.processo?.protocolo === ""),
+      `${caso}: o texto nao leva os documentos, so o marcador (premissa)`,
+      texto.e.every((x) => x.documento === MARCADOR) && texto.p.every((x) => x.processo?.protocolo === ""),
     );
     let av = 0;
     const pararX = rx.aoMudar(() => av++);
@@ -264,7 +261,7 @@ export async function verificarSincroniaRepo(): Promise<void> {
       documento: { numero: "1234567" },
     });
     const ent = await ry.entidades();
-    const { documento: _d, ...semDocumento } = ent.e[0] as Etapa;
+    const semDocumento = comMarcador(ent.e[0] as Etapa);
     await ry.importar({
       p: ent.p.map((x) => ({ ...x, processo: { protocolo: "", sigiloso: true } })),
       e: [{ ...semDocumento, nome: "E1 renomeada", atualizadoEm: semDocumento.atualizadoEm + 50, dispositivo: "dev-b" }],

@@ -25,6 +25,7 @@ import { rotuloDaVis } from "../modelo/escopo";
 import { criteriosAtivos, type Eu, FILTRO_VAZIO, type FiltroEtapas, filtrarEtapas, filtroNoContexto } from "../modelo/filtro";
 import { planoParaRedefinir } from "../modelo/linhaDeBase";
 import { datasDaEtapaNova } from "../modelo/operacoes";
+import { documentoSemNumero } from "../modelo/sigilo";
 import type { DataISO, Etapa, MudancaDeDatas, Vinculo, Vis } from "../modelo/tipos";
 import { ErroValidacao } from "../modelo/validacao";
 import type { ContextoProjetos, DocumentoConferido, ProcessoDaCaixa, TipoAlerta, UsuarioDaUnidade } from "../ponte/tipos";
@@ -902,8 +903,11 @@ export class AppProjetos {
         const atual = await repo.obterEtapa(id);
         if (!atual) throw new ErroValidacao(["A etapa não existe mais."]);
         if (!atual.concluidaEm) throw new ErroValidacao([`“${atual.nome}” não está mais concluída.`]);
-        // Campo vazio tira o documento (`null`); o mesmo número guarda o título já conferido.
-        await repo.concluirEtapa(id, data, numero ? (numero === atual.documento?.numero ? atual.documento : { numero }) : null);
+        // Campo vazio tira o documento (`null`), salvo o marcador do texto (documento de processo sigiloso cujo
+        // número este computador não tem): fica, para não apagar o número de quem o tem. O mesmo número guarda o
+        // título já conferido.
+        const vazio = documentoSemNumero(atual.documento) ? atual.documento : null;
+        await repo.concluirEtapa(id, data, numero ? (numero === atual.documento?.numero ? atual.documento : { numero }) : vazio);
       },
     });
   }

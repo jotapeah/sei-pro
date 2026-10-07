@@ -145,4 +145,28 @@ export function verificarAppBalao(): void {
       texto(bt.el).includes("50300.000001/2026-01"),
   );
   bt.fechar();
+
+  secao("app: balao do documento de processo sigiloso sem o numero (o marcador do texto)");
+  const sig = etapa({ id: "sg", documento: { numero: "", sigiloso: true } });
+  const cs = cena(sig);
+  const bs = abrirBalaoEtapa(ancora, { etapa: sig, projeto: cs.p, hoje: HOJE }, cs.acoes);
+  const linhasSig = [...bs.el.querySelectorAll(".prj-balao-li")].map((l) => texto(l));
+  const linksSig = [...bs.el.querySelectorAll<HTMLAnchorElement>(".prj-balao-li a")].map((a) => texto(a));
+  checar(
+    "mostra 'Documento de processo sigiloso', sem numero e sem link (nada de 'Documento SEI ' vazio)",
+    linhasSig.includes("Documento de processo sigiloso") &&
+      !linhasSig.some((t) => t.includes("Documento SEI")) &&
+      linksSig.join() === "50300.001234/2026-11",
+    { linhasSig, linksSig },
+  );
+  bs.fechar();
+  const vazio = etapa({ id: "vz", documento: { numero: "" } });
+  const cv = cena(vazio);
+  const bv = abrirBalaoEtapa(ancora, { etapa: vazio, projeto: cv.p, hoje: HOJE }, cv.acoes);
+  checar(
+    "numero vazio SEM a marca: como sem documento (nenhuma linha de documento)",
+    ![...bv.el.querySelectorAll(".prj-balao-li")].some((l) => /Documento/.test(texto(l))),
+    [...bv.el.querySelectorAll(".prj-balao-li")].map((l) => texto(l)),
+  );
+  bv.fechar();
 }
