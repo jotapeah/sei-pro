@@ -23,7 +23,7 @@ const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const AGORA = Date.UTC(2026, 9, 6, 12);
 const DIA = 86_400_000;
 const MEMORIA = new ErroMemoriaSigilo().message;
-const NADA: ResultadoRestauracao = { projetos: 0, fases: 0, etapas: 0, modelos: 0, registros: 0 };
+const NADA: ResultadoRestauracao = { projetos: 0, fases: 0, etapas: 0, modelos: 0, registros: 0, noOutroEscopo: 0, rotulosDoOutro: [] };
 
 function deps(m: Partial<DepsSincronizacao> = {}, situ?: Partial<SituacaoSincronia>) {
   const feitos: string[] = [];
@@ -282,6 +282,19 @@ export async function verificarAppSincronizacao(): Promise<void> {
   checar(
     "nada voltou: diz que tudo ainda existe",
     (await restaurarCom({})) === "Nada para recuperar: tudo o que estava na cópia ainda existe.",
+    avisoCp(),
+  );
+
+  checar(
+    "nada voltou porque o que faltava esta no outro escopo: diz onde",
+    (await restaurarCom({ noOutroEscopo: 2, rotulosDoOutro: ["Toda a unidade"] })) ===
+      "Nada voltou: o que faltava está em “Toda a unidade” ou foi excluído lá.",
+    avisoCp(),
+  );
+  checar(
+    "e nos dois escopos",
+    (await restaurarCom({ noOutroEscopo: 2, rotulosDoOutro: ["Toda a unidade", "Só eu"] })) ===
+      "Nada voltou: o que faltava está em “Toda a unidade” e “Só eu” ou foi excluído lá.",
     avisoCp(),
   );
 

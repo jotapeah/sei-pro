@@ -119,7 +119,7 @@ const DIA = 86_400_000;
 /** O aviso do texto inválido substituído some depois disso (o motor já regravou; ninguém mais procura o antigo). */
 const DIAS_AVISO_SUBSTITUIDO = 30;
 
-const PARTES: ReadonlyArray<[Exclude<keyof ResultadoRestauracao, "registros">, string, string]> = [
+const PARTES: ReadonlyArray<["projetos" | "fases" | "etapas" | "modelos", string, string]> = [
   ["projetos", "projeto", "projetos"],
   ["fases", "fase", "fases"],
   ["etapas", "etapa", "etapas"],
@@ -134,6 +134,10 @@ function textoDaRestauracao(r: ResultadoRestauracao): string {
   let partes = PARTES.filter(([k]) => r[k] > 0).map(([k, um, varios]) => ({ n: r[k], t: plural(r[k], um, varios) }));
   if (!partes.length && r.registros > 0)
     partes = [{ n: r.registros, t: plural(r.registros, "registro do histórico", "registros do histórico") }];
+  if (!partes.length && r.noOutroEscopo > 0) {
+    const onde = r.rotulosDoOutro.map((x) => `“${x}”`).join(" e ");
+    return `Nada voltou: o que faltava está em ${onde} ou foi excluído lá.`;
+  }
   if (!partes.length) return "Nada para recuperar: tudo o que estava na cópia ainda existe.";
   const lista = partes.map((p) => p.t);
   const juntos = lista.length === 1 ? lista[0] : `${lista.slice(0, -1).join(", ")} e ${lista.at(-1)}`;

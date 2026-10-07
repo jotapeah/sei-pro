@@ -369,13 +369,13 @@ async function verificarRestaurarRecupera(): Promise<void> {
   );
   checar(
     "o que voltou de fato, por tipo: P2, a fase, as duas etapas e a do P1, o modelo (registros: nenhum sumiu)",
-    jsonEstavel(n) === jsonEstavel({ projetos: 1, fases: 1, etapas: 3, modelos: 1, registros: 0 }),
+    jsonEstavel(n) === jsonEstavel({ projetos: 1, fases: 1, etapas: 3, modelos: 1, registros: 0, noOutroEscopo: 0, rotulosDoOutro: [] }),
     n,
   );
   checar(
     "restaurar de novo nao traz mais nada (tudo ja esta vivo)",
     jsonEstavel(await restaurarCopia(area, copia!, DONO, carimbo)) ===
-      jsonEstavel({ projetos: 0, fases: 0, etapas: 0, modelos: 0, registros: 0 }),
+      jsonEstavel({ projetos: 0, fases: 0, etapas: 0, modelos: 0, registros: 0, noOutroEscopo: 0, rotulosDoOutro: [] }),
   );
   {
     // O registro do histórico que sumiu daqui (podado, outro perfil) volta e é contado à parte.

@@ -284,6 +284,92 @@ async function n6(): Promise<void> {
   }
 }
 
+/**
+ * Residual A (sondas `b1` e `b2`): o corte dos registros só rebaixa o que está além de um horizonte grande. Com o
+ * relógio de um colega 1,5 dia adiantado, o registro dele não é "do futuro" para o corte (senão o de quem o tem e o
+ * de quem não o tem discordam, e o texto vai e volta); o relógio que foi adiantado e corrigido não apaga o que gravou.
+ */
+async function residualA(): Promise<void> {
+  secao("residuais 2 A: relogio adiantado de um dia e meio nao faz o corte vai-e-volta nem apaga registro");
+  {
+    const sei = noSei();
+    const ana = pc("ana", "pc-ana", AGORA);
+    const caio = pc("caio", "pc-caio", AGORA + 1.5 * DIA);
+    const q = await ana.un.criarProjeto({ nome: "Q" });
+    for (let i = 0; i < 310; i++) await ana.un.editarProjeto(q.id, { nome: `Q${i}` });
+    await ana.rodada(ana.un, sei);
+    await caio.rodada(caio.un, sei);
+    await caio.un.editarProjeto(q.id, { nome: "Edicao do Caio" });
+    const g0 = sei.gravadas;
+    for (let volta = 0; volta < 4; volta++) for (const x of [caio, ana]) await x.rodada(x.un, sei);
+    checar("Caio 1,5 dia adiantado, 300+ registros: 1 gravacao em 4 voltas", sei.gravadas - g0 === 1, sei.gravadas - g0);
+    checar(
+      "o registro do Caio esta no texto",
+      (await noTexto(sei.html)).h.some((r) => r.depois === "Edicao do Caio"),
+    );
+  }
+  {
+    const sei = noSei();
+    const caio = pc("caio", "pc-caio", AGORA);
+    const q = await caio.un.criarProjeto({ nome: "Q" });
+    for (let i = 0; i < 305; i++) await caio.un.editarProjeto(q.id, { nome: `Q${i}` });
+    await caio.rodada(caio.un, sei);
+    caio.rel.agora += 1.5 * DIA;
+    for (let i = 0; i < 3; i++) await caio.un.editarProjeto(q.id, { nome: `Adiantado ${i}` });
+    caio.rel.agora -= 1.5 * DIA;
+    await caio.un.editarProjeto(q.id, { nome: "Depois da correcao" });
+    await caio.rodada(caio.un, sei);
+    const n = (await noTexto(sei.html)).h.filter((r) => String(r.depois).startsWith("Adiantado")).length;
+    checar("relogio adiantado e corrigido: os 3 registros do periodo chegam ao texto", n === 3, n);
+  }
+}
+
+/**
+ * Residual B (sonda `c1`): P estava em "Só eu" na cópia, foi para a unidade e foi excluído lá. Restaurar a cópia o
+ * devolve a "Só eu" (só há lápide dele no outro escopo), sem ficar vivo nos dois. E, quando o restaurar pula itens por
+ * estarem no outro escopo e nada volta, o resultado conta quantos foram e onde estão.
+ */
+async function residualB(): Promise<void> {
+  secao("residuais 2 B: restaurar para 'So eu' com so a lapide no outro escopo deixa voltar");
+  const a = pc("ana", "pc-ana");
+  const p = await a.eu.criarProjeto({ nome: "Plano" });
+  const e = await a.eu.criarEtapa({ projeto: p.id, nome: "Oitiva", ...ETAPA });
+  const copias = copiasEmMemoria<EnvelopeArquivo>();
+  await fazerCopiaDoDia(a.area, DONO, copias, HOJE, a.carimbo);
+  await moverEntreEscopos(a.eu, a.un, p.id);
+  await a.un.removerProjeto(p.id);
+  const [copia] = await copias.listar(DONO);
+  const r = await restaurarCopia(a.area, copia!, DONO, a.carimbo);
+  checar(
+    "P que foi de 'So eu' para a unidade e foi excluido la: volta a 'So eu', e a etapa com ele",
+    !!(await a.eu.obterProjeto(p.id)) && !!(await a.eu.obterEtapa(e.id)) && !(await a.un.obterProjeto(p.id)) && r.projetos === 1,
+    r,
+  );
+  const vivos = async (repo: RepositorioProjetos) => {
+    const t = await repo.entidades();
+    return new Set([...t.p, ...t.f, ...t.e].filter((x) => x.removidoEm === undefined).map((x) => x.id));
+  };
+  const vU = await vivos(a.un);
+  const vE = await vivos(a.eu);
+  checar(
+    "nada vivo nos dois escopos ao mesmo tempo",
+    [...vU].every((id) => !vE.has(id)),
+  );
+
+  const b = pc("ana", "pc-ana");
+  const q = await b.un.criarProjeto({ nome: "Ficou na unidade" });
+  const copias2 = copiasEmMemoria<EnvelopeArquivo>();
+  await fazerCopiaDoDia(b.area, DONO, copias2, HOJE, b.carimbo);
+  await moverEntreEscopos(b.un, b.eu, q.id);
+  const [copia2] = await copias2.listar(DONO);
+  const r2 = await restaurarCopia(b.area, copia2!, DONO, b.carimbo);
+  checar(
+    "o que foi pulado por estar vivo no outro escopo e contado em noOutroEscopo (nada voltou)",
+    r2.projetos === 0 && r2.noOutroEscopo >= 1 && r2.rotulosDoOutro.join() === "Só eu",
+    r2,
+  );
+}
+
 export async function verificarRevisaoFinalResiduais(): Promise<void> {
   await n1();
   await n2();
@@ -291,4 +377,6 @@ export async function verificarRevisaoFinalResiduais(): Promise<void> {
   await n4();
   await n5();
   await n6();
+  await residualA();
+  await residualB();
 }

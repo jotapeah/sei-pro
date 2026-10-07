@@ -10,7 +10,7 @@
  */
 
 import { purgarLapides, type Versionada } from "@comum/sincronia/entidade";
-import { FOLGA_RELOGIO_MS, LIMITES } from "./constantes";
+import { LIMITES } from "./constantes";
 import { documentoSemNumero, SIGILOSO_DOCUMENTO, SIGILOSO_PROCESSO } from "./sigilo";
 import type { CampoHistorico, Carimbo, DocumentoSei, Etapa, Fase, Projeto, Registro, Vinculo } from "./tipos";
 import { chaveProtocolo } from "./vinculos";
@@ -177,14 +177,21 @@ export function projetosQueFicam(projetos: readonly Versionada[], agora: number,
 }
 
 /**
+ * Além disso, adiante de `agora`, o registro é "do futuro" para o corte: maior que qualquer diferença plausível entre
+ * relógios (o de um colega 1,5 dia adiantado, ou o próprio, adiantado e depois corrigido, não pode mudar o corte, ou
+ * o de quem tem o registro e o de quem não tem discordam e o texto vai e volta). Só o texto editado à mão passa disso.
+ */
+const HORIZONTE_FUTURO_MS = 30 * 86_400_000;
+
+/**
  * Os `limite` mais recentes ficam; os ids dos outros saem (sem lápide: o histórico só acrescenta). Com `agora`, o
- * registro "do futuro" (`quando` ou `atualizadoEm` além de `agora` + `FOLGA_RELOGIO_MS`: um relógio adiantado ou um
+ * registro "do futuro" (`quando` ou `atualizadoEm` além de `agora` + `HORIZONTE_FUTURO_MS`: um relógio adiantado ou um
  * texto editado à mão) conta como o mais antigo: não empurra os registros de verdade para fora.
  */
 export function excedentes(registros: readonly Registro[], limite: number, agora?: number): string[] {
   const vivos = registros.filter((r) => r.removidoEm === undefined);
   if (vivos.length <= limite) return [];
-  const teto = agora === undefined ? Number.POSITIVE_INFINITY : agora + FOLGA_RELOGIO_MS;
+  const teto = agora === undefined ? Number.POSITIVE_INFINITY : agora + HORIZONTE_FUTURO_MS;
   const chave = (r: Registro) => (r.quando > teto || r.atualizadoEm > teto ? Number.NEGATIVE_INFINITY : r.quando);
   const ordenados = [...vivos].sort((x, y) => {
     const a = chave(x);

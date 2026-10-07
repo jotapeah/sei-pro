@@ -420,9 +420,13 @@ export interface ResultadoRestauracao {
   modelos: number;
   /** Registros do histórico que faltavam aqui. */
   registros: number;
+  /** Projetos, fases, etapas e modelos que estavam na cópia e não voltaram por estarem no outro escopo (vivos ou excluídos lá). */
+  noOutroEscopo: number;
+  /** O rótulo dos escopos onde eles estão (“Toda a unidade”, “Só eu”). */
+  rotulosDoOutro: string[];
 }
 
-const TIPO_RESTAURADO: Record<keyof Entidades, keyof ResultadoRestauracao> = {
+const TIPO_RESTAURADO: Record<keyof Entidades, "projetos" | "fases" | "etapas" | "modelos" | "registros"> = {
   p: "projetos",
   f: "fases",
   e: "etapas",
@@ -452,14 +456,18 @@ async function situacoesDe(repo: RepositorioProjetos): Promise<Situacoes> {
  * lápide mais nova que a daqui (ou aqui nem existe mais). Lápide lá mais velha que a daqui é o contrário: veio de lá
  * para cá e saiu daqui depois, e é aqui que volta.
  */
-function foiParaOOutro(id: string, aqui: Situacoes, outro: Situacoes): boolean {
+function foiParaOOutro(id: string, aqui: Situacoes, outro: Situacoes, privado: boolean): boolean {
   const o = outro.get(id);
   if (!o) return false;
   const a = aqui.get(id);
   if (a?.vivo) return false;
   if (o.vivo) return true;
+  // Restaurando para "Só eu", a lápide lá (excluído depois de levado à unidade) não impede de voltar: não fica vivo nos dois.
+  if (privado) return false;
   return (o.removidoEm ?? 0) > (a?.removidoEm ?? Number.NEGATIVE_INFINITY);
 }
+
+const ROTULO_DO_ESCOPO: Record<Escopo["vis"], string> = { unidade: "Toda a unidade", eu: "Só eu" };
 
 const OUTRA_VIS: Record<Escopo["vis"], Escopo["vis"]> = { unidade: "eu", eu: "unidade" };
 
@@ -481,7 +489,15 @@ export async function restaurarCopia(area: Area, copia: CopiaProjetos, d: Dono, 
   if (!env) throw new ErroValidacao(["Esta cópia está danificada e não pode ser restaurada. Escolha a de outro dia."]);
   const c = carimbo();
   await devolverSigilo(area, env.sigilo, d);
-  const voltaram: ResultadoRestauracao = { projetos: 0, fases: 0, etapas: 0, modelos: 0, registros: 0 };
+  const voltaram: ResultadoRestauracao = {
+    projetos: 0,
+    fases: 0,
+    etapas: 0,
+    modelos: 0,
+    registros: 0,
+    noOutroEscopo: 0,
+    rotulosDoOutro: [],
+  };
   // A situação de cada escopo, lida antes de restaurar qualquer um; o escopo restaurado é relido (o que ele recuperou
   // conta para o outro).
   const situacoes = new Map<string, Situacoes>();
@@ -505,17 +521,30 @@ export async function restaurarCopia(area: Area, copia: CopiaProjetos, d: Dono, 
     const meu = await situacaoDe(s.escopo);
     const outro = await situacaoDe(outroDe(s.escopo));
     // O item, ou o projeto dele, foi para o outro escopo.
+    const privado = s.escopo.vis === "eu";
     const doOutro = (x: Versionada): boolean => {
       const projeto = (x as { projeto?: unknown }).projeto;
-      return foiParaOOutro(x.id, meu, outro) || (typeof projeto === "string" && foiParaOOutro(projeto, meu, outro));
+      return foiParaOOutro(x.id, meu, outro, privado) || (typeof projeto === "string" && foiParaOOutro(projeto, meu, outro, privado));
+    };
+    // O que a cópia tinha ativo e ficou de fora por isso (sem os registros, que vêm junto de quase tudo).
+    const puladas = new Set<string>();
+    const contando = (x: Versionada): boolean => {
+      const foi = doOutro(x);
+      if (foi && x.removidoEm === undefined) puladas.add(x.id);
+      return foi;
     };
     const escolhidos: Record<keyof Entidades, Versionada[]> = {
-      p: sumidos(s.entidades.p, aqui.p, c, doOutro),
-      f: sumidos(s.entidades.f, aqui.f, c, doOutro),
-      e: sumidos(s.entidades.e, aqui.e, c, doOutro),
+      p: sumidos(s.entidades.p, aqui.p, c, contando),
+      f: sumidos(s.entidades.f, aqui.f, c, contando),
+      e: sumidos(s.entidades.e, aqui.e, c, contando),
       h: ausentes(s.entidades.h, aqui.h, doOutro),
-      m: sumidos(s.entidades.m, aqui.m, c, doOutro),
+      m: sumidos(s.entidades.m, aqui.m, c, contando),
     };
+    if (puladas.size > 0) {
+      voltaram.noOutroEscopo += puladas.size;
+      const rotulo = ROTULO_DO_ESCOPO[OUTRA_VIS[s.escopo.vis]];
+      if (!voltaram.rotulosDoOutro.includes(rotulo)) voltaram.rotulosDoOutro.push(rotulo);
+    }
     if (LISTAS.every((k) => escolhidos[k].length === 0)) continue;
     await repo.importar(escolhidos as unknown as Partial<Entidades>);
     const depois = await repo.entidades();
