@@ -9,7 +9,10 @@
  * Cada montagem tem o SEU RPC, preso à chave dela: vai só para uma aba dessa
  * chave (`daChave`), nunca para a da frente só porque ela ganhou o foco, e
  * depois de desmontar recusa tudo (um pedido atrasado do app velho não chega à
- * aba de outra unidade, nem à da própria).
+ * aba de outra unidade, nem à da própria). A montagem não tem outro RPC.
+ *
+ * Se a troca fechou algo que estava aberto (um formulário, o "Entendi"), um
+ * aviso só, já na unidade nova, diz que foi fechado sem gravar.
  *
  * Também atende o "Abrir no painel" que a árvore deixa no armazenamento
  * (`projetos/foco`, alvo "lateral"): abre o projeto (e o balão da etapa) assim
@@ -18,6 +21,7 @@
 
 import type { Area } from "@comum/armazenamento/area";
 import { ErroRpc, type Rpc } from "@comum/ponte/rpc";
+import { avisar } from "@comum/ui/aviso";
 import { h, icone } from "@comum/ui/dom";
 import { CHAVE_FOCO, type ContextoProjetos, chaveDaAba, lerPedidoDeFoco } from "../../ponte/tipos";
 
@@ -32,7 +36,8 @@ export interface PonteDoLateral {
 export interface AppDoLateral {
   focarProjeto(id: string, etapa?: string): boolean;
   aoGanharFoco?(): void;
-  destruir(): void;
+  /** Desmonta; devolve quantos diálogos abertos fechou sem gravar (nada: 0). */
+  destruir(): number;
 }
 
 export interface DepsMontagem {
@@ -51,30 +56,36 @@ interface Vez {
   viva: boolean;
 }
 
+/** O que a desmontagem deixou para dizer: de que unidade e quantos diálogos fechou. */
+interface Fechados {
+  sigla: string;
+  quantos: number;
+}
+
 const MENSAGEM_SEM_ABA = "A aba do SEI destes projetos não está mais aberta nesta janela. Abra o SEI na unidade e tente de novo.";
 
-function aviso(...linhas: string[]): HTMLElement {
-  const [primeira = "", ...resto] = linhas;
+/** O aviso da troca que fechou algo aberto (mesma sigla: outro usuário ou outro SEI). */
+function avisoDaTroca(antiga: string, nova: string): string {
+  return antiga === nova
+    ? `O SEI desta janela mudou. O que estava aberto na ${antiga} foi fechado sem gravar.`
+    : `Você mudou para a ${nova}. O que estava aberto na ${antiga} foi fechado sem gravar.`;
+}
+
+function semAba(): HTMLElement {
   return h(
     "div",
     { class: "prj-lat-sem-aba" },
     icone("gantt", 28),
-    h("p", {}, primeira),
-    ...resto.map((t) => h("p", { class: "prj-lat-dica" }, t)),
+    h("p", {}, "Abra o SEI nesta janela para ver seus projetos."),
+    h("p", { class: "prj-lat-dica" }, "Se o SEI já está aberto e nada aparece, recarregue a página dele (F5)."),
   );
 }
 
 export class MontagemLateral {
-  private montado: { vez: Vez; app: AppDoLateral } | null = null;
+  private montado: { vez: Vez; app: AppDoLateral; sigla: string } | null = null;
   private fila: Promise<void> = Promise.resolve();
   private paradas: Array<() => void> = [];
   private parado = false;
-
-  /** O RPC da unidade montada agora (cada app recebe o da montagem dele, que não muda de chave). */
-  readonly rpc: Pick<Rpc, "chamar"> = {
-    chamar: <T>(op: string, args?: unknown, prazo?: number) =>
-      this.chamarNa<T>(this.montado?.vez ?? { chave: "", viva: false }, op, args, prazo),
-  };
 
   constructor(private readonly d: DepsMontagem) {}
 
@@ -83,8 +94,8 @@ export class MontagemLateral {
     this.paradas.push(
       this.d.ponte.aoMudar(() => void this.reagir()),
       this.d.area.aoMudar((m) => {
-        // A remoção do próprio pedido (já atendido) também avisa: só um pedido gravado interessa.
-        if (m[CHAVE_FOCO]?.novo !== undefined) this.enfileirar(() => this.atenderFoco());
+        // Pela chave (o valor é relido): a remoção do próprio pedido também avisa e não acha nada.
+        if (CHAVE_FOCO in m) this.enfileirar(() => this.atenderFoco());
       }),
     );
   }
@@ -122,15 +133,17 @@ export class MontagemLateral {
     return a ? a.rpc.chamar<T>(op, args, prazo) : Promise.reject(new ErroRpc("SEM_ABA", MENSAGEM_SEM_ABA));
   }
 
-  private desmontar(): void {
+  private desmontar(): Fechados | null {
     const m = this.montado;
     this.montado = null;
-    if (!m) return;
+    if (!m) return null;
     m.vez.viva = false;
     try {
-      m.app.destruir();
+      const quantos = m.app.destruir();
+      return { sigla: m.sigla, quantos: Number.isFinite(quantos) ? quantos : 0 };
     } catch (e) {
       console.warn("[SEI Pro] projetos: o lateral não desmontou direito:", e);
+      return { sigla: m.sigla, quantos: 0 };
     }
   }
 
@@ -139,21 +152,21 @@ export class MontagemLateral {
     const a = this.d.ponte.atual();
     const chave = a?.chave ?? "";
     if (this.montado && this.montado.vez.chave === chave) return;
-    this.desmontar();
-    if (!a) {
-      this.d.raiz.replaceChildren(
-        aviso("Abra o SEI nesta janela para ver seus projetos.", "Se o SEI já está aberto e nada aparece, recarregue a página dele (F5)."),
-      );
+    const fechados = this.desmontar();
+    // Aba sem chave (sem unidade) não é aba para o lateral: a ponte real nem a oferece.
+    if (!a || !chave) {
+      this.d.raiz.replaceChildren(semAba());
       return;
     }
     const ctx = await a.rpc.chamar<ContextoProjetos>("contexto");
     if (this.parado) return;
-    // A chave que a aba apresentou tem de ser a do contexto dela: senão não monta (a próxima volta da fila corrige).
-    if (chaveDaAba(ctx) !== chave) return;
-    if (!ctx.unidade) {
-      this.d.raiz.replaceChildren(aviso("Abra o SEI numa unidade para ver os projetos."));
+    // A chave que a aba apresentou tem de ser a do contexto dela (e com unidade): senão não monta e diz o mesmo que
+    // sem aba (a próxima volta da fila corrige, quando a aba se reapresentar).
+    if (chaveDaAba(ctx) !== chave || !ctx.unidade) {
+      this.d.raiz.replaceChildren(semAba());
       return;
     }
+    const sigla = ctx.unidade.sigla || "unidade";
     // O RPC já vale durante a montagem (o app pede à aba enquanto abre), preso à chave desta montagem.
     const vez: Vez = { chave, viva: true };
     let app: AppDoLateral;
@@ -163,12 +176,13 @@ export class MontagemLateral {
       vez.viva = false;
       throw e;
     }
-    this.montado = { vez, app };
+    this.montado = { vez, app, sigla };
     // Parou enquanto montava: o app que acabou de abrir sai já (relógio, ouvintes, arquivo ligado).
     if (this.parado) {
       this.desmontar();
       return;
     }
+    if (fechados?.quantos) avisar(avisoDaTroca(fechados.sigla, sigla));
     await this.atenderFoco();
   }
 

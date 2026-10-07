@@ -55,7 +55,7 @@ import { alertasDaUnidade, carregarUnidade, type DadosUnidade, type ProjetoNaTel
 import { abrirArquivados, abrirInformarDocumento, pedirNomeDoModelo } from "./dialogos/apoio";
 import { abrirDialogoEtapa, type ResultadoEtapa } from "./dialogos/etapa";
 import { abrirDialogoProjeto, type ResultadoProjeto } from "./dialogos/projeto";
-import { mensagemDoErro as mensagem } from "./erros";
+import { avisarErro, CanceladoNaTroca, mensagemDoErro as mensagem } from "./erros";
 import { dataCurta, plural } from "./formato";
 import type { ParametrosImpressao } from "./impressao";
 import { agendaDaUnidade } from "./lateral/agenda";
@@ -221,6 +221,8 @@ export class AppProjetos {
     this.filtro?.fechar();
     this.descartarVista();
     this.d.raiz.replaceChildren();
+    // O menu ou a lista aberta (camada flutuante no body) ficaria sem dono.
+    fecharOrfaos();
   }
 
   /**
@@ -336,7 +338,7 @@ export class AppProjetos {
       aoMostrarLista: (v) => this.ajustar({ mostrarLista: v }),
       aoMoverDependentes: (v) => this.ajustar({ moverDependentes: v }),
       aoOrdenar: (o) => this.ajustar({ ordemEtapas: o }),
-      aoExportar: () => void this.exportar().catch((e: unknown) => avisar(mensagem(e))),
+      aoExportar: () => void this.exportar().catch((e: unknown) => avisarErro(e)),
       aoImprimir: () => this.imprimir(),
       aoArquivados: () => this.abrirArquivados(),
     }));
@@ -721,7 +723,7 @@ export class AppProjetos {
             this.render();
           },
           // O mesmo concluir do painel: relê antes (não conclui de novo) e grava pelo repositório que pede o "Entendi".
-          aoConcluir: (i) => void this.concluir(i.projeto, i.etapa).catch((e) => avisar(mensagem(e))),
+          aoConcluir: (i) => void this.concluir(i.projeto, i.etapa).catch((e) => avisarErro(e)),
           aoEditar: (i) => this.dialogoEtapa(i.projeto, i.etapa),
           aoVer: (i) => this.focarNoLateral(i.projeto.projeto.id, i.etapa.id),
         }),
@@ -798,7 +800,7 @@ export class AppProjetos {
             : {
                 rotulo: "Exportar planilha (CSV)",
                 icone: "planilha",
-                fazer: () => void this.exportar().catch((e: unknown) => avisar(mensagem(e))),
+                fazer: () => void this.exportar().catch((e: unknown) => avisarErro(e)),
               },
           ...(ext.arquivo?.({ semProjetos }) ?? []),
           "-",
@@ -840,7 +842,7 @@ export class AppProjetos {
       .then((r) => {
         if (r === "navegou") avisar("Abrindo o Controle de Processos no projeto…");
       })
-      .catch((e) => avisar(mensagem(e)));
+      .catch((e) => avisarErro(e));
   }
 
   // ---------- projetos ----------
@@ -887,9 +889,10 @@ export class AppProjetos {
       salvar: (r) => this.salvarProjeto(p, r),
       arquivar: async () => {
         await repo.arquivarProjeto(id);
+        if (this.destruido) return;
         avisar(`Projeto “${nome}” arquivado.`, {
           rotulo: "Desfazer",
-          fazer: () => void repo.reativarProjeto(id).catch((e) => avisar(mensagem(e))),
+          fazer: () => void repo.reativarProjeto(id).catch((e) => avisarErro(e)),
         });
       },
       reativar: async () => {
@@ -965,6 +968,7 @@ export class AppProjetos {
     try {
       await destino.editarProjeto(id, mudancas);
     } catch (e) {
+      if (e instanceof CanceladoNaTroca) throw e;
       const motivo = mensagem(e);
       throw new ErroValidacao([
         `O projeto já está em “${rotuloDaVis(r.vis)}”, mas o nome e o processo novos não foram salvos: ${/[.!?]$/.test(motivo) ? motivo : `${motivo}.`} Salve de novo.`,
@@ -980,9 +984,10 @@ export class AppProjetos {
     if (!(await this.d.confirmar(texto, "Excluir"))) return false;
     const repo = this.repoDe(p.vis);
     await repo.removerProjeto(p.projeto.id);
+    if (this.destruido) return true;
     avisar(`Projeto “${p.projeto.nome}” excluído.`, {
       rotulo: "Desfazer",
-      fazer: () => void repo.restaurarProjeto(p.projeto.id).catch((e) => avisar(mensagem(e))),
+      fazer: () => void repo.restaurarProjeto(p.projeto.id).catch((e) => avisarErro(e)),
     });
     return true;
   }
@@ -1052,7 +1057,7 @@ export class AppProjetos {
       return true;
     } catch (e) {
       this.focarNova = false;
-      avisar(mensagem(e));
+      avisarErro(e);
       return false;
     }
   }
@@ -1063,7 +1068,7 @@ export class AppProjetos {
     if (!p || !e) return;
     const repo = this.repoDe(p.vis);
     const hoje = this.d.hoje();
-    const tentar = (f: () => Promise<unknown>) => void f().catch((erro) => avisar(mensagem(erro)));
+    const tentar = (f: () => Promise<unknown>) => void f().catch((erro) => avisarErro(erro));
     this.balao?.fechar();
     const camada: Camada = abrirBalaoEtapa(
       ancora,
@@ -1114,9 +1119,11 @@ export class AppProjetos {
     const atual = await repo.obterEtapa(e.id);
     if (!atual || atual.concluidaEm) return;
     await repo.concluirEtapa(e.id, hoje);
+    // Desmontado no meio (o lateral trocou de unidade): o "Desfazer" não fica na tela da unidade nova.
+    if (this.destruido) return;
     avisar(`“${atual.nome}” ${atual.marco ? "cumprido" : "concluída"} hoje (${dataCurta(hoje)}).`, [
-      { rotulo: "Informar documento", fazer: () => void this.informarDocumento(repo, e.id).catch((x) => avisar(mensagem(x))) },
-      { rotulo: "Desfazer", fazer: () => void this.desfazerConclusao(repo, e.id, hoje).catch((x) => avisar(mensagem(x))) },
+      { rotulo: "Informar documento", fazer: () => void this.informarDocumento(repo, e.id).catch((x) => avisarErro(x)) },
+      { rotulo: "Desfazer", fazer: () => void this.desfazerConclusao(repo, e.id, hoje).catch((x) => avisarErro(x)) },
     ]);
   }
 
@@ -1152,9 +1159,10 @@ export class AppProjetos {
   private async excluirEtapa(p: ProjetoNaTela, e: Etapa): Promise<void> {
     const repo = this.repoDe(p.vis);
     await repo.removerEtapa(e.id);
+    if (this.destruido) return;
     avisar(`Etapa “${e.nome}” excluída.`, {
       rotulo: "Desfazer",
-      fazer: () => void repo.restaurarEtapa(e.id).catch((x) => avisar(mensagem(x))),
+      fazer: () => void repo.restaurarEtapa(e.id).catch((x) => avisarErro(x)),
     });
   }
 
@@ -1176,7 +1184,7 @@ export class AppProjetos {
     try {
       await this.repoDe(p.vis).moverDatas(this.completar(p, m), this.d.hoje());
     } catch (e) {
-      avisar(mensagem(e));
+      avisarErro(e);
       // O Gantt já mostra as barras no lugar novo: `atualizar` com as linhas gravadas (as de antes).
       this.pintarCorpo();
     }
@@ -1184,9 +1192,7 @@ export class AppProjetos {
 
   private abrirProcesso(v: Vinculo, ev?: MouseEvent): void {
     const novaAba = !!(ev?.ctrlKey || ev?.metaKey);
-    void this.d.rpc
-      .chamar("abrirProcesso", { id: v.idProcedimento ?? "", protocolo: v.protocolo, novaAba })
-      .catch((e) => avisar(mensagem(e)));
+    void this.d.rpc.chamar("abrirProcesso", { id: v.idProcedimento ?? "", protocolo: v.protocolo, novaAba }).catch((e) => avisarErro(e));
   }
 
   // ---------- exportar e imprimir ----------

@@ -8,8 +8,9 @@
  *
  * O que é de cada montagem fica com ela: os diálogos que o app abriu fecham
  * quando ele desmonta (um formulário ou o "Entendi" da unidade velha não fica
- * por cima dos projetos da unidade nova, nem grava nela depois), e a primeira
- * contagem de cada montagem vai para a aba do painel.
+ * por cima dos projetos da unidade nova, nem grava nela depois), os avisos dele
+ * saem da tela (o "Desfazer" agiria na unidade velha), e a primeira contagem de
+ * cada montagem vai para a aba do painel.
  */
 
 import type { Area } from "@comum/armazenamento/area";
@@ -43,10 +44,10 @@ export interface NavegadorDoLateral {
 
 /**
  * Os diálogos de UMA montagem: `fecharTodos` fecha os que ainda estão abertos (quem espera a resposta recebe o
- * "fechou", como no X: a confirmação responde "não", o "Entendi" responde "Agora não"). Depois disso nada mais
- * abre: um diálogo pedido pelo app que já saiu fecha na hora, sem aparecer.
+ * "fechou", como no X: a confirmação responde "não", o "Entendi" responde "Agora não") e devolve quantos fechou.
+ * Depois disso nada mais abre: um diálogo pedido pelo app que já saiu fecha na hora, sem aparecer.
  */
-export function modaisDaVez(abrir: AbrirModal): { abrirModal: AbrirModal; fecharTodos(): void } {
+export function modaisDaVez(abrir: AbrirModal): { abrirModal: AbrirModal; fecharTodos(): number } {
   const abertos = new Set<{ fechar(): void }>();
   let encerrada = false;
   return {
@@ -69,8 +70,10 @@ export function modaisDaVez(abrir: AbrirModal): { abrirModal: AbrirModal; fechar
     },
     fecharTodos: () => {
       encerrada = true;
-      for (const m of [...abertos]) m.fechar();
+      const lista = [...abertos];
+      for (const m of lista) m.fechar();
       abertos.clear();
+      return lista.length;
     },
   };
 }
@@ -131,7 +134,10 @@ export function criarAppDoLateral(n: NavegadorDoLateral): (ctx: ContextoProjetos
       destruir: () => {
         // Primeiro o app (a resposta "não" de um diálogo fechado agora não redesenha nada), depois os diálogos.
         ligado.destruir();
-        modais.fecharTodos();
+        const fechados = modais.fecharTodos();
+        // Os avisos do app ("Desfazer", "Informar documento") agiriam na unidade velha com a nova na tela.
+        for (const a of [...n.raiz.ownerDocument.querySelectorAll(".spro-aviso")]) a.remove();
+        return fechados;
       },
     };
   };

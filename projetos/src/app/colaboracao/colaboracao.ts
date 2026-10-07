@@ -82,7 +82,7 @@ import { abrirHistorico, type NomesDoHistorico, type RegistroNaTela } from "../d
 import { abrirImportarAtividades, mensagemDaImportacao } from "../dialogos/importar";
 import { abrirModelos } from "../dialogos/modelos";
 import { montarSincronizacao } from "../dialogos/sincronizacao";
-import { mensagemDoErro } from "../erros";
+import { avisarErro, CanceladoNaTroca, mensagemDoErro } from "../erros";
 import { plural } from "../formato";
 import { comConsentimento, consentidor, gravarConsentimento, MENSAGEM_SEM_ENTENDI } from "./consentir";
 import { EstadoDaSincronia } from "./estado";
@@ -231,12 +231,19 @@ export class Colaboracao {
       unidade: consentimentoProjetos(d.sync, d.ctx.host, d.ctx.login, u.id, "unidade"),
       eu: consentimentoProjetos(d.sync, d.ctx.host, d.ctx.login, u.id, "eu"),
     };
-    this.consentirUnidade = consentidor(this.portas.unidade, () =>
+    const perguntar = consentidor(this.portas.unidade, () =>
       avisoDaUnidade({ abrirModal: d.abrirModal, sigla: this.sigla, nomeTexto: nomeDoTexto("unidade", d.ctx.login) }),
     );
+    // Desmontada com a pergunta aberta (o lateral trocou de unidade e fechou o "Entendi"): o "não" é da troca, não
+    // do usuário. Nada grava, e o cancelamento é silencioso (`avisarErro`).
+    this.consentirUnidade = async () => {
+      const sim = await perguntar();
+      if (!sim && this.destruido) throw new CanceladoNaTroca();
+      return sim;
+    };
     this.repos = { unidade: comConsentimento(d.repos.unidade, this.consentirUnidade), eu: d.repos.eu };
     // Como nas telas: o que é da sincronia no começo, o que é de arquivo depois de Exportar/Imprimir, o histórico no fim.
-    const fazer = (f: () => Promise<void>) => () => void f().catch((e: unknown) => avisar(mensagemDoErro(e)));
+    const fazer = (f: () => Promise<void>) => () => void f().catch((e: unknown) => avisarErro(e));
     this.extensoesMenu = {
       sincronia: (): EntradaMenu[] => [
         { rotulo: "Sincronização…", icone: "nuvem", dica: "Texto Padrão · arquivo", fazer: fazer(() => this.abrirSincronizacao()) },
@@ -345,15 +352,15 @@ export class Colaboracao {
       faixas.push(
         faixaAguardando({
           sigla: this.sigla,
-          aoEntendi: () => void gravarConsentimento(this.portas.unidade, "ligado").catch((e: unknown) => avisar(mensagemDoErro(e))),
+          aoEntendi: () => void gravarConsentimento(this.portas.unidade, "ligado").catch((e: unknown) => avisarErro(e)),
         }),
       );
     }
     if (convite) {
       faixas.push(
         faixaConvite({
-          aoLigar: () => void this.ligarPessoal().catch((e: unknown) => avisar(mensagemDoErro(e))),
-          aoRecusar: () => void gravarConsentimento(this.portas.eu, "desligado").catch((e: unknown) => avisar(mensagemDoErro(e))),
+          aoLigar: () => void this.ligarPessoal().catch((e: unknown) => avisarErro(e)),
+          aoRecusar: () => void gravarConsentimento(this.portas.eu, "desligado").catch((e: unknown) => avisarErro(e)),
         }),
       );
     }
@@ -561,7 +568,7 @@ export class Colaboracao {
       try {
         await enviar(atual);
       } catch (e) {
-        avisar(mensagemDoErro(e));
+        avisarErro(e);
       }
       return;
     }
@@ -587,7 +594,7 @@ export class Colaboracao {
       env = lerArquivoDoProjeto(await a.text());
       previa = previaDoRecebido(env);
     } catch (e) {
-      avisar(mensagemDoErro(e));
+      avisarErro(e);
       return;
     }
     const recebido = env;
@@ -640,6 +647,6 @@ export class Colaboracao {
           if (res.novos && primeiro) await this.d.app()?.abrirProjeto(idDoLegado.projeto(primeiro.id_projeto));
         },
       });
-    })().catch((e: unknown) => avisar(mensagemDoErro(e)));
+    })().catch((e: unknown) => avisarErro(e));
   }
 }

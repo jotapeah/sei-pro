@@ -13,13 +13,15 @@
  */
 
 import { type Area, areaMemoria } from "@comum/armazenamento/area";
+import { CHAVE_CONTADOR_PROJETOS, TETO_CONTADOR_PROJETOS } from "@comum/painel/contadores";
 import { ligarLadoAba, PonteLateral, type Remetente } from "@comum/ponte/lateral";
 import { parDePortas } from "@comum/ponte/parDePortas";
 import type { PortaRpc, Rpc } from "@comum/ponte/rpc";
 import { definirEmissorDeAviso } from "@comum/ui/aviso";
 import { type AbrirModal, criarAbrirModal } from "@comum/ui/dialogo";
 import { h } from "@comum/ui/dom";
-import { TETO_CONTADOR_PROJETOS } from "../../favoritos/src/shell/painel";
+import { instalarChromeStorage } from "../../sei-comum/tests/chromeFalso";
+import { AppProjetos } from "../src/app/app";
 import type { ArquivoLigado } from "../src/app/colaboracao/colaboracao";
 import { criarAppDoLateral, gravadorDoContador, modaisDaVez } from "../src/app/lateral/criar";
 import { type AppDoLateral, MontagemLateral, type PonteDoLateral } from "../src/app/lateral/montagem";
@@ -52,7 +54,14 @@ function aba(c: ContextoProjetos, pedidos: string[], chave = chaveDaAba(c)) {
   return { chave, rpc };
 }
 
-function cenario(o: { area?: Area; criar?: (c: ContextoProjetos, rpc: Pick<Rpc, "chamar">) => Promise<void> } = {}) {
+function cenario(
+  o: {
+    area?: Area;
+    criar?: (c: ContextoProjetos, rpc: Pick<Rpc, "chamar">) => Promise<void>;
+    /** Quantos diálogos o app de cada chave tinha abertos ao desmontar. */
+    abertos?: Record<string, number>;
+  } = {},
+) {
   const doc = telaDoApp();
   const raiz = doc.getElementById("app")!;
   const area = o.area ?? areaMemoria();
@@ -87,7 +96,10 @@ function cenario(o: { area?: Area; criar?: (c: ContextoProjetos, rpc: Pick<Rpc, 
           focos.push(`${k}:${id}:${etapa ?? "-"}`);
           return true;
         },
-        destruir: () => void destruidos.push(k),
+        destruir: () => {
+          destruidos.push(k);
+          return o.abertos?.[k] ?? 0;
+        },
       };
     },
   });
@@ -256,26 +268,38 @@ export async function verificarAppLateralPonte(): Promise<void> {
     { criados: c.criados, destruidos: c.destruidos },
   );
   pedidos.length = 0;
-  await c.montagem.rpc.chamar("processosDaCaixa");
+  // O RPC que o app da 220 recebeu (a montagem não expõe outro).
+  const rpcDa220 = c.rpcs.at(-1)!;
+  await rpcDa220.chamar("processosDaCaixa");
   checar("o RPC vai para a aba da unidade montada", pedidos.join() === `${a220.chave}:processosDaCaixa`, pedidos);
   // A aba da 220 some da ponte (fechada): o pedido não pode ir para a da 110 que ficou aberta.
   c.abas.splice(c.abas.indexOf(a220), 1);
-  const erro = await lanca(() => c.montagem.rpc.chamar("processosDaCaixa"));
+  const erro = await lanca(() => rpcDa220.chamar("processosDaCaixa"));
   checar(
     "sem aba da unidade montada: recusa (nunca manda para outra unidade)",
     erro?.codigo === "SEM_ABA" && !pedidos.some((x) => x.startsWith(a110.chave)),
     erro,
   );
+  pedidos.length = 0;
   const semUnidade = aba(ctx(null), pedidos);
   await c.mudar(semUnidade);
-  checar("aba sem unidade: o aviso, sem app", texto(c.raiz).includes("Abra o SEI numa unidade") && c.criados.length === 2);
+  checar(
+    "aba sem unidade (sem chave): o aviso de sem aba, sem app e sem pedir o contexto",
+    texto(c.raiz).includes("Abra o SEI nesta janela para ver seus projetos") && c.criados.length === 2 && !pedidos.length,
+    { texto: texto(c.raiz), pedidos },
+  );
+  checar("a montagem nao tem RPC publico (so o de cada app)", !("rpc" in c.montagem));
 
   secao("lateral: contexto que chega de outra aba nao monta");
   const t = cenario();
   t.montagem.iniciar();
   const enganada = aba(ctx("330"), [], "sei.x.gov.br|ana|u:999");
   await t.mudar(enganada);
-  checar("chave apresentada difere do contexto: nao monta", t.criados.length === 0);
+  checar(
+    "chave apresentada difere do contexto: nao monta e mostra o aviso de sem aba (nao fica em branco)",
+    t.criados.length === 0 && texto(t.raiz).includes("Abra o SEI nesta janela para ver seus projetos"),
+    texto(t.raiz),
+  );
 
   secao("lateral: Abrir no painel vindo da arvore (pedido de foco)");
   const f = cenario();
@@ -296,6 +320,56 @@ export async function verificarAppLateralPonte(): Promise<void> {
   checar("pedido vencido: ignorado", f.focos.length === 2);
   f.montagem.parar();
   checar("parar desmonta", f.destruidos.join() === k);
+
+  secao("lateral: pedido de foco pelo chrome.storage de verdade (formato do Chrome, areaChrome)");
+  const chromeFoco = instalarChromeStorage();
+  try {
+    const fc = cenario({ area: chromeFoco.local });
+    fc.montagem.iniciar();
+    await fc.mudar(aba(ctx("110"), []));
+    await chromeFoco.local.gravar({ [CHAVE_FOCO]: { alvo: "lateral", chave: k, projeto: "p7", etapa: "e7", ate: 20_000 } });
+    await tique(20);
+    checar("com o lateral ja montado: atendido", fc.focos.join() === `${k}:p7:e7`, fc.focos);
+    checar("e apagado", !(CHAVE_FOCO in (await chromeFoco.local.obter(CHAVE_FOCO))));
+    fc.montagem.parar();
+  } finally {
+    chromeFoco.restaurar();
+  }
+
+  secao("lateral: o que a troca fechou vira UM aviso depois de montar a unidade nova");
+  definirEmissorDeAviso(null);
+  const av = cenario({ abertos: { "sei.x.gov.br|ana|u:110": 2 } });
+  const avisoNaTela = () => [...document.querySelectorAll(".spro-aviso")].map((x) => texto(x));
+  av.montagem.iniciar();
+  await av.mudar(aba(ctx("110"), []));
+  await av.mudar(aba(ctx("220"), []));
+  checar(
+    "com dialogo aberto na 110: o aviso, um so, depois de montar a 220",
+    JSON.stringify(avisoNaTela()) === JSON.stringify(["Você mudou para a U220. O que estava aberto na U110 foi fechado sem gravar."]) &&
+      av.criados.at(-1) === "sei.x.gov.br|ana|u:220",
+    avisoNaTela(),
+  );
+  for (const x of document.querySelectorAll(".spro-aviso")) x.remove();
+  await av.mudar(aba(ctx("330"), []));
+  checar("sem nada aberto na 220: nenhum aviso", avisoNaTela().length === 0, avisoNaTela());
+  av.montagem.parar();
+  const avLogin = cenario({ abertos: { "sei.x.gov.br|ana|u:110": 1 } });
+  avLogin.montagem.iniciar();
+  await avLogin.mudar(aba(ctx("110"), []));
+  await avLogin.mudar(aba(ctx("110", "sei.x.gov.br", "bruno"), []));
+  checar(
+    "mesma sigla (outro usuario): o aviso sem 'mudou para a mesma'",
+    JSON.stringify(avisoNaTela()) === JSON.stringify(["O SEI desta janela mudou. O que estava aberto na U110 foi fechado sem gravar."]),
+    avisoNaTela(),
+  );
+  for (const x of document.querySelectorAll(".spro-aviso")) x.remove();
+  avLogin.montagem.parar();
+  const avSem = cenario({ abertos: { "sei.x.gov.br|ana|u:110": 1 } });
+  avSem.montagem.iniciar();
+  await avSem.mudar(aba(ctx("110"), []));
+  await avSem.mudar(null);
+  checar("dialogo aberto e nenhuma aba depois: so o aviso de sem aba no painel, sem toast", avisoNaTela().length === 0, avisoNaTela());
+  avSem.montagem.parar();
 
   secao("lateral: troca de login (mesma unidade) remonta");
   const lg = cenario();
@@ -457,8 +531,10 @@ export async function verificarAppLateralPonte(): Promise<void> {
     gravados,
   );
   checar(
-    "o teto e o do selo da aba (2 escopos x projetos ativos x etapas por projeto)",
-    TETO_CONTADOR_PAINEL === TETO_CONTADOR_PROJETOS && TETO_CONTADOR_PAINEL === 2 * LIMITES.projetosAtivos * LIMITES.etapasPorProjeto,
+    "chave e teto do contrato do sei-comum, e o teto e a conta dos LIMITES (2 escopos x projetos ativos x etapas)",
+    TETO_CONTADOR_PAINEL === TETO_CONTADOR_PROJETOS &&
+      CHAVE_CONTADOR_PAINEL === CHAVE_CONTADOR_PROJETOS &&
+      TETO_CONTADOR_PAINEL === 2 * LIMITES.projetosAtivos * LIMITES.etapasPorProjeto,
   );
   const outro = gravadorDoContador(areaC);
   outro(TETO_CONTADOR_PAINEL);
@@ -556,6 +632,52 @@ export async function verificarAppLateralPonte(): Promise<void> {
   );
   quebrado.parar();
 
+  secao("lateral: concluir que termina depois de desmontar nao deixa aviso com acao");
+  {
+    const doc = telaDoApp();
+    definirEmissorDeAviso(null);
+    const area = areaMemoria();
+    const { repo: eu } = novoRepo(escoposDaUnidade("sei.x.gov.br", "ana", "110").eu, area, "g");
+    const { repo: un } = novoRepo(escoposDaUnidade("sei.x.gov.br", "ana", "110").unidade, area, "h");
+    const pj = await eu.criarProjeto({ nome: "Lento" });
+    const et = await eu.criarEtapa({ projeto: pj.id, nome: "Etapa lenta", inicio: "2026-09-01", fim: "2026-10-01" });
+    let liberar: () => void = () => undefined;
+    const concluirDeVerdade = eu.concluirEtapa.bind(eu);
+    eu.concluirEtapa = async (...args: Parameters<typeof eu.concluirEtapa>) => {
+      await new Promise<void>((ok) => {
+        liberar = ok;
+      });
+      return concluirDeVerdade(...args);
+    };
+    const app = new AppProjetos({
+      raiz: doc.getElementById("app")!,
+      ctx: ctx("110"),
+      area,
+      repos: { unidade: un, eu },
+      rpc: { chamar: async <T>() => [] as T },
+      abrirModal: criarAbrirModal(),
+      confirmar: async () => true,
+      baixar: () => undefined,
+      hoje: () => HOJE,
+      agora: () => AGORA,
+      modo: "lateral",
+    });
+    await app.iniciar();
+    botao(acoes(doc.getElementById("app")!, et.id)!, "Concluir")!.click();
+    await tique(10);
+    doc.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"][aria-label="Ajustes dos projetos"]')?.click();
+    const menuAberto = !!doc.querySelector(".spro-menu-pop");
+    app.destruir();
+    checar("o menu de ajustes aberto sai com o app (nada orfao no body)", menuAberto && !doc.querySelector(".spro-menu-pop"));
+    liberar();
+    await tique(20);
+    checar(
+      "a etapa conclui (a acao era da unidade dela), mas o app que saiu nao mostra o 'Desfazer'",
+      (await eu.obterEtapa(et.id))?.concluidaEm === HOJE && !doc.querySelector(".spro-aviso"),
+      [...doc.querySelectorAll(".spro-aviso")].map((x) => texto(x)),
+    );
+  }
+
   secao("lateral de ponta a ponta: ponte real, ligarApp e a troca de unidade");
   const p = painelLateral();
   const e110 = escoposDaUnidade("sei.x.gov.br", "ana", "110");
@@ -607,6 +729,13 @@ export async function verificarAppLateralPonte(): Promise<void> {
     texto(p.raiz),
   );
   checar("o Entendi da 110 fechou com a troca", !p.doc.querySelector("dialog"));
+  await tique(20);
+  const avisosP = () => [...p.doc.querySelectorAll(".spro-aviso")].map((x) => texto(x));
+  checar(
+    "sem o aviso do Entendi da 110 (cancelado em silencio); um aviso so: o da troca",
+    JSON.stringify(avisosP()) === JSON.stringify(["Você mudou para a U220. O que estava aberto na U110 foi fechado sem gravar."]),
+    avisosP(),
+  );
   if (entendi) botao(entendi, "Entendi")?.click();
   await tique(30);
   checar(
@@ -621,6 +750,7 @@ export async function verificarAppLateralPonte(): Promise<void> {
     (await eu220.obterEtapa(n220.id))?.concluidaEm === HOJE && (await p.escopo("110")) === antes110,
   );
   checar("contador: 0 depois de concluir na 220", (await p.area.obter(CHAVE_CONTADOR_PAINEL))[CHAVE_CONTADOR_PAINEL] === 0);
+  checar("o aviso da conclusao tem o Desfazer", !!botao(p.doc.body, "Desfazer"));
   p.pedidos.length = 0;
   // A árvore pediu "Abrir no painel" para a 220: o lateral abre o projeto, e o "Abrir no painel" dele vai à aba da 220.
   await p.area.gravar({ [CHAVE_FOCO]: { alvo: "lateral", chave: chaveDaAba(ctx("220")), projeto: p220.id, ate: AGORA + 30_000 } });
@@ -629,8 +759,16 @@ export async function verificarAppLateralPonte(): Promise<void> {
   await tique(30);
   checar("o pedido do app da 220 vai so para a aba da 220", p.pedidos.join() === `${aba2.rotulo}:focarNoPainel`, p.pedidos);
   p.pedidos.length = 0;
+  // O menu de ajustes da 220 fica aberto (camada flutuante no body) quando a aba da 220 fecha.
+  p.raiz.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"][aria-label="Ajustes dos projetos"]')?.click();
+  checar("menu de ajustes aberto antes da troca", !!p.doc.querySelector(".spro-menu-pop"));
   aba2.fechar();
   await tique(80);
+  checar(
+    "a troca leva os avisos da 220 (o Desfazer nao age na unidade montada depois) e o menu aberto",
+    !p.doc.querySelector(".spro-aviso") && !botao(p.doc.body, "Desfazer") && !p.doc.querySelector(".spro-menu-pop"),
+    { avisos: avisosP(), menu: !!p.doc.querySelector(".spro-menu-pop") },
+  );
   checar(
     "a aba da 220 fechou e sobrou a da 110: o lateral volta para a 110",
     texto(p.raiz).includes("Revisão 110") && !texto(p.raiz).includes("Plano 220"),
