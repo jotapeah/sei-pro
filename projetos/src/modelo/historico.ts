@@ -9,7 +9,8 @@
  * até `LIMITES.registroValor`, quem gravou até `LIMITES.rotulo`.
  */
 
-import { LIMITES } from "./constantes";
+import { purgarLapides, type Versionada } from "@comum/sincronia/entidade";
+import { FOLGA_RELOGIO_MS, LIMITES } from "./constantes";
 import { documentoSemNumero, SIGILOSO_DOCUMENTO, SIGILOSO_PROCESSO } from "./sigilo";
 import type { CampoHistorico, Carimbo, DocumentoSei, Etapa, Fase, Projeto, Registro, Vinculo } from "./tipos";
 import { chaveProtocolo } from "./vinculos";
@@ -165,10 +166,31 @@ export function carimbarRegistros(novos: readonly RegistroNovo[], c: Carimbo, no
   });
 }
 
-/** Os `limite` mais recentes ficam; os ids dos outros saem (sem lápide: o histórico só acrescenta). */
-export function excedentes(registros: readonly Registro[], limite: number): string[] {
+/**
+ * Os projetos que dão sentido a fases, etapas e registros: os vivos e os com lápide dentro do prazo (`dias`, a poda
+ * do texto). Fora deles, o item é órfão: o texto não o leva, o corte dos 300 registros não o conta e o `limpar` o
+ * tira. É um predicado só para o texto e para os cortes daqui: se um contasse o órfão e o outro não, o corte de quem
+ * o tem e o de quem chegou depois discordariam, e o texto iria e voltaria.
+ */
+export function projetosQueFicam(projetos: readonly Versionada[], agora: number, dias: number): ReadonlySet<string> {
+  return new Set(purgarLapides([...projetos], agora, dias).map((p) => p.id));
+}
+
+/**
+ * Os `limite` mais recentes ficam; os ids dos outros saem (sem lápide: o histórico só acrescenta). Com `agora`, o
+ * registro "do futuro" (`quando` ou `atualizadoEm` além de `agora` + `FOLGA_RELOGIO_MS`: um relógio adiantado ou um
+ * texto editado à mão) conta como o mais antigo: não empurra os registros de verdade para fora.
+ */
+export function excedentes(registros: readonly Registro[], limite: number, agora?: number): string[] {
   const vivos = registros.filter((r) => r.removidoEm === undefined);
   if (vivos.length <= limite) return [];
-  const ordenados = [...vivos].sort((x, y) => y.quando - x.quando || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
+  const teto = agora === undefined ? Number.POSITIVE_INFINITY : agora + FOLGA_RELOGIO_MS;
+  const chave = (r: Registro) => (r.quando > teto || r.atualizadoEm > teto ? Number.NEGATIVE_INFINITY : r.quando);
+  const ordenados = [...vivos].sort((x, y) => {
+    const a = chave(x);
+    const b = chave(y);
+    if (a !== b) return a < b ? 1 : -1;
+    return x.id < y.id ? -1 : x.id > y.id ? 1 : 0;
+  });
   return ordenados.slice(limite).map((r) => r.id);
 }

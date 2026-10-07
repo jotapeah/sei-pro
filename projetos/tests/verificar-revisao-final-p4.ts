@@ -32,7 +32,7 @@ const MENSAGEM_UNIDADE_SO_LEITURA =
 const escopo = (vis: Vis, login = "ana"): Escopo => ({ host: HOST, login, unidade: "110", vis });
 
 /** Um computador: os dois escopos da unidade 110 numa área, o relógio à mostra e o motor de verdade. */
-function pc(login: string, disp: string, inicio = AGORA, area: Area = areaMemoria()) {
+export function pc(login: string, disp: string, inicio = AGORA, area: Area = areaMemoria()) {
   const rel = { agora: inicio };
   let n = 0;
   const carimbo = () => ({ agora: ++rel.agora, dispositivo: disp, por: login, nome: login });
@@ -68,13 +68,13 @@ function registro(m: Partial<Registro> & { id: string; projeto: string }): Regis
 }
 
 /** O envelope inteiro do texto (com cabeçalho), para editar à mão. */
-async function envelopeDoTexto(html: string | null): Promise<EnvelopeProjetos> {
+export async function envelopeDoTexto(html: string | null): Promise<EnvelopeProjetos> {
   const r = html ? await lerConteudoTexto(html) : null;
   if (!r || !("bruto" in r)) throw new Error("texto sem envelope");
   return r.bruto as EnvelopeProjetos;
 }
 
-const vivos = async (r: RepositorioProjetos): Promise<Set<string>> => {
+export const vivos = async (r: RepositorioProjetos): Promise<Set<string>> => {
   const t = await r.entidades();
   return new Set([...t.p, ...t.f, ...t.e, ...t.h].filter((x) => x.removidoEm === undefined).map((x) => x.id));
 };

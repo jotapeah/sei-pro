@@ -24,6 +24,7 @@ import { completarComDependentes, problemasDasMudancas } from "../modelo/depende
 import { rotuloDaVis } from "../modelo/escopo";
 import { criteriosAtivos, type Eu, FILTRO_VAZIO, type FiltroEtapas, filtrarEtapas, filtroNoContexto } from "../modelo/filtro";
 import { planoParaRedefinir } from "../modelo/linhaDeBase";
+import { ErroMemoriaSigilo } from "../modelo/memoriaSigilo";
 import { datasDaEtapaNova } from "../modelo/operacoes";
 import { documentoSemNumero, type SigilosConhecidos } from "../modelo/sigilo";
 import type { DataISO, Etapa, MudancaDeDatas, Vinculo, Vis } from "../modelo/tipos";
@@ -311,7 +312,7 @@ export class AppProjetos {
       aoMostrarLista: (v) => this.ajustar({ mostrarLista: v }),
       aoMoverDependentes: (v) => this.ajustar({ moverDependentes: v }),
       aoOrdenar: (o) => this.ajustar({ ordemEtapas: o }),
-      aoExportar: () => void this.exportar(),
+      aoExportar: () => void this.exportar().catch((e: unknown) => avisar(mensagem(e))),
       aoImprimir: () => this.imprimir(),
       aoArquivados: () => this.abrirArquivados(),
     }));
@@ -995,7 +996,8 @@ export class AppProjetos {
 
   /**
    * A planilha da tela, com o sigilo pela regra e pela memória deste computador. Sem conseguir ler a memória, nada é
-   * baixado (falha fechada: o número de um processo sigiloso iria na planilha).
+   * baixado (falha fechada: o número de um processo sigiloso iria na planilha) e o aviso diz isso; outro erro lança
+   * (quem chama mostra a mensagem dele, como nas outras ações).
    */
   private async exportar(): Promise<void> {
     const hoje = this.d.hoje();
@@ -1005,6 +1007,7 @@ export class AppProjetos {
     try {
       conhecidos = await this.d.repos.unidade.sigilosConhecidos();
     } catch (e) {
+      if (!(e instanceof ErroMemoriaSigilo)) throw e;
       console.warn("[SEI Pro] projetos: planilha sem a memória do sigilo:", mensagem(e));
       avisar(MENSAGEM_PLANILHA_SEM_MEMORIA);
       return;

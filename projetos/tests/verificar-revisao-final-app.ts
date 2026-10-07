@@ -249,7 +249,6 @@ async function item12e13(): Promise<void> {
   );
 
   secao("revisao final 13: a faixa 'aguardando' e anunciada pelo leitor de tela");
-  secao("revisao final 13: a faixa 'aguardando' e anunciada; quem so consulta ganha o texto certo");
   const ag = faixaAguardando({ sigla: "SEPRO", aoEntendi: () => undefined });
   checar("faixa aguardando com role=status", ag.getAttribute("role") === "status");
 }

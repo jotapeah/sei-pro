@@ -928,13 +928,15 @@ async function verificarSigiloGruda(): Promise<void> {
     await rp.limpar(rel.agora);
     const local = await rp.entidades();
     checar("a poda local apagou as lapides", !local.p.some((x) => x.id === pz.id) && !local.e.some((x) => x.id === ez.id));
-    const regs = local.h.filter((r) => r.projeto === pz.id && (r.campo === "processo" || r.campo === "documento"));
-    // Rodada 2: a memória do sigilo guarda o número e o documento marcados, então a poda não precisa reescrever
-    // estes registros (o histórico daqui fica com os números) e o texto continua sem eles (abaixo).
+    const regs = local.h.filter((r) => r.projeto === pz.id);
+    // Rodada 2: a memória do sigilo guarda o número e o documento marcados antes da poda. Desde os residuais da
+    // revisão final (N1), o `limpar` também tira os registros do projeto podado (órfãos, que o texto não leva):
+    // o que garante o sigilo é a memória, que segue raspando se esses números voltarem a aparecer.
+    const memP = lerMemoria(await areaP.obter(null), prefixoMemoriaSigilo(ESCOPO_UN.host, ESCOPO_UN.login));
     checar(
-      "a memoria do sigilo cobre: o historico daqui continua com os numeros",
-      regs.length >= 2 && regs.some((r) => r.depois === SIGILO) && regs.some((r) => r.depois === "1234567"),
-      regs,
+      "a poda tira os registros do projeto podado, e a memoria do sigilo guarda o numero e o documento",
+      regs.length === 0 && memP.processos.has("50300000777202610") && memP.documentos.has("1234567"),
+      { regs: regs.length, p: [...memP.processos.keys()], d: [...memP.documentos.keys()] },
     );
     await motorP.sincronizar({ forcar: true });
     const j2 = await jsonDoTexto(seiP.html);
@@ -960,13 +962,14 @@ async function verificarSigiloGruda(): Promise<void> {
     await rq.removerProjeto(pq.id);
     rel.agora += 181 * DIA;
     await rq.limpar(rel.agora);
-    const hq = (await rq.entidades()).h.filter((r) => r.alvo === eq.id && r.campo === "documento");
+    const hq = (await rq.entidades()).h.filter((r) => r.projeto === pq.id);
     // Rodada 3: o que o envelope rasparia (inclusive o número antigo, pela etapa sigilosa) já está na memória antes
-    // da poda, então a poda não reescreve mais o histórico daqui.
+    // da poda. Desde os residuais da revisão final (N1), os registros do projeto podado saem com ele (órfãos).
+    const memQ = lerMemoria(await areaQ.obter(null), prefixoMemoriaSigilo(ESCOPO_UN.host, ESCOPO_UN.login));
     checar(
-      "o historico daqui fica com os dois numeros (a memoria ja os tinha antes da poda)",
-      hq.length === 2 && hq.some((r) => r.depois === "7777001") && hq.some((r) => r.depois === "7777002"),
-      hq,
+      "a poda tira os registros do projeto podado; a memoria ja tinha os dois numeros antes da poda",
+      hq.length === 0 && memQ.documentos.has("7777001") && memQ.documentos.has("7777002"),
+      { hq: hq.length, d: [...memQ.documentos.keys()] },
     );
     const seiQ = noSei(null);
     await motorDe(rq, areaQ, seiQ, {}, () => rel.agora).sincronizar({ forcar: true });

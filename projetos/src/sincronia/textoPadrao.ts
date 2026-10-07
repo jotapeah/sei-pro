@@ -35,9 +35,9 @@ import { assinaturaEstavel, jsonEstavel, porId } from "@comum/sincronia/assinatu
 import { purgarLapides } from "@comum/sincronia/entidade";
 import type { AdaptadorTexto } from "@comum/sincronia/motor";
 import { nomeDeTextoInterno, type ValidacaoTexto, versaoMaisNova } from "@comum/sincronia/textoPadraoCodec";
-import { chaveSyncTexto, DIAS_LAPIDE_EU, DIAS_LAPIDE_UNIDADE, FOLGA_RELOGIO_MS, LIMITES } from "../modelo/constantes";
+import { chaveSyncTexto, diasDeLapide, FOLGA_RELOGIO_MS, LIMITES } from "../modelo/constantes";
 import { chaveEscopo } from "../modelo/escopo";
-import { excedentes } from "../modelo/historico";
+import { excedentes, projetosQueFicam } from "../modelo/historico";
 import { cortarSigilo, NADA_CONHECIDO, type Numeros, type SigilosConhecidos, sigiloDoEnvelope } from "../modelo/sigilo";
 import type { Entidades, EnvelopeProjetos, Escopo, Vis } from "../modelo/tipos";
 import { entidadeValida, RepositorioProjetos } from "../repositorio";
@@ -142,16 +142,17 @@ export function paraOTextoComRaspados(
   agora: number,
   conhecidos: SigilosConhecidos = NADA_CONHECIDO,
 ): { envelope: EnvelopeProjetos; raspados: Numeros } {
-  const dias = env.vis === "unidade" ? DIAS_LAPIDE_UNIDADE : DIAS_LAPIDE_EU;
+  const dias = diasDeLapide(env.vis);
   const ent = env.entidades;
   // A regra sobre tudo, antes da poda: a marca de uma lápide que sai ainda vale para os outros.
   const sigilo = sigiloDoEnvelope(ent.p, ent.e, conhecidos);
   const projetos = purgarLapides(ent.p, agora, dias);
-  // Só o que tem o projeto no texto (vivo ou lápide): o órfão seria recusado por quem lê.
-  const ids = new Set(projetos.map((p) => p.id));
+  // Só o que tem o projeto no texto (vivo ou lápide): o órfão seria recusado por quem lê. O mesmo predicado dos
+  // cortes daqui (`projetosQueFicam`); o registro do futuro fica atrás dos outros no corte dos 300.
+  const ids = projetosQueFicam(ent.p, agora, dias);
   const doProjeto = <T extends { projeto: string }>(lista: T[]): T[] => lista.filter((x) => ids.has(x.projeto));
   const vivosH = doProjeto(purgarLapides(ent.h, agora, dias));
-  const fora = new Set(excedentes(vivosH, LIMITES.historico));
+  const fora = new Set(excedentes(vivosH, LIMITES.historico, agora));
   // O raspado mantém id e carimbo: na volta, o `importar` reconhece o mesmo registro e fica com o daqui.
   const corte = cortarSigilo(
     { p: projetos, e: doProjeto(purgarLapides(ent.e, agora, dias)), h: vivosH.filter((r) => !fora.has(r.id)) },

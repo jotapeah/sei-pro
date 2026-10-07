@@ -34,6 +34,8 @@ export const FOLGA_RELOGIO_MS = 86_400_000;
 /** Lápides: a unidade tem usuários eventuais, que não podem ressuscitar exclusões (spec 6.1). */
 export const DIAS_LAPIDE_UNIDADE = 180;
 export const DIAS_LAPIDE_EU = 90;
+/** O prazo das lápides do escopo (a poda do texto e a do `limpar`). */
+export const diasDeLapide = (vis: "unidade" | "eu"): number => (vis === "unidade" ? DIAS_LAPIDE_UNIDADE : DIAS_LAPIDE_EU);
 
 /**
  * Projetos lidos do servidor do Atividades (ou do guardado pelo painel antigo) numa importação: dado de fora,

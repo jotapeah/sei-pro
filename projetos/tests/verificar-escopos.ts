@@ -133,11 +133,15 @@ export async function verificarEscopos(): Promise<void> {
   await rl.removerProjeto(pl.id);
   const removidoEm = relogio();
   checar("unidade: lapide de 179 dias fica", (await rl.limpar(removidoEm + 179 * DIA)) === 0);
-  checar("unidade: lapide de 181 dias sai", (await rl.limpar(removidoEm + 181 * DIA)) === 1 && !(await rl.projetos.obter(pl.id)));
+  // Com a lápide saem os 2 registros do projeto (criação e exclusão): órfãos, como no texto (residuais N1).
+  checar(
+    "unidade: lapide de 181 dias sai (com os registros do projeto)",
+    (await rl.limpar(removidoEm + 181 * DIA)) === 3 && !(await rl.projetos.obter(pl.id)) && (await rl.historico()).length === 0,
+  );
   const { repo: rle, relogio: relogioEu } = novoRepo(ESCOPO_EU, areaMemoria(), "m");
   const pe = await rle.criarProjeto({ nome: "Meu" });
   await rle.removerProjeto(pe.id);
-  checar("so eu: lapide de 91 dias sai", (await rle.limpar(relogioEu() + 91 * DIA)) === 1);
+  checar("so eu: lapide de 91 dias sai (com os registros do projeto)", (await rle.limpar(relogioEu() + 91 * DIA)) === 3);
 
   secao("projetos: indice de processos");
   checar("chaveProtocolo so digitos", chaveProtocolo("50300.004410/2026-02") === "50300004410202602");

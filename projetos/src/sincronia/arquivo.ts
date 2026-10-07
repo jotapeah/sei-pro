@@ -400,14 +400,14 @@ const comId = (x: unknown): x is Versionada =>
 
 /**
  * Os itens ATIVOS na cópia que aqui sumiram (ausentes ou com lápide), recarimbados para vencer a lápide. O que está
- * vivo aqui não entra (fica como está, mesmo que difira da cópia), nem o que está vivo no outro escopo da unidade
- * (`vivosNoOutro`: foi levado para lá pelo "Quem vê" depois da cópia).
+ * vivo aqui não entra (fica como está, mesmo que difira da cópia), nem o que `doOutro` diz que foi para o outro
+ * escopo da unidade.
  */
-function sumidos(daCopia: unknown, aqui: readonly Versionada[], c: Carimbo, vivosNoOutro: ReadonlySet<string>): Versionada[] {
+function sumidos(daCopia: unknown, aqui: readonly Versionada[], c: Carimbo, doOutro: (x: Versionada) => boolean): Versionada[] {
   const vivos = new Set(aqui.filter((x) => x.removidoEm === undefined).map((x) => x.id));
   const lista = Array.isArray(daCopia) ? (daCopia as unknown[]) : [];
   return recarimbarAtivos(
-    lista.filter(comId).filter((x) => !vivos.has(x.id) && !vivosNoOutro.has(x.id)),
+    lista.filter(comId).filter((x) => !vivos.has(x.id) && !doOutro(x)),
     c,
   );
 }
@@ -432,17 +432,33 @@ const TIPO_RESTAURADO: Record<keyof Entidades, keyof ResultadoRestauracao> = {
 
 /**
  * Os registros do histórico da cópia que aqui não existem: entram como vieram (registro não muda depois de gravado).
- * O que está vivo no outro escopo da unidade foi junto com o projeto pelo "Quem vê": não volta.
+ * O que foi junto com o projeto para o outro escopo pelo "Quem vê" (`doOutro`) não volta.
  */
-function ausentes(daCopia: unknown, aqui: readonly Versionada[], vivosNoOutro: ReadonlySet<string>): Versionada[] {
+function ausentes(daCopia: unknown, aqui: readonly Versionada[], doOutro: (x: Versionada) => boolean): Versionada[] {
   const ids = new Set(aqui.map((x) => x.id));
-  return (Array.isArray(daCopia) ? (daCopia as unknown[]) : []).filter(comId).filter((x) => !ids.has(x.id) && !vivosNoOutro.has(x.id));
+  return (Array.isArray(daCopia) ? (daCopia as unknown[]) : []).filter(comId).filter((x) => !ids.has(x.id) && !doOutro(x));
 }
 
-/** Os ids vivos (projetos, fases, etapas e registros: o que o "Quem vê" leva) de um escopo. */
-async function vivosDe(repo: RepositorioProjetos): Promise<Set<string>> {
+/** Como cada id (projeto, fase, etapa, registro: o que o "Quem vê" leva) está num escopo: vivo, ou a lápide de quando. */
+type Situacoes = Map<string, { vivo: boolean; removidoEm?: number }>;
+
+async function situacoesDe(repo: RepositorioProjetos): Promise<Situacoes> {
   const t = await repo.entidades();
-  return new Set([...t.p, ...t.f, ...t.e, ...t.h].filter((x) => x.removidoEm === undefined).map((x) => x.id));
+  return new Map([...t.p, ...t.f, ...t.e, ...t.h].map((x) => [x.id, { vivo: x.removidoEm === undefined, removidoEm: x.removidoEm }]));
+}
+
+/**
+ * O id foi para o outro escopo da unidade depois de sair deste: não está vivo aqui, e lá está vivo ou tem uma
+ * lápide mais nova que a daqui (ou aqui nem existe mais). Lápide lá mais velha que a daqui é o contrário: veio de lá
+ * para cá e saiu daqui depois, e é aqui que volta.
+ */
+function foiParaOOutro(id: string, aqui: Situacoes, outro: Situacoes): boolean {
+  const o = outro.get(id);
+  if (!o) return false;
+  const a = aqui.get(id);
+  if (a?.vivo) return false;
+  if (o.vivo) return true;
+  return (o.removidoEm ?? 0) > (a?.removidoEm ?? Number.NEGATIVE_INFINITY);
 }
 
 const OUTRA_VIS: Record<Escopo["vis"], Escopo["vis"]> = { unidade: "eu", eu: "unidade" };
@@ -452,11 +468,13 @@ const OUTRA_VIS: Record<Escopo["vis"], Escopo["vis"]> = { unidade: "eu", eu: "un
  * ativos na cópia e aqui sumiram (ausentes ou excluídos depois dela), recarimbados para vencer a lápide (o projeto
  * excluído volta com as fases e as etapas que foram junto); os registros do histórico que faltam entram como vieram.
  * O que está vivo aqui fica como está, mesmo que difira da cópia (a edição de um colega depois da cópia não é
- * desfeita) e não é recarimbado. O que está vivo no OUTRO escopo da mesma unidade (o projeto que mudou de "Quem
- * vê" depois da cópia, com as fases, as etapas e os registros que foram junto) também não volta: senão ficaria vivo
- * nos dois, e o de "Só eu" voltaria ao texto da unidade. A memória do sigilo da cópia volta como no
- * `importarTudo`. A cópia vem do IndexedDB e passa pela mesma leitura do arquivo: torta, nada é restaurado (`ErroValidacao`). Devolve o que
- * voltou de fato, por tipo (os escolhidos que estão vivos depois da mescla).
+ * desfeita) e não é recarimbado. O que foi para o OUTRO escopo da mesma unidade depois da cópia (o projeto que mudou
+ * de "Quem vê", vivo lá ou excluído lá depois, com as fases, as etapas e os registros que foram junto, e a etapa ou a
+ * fase de um projeto assim, mesmo a que ficou aqui como lápide) também não volta: senão ficaria vivo nos dois, ou o
+ * "Quem vê" escolhido depois da cópia seria desfeito, e o de "Só eu" voltaria ao texto da unidade. A memória do
+ * sigilo da cópia volta como no `importarTudo`. A cópia vem do IndexedDB e passa pela mesma leitura do arquivo: torta,
+ * nada é restaurado (`ErroValidacao`). Devolve o que voltou de fato, por tipo (os escolhidos que estão vivos depois
+ * da mescla).
  */
 export async function restaurarCopia(area: Area, copia: CopiaProjetos, d: Dono, carimbo: () => Carimbo): Promise<ResultadoRestauracao> {
   const env = lerEnvelopeArquivo((copia as { envelope?: unknown } | null)?.envelope);
@@ -464,39 +482,48 @@ export async function restaurarCopia(area: Area, copia: CopiaProjetos, d: Dono, 
   const c = carimbo();
   await devolverSigilo(area, env.sigilo, d);
   const voltaram: ResultadoRestauracao = { projetos: 0, fases: 0, etapas: 0, modelos: 0, registros: 0 };
-  // Os vivos de cada escopo, lidos antes de restaurar qualquer um; o que um escopo recupera entra na conta do outro.
-  const vivos = new Map<string, Set<string>>();
-  const vivosNo = async (e: Escopo): Promise<Set<string>> => {
+  // A situação de cada escopo, lida antes de restaurar qualquer um; o escopo restaurado é relido (o que ele recuperou
+  // conta para o outro).
+  const situacoes = new Map<string, Situacoes>();
+  const situacaoDe = async (e: Escopo, reler = false): Promise<Situacoes> => {
     const k = chaveEscopo(e);
-    let v = vivos.get(k);
-    if (!v) {
-      v = await vivosDe(repoDe(area, e, () => c));
-      vivos.set(k, v);
+    let v = situacoes.get(k);
+    if (!v || reler) {
+      v = await situacoesDe(repoDe(area, e, () => c));
+      situacoes.set(k, v);
     }
     return v;
   };
-  for (const s of escoposDoDono(env, d)) await vivosNo({ ...s.escopo, vis: OUTRA_VIS[s.escopo.vis] });
+  const outroDe = (e: Escopo): Escopo => ({ ...e, vis: OUTRA_VIS[e.vis] });
+  for (const s of escoposDoDono(env, d)) {
+    await situacaoDe(s.escopo);
+    await situacaoDe(outroDe(s.escopo));
+  }
   for (const s of escoposDoDono(env, d)) {
     const repo = repoDe(area, s.escopo, () => c);
     const aqui = await repo.entidades();
-    const noOutro = await vivosNo({ ...s.escopo, vis: OUTRA_VIS[s.escopo.vis] });
+    const meu = await situacaoDe(s.escopo);
+    const outro = await situacaoDe(outroDe(s.escopo));
+    // O item, ou o projeto dele, foi para o outro escopo.
+    const doOutro = (x: Versionada): boolean => {
+      const projeto = (x as { projeto?: unknown }).projeto;
+      return foiParaOOutro(x.id, meu, outro) || (typeof projeto === "string" && foiParaOOutro(projeto, meu, outro));
+    };
     const escolhidos: Record<keyof Entidades, Versionada[]> = {
-      p: sumidos(s.entidades.p, aqui.p, c, noOutro),
-      f: sumidos(s.entidades.f, aqui.f, c, noOutro),
-      e: sumidos(s.entidades.e, aqui.e, c, noOutro),
-      h: ausentes(s.entidades.h, aqui.h, noOutro),
-      m: sumidos(s.entidades.m, aqui.m, c, noOutro),
+      p: sumidos(s.entidades.p, aqui.p, c, doOutro),
+      f: sumidos(s.entidades.f, aqui.f, c, doOutro),
+      e: sumidos(s.entidades.e, aqui.e, c, doOutro),
+      h: ausentes(s.entidades.h, aqui.h, doOutro),
+      m: sumidos(s.entidades.m, aqui.m, c, doOutro),
     };
     if (LISTAS.every((k) => escolhidos[k].length === 0)) continue;
     await repo.importar(escolhidos as unknown as Partial<Entidades>);
     const depois = await repo.entidades();
-    const meus = await vivosNo(s.escopo);
     for (const k of LISTAS) {
       const ids = new Set(escolhidos[k].map((x) => x.id));
-      const voltou = (depois[k] as Versionada[]).filter((x) => ids.has(x.id) && x.removidoEm === undefined);
-      voltaram[TIPO_RESTAURADO[k]] += voltou.length;
-      for (const x of voltou) meus.add(x.id);
+      voltaram[TIPO_RESTAURADO[k]] += (depois[k] as Versionada[]).filter((x) => ids.has(x.id) && x.removidoEm === undefined).length;
     }
+    await situacaoDe(s.escopo, true);
   }
   return voltaram;
 }

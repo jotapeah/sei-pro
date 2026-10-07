@@ -14,13 +14,14 @@ import { jsonEstavel } from "@comum/sincronia/assinatura";
 import { mesclar, purgarLapides, type Versionada } from "@comum/sincronia/entidade";
 import { normalizarTexto } from "@comum/texto";
 import { dataNaFaixa, LIMITE_DIAS_ETAPA } from "./modelo/calendario";
-import { DIAS_LAPIDE_EU, DIAS_LAPIDE_UNIDADE, FOLGA_RELOGIO_MS, LIMITES, prefixoMemoriaSigilo, QUANDO_MINIMO } from "./modelo/constantes";
+import { diasDeLapide, FOLGA_RELOGIO_MS, LIMITES, prefixoMemoriaSigilo, QUANDO_MINIMO } from "./modelo/constantes";
 import { problemasDasMudancas, validarDependencias, violacoesDeDatas } from "./modelo/dependencias";
 import { baseDoEscopo, chaveMeta, prefixoDe, rotuloDaVis } from "./modelo/escopo";
 import {
   type ApoioHistorico,
   carimbarRegistros,
   excedentes,
+  projetosQueFicam,
   type RegistroNovo,
   registrosDeEtapa,
   registrosDeFase,
@@ -291,7 +292,7 @@ export class RepositorioProjetos {
         regs.map((r) => [r.id, r]),
       ),
     });
-    if (regs.length) await this.podarHistorico();
+    if (regs.length) await this.podarHistorico(c.agora);
   }
 
   /**
@@ -380,9 +381,21 @@ export class RepositorioProjetos {
     };
   }
 
-  /** Os 300 registros mais recentes ficam (spec 5.4). `Area` não grava e remove juntos: é outra chamada. */
-  private async podarHistorico(): Promise<void> {
-    await this.registros.apagar(excedentes(await this.registros.listar(), LIMITES.historico));
+  /**
+   * Os 300 registros mais recentes ficam (spec 5.4), contados como no texto: o órfão (de projeto que não fica,
+   * `projetosQueFicam`) não ocupa vaga, e o do futuro fica atrás dos outros. `Area` não grava e remove juntos: é
+   * outra chamada.
+   */
+  private async podarHistorico(agora: number): Promise<void> {
+    const t = await this.entidades();
+    const ficam = projetosQueFicam(t.p, agora, diasDeLapide(this.escopo.vis));
+    await this.registros.apagar(
+      excedentes(
+        t.h.filter((r) => ficam.has(r.projeto)),
+        LIMITES.historico,
+        agora,
+      ),
+    );
   }
 
   private async apoio(projeto: string): Promise<ApoioHistorico> {
@@ -980,9 +993,14 @@ export class RepositorioProjetos {
     );
     // Órfão (fase, etapa ou registro de um projeto que não existe aqui nem fica com esta mescla, viva ou lápide):
     // ignorado. Um texto editado à mão não enche o armazenamento de itens que nenhuma tela mostra e que voltariam
-    // ao texto a cada rodada; a etapa de uma corrida legítima chega com o projeto (mesmo em lápide).
-    const existentes = new Set([...projetosAqui.map((p) => p.id), ...projetosNovos.map(([id]) => id)]);
+    // ao texto a cada rodada; a etapa de uma corrida legítima chega com o projeto (mesmo em lápide). O projeto que
+    // vem do futuro (recusado aqui, mas levado de volta ao texto por `comOsDoFuturo`) também conta: a etapa que um
+    // colega pôs nele não é órfã, senão este computador a tiraria do texto e o colega a regravaria.
+    const doFuturo = ((ent.p ?? []) as unknown[]).filter((x) => entidadeValida(x, "p") && !entidadeValida(x, "p", agora)) as Projeto[];
+    const existentes = new Set([...projetosAqui.map((p) => p.id), ...projetosNovos.map(([id]) => id), ...doFuturo.map((p) => p.id)]);
     const comProjeto = (x: { projeto: string }) => existentes.has(x.projeto);
+    // O corte dos 300 registros conta como o texto (o mesmo predicado de órfão, com os mesmos projetos).
+    const ficam = projetosQueFicam([...sobrepor(projetosAqui, projetosNovos), ...doFuturo], agora, diasDeLapide(this.escopo.vis));
     mesclarCol(this.fases, aqui.f, ent.f, "f", () => new Set(), undefined, comProjeto);
     const etapasNovas = mesclarCol(
       this.etapas,
@@ -993,7 +1011,15 @@ export class RepositorioProjetos {
       (v, l) => manterDocumentoSigiloso(manterNumeroSigiloso(v, l), l),
       comProjeto,
     );
-    const registrosNovos = mesclarCol(this.registros, registrosAqui, ent.h, "h", registrosAlemDoTeto, registroDaqui, comProjeto);
+    const registrosNovos = mesclarCol(
+      this.registros,
+      registrosAqui,
+      ent.h,
+      "h",
+      (l, v) => registrosAlemDoTeto(l, v, ficam, agora),
+      registroDaqui,
+      comProjeto,
+    );
     mesclarCol(this.modelos, aqui.m, ent.m, "m", (l, v) => alemDoTeto(l, v, (x) => (vivo(x) ? "" : null), LIMITES.modelos));
     // Tudo ou nada: decidido antes de qualquer gravação, sobre a mesma leitura.
     if (opcoes.inteiro && soma.ignorados)
@@ -1043,7 +1069,7 @@ export class RepositorioProjetos {
     // Com anotações ("Quem vê"), a gravação leva os itens que vieram de fora: nada vira local por ela.
     if (anotacoes) await this.salvar(itens, anotacoes.registros, anotacoes.carimbo, true);
     else if (Object.keys(itens).length) await this.area.gravar(itens);
-    if (importouRegistros && !anotacoes?.registros.length) await this.podarHistorico();
+    if (importouRegistros && !anotacoes?.registros.length) await this.podarHistorico(agora);
     return soma;
   }
 
@@ -1109,12 +1135,15 @@ export class RepositorioProjetos {
   /**
    * Apaga de vez as lápides velhas (180 dias na unidade, 90 no "só eu": um
    * usuário eventual da unidade não pode ressuscitar exclusões), a fase e a
-   * etapa vivas de projeto que não existe mais (órfãs) e poda o histórico em
-   * 300 registros. Devolve quantas chaves saíram. `Area` não tem "gravar e
-   * remover" juntos: é uma única `remover` com todas as chaves.
+   * etapa vivas e os registros de projeto que não fica (órfãos: o mesmo
+   * predicado do texto, `projetosQueFicam`) e poda o histórico em 300
+   * registros. Lê o escopo e a memória do sigilo numa chamada só: uma gravação
+   * de outra aba no meio não faz uma etapa nova parecer órfã. Devolve quantas
+   * chaves saíram. `Area` não tem "gravar e remover" juntos: é uma única
+   * `remover` com todas as chaves.
    */
   async limpar(agora: number = Date.now()): Promise<number> {
-    const dias = this.escopo.vis === "unidade" ? DIAS_LAPIDE_UNIDADE : DIAS_LAPIDE_EU;
+    const dias = diasDeLapide(this.escopo.vis);
     const chaves: string[] = [];
     const ficam = <T extends Versionada>(col: Colecao<T>, todos: T[]): T[] => {
       const manter = purgarLapides(todos, agora, dias);
@@ -1122,14 +1151,12 @@ export class RepositorioProjetos {
       for (const i of todos) if (!ids.has(i.id)) chaves.push(col.chave(i.id));
       return manter;
     };
-    const [projetos, fases, etapas, modelos, regs] = await Promise.all([
-      this.projetos.listar(),
-      this.fases.listar(),
-      this.etapas.listar(),
-      this.modelos.listar(),
-      this.registros.listar(),
-    ]);
-    const projetosFicam = new Set(ficam(this.projetos, projetos).map((p) => p.id));
+    // Falha fechada: sem ler o escopo ou a memória, lança (`ErroMemoriaSigilo`) e nada é podado.
+    const tudo = await this.lerChaves(true);
+    const memoria = lerMemoria(tudo, this.prefixoMemoria);
+    const { p: projetos, f: fases, e: etapas, m: modelos, h: regs } = entidadesDe(tudo, this.base);
+    ficam(this.projetos, projetos);
+    const projetosFicam = projetosQueFicam(projetos, agora, dias);
     // Fase e etapa vivas de projeto que não existe (a lápide dele saiu agora ou antes; a etapa de uma corrida com
     // a exclusão do projeto): nenhuma tela as mostra e o texto já não as leva.
     const semProjeto = <T extends Versionada & { projeto: string }>(col: Colecao<T>, mantidas: T[]) => {
@@ -1138,13 +1165,17 @@ export class RepositorioProjetos {
     semProjeto(this.fases, ficam(this.fases, fases));
     semProjeto(this.etapas, ficam(this.etapas, etapas));
     ficam(this.modelos, modelos);
-    const mantidos = ficam(this.registros, regs);
-    for (const id of excedentes(mantidos, LIMITES.historico)) chaves.push(this.registros.chave(id));
+    // O registro órfão sai (o texto já não o leva); os outros, além dos 300, também.
+    const comProjeto: Registro[] = [];
+    for (const r of ficam(this.registros, regs)) {
+      if (projetosFicam.has(r.projeto)) comProjeto.push(r);
+      else chaves.push(this.registros.chave(r.id));
+    }
+    for (const id of excedentes(comProjeto, LIMITES.historico, agora)) chaves.push(this.registros.chave(id));
     // Antes de as lápides saírem, tudo o que o envelope rasparia delas (vínculos, documentos e os registros pela
     // etapa sigilosa) vai para a memória do sigilo, que segue raspando sem elas; o histórico daqui fica como está.
     // Como aprendida: o que este dispositivo marcou já entrou como local na gravação que o marcou. Falha fechada:
-    // sem ler ou sem gravar a memória, lança e nada é podado.
-    const memoria = await this.memoria();
+    // sem gravar a memória, lança e nada é podado.
     const conhecidos = conhecidosDe(memoria);
     const corte = cortarSigilo({ p: projetos, e: etapas, h: regs }, sigiloDoEnvelope(projetos, etapas, conhecidos));
     const entradas = this.entradasPorOrigem(memoria, {
@@ -1249,12 +1280,21 @@ function alemDoTeto<T extends Versionada>(
   return fora;
 }
 
-/** Registros: ficam os 300 mais recentes do escopo (como a poda); os que chegam e não estariam entre eles ficam de fora. */
-function registrosAlemDoTeto(locais: ReadonlyMap<string, Registro>, vencedoras: readonly Registro[]): Set<string> {
+/**
+ * Registros: ficam os 300 mais recentes do escopo, contados como na poda e no texto (só os de projeto que fica, o
+ * do futuro atrás); os que chegam e não estariam entre eles ficam de fora.
+ */
+function registrosAlemDoTeto(
+  locais: ReadonlyMap<string, Registro>,
+  vencedoras: readonly Registro[],
+  ficam: ReadonlySet<string>,
+  agora: number,
+): Set<string> {
   const final = new Map(locais);
   for (const v of vencedoras) final.set(v.id, v);
   const chegando = new Set(vencedoras.map((v) => v.id));
-  return new Set(excedentes([...final.values()], LIMITES.historico).filter((id) => chegando.has(id)));
+  const contam = [...final.values()].filter((r) => ficam.has(r.projeto));
+  return new Set(excedentes(contam, LIMITES.historico, agora).filter((id) => chegando.has(id)));
 }
 
 /** As entidades de um escopo a partir das chaves lidas (`base` = `baseDoEscopo`). */
