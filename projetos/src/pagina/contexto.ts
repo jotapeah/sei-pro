@@ -1,0 +1,35 @@
+/** Contexto da aba (spec 7): host, login, nome e unidade, lidos do cabeçalho do SEI. */
+
+import { lerContexto } from "@nucleo/sei";
+import { paginaDe } from "@nucleo/sessao/pagina";
+import type { ContextoProjetos } from "../ponte/tipos";
+
+export function contextoProjetos(
+  doc: Document,
+  extras: { temaEscuro: boolean; corTema?: string; atividades: boolean },
+  url?: string,
+): ContextoProjetos | null {
+  const c = lerContexto(paginaDe(doc, url));
+  if (!c.usuario.login) return null;
+  const ctx: ContextoProjetos = {
+    host: c.host,
+    login: c.usuario.login.toLowerCase(),
+    nome: c.usuario.nome,
+    unidade: c.unidade.id ? { id: c.unidade.id, sigla: c.unidade.sigla, nome: c.unidade.nome } : null,
+    versao: c.versao,
+    temaEscuro: extras.temaEscuro,
+    atividades: extras.atividades,
+  };
+  if (extras.corTema) ctx.corTema = extras.corTema;
+  return ctx;
+}
+
+/** Servidor do Atividades configurado: o legado grava `configBasePro_atividades` com URL_API e KEY_USER. */
+export function atividadesConfigurado(armazenamento: Pick<Storage, "getItem">): boolean {
+  try {
+    const c = JSON.parse(armazenamento.getItem("configBasePro_atividades") ?? "null") as { URL_API?: unknown; KEY_USER?: unknown } | null;
+    return !!c && typeof c.URL_API === "string" && !!c.URL_API && !!c.KEY_USER;
+  } catch {
+    return false;
+  }
+}

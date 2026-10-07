@@ -7,7 +7,7 @@
   "scripts": {
     "build": "npm run verificar && node build.mjs",
     "build:rapido": "node build.mjs",
-    "tipos": "tsc --noEmit",
+    "tipos": "tsc --noEmit && tsc --noEmit -p tsconfig.pagina.json",
     "verificar": "tsx tests/verificar.ts",
     "checar": "biome check src tests"
   },

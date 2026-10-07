@@ -20,5 +20,6 @@
       "@nucleo/*": ["../sei-nucleo/src/*"]
     }
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts"]
+  "include": ["src/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["src/pagina", "tests/pagina"]
 }

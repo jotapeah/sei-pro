@@ -45,4 +45,8 @@ await verificarAppEtapa();
 await verificarAppProjeto();
 await verificarAppCsv();
 await verificarApp();
+// O content script importa o núcleo do SEI (tsconfig.pagina.json): caminho numa variável, para o tsc
+// do pacote (com noUncheckedIndexedAccess) não seguir o import.
+const suitePagina = "./pagina/verificar-pagina";
+await ((await import(suitePagina)) as { verificarPagina(): Promise<void> }).verificarPagina();
 resumo();
