@@ -1,5 +1,8 @@
 import { areaMemoria } from "@comum/armazenamento/area";
-import type { AbrirModal } from "@comum/ui/dialogo";
+import { emissorDeAvisoPelaPagina } from "@comum/painel/aviso";
+import { sobreposicaoNoApp } from "@comum/painel/sobreposicao";
+import { definirEmissorDeAviso } from "@comum/ui/aviso";
+import { type AbrirModal, criarAbrirModal } from "@comum/ui/dialogo";
 import { AppProjetos } from "../src/app/app";
 import type { ParametrosImpressao } from "../src/app/impressao";
 import { gravarPreferencias, lerPreferencias } from "../src/app/preferencias";
@@ -26,9 +29,20 @@ const CTX: ContextoProjetos = {
 };
 const AGORA = new Date(2026, 9, 6, 15).getTime();
 
-async function montar(
+/** Aviso que o app mandou para a página do SEI (modo embutido): `responder` é o clique do usuário lá. */
+export interface AvisoNaPagina {
+  texto?: string;
+  acao?: string;
+  acoes?: string[];
+  ms?: number;
+  responder(r: boolean | number): void;
+}
+
+export async function montar(
   o: {
     vazio?: boolean;
+    /** Como no painel embutido: <dialog> de verdade, sobreposição e aviso pela página (desligar com `definirEmissorDeAviso(null)`). */
+    embutido?: boolean;
     falharGantt?: boolean;
     sincronia?: ProvedorSincronia;
     hoje?: () => DataISO;
@@ -58,15 +72,18 @@ async function montar(
     Object.assign(ids, { p: p.id, f: f.id, a: a.id, b: b.id, q: q.id });
   }
   const chamadas: Array<[string, unknown]> = [];
+  const naPagina: AvisoNaPagina[] = [];
   const rpc = {
     chamar: async <T>(op: string, args?: unknown): Promise<T> => {
       chamadas.push([op, args]);
       if (op === "processosDaCaixa" || op === "usuariosDaUnidade") return [] as T;
+      if (op === "aviso")
+        return new Promise<T>((r) => naPagina.push({ ...(args as Omit<AvisoNaPagina, "responder">), responder: (x) => r(x as T) }));
       return true as T;
     },
   };
   const modais: string[] = [];
-  const abrirModal: AbrirModal = (m) => {
+  let abrirModal: AbrirModal = (m) => {
     modais.push(m.titulo);
     doc.body.append(m.conteudo);
     return {
@@ -76,6 +93,11 @@ async function montar(
       },
     };
   };
+  if (o.embutido) {
+    const sobrepor = sobreposicaoNoApp(rpc, { minimo: () => undefined }, { doc, espera: 10 });
+    abrirModal = criarAbrirModal({ aoAbrir: sobrepor.abrir, aoFechar: sobrepor.fechar });
+    definirEmissorDeAviso(emissorDeAvisoPelaPagina(rpc, doc));
+  }
   const t = {
     confirmar: true,
     confirmacoes: [] as string[],
@@ -105,19 +127,19 @@ async function montar(
   });
   if (!o.semIniciar) await app.iniciar();
   const raiz = doc.getElementById("app")!;
-  return { doc, raiz, area, un, eu, ids, app, chamadas, modais, t, g };
+  return { doc, raiz, area, un, eu, ids, app, chamadas, modais, t, g, naPagina };
 }
 
-type Montado = Awaited<ReturnType<typeof montar>>;
+export type Montado = Awaited<ReturnType<typeof montar>>;
 
-const aviso = (doc: Document) => doc.querySelector(".spro-aviso");
-const textoDoAviso = (doc: Document) => texto(aviso(doc)?.querySelector("span"));
-const abrirAba = (m: Montado, id: string) => (m.raiz.querySelector(`[role='tab'][data-aba='${id}']`) as HTMLElement | null)?.click();
-const clicarLinha = (m: Montado, id: string) => (m.raiz.querySelector(`.prj-lin[data-id='${id}']`) as HTMLElement | null)?.click();
-const balao = (m: Montado) => m.doc.querySelector<HTMLElement>(".prj-balao");
-const formProjeto = (m: Montado) => m.doc.querySelector<HTMLElement>(".prj-form-projeto");
+export const aviso = (doc: Document) => doc.querySelector(".spro-aviso");
+export const textoDoAviso = (doc: Document) => texto(aviso(doc)?.querySelector("span"));
+export const abrirAba = (m: Montado, id: string) => (m.raiz.querySelector(`[role='tab'][data-aba='${id}']`) as HTMLElement | null)?.click();
+export const clicarLinha = (m: Montado, id: string) => (m.raiz.querySelector(`.prj-lin[data-id='${id}']`) as HTMLElement | null)?.click();
+export const balao = (m: Montado) => m.doc.querySelector<HTMLElement>(".prj-balao");
+export const formProjeto = (m: Montado) => m.doc.querySelector<HTMLElement>(".prj-form-projeto");
 const fecharFormProjeto = (m: Montado) => botao(formProjeto(m) ?? m.doc.createElement("div"), "Cancelar")?.click();
-const etapasDoGantt = (m: Montado) => (m.g.a.linhas.at(-1) ?? []).filter((l): l is LinhaEtapa => l.tipo === "etapa");
+export const etapasDoGantt = (m: Montado) => (m.g.a.linhas.at(-1) ?? []).filter((l): l is LinhaEtapa => l.tipo === "etapa");
 
 export async function verificarApp(): Promise<void> {
   secao("app: primeiro uso");

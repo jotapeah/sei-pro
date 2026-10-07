@@ -2,6 +2,7 @@ import { observarAltura } from "../src/painel/altura";
 import { avisoNaPagina, emissorDeAvisoPelaPagina } from "../src/painel/aviso";
 import { criarSobreposicao, sobreposicaoNoApp } from "../src/painel/sobreposicao";
 import type { Rpc } from "../src/ponte/rpc";
+import { avisar as avisarNoApp, definirEmissorDeAviso } from "../src/ui/aviso";
 import { botao, checar, disparar, instalarDom, lanca, secao, tique } from "./util";
 
 /** Um rpc que só anota o que o app pediu; `responder` decide a resposta de cada operação. */
@@ -153,4 +154,54 @@ export async function verificarPainelApp(): Promise<void> {
   emissorDeAvisoPelaPagina(e2.rpc, docE)("Copiado.", undefined, 50);
   await tique();
   checar("aba sem resposta: o aviso aparece no app", docE.querySelector(".spro-aviso")?.textContent?.includes("Copiado.") === true);
+
+  secao("painel (app): aviso dado com dialogo aberto vai para a pagina quando ele fecha");
+  const docR = instalarDom('<html><body><dialog open id="d"></dialog></body></html>');
+  const dR = docR.getElementById("d") as HTMLElement;
+  // Como o abrirModal dos apps (o primeiro ouvinte): fechar tira o diálogo da página e desliga a sobreposição.
+  docR.documentElement.dataset.sobreposto = "sim";
+  dR.addEventListener("close", () => {
+    dR.remove();
+    delete docR.documentElement.dataset.sobreposto;
+  });
+  let desfeitoR = 0;
+  const r1 = rpcFalso(async () => true);
+  definirEmissorDeAviso(emissorDeAvisoPelaPagina(r1.rpc, docR));
+  avisarNoApp("Etapa “Nota” excluída.", { rotulo: "Desfazer", fazer: () => desfeitoR++ }, 5000);
+  const localR = docR.querySelector(".spro-aviso");
+  checar("com o dialogo aberto, o aviso fica no dialogo (clicavel)", !!localR && dR.contains(localR) && r1.chamadas.length === 0);
+  dR.removeAttribute("open");
+  disparar(dR, "close");
+  await tique();
+  const pedidoR = r1.chamadas[0]?.args as { texto?: string; acao?: string; ms?: number } | undefined;
+  checar(
+    "ao fechar, o aviso vai para a pagina com a acao e sai do app",
+    r1.chamadas[0]?.op === "aviso" &&
+      pedidoR?.texto === "Etapa “Nota” excluída." &&
+      pedidoR.acao === "Desfazer" &&
+      !localR?.isConnected &&
+      !docR.querySelector(".spro-aviso"),
+    r1.chamadas,
+  );
+  checar(
+    "com o tempo que faltava, e o Desfazer clicado na pagina volta ao app",
+    (pedidoR?.ms ?? 0) <= 5000 && (pedidoR?.ms ?? 0) > 4000 && desfeitoR === 1,
+    { ms: pedidoR?.ms, desfeitoR },
+  );
+  const docR2 = instalarDom('<html><body><dialog open id="d"></dialog></body></html>');
+  const dR2 = docR2.getElementById("d") as HTMLElement;
+  dR2.addEventListener("close", () => dR2.remove());
+  docR2.documentElement.dataset.sobreposto = "sim";
+  const r2 = rpcFalso(async () => true);
+  definirEmissorDeAviso(emissorDeAvisoPelaPagina(r2.rpc, docR2));
+  avisarNoApp("Arquivado.", { rotulo: "Desfazer", fazer: () => undefined }, 5000);
+  // Outro diálogo continua aberto (a sobreposição fica): o emissor recusa de novo e o aviso desce para o body do app.
+  dR2.removeAttribute("open");
+  disparar(dR2, "close");
+  await tique();
+  checar(
+    "emissor que recusa de novo: o aviso continua no app, no body",
+    r2.chamadas.length === 0 && docR2.querySelector(".spro-aviso")?.parentElement === docR2.body,
+  );
+  definirEmissorDeAviso(null);
 }

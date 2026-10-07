@@ -31,7 +31,7 @@ export function definirEmissorDeAviso(e: EmissorAviso | null): void {
 /** Aviso curto (toast) no rodapé da tela, com uma ação opcional ("Desfazer") ou mais de uma. */
 export function avisar(texto: string, acao?: AcoesAviso, ms = 7000): void {
   if (emissor?.(texto, acao, ms)) return;
-  mostrarAviso(document, texto, acao, ms);
+  mostrarAviso(document, texto, acao, ms, emissor);
 }
 
 /**
@@ -57,7 +57,13 @@ export function destinoDoAviso(doc: Document): HTMLElement {
   return dialogo ?? doc.body ?? doc.documentElement;
 }
 
-export function mostrarAviso(doc: Document, texto: string, acao: AcoesAviso, ms: number): HTMLElement {
+/**
+ * `reoferecer`: o emissor que recusou o aviso (o do painel embutido recusa com diálogo aberto). Quando o
+ * diálogo fecha e o aviso iria para o `body`, ele é oferecido de novo, com o tempo que falta e as
+ * mesmas ações; se o emissor aceitar, sai daqui. No painel embutido, o iframe volta para baixo da
+ * lista ao fechar o diálogo, e um aviso preso ao rodapé dele ficaria fora da vista.
+ */
+export function mostrarAviso(doc: Document, texto: string, acao: AcoesAviso, ms: number, reoferecer?: EmissorAviso | null): HTMLElement {
   const fundo = doc.body ?? doc.documentElement;
   // Um aviso por vez, esteja o anterior no body ou num diálogo.
   for (const lugar of [fundo, ...doc.querySelectorAll("dialog")])
@@ -90,16 +96,24 @@ export function mostrarAviso(doc: Document, texto: string, acao: AcoesAviso, ms:
       /* navegador sem popover: fica como elemento fixo comum */
     }
   };
+  const fim = Date.now() + ms;
   const anexar = () => {
     const destino = destinoDoAviso(doc);
     destino.append(el);
     mostrar();
-    // O diálogo fecha com o aviso na tela (o "Desfazer" ainda vale): o aviso desce para o próximo lugar.
+    // O diálogo fecha com o aviso na tela (o "Desfazer" ainda vale): o aviso desce para o próximo lugar,
+    // ou vai para quem tinha recusado (agora sem diálogo), com o tempo que falta.
     if (destino.localName === "dialog")
       destino.addEventListener(
         "close",
         () => {
-          if (vivo && destino.contains(el)) anexar();
+          if (!vivo || !destino.contains(el)) return;
+          if (reoferecer && destinoDoAviso(doc).localName !== "dialog" && reoferecer(texto, acao, Math.max(0, fim - Date.now()))) {
+            vivo = false;
+            el.remove();
+            return;
+          }
+          anexar();
         },
         { once: true },
       );
