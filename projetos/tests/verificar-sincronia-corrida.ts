@@ -1,0 +1,135 @@
+/**
+ * Review Focus 2 do plano-mestre: dois usuários editando o mesmo projeto
+ * "Toda a unidade" quase ao mesmo tempo. Dois computadores (repositório e
+ * motor próprios, relógios próprios) e UM Texto Padrão em memória que confere
+ * a gravação como o armazém do núcleo; o gancho intercala a rodada de um no
+ * meio da do outro. Depois da próxima rodada de cada um, as duas alterações
+ * estão no texto e nos dois computadores; uma exclusão não ressuscita.
+ */
+
+import { areaMemoria } from "@comum/armazenamento/area";
+import { type ConferenciaTexto, MotorTextoPadrao, type ResultadoGravacao } from "@comum/sincronia/motor";
+import { lerConteudoTexto } from "@comum/sincronia/textoPadraoCodec";
+import type { EnvelopeProjetos, Escopo } from "../src/modelo/tipos";
+import { RepositorioProjetos } from "../src/repositorio";
+import { adaptadorProjetos } from "../src/sincronia/textoPadrao";
+import { checar, secao } from "./util";
+
+const AGORA = Date.UTC(2026, 9, 6, 12);
+
+/** O texto da unidade no SEI: um só para os dois computadores. */
+function textoDaUnidade() {
+  const t = {
+    html: null as string | null,
+    gravacoes: 0,
+    /** Roda (uma vez) logo antes da próxima conferência: é o colega gravando no meio. */
+    antesDaConferencia: undefined as (() => Promise<unknown>) | undefined,
+  };
+  const destino = {
+    ler: async () => t.html,
+    gravar: async (h: string) => {
+      t.gravacoes++;
+      t.html = h;
+    },
+    gravarConferindo: async (h: string, c: ConferenciaTexto): Promise<ResultadoGravacao> => {
+      const colega = t.antesDaConferencia;
+      t.antesDaConferencia = undefined;
+      if (colega) await colega();
+      if (!c.mesmo(t.html, c.anterior)) return { gravado: false, atual: t.html };
+      t.gravacoes++;
+      t.html = h;
+      return { gravado: true };
+    },
+  };
+  return { t, destino };
+}
+
+function computador(login: string, dispositivo: string, texto: ReturnType<typeof textoDaUnidade>, inicio: number) {
+  const area = areaMemoria();
+  const relogio = { agora: inicio };
+  const escopo: Escopo = { host: "sei.x.gov.br", login, unidade: "110", vis: "unidade" };
+  let n = 0;
+  const repo = new RepositorioProjetos(
+    area,
+    escopo,
+    () => ({ agora: ++relogio.agora, dispositivo, por: login, nome: login }),
+    () => `${dispositivo}-${++n}`,
+  );
+  const motor = new MotorTextoPadrao<EnvelopeProjetos>({
+    adaptador: adaptadorProjetos({ repo, area, sigla: "SEPRO", nomeUsuario: login }),
+    destino: texto.destino,
+    area,
+    travar: (_n, fn) => fn(),
+    agora: () => relogio.agora,
+    releituras: 3,
+    temporizador: { definir: () => 0, cancelar: () => undefined },
+  });
+  return { repo, motor, relogio, rodada: () => motor.sincronizar({ forcar: true }) };
+}
+
+async function noTexto(html: string | null): Promise<EnvelopeProjetos["entidades"]> {
+  const r = html ? await lerConteudoTexto(html) : null;
+  return r && "bruto" in r ? (r.bruto as EnvelopeProjetos).entidades : { p: [], f: [], e: [], h: [], m: [] };
+}
+
+export async function verificarSincroniaCorrida(): Promise<void> {
+  secao("corrida na unidade: duas edicoes quase ao mesmo tempo");
+  const texto = textoDaUnidade();
+  const ana = computador("ana", "pc-ana", texto, AGORA);
+  const bia = computador("bia", "pc-bia", texto, AGORA + 5);
+  const p = await ana.repo.criarProjeto({ nome: "Revisão normativa" });
+  const x = await ana.repo.criarEtapa({ projeto: p.id, nome: "Minuta", inicio: "2026-10-06", fim: "2026-10-09" });
+  const y = await ana.repo.criarEtapa({ projeto: p.id, nome: "Consulta pública", inicio: "2026-10-13", fim: "2026-10-23" });
+  const z = await ana.repo.criarEtapa({ projeto: p.id, nome: "Nota técnica", inicio: "2026-10-26", fim: "2026-10-30" });
+  await ana.rodada();
+  await bia.rodada();
+  checar("a bia recebeu o projeto da ana", (await bia.repo.dados()).etapas.length === 3);
+
+  await ana.repo.editarEtapa(x.id, { nome: "Minuta revisada" }, "2026-10-06");
+  await bia.repo.editarEtapa(y.id, { inicio: "2026-10-14", fim: "2026-10-27" }, "2026-10-06");
+  // A ana lê; antes da conferência dela, a rodada inteira da bia grava o texto.
+  texto.t.antesDaConferencia = () => bia.rodada();
+  const sAna = await ana.rodada();
+  const t1 = await noTexto(texto.t.html);
+  checar(
+    "o texto tem as duas alteracoes (a conferencia da ana achou o da bia e mesclou)",
+    t1.e.find((e) => e.id === x.id)?.nome === "Minuta revisada" && t1.e.find((e) => e.id === y.id)?.fim === "2026-10-27",
+    t1.e.map((e) => [e.nome, e.inicio, e.fim]),
+  );
+  checar("sem desistencia nem erro", sAna.estado === "ok" && !sAna.pendente, sAna);
+  checar("a ana ja tem a alteracao da bia", (await ana.repo.obterEtapa(y.id))?.fim === "2026-10-27");
+  const gravacoes = texto.t.gravacoes;
+  await bia.rodada();
+  checar("a bia, na rodada seguinte, tem a da ana", (await bia.repo.obterEtapa(x.id))?.nome === "Minuta revisada");
+  checar("e nao regrava (o texto ja estava em dia)", texto.t.gravacoes === gravacoes);
+  const h = (await noTexto(texto.t.html)).h;
+  checar(
+    "o historico tem quem mudou o que (os dois)",
+    h.some((r) => r.por === "ana" && r.campo === "nome") && h.some((r) => r.por === "bia" && r.campo === "fim"),
+    h.map((r) => `${r.por}:${r.campo}`),
+  );
+
+  secao("corrida na unidade: exclusao nao ressuscita");
+  await ana.repo.removerEtapa(z.id);
+  await bia.repo.editarEtapa(y.id, { nome: "Consulta pública (30 dias)" }, "2026-10-06");
+  // A bia (que ainda tem a etapa Z viva) lê; a ana exclui e grava antes da conferência dela.
+  texto.t.antesDaConferencia = () => ana.rodada();
+  await bia.rodada();
+  const t2 = await noTexto(texto.t.html);
+  const zNoTexto = t2.e.find((e) => e.id === z.id);
+  checar(
+    "a etapa excluida continua lapide no texto (a copia velha da bia nao a trouxe de volta)",
+    zNoTexto?.removidoEm !== undefined,
+    zNoTexto,
+  );
+  checar("a edicao da bia entrou junto", t2.e.find((e) => e.id === y.id)?.nome === "Consulta pública (30 dias)");
+  checar("na bia, a etapa sumiu", (await bia.repo.obterEtapa(z.id)) === undefined);
+  await ana.rodada();
+  checar(
+    "na ana, a edicao da bia chegou e a exclusao ficou",
+    (await ana.repo.obterEtapa(y.id))?.nome === "Consulta pública (30 dias)" && (await ana.repo.obterEtapa(z.id)) === undefined,
+  );
+  const terceira = computador("caio", "pc-caio", texto, AGORA + 9);
+  await terceira.rodada();
+  checar("um terceiro, que chega depois, recebe tudo e sem a etapa excluida", (await terceira.repo.dados()).etapas.length === 2);
+}

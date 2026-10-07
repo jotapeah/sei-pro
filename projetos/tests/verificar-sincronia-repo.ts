@@ -392,5 +392,17 @@ export async function verificarSincroniaRepo(): Promise<void> {
         !s.vinculo(undefined) &&
         !s.vinculo({ protocolo: "SEI-" }),
     );
+    // Vínculo de fora (texto editado à mão) com o número que não é texto: a regra responde, sem lançar.
+    const tortos: unknown[] = [{ protocolo: 50300 }, { protocolo: null }, { protocolo: ["50300.000777/2026-10"] }, {}];
+    const respostas: boolean[] = [];
+    const erro = await lanca(() => {
+      for (const v of tortos) respostas.push(s.vinculo(v as Vinculo));
+      respostas.push(s.vinculo({ protocolo: 50300, sigiloso: true } as unknown as Vinculo));
+    });
+    checar(
+      "vinculo(): numero que nao e texto nao lanca; nao e sigiloso, salvo marcado",
+      erro === null && respostas.join() === "false,false,false,false,true",
+      erro?.message ?? respostas,
+    );
   }
 }

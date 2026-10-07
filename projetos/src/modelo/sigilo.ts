@@ -44,7 +44,9 @@ export function sigiloDoEnvelope(projetos: readonly unknown[], etapas: readonly 
     const k = v?.sigiloso === true ? chaveProtocolo(v.protocolo) : "";
     if (k) chaves.add(k);
   }
-  const vinculo = (v: Vinculo | undefined): boolean => !!v && (v.sigiloso === true || chaves.has(chaveProtocolo(v.protocolo)));
+  // O vínculo pode vir de fora (texto editado à mão) com o número que não é texto: não é sigiloso, salvo marcado.
+  const vinculo = (v: Vinculo | undefined): boolean =>
+    !!v && (v.sigiloso === true || (typeof v.protocolo === "string" && chaves.has(chaveProtocolo(v.protocolo))));
   const idsProjetos = new Set<string>();
   for (const x of projetos) if (objeto(x) && typeof x.id === "string" && vinculo(vinculoDe(x))) idsProjetos.add(x.id);
   const idsEtapas = new Set<string>();

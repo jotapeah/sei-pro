@@ -24,7 +24,9 @@ import { verificarManifest } from "./verificar-manifest";
 import { verificarModelos } from "./verificar-modelos";
 import { verificarOperacoes } from "./verificar-operacoes";
 import { verificarRepositorio } from "./verificar-repositorio";
+import { verificarSincroniaCorrida } from "./verificar-sincronia-corrida";
 import { verificarSincroniaRepo } from "./verificar-sincronia-repo";
+import { verificarSincroniaTexto } from "./verificar-sincronia-texto";
 import { verificarSituacao } from "./verificar-situacao";
 import { verificarVendor } from "./verificar-vendor";
 
@@ -37,6 +39,8 @@ verificarFiltro();
 await verificarRepositorio();
 await verificarEscopos();
 await verificarSincroniaRepo();
+await verificarSincroniaTexto();
+await verificarSincroniaCorrida();
 await verificarModelos();
 await verificarVendor();
 verificarLinhas();
