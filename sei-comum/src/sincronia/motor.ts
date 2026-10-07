@@ -37,7 +37,9 @@
  *   mudou, devolve o atual, que entra na próxima tentativa da mesma conta.
  * - Texto que ainda não existe e não teria nada (`vazio`): não é criado.
  * - `lerNoRecuo`: durante o recuo de "indisponível" (quem pode ler mas não
- *   gravar), as puxadas continuam, só sem gravar.
+ *   gravar), as puxadas continuam, só sem gravar. A mudança local (inclusive a
+ *   da mescla dessas puxadas) não força rodada no recuo: fica pendente e vai
+ *   depois dele, ou no "Sincronizar agora" (aí o usuário pediu).
  */
 
 import type { Area } from "../armazenamento/area";
@@ -164,7 +166,10 @@ export interface DepsMotorTexto<E> {
   temporizador?: Temporizador;
   /** O sorteio do atraso da nova tentativa, em [0, 1) (Math.random). */
   aleatorio?: () => number;
-  /** No recuo de "indisponível", continua puxando (sem gravar) a cada `intervaloPuxar`. */
+  /**
+   * No recuo de "indisponível", continua puxando (sem gravar) a cada `intervaloPuxar`; o envio
+   * agendado por mudança local também só puxa (a pendência fica para depois do recuo).
+   */
   lerNoRecuo?: boolean;
 }
 
@@ -198,6 +203,8 @@ export class MotorTextoPadrao<E> {
   private desistencias = 0;
   /** `parar()` foi chamado: uma rodada que ainda termine não rearma o envio. */
   private parado = false;
+  /** As gravações do status, em fila (`gravarStatus`). */
+  private filaStatus: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly d: DepsMotorTexto<E>) {}
 
@@ -219,11 +226,20 @@ export class MotorTextoPadrao<E> {
     return v ?? { estado: "nunca", quando: 0, pendente: false };
   }
 
-  private async gravarStatus(m: Partial<StatusSync>): Promise<StatusSync> {
-    // "Aguardando permissão" vale só para a rodada que o gravou.
-    const novo = { ...(await this.status()), aguardandoPermissao: undefined, ...m };
-    await this.d.area.gravar({ [this.d.adaptador.chaveStatus]: novo });
-    return novo;
+  /**
+   * Uma gravação de status por vez, cada uma lendo o status de agora: a marca de pendente (que a mescla da própria
+   * rodada também dispara pelo `aoMudar`) não pode gravar por cima, com uma leitura velha, o `ultimoPuxar` que a
+   * rodada acabou de gravar (no recuo, isso fazia o envio agendado ler de novo antes do intervalo).
+   */
+  private gravarStatus(m: Partial<StatusSync>): Promise<StatusSync> {
+    const feito = this.filaStatus.then(async () => {
+      // "Aguardando permissão" vale só para a rodada que o gravou.
+      const novo = { ...(await this.status()), aguardandoPermissao: undefined, ...m };
+      await this.d.area.gravar({ [this.d.adaptador.chaveStatus]: novo });
+      return novo;
+    });
+    this.filaStatus = feito.catch(() => undefined);
+    return feito;
   }
 
   async marcarPendente(): Promise<void> {
@@ -259,8 +275,15 @@ export class MotorTextoPadrao<E> {
   }
 
   private async enviarAgendado(): Promise<void> {
+    // No recuo com `lerNoRecuo` (quem só lê), forçar levaria a mescla do próprio `soLer` (que avisa o `aoMudar`) a
+    // uma rodada que tenta gravar: lá o envio só puxa, respeitando o intervalo, e a pendência continua guardada.
+    const forcar = !(this.d.lerNoRecuo && this.noRecuo(await this.status(), this.agora()));
     // Trava ocupada (outra aba, ou a rodada desta ainda em curso): sem rearmar, a mudança esperaria a próxima carga.
-    if ((await this.executar(true)) === null) this.rearmar(this.atrasoEnvio);
+    if ((await this.executar(forcar)) === null) this.rearmar(this.atrasoEnvio);
+  }
+
+  private noRecuo(s: StatusSync, agora: number): boolean {
+    return s.estado === "indisponivel" && (s.indisponivelAte ?? 0) > agora;
   }
 
   async sincronizar(o: { forcar?: boolean } = {}): Promise<StatusSync> {
@@ -276,7 +299,7 @@ export class MotorTextoPadrao<E> {
     const a = this.d.adaptador;
     const nome = nomeDaTrava(a.modulo, a.chaveStatus);
     if (!forcar) {
-      if (s.estado === "indisponivel" && (s.indisponivelAte ?? 0) > agora) {
+      if (this.noRecuo(s, agora)) {
         if (!this.d.lerNoRecuo || (s.ultimoPuxar && agora - s.ultimoPuxar < intervalo)) return s;
         return this.d.travar(nome, () => this.soLer(agora));
       }

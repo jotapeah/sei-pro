@@ -24,6 +24,7 @@ import { checar, lanca, secao, tique } from "./util";
 
 const DIA = 86_400_000;
 const CHAVE = "teste/sync/tp/a";
+const RELOGIO_RECUO = 10_000_000;
 
 function montar(o: {
   destino: DestinoTexto;
@@ -134,6 +135,23 @@ export async function verificarMotorUnidade(): Promise<void> {
     d5.gravadas === 1 && ids(await itensDoTexto(d5.html)) === "a1,b1" && m5.repo.itens.has("b1"),
     await itensDoTexto(d5.html),
   );
+  const d7 = destinoConferindo(await textoDeOutro([item("b1", 50)]));
+  const m7 = montar({ destino: d7 });
+  m7.repo.por("a1", "um", 100);
+  let escapou = false;
+  d7.aoConferir = (n) => {
+    if (n !== 1 || d7.html === null) return;
+    const antes = d7.html;
+    // O SEI 5 devolve o conteúdo do formulário escapado mais uma vez.
+    d7.html = antes.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    escapou = d7.html !== antes;
+  };
+  const s7 = await m7.motor.sincronizar();
+  checar(
+    "o escape a mais do SEI 5 no texto conferido nao conta como mudanca: grava na 1a conferencia",
+    escapou && s7.estado === "ok" && d7.conferencias === 1 && d7.gravadas === 1 && ids(await itensDoTexto(d7.html)) === "a1,b1",
+    { s7, conferencias: d7.conferencias, gravadas: d7.gravadas },
+  );
   const d6 = destinoConferindo(null);
   const m6 = montar({ destino: d6, releituras: 0 });
   m6.repo.por("a1", "um", 100);
@@ -216,6 +234,7 @@ export async function verificarMotorUnidade(): Promise<void> {
   const area = areaMemoria();
   const prefs = areaMemoria();
   const repo = repoTeste();
+  let relogio = 10_000_000;
   const remoto = destinoConferindo(await textoDeOutro([item("b1", 50)]));
   const porta = consentimentoNaArea({ area: prefs, chavePreferencias: "teste/preferencias", campo: "textoPadrao", chave: "k|un" });
   const c = new ControleTextoPadrao<EnvTeste>({
@@ -226,6 +245,7 @@ export async function verificarMotorUnidade(): Promise<void> {
     aoMudarLocal: (cb) => repo.aoMudar(cb),
     travar: (_n, fn) => fn(),
     atrasoEnvio: 10,
+    agora: () => relogio,
     lerSemConsentimento: true,
   });
   await c.iniciar({ puxar: true });
@@ -245,7 +265,16 @@ export async function verificarMotorUnidade(): Promise<void> {
   );
   await definirConsentimento(prefs, "teste/preferencias", "textoPadrao", "k|un", "desligado");
   await tique(30);
-  checar("desligado: continua lendo (puxar responde)", (await c.puxar()) !== null);
+  // Um colega grava depois; passado o intervalo, o foco puxa de novo.
+  remoto.html = await textoDeOutro([...(await itensDoTexto(remoto.html)), item("b3", 300)]);
+  relogio += 6 * 60_000;
+  const lidasAntes = remoto.lidas;
+  const sd = await c.puxar();
+  checar(
+    "desligado: continua lendo e mesclando o dos colegas (sem gravar)",
+    sd !== null && remoto.lidas > lidasAntes && repo.itens.has("b3") && remoto.gravadas === 1,
+    { sd, lidas: remoto.lidas, lidasAntes, gravadas: remoto.gravadas },
+  );
   c.parar();
   let perguntas = 0;
   const repo2 = repoTeste();
@@ -267,4 +296,74 @@ export async function verificarMotorUnidade(): Promise<void> {
   await c2.agora();
   checar("permitido proprio do modulo no lugar do consentimento", perguntas === 1 && remoto2.gravadas === 1);
   c2.parar();
+
+  secao("controle: recuo de indisponivel de quem so le (a mescla nao vira tentativa de gravar)");
+  for (const caso of [
+    { nome: "consentiu, nada local", local: false, consentir: true },
+    { nome: "consentiu, item local", local: true, consentir: true },
+    { nome: "sem o Entendi, item local", local: true, consentir: false },
+  ]) {
+    const r = await controleNoRecuo(caso);
+    checar(
+      `${caso.nome}: le uma vez, mescla, nenhuma tentativa de gravar; estado, mensagem e recuo ficam; pendente guardado`,
+      r.tentativas() === 0 &&
+        r.remoto.lidas === 1 &&
+        r.repo.itens.has("b1") &&
+        r.st.estado === "indisponivel" &&
+        r.st.mensagem === indisponivel.mensagem &&
+        r.st.indisponivelAte === indisponivel.indisponivelAte &&
+        r.st.pendente === true,
+      { tentativas: r.tentativas(), lidas: r.remoto.lidas, st: r.st },
+    );
+    if (caso.local && caso.consentir) {
+      const sa = await r.c.agora();
+      checar(
+        "Sincronizar agora no recuo: tenta gravar (o usuario pediu) e o recuo continua",
+        r.tentativas() === 1 && sa.estado === "indisponivel" && (sa.indisponivelAte ?? 0) > RELOGIO_RECUO,
+        { tentativas: r.tentativas(), sa },
+      );
+    }
+    r.c.parar();
+  }
+}
+
+/** O texto da unidade de quem só lê: em recuo de "indisponível", e gravar é recusado pelo SEI. */
+async function controleNoRecuo(o: { local: boolean; consentir: boolean }) {
+  const area = areaMemoria({
+    [CHAVE]: {
+      estado: "indisponivel",
+      quando: 1,
+      pendente: false,
+      indisponivelAte: RELOGIO_RECUO + DIA,
+      mensagem: "Indisponível nesta unidade.",
+    } satisfies StatusSync,
+  });
+  const prefs = areaMemoria();
+  const porta = consentimentoNaArea({ area: prefs, chavePreferencias: "teste/preferencias", campo: "textoPadrao", chave: "k|un" });
+  if (o.consentir) await definirConsentimento(prefs, "teste/preferencias", "textoPadrao", "k|un", "ligado");
+  const repo = repoTeste();
+  if (o.local) repo.por("a1", "um", 100);
+  const remoto = destinoConferindo(await textoDeOutro([item("b1", 50)]));
+  let tentativas = 0;
+  const recusar = async (): Promise<never> => {
+    tentativas++;
+    throw Object.assign(new Error("sem o link de alterar"), { codigo: "SEI_ACAO_INDISPONIVEL" });
+  };
+  const c = new ControleTextoPadrao<EnvTeste>({
+    area,
+    adaptador: adaptadorTeste(repo),
+    armazem: () => ({ ler: () => remoto.ler(), gravar: recusar, gravarConferindo: recusar, excluir: async () => false }),
+    consentimento: porta,
+    aoMudarLocal: (cb) => repo.aoMudar(cb),
+    travar: (_n, fn) => fn(),
+    atrasoEnvio: 10,
+    agora: () => RELOGIO_RECUO,
+    lerSemConsentimento: true,
+    lerNoRecuo: true,
+  });
+  await c.iniciar({ puxar: true });
+  // A mescla do b1 avisa o aoMudar: o envio agendado (10 ms) tem tempo de sobra para rodar.
+  await tique(80);
+  const st = (await area.obter(CHAVE))[CHAVE] as StatusSync;
+  return { c, repo, remoto, st, tentativas: () => tentativas };
 }
