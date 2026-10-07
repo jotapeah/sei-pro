@@ -206,6 +206,12 @@ export interface DepsLigarSincronia {
    * só vai ao SEI o que mudou aqui (o lateral, a árvore) e a pendência de uma carga anterior.
    */
   puxar?: boolean;
+  /**
+   * P5, nas outras telas de topo: a tela tem o item "Textos Padrão" no menu (`armazemNaTela`)? Se não tem, a
+   * sincronia não liga (null): a rodada de envio daria "indisponível", e esse status (com o recuo de 1 dia) é um só
+   * para todas as abas da unidade, inclusive a do Controle de Processos que lê e grava de verdade.
+   */
+  temArmazem?: () => boolean;
 }
 
 /**
@@ -216,6 +222,7 @@ export interface DepsLigarSincronia {
  * montou (o executor responde `SEM_SINCRONIA`); nada daqui lança nem deixa rejeição solta.
  */
 export function ligarSincronia(d: DepsLigarSincronia): SincroniaPagina | null {
+  if (d.temArmazem && !d.temArmazem()) return null;
   let s: SincroniaPagina;
   try {
     s = new SincroniaPagina({

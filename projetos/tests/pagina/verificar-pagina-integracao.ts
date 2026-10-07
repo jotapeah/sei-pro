@@ -16,6 +16,7 @@ import { PonteLateral, type Remetente } from "@comum/ponte/lateral";
 import { parDePortas } from "@comum/ponte/parDePortas";
 import { criarRpc, type PortaRpc, type Rpc } from "@comum/ponte/rpc";
 import { definirConsentimento } from "@comum/sincronia/consentimento";
+import type { StatusSync } from "@comum/sincronia/motor";
 import { gerarConteudoTexto } from "@comum/sincronia/textoPadraoCodec";
 import { definirEmissorDeAviso } from "@comum/ui/aviso";
 import { linkDoMenu } from "@nucleo/links/links";
@@ -24,6 +25,7 @@ import { paginaDe } from "@nucleo/sessao/pagina";
 import { MontagemLateral } from "../../src/app/lateral/montagem";
 import { CHAVE_LATERAL } from "../../src/modelo/constantes";
 import { escoposDaUnidade } from "../../src/modelo/escopo";
+import { armazemDoTexto, armazemNaTela } from "../../src/pagina/armazem";
 import { contextoProjetos } from "../../src/pagina/contexto";
 import { tratadoresProjetos } from "../../src/pagina/executor";
 import { atenderPedidoDoLateral, focarNoPainelDaAba, focoDaAba, irAoPainel, type PainelDaAba, pedirLateral } from "../../src/pagina/foco";
@@ -34,6 +36,7 @@ import { qualTela } from "../../src/pagina/tela";
 import { CHAVE_FOCO, type ContextoProjetos, chaveDaAba, lerPedidoDeFoco } from "../../src/ponte/tipos";
 import { RepositorioProjetos } from "../../src/repositorio";
 import { CHAVE_CONSENTIMENTO, chaveDoConsentimento } from "../../src/sincronia/consentimento";
+import { chaveStatusTexto } from "../../src/sincronia/textoPadrao";
 import { HOJE } from "../fabrica";
 import { checar, instalarDom, lanca, secao, telaSei, tique } from "./util";
 import { doColega, envelopeDoTexto, textoNoSei } from "./verificar-sincronia-pagina";
@@ -234,6 +237,14 @@ export async function verificarPaginaIntegracao(): Promise<void> {
       (await invalido(() => trat.abrirDocumento?.({ numero: "SEI" }))),
   );
   checar(
+    "abrir documento com numero (nao texto): so inteiro seguro e nao negativo (1e21 viraria os digitos de '1e+21')",
+    (await invalido(() => trat.abrirDocumento?.({ numero: 1e21 }))) &&
+      (await invalido(() => trat.abrirDocumento?.({ numero: -5 }))) &&
+      (await invalido(() => trat.abrirDocumento?.({ numero: 12.5 }))) &&
+      (await passa(() => trat.abrirDocumento?.({ numero: 1240002 }), "1240002")),
+    enviados,
+  );
+  checar(
     "abrir documento: o numero SEI (so os digitos) e 20 digitos passam",
     (await passa(() => trat.abrirDocumento?.({ numero: "SEI 1240001" }), "1240001")) &&
       (await passa(() => trat.abrirDocumento?.({ numero: "9".repeat(20) }), "9".repeat(20))),
@@ -351,11 +362,10 @@ export async function verificarPaginaIntegracao(): Promise<void> {
   pedidos.length = 0;
   const idasFoco: string[] = [];
   const areaFoco = areaMemoria();
-  const foco = (o: { painel: PainelDaAba | null; naCaixa: boolean; link?: () => string }) =>
+  const foco = (o: { painel: Promise<PainelDaAba | null>; link?: () => string; area?: Area }) =>
     focoDaAba({
-      painel: Promise.resolve(o.painel),
-      naCaixa: o.naCaixa,
-      area: areaFoco,
+      painel: o.painel,
+      area: o.area ?? areaFoco,
       chave,
       agora: () => 5_000,
       link: o.link ?? (() => linkDoMenu(paginaDe(docT, pT.url), "procedimento_controlar")),
@@ -363,7 +373,7 @@ export async function verificarPaginaIntegracao(): Promise<void> {
     });
   checar(
     "no Controle de Processos com o painel: rola ate ele",
-    (await foco({ painel, naCaixa: true })("p5").catch((e: unknown) => e)) === "painel",
+    (await foco({ painel: Promise.resolve(painel) })("p5").catch((e: unknown) => e)) === "painel",
   );
   await tique(10);
   checar(
@@ -371,14 +381,42 @@ export async function verificarPaginaIntegracao(): Promise<void> {
     JSON.stringify(pedidos) === '[["focarProjeto",{"id":"p5"}]]' && idasFoco.length === 0,
     pedidos,
   );
+  // A visão por marcadores do Controle de Processos não recebe o painel (#tblMarcadores); ela vem de parâmetro da URL
+  // que o link do menu não leva (reset=1): o menu abre a lista completa, onde o painel monta e atende o pedido.
+  const { doc: docM, pagina: pM } = telaSei("sei41/caixa.html");
+  docM.body.append(docM.createElement("table"));
+  docM.body.lastElementChild?.setAttribute("id", "tblMarcadores");
+  const semPainelNaVisao = montarPainelProjetos(docM, { urlApp: "x", recolhido: false, ordem: null, aoRecolher: () => undefined }) === null;
+  const areaM = areaMemoria();
+  const naVisao = await foco({
+    painel: Promise.resolve(null),
+    area: areaM,
+    link: () => linkDoMenu(paginaDe(docM, pM.url), "procedimento_controlar"),
+  })("p7", "e7").catch((e: unknown) => e);
   checar(
-    "no Controle de Processos sem o painel montado: erro claro (ir ate ele recarregaria a mesma tela)",
-    (await lanca(() => foco({ painel: null, naCaixa: true })("p5")))?.codigo === "SEM_PAINEL" && idasFoco.length === 0,
+    "Controle de Processos na visao por marcadores (o painel nao entra): vai pela lista completa do menu e deixa o pedido",
+    semPainelNaVisao &&
+      naVisao === "navegou" &&
+      idasFoco.length === 1 &&
+      /acao=procedimento_controlar&reset=1/.test(idasFoco[0] ?? "") &&
+      !/tipo_filtro|marcador/.test(idasFoco[0] ?? "") &&
+      lerPedidoDeFoco((await areaM.obter(CHAVE_FOCO))[CHAVE_FOCO], "painel", chave, 5_000)?.etapa === "e7",
+    { semPainelNaVisao, naVisao, idasFoco },
+  );
+  const areaFalhou = areaMemoria();
+  const falhou = await lanca(() => foco({ painel: Promise.reject(new Error("storage indisponivel")), area: areaFalhou })("p5"));
+  checar(
+    "o painel falhou ao montar: erro com a mensagem propria, sem navegar e sem pedido guardado",
+    falhou?.codigo === "SEM_PAINEL" &&
+      falhou.message === "O painel de projetos não pôde ser aberto nesta página. Recarregue o Controle de Processos e tente de novo." &&
+      idasFoco.length === 1 &&
+      !(CHAVE_FOCO in (await areaFalhou.obter(CHAVE_FOCO))),
+    falhou,
   );
   checar(
     "em outra tela de topo: vai pelo link do menu e deixa o pedido",
-    (await foco({ painel: null, naCaixa: false })("p6", "e6").catch((e: unknown) => e)) === "navegou" &&
-      idasFoco.length === 1 &&
+    (await foco({ painel: Promise.resolve(null) })("p6", "e6").catch((e: unknown) => e)) === "navegou" &&
+      idasFoco.length === 2 &&
       lerPedidoDeFoco((await areaFoco.obter(CHAVE_FOCO))[CHAVE_FOCO], "painel", chave, 5_000)?.etapa === "e6",
     idasFoco,
   );
@@ -636,7 +674,6 @@ async function pontaAPonta(): Promise<void> {
         conferir: async () => null,
         focarNoPainel: focoDaAba({
           painel: Promise.resolve(painelDaTela),
-          naCaixa: qualTela(doc) === "caixa",
           area,
           chave: chaveDaAba(ctx),
           agora: () => 1_000,
@@ -756,4 +793,42 @@ async function sincroniaNasOutrasTelas(): Promise<void> {
     { gravadas: un.gravadas, nomes: env?.entidades.p.map((x) => x.nome) },
   );
   s?.parar();
+
+  // Uma tela de topo sem o item "Textos Padrão" no menu: a rodada de envio pelo armazém real daria "indisponível", e
+  // esse status (com o recuo de 1 dia) é um só para todas as abas da unidade. Ali a sincronia nem liga.
+  const { doc: docComMenu, pagina: pComMenu } = telaSei("sei41/trabalhar.html");
+  const { doc: docCaixa, pagina: pCaixa } = telaSei("sei41/caixa.html");
+  const { doc: docSemMenu, pagina: pSemMenu } = telaSei("sei41/arvore.html");
+  checar(
+    "o item Textos Padrao no menu: a tela do processo e a caixa tem; uma pagina sem ele nao",
+    armazemNaTela(docComMenu, pComMenu.url) && armazemNaTela(docCaixa, pCaixa.url) && !armazemNaTela(docSemMenu, pSemMenu.url),
+  );
+  const areaSem = areaMemoria();
+  const reposSem = {
+    unidade: new RepositorioProjetos(areaSem, esc.unidade, carimbo),
+    eu: new RepositorioProjetos(areaSem, esc.eu, carimbo),
+  };
+  const semMenu = ligarSincronia({
+    ctx: { host, login: "ana", nome: "Ana" },
+    unidade: { id: "110", sigla: "TESTE" },
+    area: areaSem,
+    sync: areaMemoria(),
+    repos: reposSem,
+    armazem: (vis) => armazemDoTexto(docSemMenu, pSemMenu.url, vis, "ana"),
+    janela: new EventTarget(),
+    doc: Object.assign(new EventTarget(), { visibilityState: "visible" as DocumentVisibilityState }),
+    atrasoEnvio: 10,
+    puxar: false,
+    temArmazem: () => armazemNaTela(docSemMenu, pSemMenu.url),
+  });
+  await reposSem.unidade.criarProjeto({ nome: "Feito no lateral" });
+  await tique(150);
+  const chaveSt = chaveStatusTexto(esc.unidade);
+  const st = (await areaSem.obter(chaveSt))[chaveSt] as StatusSync | undefined;
+  checar(
+    "tela sem o item Textos Padrao: a sincronia nao liga e o status da unidade fica como estava (nada de 'indisponivel')",
+    semMenu === null && st === undefined,
+    { ligou: semMenu !== null, st },
+  );
+  semMenu?.parar();
 }

@@ -49,16 +49,19 @@ function protocoloDoPedido(v: unknown): string | null {
   const t = v.trim();
   return t && RE_PROTOCOLO.test(t) ? t : null;
 }
+/** Número que vem como `number`: só inteiro seguro e não negativo (`1e21` viraria "1e+21", e os dígitos dele, "121"). */
+const inteiroComoTexto = (v: unknown): string | null => (typeof v === "number" && Number.isSafeInteger(v) && v >= 0 ? String(v) : null);
 /** O id do processo: ausente ou vazio (só a pesquisa rápida), ou só dígitos; qualquer outra coisa é null (recusa). */
 function idDoPedido(v: unknown): string | null {
   if (v === undefined || v === null || v === "") return "";
-  const t = typeof v === "string" ? v : typeof v === "number" && Number.isSafeInteger(v) && v >= 0 ? String(v) : null;
+  const t = typeof v === "string" ? v : inteiroComoTexto(v);
   return t !== null && RE_ID_PROCEDIMENTO.test(t) ? t : null;
 }
 /** Id de projeto ou de etapa (texto curto, como o `focarProjeto` do app aceita). */
 const idCurto = (v: unknown): string | undefined => (typeof v === "string" && v.length > 0 && v.length <= 200 ? v : undefined);
 
-const SEM_SINCRONIA = "A sincronia pelo Texto Padrão só funciona numa tela do SEI com unidade.";
+const SEM_SINCRONIA =
+  "A sincronia pelo Texto Padrão só funciona numa tela do SEI com unidade e com o item Textos Padrão no menu. Abra o Controle de Processos e tente de novo.";
 
 /** Os processos da página da caixa que está na tela (sem requisição). */
 export function processosDaCaixa(doc: Document): ProcessoDaCaixa[] {
@@ -91,7 +94,7 @@ export function tratadoresProjetos(d: DepsExecutor): Record<string, Tratador> {
     // Documento: a pesquisa rápida com o número SEI, numa aba nova (a tela atual fica).
     abrirDocumento: (args) => {
       const bruto = (args as { numero?: unknown } | null)?.numero;
-      const n = (typeof bruto === "string" || typeof bruto === "number" ? String(bruto) : "").replace(/\D/g, "");
+      const n = (typeof bruto === "string" ? bruto : (inteiroComoTexto(bruto) ?? "")).replace(/\D/g, "");
       if (!RE_DOCUMENTO.test(n)) throw new ErroRpc("ARGUMENTO_INVALIDO", "Informe o número SEI do documento (até 20 dígitos).");
       return abrirProcesso(d.doc, "", n, true);
     },

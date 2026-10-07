@@ -91,10 +91,11 @@ export async function atenderPedidoDoLateral(
 }
 
 export interface DepsFocoDaAba {
-  /** O painel desta aba: só no Controle de Processos, quando montou (null nas outras telas). */
+  /**
+   * O painel desta aba: o montado no Controle de Processos; null quando a tela não o recebe (as outras telas, e a
+   * visão por marcadores do Controle de Processos); rejeitada quando a montagem falhou.
+   */
   painel: Promise<PainelDaAba | null>;
-  /** A tela é o Controle de Processos. */
-  naCaixa: boolean;
   area: Area;
   chave: string;
   agora(): number;
@@ -103,20 +104,25 @@ export interface DepsFocoDaAba {
 }
 
 /**
- * O `focarNoPainel` que o lateral pede a esta aba: com o painel montado, rola até ele; no Controle de Processos sem
- * o painel (a lista filtrada por marcador, onde ele não entra), erro que diz o que fazer (ir até ele pelo menu
- * poderia trazer a mesma lista, e o pedido venceria sem nada acontecer); nas outras telas, vai ao Controle de
- * Processos pelo menu.
+ * O `focarNoPainel` que o lateral pede a esta aba: com o painel montado, rola até ele; sem o painel na tela (as
+ * outras telas, e a visão por marcadores do Controle de Processos, que vem de parâmetro da URL que o link do menu
+ * não leva), vai ao Controle de Processos pelo menu (a lista completa, onde o painel monta e atende o pedido); se a
+ * montagem do painel falhou, erro (ir até ele cairia na mesma falha).
  */
 export function focoDaAba(d: DepsFocoDaAba): (id: string, etapa?: string) => Promise<"painel" | "navegou"> {
+  // A montagem que falha antes de o lateral pedir não vira rejeição solta.
+  d.painel.catch(() => undefined);
   return async (id, etapa) => {
-    const m = await d.painel;
-    if (m) return focarNoPainelDaAba(m, id, etapa);
-    if (d.naCaixa)
+    let m: PainelDaAba | null;
+    try {
+      m = await d.painel;
+    } catch {
       throw new ErroRpc(
         "SEM_PAINEL",
-        "Esta lista do Controle de Processos não mostra o painel de projetos (a filtrada por marcador, por exemplo). Volte à lista completa e tente de novo.",
+        "O painel de projetos não pôde ser aberto nesta página. Recarregue o Controle de Processos e tente de novo.",
       );
+    }
+    if (m) return focarNoPainelDaAba(m, id, etapa);
     return irAoPainel({ area: d.area, chave: d.chave, agora: d.agora(), link: d.link, ir: d.ir }, id, etapa);
   };
 }

@@ -44,7 +44,7 @@ import { escoposDaUnidade } from "../modelo/escopo";
 import type { Carimbo, Vis } from "../modelo/tipos";
 import { CANAL_LATERAL, CANAL_PROJETOS, type ContextoProjetos, chaveDaAba } from "../ponte/tipos";
 import { RepositorioProjetos } from "../repositorio";
-import { armazemDoTexto } from "./armazem";
+import { armazemDoTexto, armazemNaTela } from "./armazem";
 import { atividadesDaAba } from "./atividades";
 import { atividadesConfigurado, contextoProjetos } from "./contexto";
 import { conferirDocumento } from "./documento";
@@ -107,7 +107,8 @@ async function principal(): Promise<void> {
     unidade: new RepositorioProjetos(area, escopos.unidade, carimbo),
     eu: new RepositorioProjetos(area, escopos.eu, carimbo),
   };
-  // Os dois Textos Padrão: o Controle de Processos lê ao abrir e ao ganhar foco; as outras telas só enviam.
+  // Os dois Textos Padrão: o Controle de Processos lê ao abrir e ao ganhar foco; as outras telas só enviam, e só se
+  // têm o item "Textos Padrão" no menu (senão o status "indisponível" valeria para todas as abas da unidade).
   const sincronia = ligarSincronia({
     ctx,
     unidade,
@@ -118,14 +119,12 @@ async function principal(): Promise<void> {
     janela: window,
     doc: document,
     puxar: naCaixa,
+    temArmazem: naCaixa ? undefined : () => armazemNaTela(document, location.href),
   });
   const aba: Aba = { ctx, unidade, area, repos, sincronia };
-  const painel: Promise<PainelDaAba | null> = naCaixa
-    ? montarNaCaixa(aba).catch((e) => {
-        console.warn("[SEI Pro] projetos: painel", e);
-        return null;
-      })
-    : Promise.resolve(null);
+  // null: a tela não recebe o painel (as outras telas e a visão por marcadores); rejeitada: a montagem falhou.
+  const painel: Promise<PainelDaAba | null> = naCaixa ? montarNaCaixa(aba) : Promise.resolve(null);
+  painel.catch((e) => console.warn("[SEI Pro] projetos: painel", e));
   // O lado da aba do lateral já (sem esperar o painel): a página recarregada volta antes do fim da carência.
   ligarLateralDaAba({
     doc: document,
@@ -136,7 +135,6 @@ async function principal(): Promise<void> {
       iframe: null,
       focarNoPainel: focoDaAba({
         painel,
-        naCaixa,
         area,
         chave: chaveDaAba(ctx),
         agora: () => Date.now(),
@@ -147,7 +145,10 @@ async function principal(): Promise<void> {
   });
 }
 
-/** O painel embutido, as pílulas (com o contador do lateral) e o "Abrir no painel" que o lateral deixou. */
+/**
+ * O painel embutido, as pílulas (com o contador do lateral) e o "Abrir no painel" que o lateral deixou. null quando
+ * esta lista não recebe o painel (a visão por marcadores); rejeita se a montagem falhar.
+ */
 async function montarNaCaixa(aba: Aba): Promise<PainelDaAba | null> {
   const { ctx, area, repos } = aba;
   const prefs = await lerPreferencias(area);
