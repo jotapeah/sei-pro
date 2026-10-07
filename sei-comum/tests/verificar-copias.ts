@@ -112,4 +112,34 @@ export async function verificarBancoECopias(): Promise<void> {
       (e: unknown) => e,
     );
   checar("a transacao seguinte grava normalmente", falha === null && (await copiasDepois.listar({ host: "h", login: "p" })).length === 1);
+
+  secao("IndexedDB: banco bloqueado por outra aba rejeita com mensagem clara, nao fica pendurado");
+  let fechados = 0;
+  const bloqueada = {
+    open() {
+      const r: { result?: unknown; onblocked?: () => void; onsuccess?: () => void } = {};
+      setTimeout(() => r.onblocked?.(), 1);
+      // A outra aba fecha depois: o banco abre tarde e tem de ser fechado (ninguém mais o espera).
+      setTimeout(() => {
+        r.result = { close: () => void fechados++ };
+        r.onsuccess?.();
+      }, 20);
+      return r;
+    },
+  } as unknown as IDBFactory;
+  const bloqueio = await Promise.race([
+    abrirBanco("seipro-teste", bloqueada).then(
+      () => "resolveu",
+      (e: { message?: string } | null) => `rejeitou:${e?.message}`,
+    ),
+    tique(10).then(() => "pendurada"),
+  ]);
+  checar(
+    "o bloqueio rejeita com o que fazer",
+    bloqueio ===
+      "rejeitou:O banco de cópias deste navegador está ocupado por outra janela do SEI Pro. Feche as outras abas do SEI e tente de novo.",
+    bloqueio,
+  );
+  await tique(30);
+  checar("o banco que abre depois do bloqueio e fechado", fechados === 1, fechados);
 }

@@ -12,15 +12,30 @@
 export const VERSAO_BANCO = 1;
 export type Deposito = "copias" | "arquivos";
 
+export const MENSAGEM_BANCO_BLOQUEADO =
+  "O banco de cópias deste navegador está ocupado por outra janela do SEI Pro. Feche as outras abas do SEI e tente de novo.";
+
+/**
+ * Abre o banco do módulo. Outra conexão aberta numa versão antiga BLOQUEIA a abertura (`blocked`): em vez de
+ * esperar sem prazo, rejeita com o que fazer; se o banco abrir depois, é fechado (ninguém mais o espera).
+ */
 export function abrirBanco(nome: string, fabrica: IDBFactory = globalThis.indexedDB): Promise<IDBDatabase> {
   return new Promise<IDBDatabase>((ok, erro) => {
+    let desistiu = false;
     const r = fabrica.open(nome, VERSAO_BANCO);
     r.onupgradeneeded = () => {
       const db = r.result;
       if (!db.objectStoreNames.contains("copias")) db.createObjectStore("copias", { keyPath: "id" }).createIndex("dono", "dono");
       if (!db.objectStoreNames.contains("arquivos")) db.createObjectStore("arquivos");
     };
-    r.onsuccess = () => ok(r.result);
+    r.onblocked = () => {
+      desistiu = true;
+      erro(new Error(MENSAGEM_BANCO_BLOQUEADO));
+    };
+    r.onsuccess = () => {
+      if (desistiu) r.result.close();
+      else ok(r.result);
+    };
     r.onerror = () => erro(r.error);
   });
 }
