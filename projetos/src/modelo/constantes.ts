@@ -11,7 +11,19 @@ export const LIMITES = {
   etapasPorProjeto: 300,
   historico: 300,
   modelos: 50,
+  /** Cada lado (`antes`/`depois`) de um registro do histórico; o das dependências (os nomes juntos) nasce cortado. */
+  registroValor: 400,
+  /**
+   * Login e nome de quem gravou (no SEI, até 100), o campo do registro, o `alteradoPor`, o login do responsável e o
+   * id do dispositivo (um UUID).
+   */
+  rotulo: 100,
+  /** A chave da ordem manual (índice fracionário): cresce um caractere a cada umas seis inserções no mesmo vão. */
+  ordem: 1000,
 } as const;
+
+/** Registro do histórico com `quando` antes disto (2000-01-01) vem de um relógio quebrado ou é forjado: recusado. */
+export const QUANDO_MINIMO = Date.UTC(2000, 0, 1);
 
 /**
  * Relógio de outro computador adiantado que a mesclagem ainda aceita (1 dia). Carimbo além disso é

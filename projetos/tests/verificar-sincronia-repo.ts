@@ -13,7 +13,7 @@ import type { DocumentoSei, Entidades, Etapa, Projeto, Registro, Vinculo } from 
 import { chaveProtocolo } from "../src/modelo/vinculos";
 import { MODELOS_EMBUTIDOS } from "../src/modelos/embutidos";
 import { entidadeValida, manterDocumentoSigiloso, moverEntreEscopos } from "../src/repositorio";
-import { ESCOPO_EU, ESCOPO_UN, novoRepo } from "./apoioRepositorio";
+import { ESCOPO_EU, ESCOPO_UN, novoRepo, RELOGIO_INICIAL } from "./apoioRepositorio";
 import { etapa, projeto } from "./fabrica";
 import { checar, lanca, secao } from "./util";
 
@@ -306,11 +306,17 @@ export async function verificarSincroniaRepo(): Promise<void> {
         h.h.find((r) => r.id === regDoc?.id)?.depois === "1234567",
       { rr, av },
     );
-    const lapide: Registro = { ...(regDoc as Registro), removidoEm: 5_000, atualizadoEm: 5_000, dispositivo: "dev-b" };
+    // Mais nova que a daqui (o relógio de teste começa em 2026).
+    const lapide: Registro = {
+      ...(regDoc as Registro),
+      removidoEm: RELOGIO_INICIAL + 5_000,
+      atualizadoEm: RELOGIO_INICIAL + 5_000,
+      dispositivo: "dev-b",
+    };
     const rl = await rh.importar({ h: [lapide] });
     checar(
       "registro com outro carimbo (lapide de outro computador) ainda entra",
-      rl.atualizados === 1 && av === 1 && (await rh.registros.obter(lapide.id))?.removidoEm === 5_000,
+      rl.atualizados === 1 && av === 1 && (await rh.registros.obter(lapide.id))?.removidoEm === RELOGIO_INICIAL + 5_000,
       { rl, av },
     );
     pararH();

@@ -9,6 +9,7 @@ import { normalizarTexto } from "@comum/texto";
 import { ANO_MAX, ANO_MIN, dataNaFaixa, dataValida, LIMITE_DIAS_ETAPA, MAX_DIAS_UTEIS } from "./calendario";
 import { LIMITES } from "./constantes";
 import type { Etapa, ItemChecklist, Modelo, Projeto } from "./tipos";
+import { RE_DOCUMENTO } from "./vinculos";
 
 export class ErroValidacao extends Error {
   constructor(readonly mensagens: string[]) {
@@ -83,9 +84,24 @@ export function problemasDasDatas(inicio: unknown, fim: unknown): string[] {
   return [];
 }
 
+/**
+ * O documento que comprova a etapa, com a regra da importação (`entidadeValida`) e do diálogo: número vazio (sem
+ * documento, ou o marcador do documento de processo sigiloso) ou só dígitos, de 1 a 20 (`RE_DOCUMENTO`); título
+ * de até 200; marca de sigilo booleana. Quem grava pelo repositório sem o diálogo (o Agente) cai aqui.
+ */
+export function problemasDoDocumento(d: unknown): string[] {
+  const o = d as { numero?: unknown; titulo?: unknown; sigiloso?: unknown } | null;
+  if (!o || typeof o !== "object" || typeof o.numero !== "string" || (o.numero !== "" && !RE_DOCUMENTO.test(o.numero)))
+    return ["Número de documento inválido."];
+  if (o.titulo !== undefined && (typeof o.titulo !== "string" || o.titulo.length > LIMITES.nome))
+    return [`O título do documento pode ter até ${LIMITES.nome} caracteres.`];
+  if (o.sigiloso !== undefined && typeof o.sigiloso !== "boolean") return ["Número de documento inválido."];
+  return [];
+}
+
 /** Os tetos de texto são os mesmos de `entidadeValida` (importação): o que se grava aqui sincroniza. */
 export function problemasDaEtapa(
-  e: Pick<Etapa, "nome" | "inicio" | "fim" | "progresso" | "checklist" | "etiquetas" | "observacoes" | "responsavel">,
+  e: Pick<Etapa, "nome" | "inicio" | "fim" | "progresso" | "checklist" | "etiquetas" | "observacoes" | "responsavel" | "documento">,
 ): string[] {
   const saida = problemasDoNome(e.nome, "Informe o nome da etapa.");
   saida.push(...problemasDasDatas(e.inicio, e.fim));
@@ -96,6 +112,8 @@ export function problemasDaEtapa(
   saida.push(...problemasDasEtiquetas(e.etiquetas));
   if ((e.observacoes ?? "").length > LIMITES.observacoes) saida.push("As observações podem ter até 2.000 caracteres.");
   if ((e.responsavel?.nome ?? "").length > LIMITES.nome) saida.push(`O nome do responsável pode ter até ${LIMITES.nome} caracteres.`);
+  if ((e.responsavel?.login ?? "").length > LIMITES.rotulo) saida.push("O login do responsável é longo demais.");
+  if (e.documento !== undefined) saida.push(...problemasDoDocumento(e.documento));
   return saida;
 }
 

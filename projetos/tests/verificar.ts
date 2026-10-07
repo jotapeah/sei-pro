@@ -31,6 +31,7 @@ import { verificarManifest } from "./verificar-manifest";
 import { verificarModelos } from "./verificar-modelos";
 import { verificarOperacoes } from "./verificar-operacoes";
 import { verificarRepositorio } from "./verificar-repositorio";
+import { verificarRevisaoFinalP4 } from "./verificar-revisao-final-p4";
 import { verificarSincroniaArquivo } from "./verificar-sincronia-arquivo";
 import { verificarSincroniaCorrida } from "./verificar-sincronia-corrida";
 import { verificarSincroniaDocumento } from "./verificar-sincronia-documento";
@@ -77,6 +78,7 @@ await verificarAppColaboracaoFluxos();
 await verificarAppP4();
 await verificarAppRevisao();
 await verificarAppEntrada();
+await verificarRevisaoFinalP4();
 await verificarEstatico();
 await verificarManifest();
 // O content script importa o núcleo do SEI (tsconfig.pagina.json): caminho numa variável, para o tsc

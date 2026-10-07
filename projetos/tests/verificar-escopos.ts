@@ -5,7 +5,7 @@ import type { Etapa, Modelo, Projeto, Registro } from "../src/modelo/tipos";
 import { idValido } from "../src/modelo/validacao";
 import { chaveProtocolo, indiceDeProcessos } from "../src/modelo/vinculos";
 import { entidadeValida, indiceDosEscopos, manterNumeroSigiloso, moverEntreEscopos } from "../src/repositorio";
-import { ESCOPO_EU, ESCOPO_UN, novoRepo } from "./apoioRepositorio";
+import { ESCOPO_EU, ESCOPO_UN, novoRepo, RELOGIO_INICIAL } from "./apoioRepositorio";
 import { etapa, fase, HOJE, projeto } from "./fabrica";
 import { checar, secao } from "./util";
 
@@ -14,7 +14,7 @@ const DIA = 86_400_000;
 export async function verificarEscopos(): Promise<void> {
   secao("projetos: exportar e importar envelope");
   const area = areaMemoria();
-  const navegador = { agora: 1_000 };
+  const navegador = { agora: RELOGIO_INICIAL };
   const { repo: un } = novoRepo(ESCOPO_UN, area, "u", navegador);
   const { repo: eu } = novoRepo(ESCOPO_EU, area, "e", navegador);
   const p = await un.criarProjeto({ nome: "Pregão", processo: { protocolo: "50300.004410/2026-02" } });
@@ -201,7 +201,7 @@ export async function verificarEscopos(): Promise<void> {
   checar("datas do mover nao mudam", de.etapas[0]?.inicio === "2026-10-07" && HOJE === "2026-10-06");
 
   secao("projetos: mover com destino hostil e vinculo torto");
-  const nav2 = { agora: 1_000 };
+  const nav2 = { agora: RELOGIO_INICIAL };
   const { repo: ua } = novoRepo(ESCOPO_UN, areaMemoria(), "a", nav2);
   const { repo: ea2 } = novoRepo(ESCOPO_EU, areaMemoria(), "b", nav2);
   const pm = await ua.criarProjeto({ nome: "Mover" });
@@ -223,11 +223,13 @@ export async function verificarEscopos(): Promise<void> {
 
   {
     // Destino com 300 registros mais novos: os do projeto movido são excedentes, e o mover não é recusado por isso.
-    const navH = { agora: 1_000 };
+    const navH = { agora: RELOGIO_INICIAL };
     const { repo: origemH } = novoRepo(ESCOPO_UN, areaMemoria(), "oh", navH);
     const { repo: destinoH } = novoRepo(ESCOPO_EU, areaMemoria(), "dh", navH);
     const ph = await origemH.criarProjeto({ nome: "Com historico" });
     await origemH.criarEtapa({ projeto: ph.id, nome: "E", inicio: "2026-10-07", fim: "2026-10-08" });
+    // Os 300 são de outro projeto do destino (registro de projeto que não existe é órfão e é recusado: revisão final da P4).
+    await destinoH.importar({ p: [projeto({ id: "outro", atualizadoEm: navH.agora })] });
     const cheios: Registro[] = Array.from({ length: LIMITES.historico }, (_, i) => ({
       id: `n${i}`,
       alvo: "outro",
@@ -350,12 +352,12 @@ export async function verificarEscopos(): Promise<void> {
       id: "r1",
       alvo: "e1",
       projeto: "p1",
-      quando: 5,
+      quando: RELOGIO_INICIAL,
       por: "ana",
       campo: "nome",
       antes: "a",
       depois: "b",
-      atualizadoEm: 5,
+      atualizadoEm: RELOGIO_INICIAL,
       dispositivo: "d",
     };
     checar("entidadeValida aceita registro completo", entidadeValida(reg, "h"));
@@ -423,17 +425,17 @@ export async function verificarEscopos(): Promise<void> {
       id: `r${i}`,
       alvo: "p000",
       projeto: "p000",
-      quando: i + 1,
+      quando: RELOGIO_INICIAL + i + 1,
       por: "ana",
       campo: "nome",
-      atualizadoEm: i + 1,
+      atualizadoEm: RELOGIO_INICIAL + i + 1,
       dispositivo: "d",
     }));
     const r4 = await rt.importar({ h: regs });
     const hist = await rt.historico();
     checar(
       "310 registros: ficam os 300 mais recentes",
-      hist.length === LIMITES.historico && r4.excedentes === 10 && !hist.some((r) => r.quando <= 10),
+      hist.length === LIMITES.historico && r4.excedentes === 10 && !hist.some((r) => r.quando <= RELOGIO_INICIAL + 10),
       { ...r4, hist: hist.length },
     );
   }

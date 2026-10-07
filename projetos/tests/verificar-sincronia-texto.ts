@@ -188,9 +188,10 @@ export async function verificarSincroniaTexto(): Promise<void> {
 
   secao("sincronia: poda na exportacao");
   const velha = (dias: number) => AGORA - dias * DIA;
+  // A etapa e os registros são do projeto vivo "p1" (sem o projeto no texto, seriam órfãos: revisão final da P4).
   const comLapides = envelope({
     entidades: {
-      p: [projeto({ id: "p-ok" }), projeto({ id: "p-181", removidoEm: velha(181), atualizadoEm: velha(181) })],
+      p: [projeto({ id: "p1" }), projeto({ id: "p-181", removidoEm: velha(181), atualizadoEm: velha(181) })],
       f: [],
       e: [etapa({ id: "e-100", removidoEm: velha(100), atualizadoEm: velha(100) })],
       h: Array.from({ length: 305 }, (_, i) => registro({ id: `h${String(i).padStart(3, "0")}`, quando: AGORA - i })),

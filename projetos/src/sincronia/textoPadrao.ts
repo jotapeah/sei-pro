@@ -21,10 +21,16 @@
  * sigilosa.
  *
  * Poda na exportação: lápides de mais de 180 dias (unidade) ou 90 (pessoal) e
- * o histórico além dos 300 registros mais recentes ficam de fora.
+ * o histórico além dos 300 registros mais recentes ficam de fora; e, com o
+ * projeto que ficou de fora, as fases, as etapas e os registros dele (órfãos,
+ * que a importação de um colega recusaria: levá-los faria o texto ir e voltar).
+ *
+ * Sem o consentimento, o motor compara o envelope daqui com o texto lido como
+ * este adaptador o gravaria (`textoComoGravado`): a poda e o que a importação
+ * recusa (o texto editado à mão) não fazem aparecer a faixa do "Entendi".
  */
 
-import type { Area } from "@comum/armazenamento/area";
+import { type Area, areaMemoria } from "@comum/armazenamento/area";
 import { assinaturaEstavel, jsonEstavel, porId } from "@comum/sincronia/assinatura";
 import { purgarLapides } from "@comum/sincronia/entidade";
 import type { AdaptadorTexto } from "@comum/sincronia/motor";
@@ -34,7 +40,7 @@ import { chaveEscopo } from "../modelo/escopo";
 import { excedentes } from "../modelo/historico";
 import { cortarSigilo, NADA_CONHECIDO, type Numeros, type SigilosConhecidos, sigiloDoEnvelope } from "../modelo/sigilo";
 import type { Entidades, EnvelopeProjetos, Escopo, Vis } from "../modelo/tipos";
-import { entidadeValida, type RepositorioProjetos } from "../repositorio";
+import { entidadeValida, RepositorioProjetos } from "../repositorio";
 
 /** O CKEditor 5 baixa o conteúdo de todos os textos da unidade (como nos Favoritos). */
 export const TETO_TEXTO = 100 * 1024;
@@ -46,6 +52,10 @@ export const VERSAO = 1;
 export const TETOS_ENVELOPE: Readonly<Record<keyof Entidades, number>> = { p: 2000, f: 20_000, e: 60_000, h: 5000, m: 500 };
 
 export { SIGILOSO_DOCUMENTO, SIGILOSO_PROCESSO } from "../modelo/sigilo";
+
+/** Quem lê o texto da unidade mas não pode gravá-lo (só o link de consultar): o que muda e o que continua. */
+export const MENSAGEM_SO_LEITURA_UNIDADE =
+  "O SEI não deixa gravar este Texto Padrão com o seu perfil nesta unidade; os projetos dos colegas continuam chegando.";
 
 /** A desistência depois das releituras: o motor tenta de novo sozinho (o app mostra como "pendente"). */
 export const MENSAGEM_MUDOU =
@@ -136,17 +146,27 @@ export function paraOTextoComRaspados(
   const ent = env.entidades;
   // A regra sobre tudo, antes da poda: a marca de uma lápide que sai ainda vale para os outros.
   const sigilo = sigiloDoEnvelope(ent.p, ent.e, conhecidos);
-  const vivosH = purgarLapides(ent.h, agora, dias);
+  const projetos = purgarLapides(ent.p, agora, dias);
+  // Só o que tem o projeto no texto (vivo ou lápide): o órfão seria recusado por quem lê.
+  const ids = new Set(projetos.map((p) => p.id));
+  const doProjeto = <T extends { projeto: string }>(lista: T[]): T[] => lista.filter((x) => ids.has(x.projeto));
+  const vivosH = doProjeto(purgarLapides(ent.h, agora, dias));
   const fora = new Set(excedentes(vivosH, LIMITES.historico));
   // O raspado mantém id e carimbo: na volta, o `importar` reconhece o mesmo registro e fica com o daqui.
   const corte = cortarSigilo(
-    { p: purgarLapides(ent.p, agora, dias), e: purgarLapides(ent.e, agora, dias), h: vivosH.filter((r) => !fora.has(r.id)) },
+    { p: projetos, e: doProjeto(purgarLapides(ent.e, agora, dias)), h: vivosH.filter((r) => !fora.has(r.id)) },
     sigilo,
   );
   return {
     envelope: {
       ...env,
-      entidades: { p: corte.p, f: purgarLapides(ent.f, agora, dias), e: corte.e, h: corte.h, m: purgarLapides(ent.m, agora, dias) },
+      entidades: {
+        p: corte.p,
+        f: doProjeto(purgarLapides(ent.f, agora, dias)),
+        e: corte.e,
+        h: corte.h,
+        m: purgarLapides(ent.m, agora, dias),
+      },
     },
     raspados: corte.raspados,
   };
@@ -173,6 +193,18 @@ export function comOsDoFuturo(env: EnvelopeProjetos, remoto: EnvelopeProjetos | 
     (entidades as Record<string, unknown[]>)[k] = [...entidades[k].filter((x) => !ids.has(x.id)), ...futuros];
   }
   return { ...env, entidades };
+}
+
+/**
+ * O texto lido como este adaptador o gravaria se só tivesse ele: importado num repositório vazio (em memória, que
+ * nada grava: o que a importação recusa fica de fora) e exportado com a poda e o corte do sigilo (o que o próprio
+ * envelope marca). É o "exportar(importado(lido))" que o motor compara, sem o consentimento, com o envelope daqui.
+ */
+export async function textoComoGravado(lido: EnvelopeProjetos, escopo: Escopo, agora: number): Promise<EnvelopeProjetos> {
+  const repo = new RepositorioProjetos(areaMemoria(), escopo, () => ({ agora, dispositivo: "normalizar" }));
+  await repo.importar(lido.entidades);
+  const { envelope, conhecidos } = await repo.exportarComConhecidos(agora);
+  return paraOTexto(comOsDoFuturo(envelope, lido, agora), agora, conhecidos);
 }
 
 /** Igual para o mesmo conteúdo em qualquer computador: sem `gerado`, listas pelo id. */
@@ -237,6 +269,7 @@ export function adaptadorProjetos(d: DepsAdaptador): AdaptadorTexto<EnvelopeProj
     },
     assinatura: assinaturaProjetos,
     vazio: (env) => LISTAS.every((k) => env.entidades[k].length === 0),
+    normalizar: (lido, agora) => textoComoGravado(lido, escopo, agora),
     async antesDeRegravarInvalido(motivo, html) {
       const guardado: TextoSubstituido = {
         quando: d.repo.carimboAtual().agora,
@@ -257,6 +290,8 @@ export function adaptadorProjetos(d: DepsAdaptador): AdaptadorTexto<EnvelopeProj
       invalidoRegravado: (motivo) =>
         `O texto no SEI estava inválido (${motivo}) e foi regravado a partir deste computador; o texto antigo ficou guardado neste navegador.`,
       mudouDuranteGravacao: MENSAGEM_MUDOU,
+      // No pessoal, a mensagem genérica do motor: não há colegas.
+      ...(unidade ? { soLeitura: MENSAGEM_SO_LEITURA_UNIDADE } : {}),
     },
   };
 }

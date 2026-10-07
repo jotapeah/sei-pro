@@ -106,13 +106,13 @@ export interface EnvelopeProjeto {
 /** O vínculo no arquivo: sem o `idProcedimento`; o sigiloso, sempre vazio. */
 function vinculoNoArquivo(v: Vinculo | undefined): Vinculo | undefined {
   if (!v) return undefined;
-  return v.sigiloso ? { protocolo: "", sigiloso: true } : { protocolo: v.protocolo };
+  return v.sigiloso ? { ...VINCULO_VAZIO } : { protocolo: v.protocolo };
 }
 
 /** O documento no arquivo: o marcado vai como o marcador (o corte já o trocou; aqui é a garantia). */
 function documentoNoArquivo(d: DocumentoSei | undefined): DocumentoSei | undefined {
   if (!d) return undefined;
-  return d.sigiloso ? { numero: "", sigiloso: true } : semVazios({ numero: d.numero, titulo: d.titulo });
+  return d.sigiloso ? { ...DOCUMENTO_VAZIO } : semVazios({ numero: d.numero, titulo: d.titulo });
 }
 
 function etapaNoArquivo(e: Etapa): EtapaNoArquivo {

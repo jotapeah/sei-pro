@@ -14,7 +14,7 @@ import { jsonEstavel } from "@comum/sincronia/assinatura";
 import { mesclar, purgarLapides, type Versionada } from "@comum/sincronia/entidade";
 import { normalizarTexto } from "@comum/texto";
 import { dataNaFaixa, LIMITE_DIAS_ETAPA } from "./modelo/calendario";
-import { DIAS_LAPIDE_EU, DIAS_LAPIDE_UNIDADE, FOLGA_RELOGIO_MS, LIMITES, prefixoMemoriaSigilo } from "./modelo/constantes";
+import { DIAS_LAPIDE_EU, DIAS_LAPIDE_UNIDADE, FOLGA_RELOGIO_MS, LIMITES, prefixoMemoriaSigilo, QUANDO_MINIMO } from "./modelo/constantes";
 import { problemasDasMudancas, validarDependencias, violacoesDeDatas } from "./modelo/dependencias";
 import { baseDoEscopo, chaveMeta, prefixoDe, rotuloDaVis } from "./modelo/escopo";
 import {
@@ -87,6 +87,7 @@ import {
   nomeLimpo,
   problemasDaEstruturaDoModelo,
   problemasDaEtapa,
+  problemasDoDocumento,
   problemasDoModelo,
   problemasDoProjeto,
 } from "./modelo/validacao";
@@ -751,6 +752,9 @@ export class RepositorioProjetos {
   async concluirEtapa(id: string, hoje: DataISO, documento?: DocumentoSei | null): Promise<Etapa> {
     const atual = await this.obterEtapa(id);
     if (!atual) throw new ErroValidacao(["A etapa não existe mais."]);
+    // A mesma regra do diálogo e da importação: o Agente (P5) grava por aqui, sem passar pelo diálogo.
+    const problemas = documento ? problemasDoDocumento(documento) : [];
+    if (problemas.length) throw new ErroValidacao(problemas);
     const c = this.carimbo();
     const e = concluir(atual, hoje, c, documento);
     await this.salvar(this.entradas(this.etapas, [[id, e]]), registrosDeEtapa(atual, e), c);
@@ -944,8 +948,9 @@ export class RepositorioProjetos {
       tipo: keyof Entidades,
       teto: (locais: ReadonlyMap<string, T>, vencedoras: readonly T[]) => Set<string>,
       combinar?: (vencedor: T, local: T | undefined) => T,
+      aceitar?: (vencedor: T) => boolean,
     ) => {
-      const r = this.mesclarEm(locais, lista ?? [], tipo, agora, teto, combinar);
+      const r = this.mesclarEm(locais, lista ?? [], tipo, agora, teto, combinar, aceitar);
       soma.novos += r.novos;
       soma.atualizados += r.atualizados;
       soma.ignorados += r.ignorados;
@@ -973,7 +978,12 @@ export class RepositorioProjetos {
       (l, v) => alemDoTeto(l, v, (x) => (vivo(x) && x.arquivadoEm === undefined ? "" : null), LIMITES.projetosAtivos),
       manterNumeroSigiloso,
     );
-    mesclarCol(this.fases, aqui.f, ent.f, "f", () => new Set());
+    // Órfão (fase, etapa ou registro de um projeto que não existe aqui nem fica com esta mescla, viva ou lápide):
+    // ignorado. Um texto editado à mão não enche o armazenamento de itens que nenhuma tela mostra e que voltariam
+    // ao texto a cada rodada; a etapa de uma corrida legítima chega com o projeto (mesmo em lápide).
+    const existentes = new Set([...projetosAqui.map((p) => p.id), ...projetosNovos.map(([id]) => id)]);
+    const comProjeto = (x: { projeto: string }) => existentes.has(x.projeto);
+    mesclarCol(this.fases, aqui.f, ent.f, "f", () => new Set(), undefined, comProjeto);
     const etapasNovas = mesclarCol(
       this.etapas,
       etapasAqui,
@@ -981,8 +991,9 @@ export class RepositorioProjetos {
       "e",
       (l, v) => alemDoTeto(l, v, (x) => (vivo(x) ? x.projeto : null), LIMITES.etapasPorProjeto),
       (v, l) => manterDocumentoSigiloso(manterNumeroSigiloso(v, l), l),
+      comProjeto,
     );
-    const registrosNovos = mesclarCol(this.registros, registrosAqui, ent.h, "h", registrosAlemDoTeto, registroDaqui);
+    const registrosNovos = mesclarCol(this.registros, registrosAqui, ent.h, "h", registrosAlemDoTeto, registroDaqui, comProjeto);
     mesclarCol(this.modelos, aqui.m, ent.m, "m", (l, v) => alemDoTeto(l, v, (x) => (vivo(x) ? "" : null), LIMITES.modelos));
     // Tudo ou nada: decidido antes de qualquer gravação, sobre a mesma leitura.
     if (opcoes.inteiro && soma.ignorados)
@@ -1036,6 +1047,10 @@ export class RepositorioProjetos {
     return soma;
   }
 
+  /**
+   * `aceitar` recusa uma vencedora que mudaria o estado daqui (o órfão): conta como ignorada e não ocupa vaga de
+   * teto. O item igual ao daqui não é vencedora e não conta.
+   */
   private mesclarEm<T extends Versionada>(
     locais: readonly T[],
     itens: readonly unknown[],
@@ -1043,11 +1058,14 @@ export class RepositorioProjetos {
     agora: number,
     teto: (locais: ReadonlyMap<string, T>, vencedoras: readonly T[]) => Set<string>,
     combinar: (vencedor: T, local: T | undefined) => T = (v) => v,
+    aceitar: (vencedor: T) => boolean = () => true,
   ): { gravar: Array<[string, T]>; novos: number; atualizados: number; ignorados: number; excedentes: number } {
     const validos = itens.filter((x) => entidadeValida(x, tipo, agora)).map((x) => sanear(x as T, tipo));
     const porId = new Map(locais.map((i) => [i.id, i]));
     // `mesclar` devolve o próprio objeto vencedor: se é o local, nada a gravar.
-    const vencedoras = mesclar([...locais], validos).filter((v) => v !== porId.get(v.id));
+    const mudam = mesclar([...locais], validos).filter((v) => v !== porId.get(v.id));
+    const vencedoras = mudam.filter(aceitar);
+    const recusadas = mudam.length - vencedoras.length;
     const fora = teto(porId, vencedoras);
     const gravar: Array<[string, T]> = [];
     let novos = 0;
@@ -1063,7 +1081,7 @@ export class RepositorioProjetos {
       else novos += 1;
     }
     const invalidos = itens.length - validos.length;
-    return { gravar, novos, atualizados, ignorados: invalidos + fora.size, excedentes: fora.size };
+    return { gravar, novos, atualizados, ignorados: invalidos + recusadas + fora.size, excedentes: fora.size };
   }
 
   /**
@@ -1090,9 +1108,10 @@ export class RepositorioProjetos {
 
   /**
    * Apaga de vez as lápides velhas (180 dias na unidade, 90 no "só eu": um
-   * usuário eventual da unidade não pode ressuscitar exclusões) e poda o
-   * histórico em 300 registros. Devolve quantas chaves saíram. `Area` não tem
-   * "gravar e remover" juntos: é uma única `remover` com todas as chaves.
+   * usuário eventual da unidade não pode ressuscitar exclusões), a fase e a
+   * etapa vivas de projeto que não existe mais (órfãs) e poda o histórico em
+   * 300 registros. Devolve quantas chaves saíram. `Area` não tem "gravar e
+   * remover" juntos: é uma única `remover` com todas as chaves.
    */
   async limpar(agora: number = Date.now()): Promise<number> {
     const dias = this.escopo.vis === "unidade" ? DIAS_LAPIDE_UNIDADE : DIAS_LAPIDE_EU;
@@ -1110,9 +1129,14 @@ export class RepositorioProjetos {
       this.modelos.listar(),
       this.registros.listar(),
     ]);
-    ficam(this.projetos, projetos);
-    ficam(this.fases, fases);
-    ficam(this.etapas, etapas);
+    const projetosFicam = new Set(ficam(this.projetos, projetos).map((p) => p.id));
+    // Fase e etapa vivas de projeto que não existe (a lápide dele saiu agora ou antes; a etapa de uma corrida com
+    // a exclusão do projeto): nenhuma tela as mostra e o texto já não as leva.
+    const semProjeto = <T extends Versionada & { projeto: string }>(col: Colecao<T>, mantidas: T[]) => {
+      for (const x of mantidas) if (x.removidoEm === undefined && !projetosFicam.has(x.projeto)) chaves.push(col.chave(x.id));
+    };
+    semProjeto(this.fases, ficam(this.fases, fases));
+    semProjeto(this.etapas, ficam(this.etapas, etapas));
     ficam(this.modelos, modelos);
     const mantidos = ficam(this.registros, regs);
     for (const id of excedentes(mantidos, LIMITES.historico)) chaves.push(this.registros.chave(id));
@@ -1267,9 +1291,12 @@ const listaDe = (x: unknown, max: number, ok: (v: unknown) => boolean): boolean 
 const MEDIDAS: ReadonlySet<unknown> = new Set(["manual", "tempo", "checklist"]);
 
 const nomeValido = textoAte(LIMITES.nome);
+const rotuloValido = textoAte(LIMITES.rotulo);
+const ordemValida = textoAte(LIMITES.ordem);
+const valorDoRegistro = textoAte(LIMITES.registroValor);
 const etiquetasValidas = (x: unknown): boolean => listaDe(x, LIMITES.etiquetas, textoAte(LIMITES.etiquetaTexto));
 const origemValida = (x: unknown): boolean => opcional(x, (o) => objeto(o) && opcional(o.atividades, finito));
-const responsavelValido = (x: unknown): boolean => opcional(x, (r) => objeto(r) && nomeValido(r.nome) && opcional(r.login, texto));
+const responsavelValido = (x: unknown): boolean => opcional(x, (r) => objeto(r) && nomeValido(r.nome) && opcional(r.login, rotuloValido));
 const itemValido = (x: unknown): boolean =>
   objeto(x) && texto(x.id) && textoAte(LIMITES.checklistTexto)(x.texto) && typeof x.feito === "boolean";
 const progressoValido = (x: unknown): boolean => finito(x) && x >= 0 && x <= 100;
@@ -1322,33 +1349,36 @@ function documentoValido(d: unknown): boolean {
  * os referenciados em `projeto`, `fase`, `dependeDe` e `alvo`) casam com `RE_ID`; textos e listas
  * respeitam os limites da spec 5.4 (os do diálogo, para o item continuar editável); datas existem e
  * ficam de 2000 a 2100. Com `agora`, carimbo (`atualizadoEm`, `removidoEm`) mais de
- * `FOLGA_RELOGIO_MS` à frente é recusado. Texto do histórico (`antes`/`depois`) não tem teto.
+ * `FOLGA_RELOGIO_MS` à frente é recusado. O registro do histórico também tem teto (um colega não enche o
+ * armazenamento de todos nem empurra os registros de verdade para fora dos 300): `quando` de 2000-01-01 até o
+ * mesmo teto do carimbo, `antes`/`depois` até `LIMITES.registroValor`, `por`/`nome`/`campo` até `LIMITES.rotulo`;
+ * em todo tipo, `alteradoPor` e `dispositivo` até `LIMITES.rotulo`, e a `ordem` até `LIMITES.ordem`.
  */
 export function entidadeValida(x: unknown, tipo: keyof Entidades, agora?: number): boolean {
   if (!objeto(x)) return false;
   const o = x;
   const teto = agora === undefined ? Number.POSITIVE_INFINITY : agora + FOLGA_RELOGIO_MS;
   const carimbo = (n: unknown): boolean => finito(n) && n <= teto;
-  if (!idValido(o.id) || !carimbo(o.atualizadoEm) || !texto(o.dispositivo)) return false;
-  if (!opcional(o.removidoEm, carimbo) || !opcional(o.alteradoPor, texto)) return false;
+  if (!idValido(o.id) || !carimbo(o.atualizadoEm) || !rotuloValido(o.dispositivo)) return false;
+  if (!opcional(o.removidoEm, carimbo) || !opcional(o.alteradoPor, rotuloValido)) return false;
   switch (tipo) {
     case "p":
       return (
         nomeValido(o.nome) &&
         etiquetasValidas(o.etiquetas) &&
-        texto(o.ordem) &&
+        ordemValida(o.ordem) &&
         finito(o.criadoEm) &&
         opcional(o.arquivadoEm, finito) &&
         vinculoValido(o.processo) &&
         origemValida(o.origem)
       );
     case "f":
-      return idValido(o.projeto) && nomeValido(o.nome) && texto(o.ordem);
+      return idValido(o.projeto) && nomeValido(o.nome) && ordemValida(o.ordem);
     case "e":
       return (
         idValido(o.projeto) &&
         opcional(o.fase, idValido) &&
-        texto(o.ordem) &&
+        ordemValida(o.ordem) &&
         nomeValido(o.nome) &&
         datasValidas(o.inicio, o.fim, false) &&
         typeof o.marco === "boolean" &&
@@ -1370,12 +1400,13 @@ export function entidadeValida(x: unknown, tipo: keyof Entidades, agora?: number
       return (
         idValido(o.alvo) &&
         idValido(o.projeto) &&
-        finito(o.quando) &&
-        texto(o.por) &&
-        opcional(o.nome, texto) &&
-        texto(o.campo) &&
-        opcional(o.antes, texto) &&
-        opcional(o.depois, texto)
+        carimbo(o.quando) &&
+        (o.quando as number) >= QUANDO_MINIMO &&
+        rotuloValido(o.por) &&
+        opcional(o.nome, rotuloValido) &&
+        rotuloValido(o.campo) &&
+        opcional(o.antes, valorDoRegistro) &&
+        opcional(o.depois, valorDoRegistro)
       );
     case "m":
       return (

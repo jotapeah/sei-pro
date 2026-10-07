@@ -133,6 +133,19 @@ export function sigiloDoEnvelope(
   return { chaves, projetos: idsProjetos, etapas: idsEtapas, documentos, vinculo };
 }
 
+/**
+ * A etapa é sigilosa pela regra `s`: o processo próprio é sigiloso, ou ela não tem processo próprio e o do
+ * projeto é (marcado, o mesmo número marcado noutro lugar, ou conhecido pela memória). A mesma conta do envelope,
+ * das marcas, do CSV e da impressão.
+ */
+export function etapaSigilosa(
+  e: Pick<Etapa, "processo">,
+  projeto: Pick<Projeto, "processo"> | undefined,
+  s: Pick<SigiloDoEnvelope, "vinculo">,
+): boolean {
+  return e.processo ? s.vinculo(e.processo) : !!projeto && s.vinculo(projeto.processo);
+}
+
 /** O vínculo sigiloso no texto: sem o número e sem o `idProcedimento`. */
 export const VINCULO_VAZIO: Vinculo = { protocolo: "", sigiloso: true };
 
@@ -219,11 +232,11 @@ export function marcasDeSigilo(
     x.processo && !x.processo.sigiloso && s.vinculo(x.processo) ? { ...x, processo: marcarVinculo(x.processo) } : x,
   );
   // A etapa herda do projeto como ele fica aqui (uma versão velha de fora não decide).
-  const projetoSigiloso = new Set(p2.filter((x) => x.processo?.sigiloso).map((x) => x.id));
+  const projetos = new Map(p2.map((x) => [x.id, x]));
   const e2 = e1.map((x) => {
     let y = x.processo && !x.processo.sigiloso && s.vinculo(x.processo) ? { ...x, processo: marcarVinculo(x.processo) } : x;
-    const sigilosa = y.processo ? y.processo.sigiloso === true : projetoSigiloso.has(y.projeto);
-    if (sigilosa && y.documento && !y.documento.sigiloso) y = { ...y, documento: marcarDocumento(y.documento) };
+    if (etapaSigilosa(y, projetos.get(y.projeto), s) && y.documento && !y.documento.sigiloso)
+      y = { ...y, documento: marcarDocumento(y.documento) };
     return y;
   });
   // A chave vazia (o marcador, o número vazio sem a marca) não marca nada pelo número.

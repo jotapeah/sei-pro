@@ -12,7 +12,19 @@ export interface Relogio {
   agora: number;
 }
 
-export function novoRepo(escopo: Escopo = ESCOPO_UN, area: Area = areaMemoria(), prefixoId = "id", relogio: Relogio = { agora: 1_000 }) {
+/**
+ * Início do relógio de teste: 01/10/2026. O registro do histórico com `quando` antes de 2000 é recusado na
+ * importação (revisão final da P4, item 3): com o relógio em 1970 (1_000 ms), nenhum registro criado numa prova
+ * passaria para outro escopo ou outro computador.
+ */
+export const RELOGIO_INICIAL = Date.UTC(2026, 9, 1, 12);
+
+export function novoRepo(
+  escopo: Escopo = ESCOPO_UN,
+  area: Area = areaMemoria(),
+  prefixoId = "id",
+  relogio: Relogio = { agora: RELOGIO_INICIAL },
+) {
   let n = 0;
   const repo = new RepositorioProjetos(
     area,

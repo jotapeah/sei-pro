@@ -18,9 +18,12 @@
  *   ou em item de colega. Uma aprendida que uma gravação daqui marca vira local.
  * - Nada é despejado, nunca: um colega não consegue empurrar para fora um número sigiloso de verdade.
  *   As locais não têm teto. As aprendidas têm teto de `TETO_APRENDIDAS` (20000) por conjunto: com ele cheio,
- *   uma aprendida nova simplesmente não entra. O teto é aproximado: cada gravação conta as aprendidas que leu,
- *   sem trava entre elas, e duas gravações simultâneas de escopos diferentes (o `importar` do "Só eu" e o da
- *   unidade, cada um com a sua trava) podem passar dele: cada uma soma no máximo o que faltava quando leu,
+ *   uma aprendida nova simplesmente não entra. A cascata conta no teto como qualquer aprendida: marcar um
+ *   processo que tinha 40 documentos em lápides de um colega, com só 5 vagas, guarda 5 deles (a prova
+ *   "memoria do sigilo quase cheia"); os outros seguem raspados pela regra enquanto a marca estiver no estado.
+ *   O teto é aproximado: cada gravação conta as aprendidas que leu, sem trava entre elas, e duas gravações
+ *   simultâneas de escopos diferentes (o `importar` do "Só eu" e o da unidade, cada um com a sua trava) podem
+ *   passar dele: cada uma soma no máximo o que faltava quando leu,
  *   então o excesso é o que a outra somou no meio (nunca o dobro do teto). As entradas são chaves separadas:
  *   nenhuma apaga a outra, e a gravação seguinte, cheia, não soma mais nada.
  * - Custo do teto cheio: este computador não fica sabendo do sigilo de um número pelo colega. Enquanto a

@@ -2,7 +2,7 @@ import { areaMemoria } from "@comum/armazenamento/area";
 import { linhasDoProjeto } from "../src/gantt/linhas";
 import { LIMITES } from "../src/modelo/constantes";
 import { ErroValidacao } from "../src/modelo/validacao";
-import { ESCOPO_EU, novoRepo } from "./apoioRepositorio";
+import { ESCOPO_EU, novoRepo, RELOGIO_INICIAL } from "./apoioRepositorio";
 import { HOJE } from "./fabrica";
 import { checar, lanca, secao } from "./util";
 
@@ -314,7 +314,10 @@ export async function verificarRepositorio(): Promise<void> {
     const y = await r.criarEtapa({ projeto: pr.id, nome: "Y", inicio: "2026-10-13", fim: "2026-10-16" });
     const z = await r.criarEtapa({ projeto: pr.id, nome: "Z", inicio: "2026-10-13", fim: "2026-10-16" });
     await r.editarEtapa(x.id, { dependeDe: [y.id] }, HOJE);
-    await r.importar({ e: [{ ...(await r.obterEtapa(y.id))!, dependeDe: [x.id], atualizadoEm: 99_999, dispositivo: "dev-b" }] });
+    // Uma versão de outro computador, mais nova que a daqui (o relógio de teste começa em 2026).
+    await r.importar({
+      e: [{ ...(await r.obterEtapa(y.id))!, dependeDe: [x.id], atualizadoEm: RELOGIO_INICIAL + 99_999, dispositivo: "dev-b" }],
+    });
     const ren = await lanca(() => r.editarEtapa(z.id, { nome: "Z renomeada" }, HOJE));
     checar("renomear Z (sem relacao com o ciclo) passa", ren === null, mensagens(ren));
     const emX = await lanca(() => r.editarEtapa(x.id, { nome: "X2" }, HOJE));

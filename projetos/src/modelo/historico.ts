@@ -4,10 +4,13 @@
  * Processo sigiloso entra como "processo sigiloso": o registro vai para o
  * Texto Padrão da unidade e o número não pode ir junto. O documento que só
  * tem o marcador do texto (documento de processo sigiloso sem o número) entra
- * como "documento de processo sigiloso", nunca vazio.
+ * como "documento de processo sigiloso", nunca vazio. O registro nasce dentro
+ * dos tetos que a importação de um colega aceita (`entidadeValida`): cada lado
+ * até `LIMITES.registroValor`, quem gravou até `LIMITES.rotulo`.
  */
 
-import { documentoSemNumero, SIGILOSO_DOCUMENTO } from "./sigilo";
+import { LIMITES } from "./constantes";
+import { documentoSemNumero, SIGILOSO_DOCUMENTO, SIGILOSO_PROCESSO } from "./sigilo";
 import type { CampoHistorico, Carimbo, DocumentoSei, Etapa, Fase, Projeto, Registro, Vinculo } from "./tipos";
 import { chaveProtocolo } from "./vinculos";
 
@@ -26,11 +29,17 @@ export interface ApoioHistorico {
 
 export const SEM_APOIO: ApoioHistorico = { nomeDaFase: () => undefined, nomeDaEtapa: () => undefined };
 
-const SIGILOSO = "processo sigiloso";
+/** Corta com "…" sem partir um caractere em dois: o par de substitutos de um emoji fica inteiro ou sai. */
+export function cortarTexto(t: string, max: number): string {
+  if (t.length <= max) return t;
+  const c = t.charCodeAt(max - 2);
+  const fim = c >= 0xd800 && c <= 0xdbff ? max - 2 : max - 1;
+  return `${t.slice(0, fim)}…`;
+}
 
 export function textoDoVinculo(v: Vinculo | undefined): string | undefined {
   if (!v) return undefined;
-  return v.sigiloso ? SIGILOSO : v.protocolo || undefined;
+  return v.sigiloso ? SIGILOSO_PROCESSO : v.protocolo || undefined;
 }
 
 /** O número do documento; o marcador do texto vira o texto fixo; o número vazio sem a marca é "sem documento". */
@@ -52,7 +61,7 @@ export function textosDoVinculo(antes: Vinculo | undefined, depois: Vinculo | un
   const a = chaveDoVinculo(antes);
   const d = chaveDoVinculo(depois);
   if (a !== d && a && d) return textos;
-  return [antes ? SIGILOSO : undefined, depois ? SIGILOSO : undefined];
+  return [antes ? SIGILOSO_PROCESSO : undefined, depois ? SIGILOSO_PROCESSO : undefined];
 }
 
 function ciclo<T extends { removidoEm?: number }>(
@@ -133,18 +142,23 @@ export function registrosDeFase(antes: Fase | undefined, depois: Fase | undefine
   return saida;
 }
 
+/** Os registros novos com o carimbo e dentro dos tetos da importação (o lado longo e quem gravou, cortados). */
 export function carimbarRegistros(novos: readonly RegistroNovo[], c: Carimbo, novoId: () => string): Registro[] {
+  const lado = (t: string | undefined) => (t === undefined ? undefined : cortarTexto(t, LIMITES.registroValor));
+  const quem = (t: string) => cortarTexto(t, LIMITES.rotulo);
   return novos.map((r) => {
     const reg: Registro = {
       id: novoId(),
       ...r,
+      antes: lado(r.antes),
+      depois: lado(r.depois),
       quando: c.agora,
-      por: c.por ?? "",
+      por: quem(c.por ?? ""),
       atualizadoEm: c.agora,
       dispositivo: c.dispositivo,
     };
-    if (c.nome) reg.nome = c.nome;
-    if (c.por) reg.alteradoPor = c.por;
+    if (c.nome) reg.nome = quem(c.nome);
+    if (c.por) reg.alteradoPor = quem(c.por);
     if (reg.antes === undefined) delete reg.antes;
     if (reg.depois === undefined) delete reg.depois;
     return reg;
