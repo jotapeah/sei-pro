@@ -6,8 +6,10 @@
  */
 
 import { definirEmissorDeAviso } from "@comum/ui/aviso";
+import { abrirCamada } from "../src/app/componentes/camada";
 import { SEM_FASE } from "../src/modelo/constantes";
-import { escolherCombo, itemDoMenu, texto } from "./apoioApp";
+import type { MudancasEtapa } from "../src/repositorio";
+import { digitar, escolherCombo, itemDoMenu, rastrearFoco, tecla, telaDoApp, texto } from "./apoioApp";
 import { HOSTIL } from "./cenarioGantt";
 import { botao, checar, secao, tique } from "./util";
 import { abrirAba, balao, clicarLinha, etapasDoGantt, formProjeto, montar } from "./verificar-app";
@@ -128,4 +130,111 @@ export async function verificarAppRevisao(): Promise<void> {
     texto(fl.raiz.querySelector(".prj-lista")),
   );
   fl.app.destruir();
+
+  secao("app: camada (balao, popover) leva o foco para dentro e devolve a quem abriu");
+  const docC = telaDoApp();
+  rastrearFoco(docC);
+  const appC = docC.getElementById("app") as HTMLElement;
+  const abre = docC.createElement("button");
+  const outro = docC.createElement("input");
+  appC.append(abre, outro);
+  const conteudoC = () => {
+    const d = docC.createElement("div");
+    const p1 = docC.createElement("button");
+    p1.textContent = "Primeiro";
+    const p2 = docC.createElement("button");
+    p2.textContent = "Segundo";
+    d.append(docC.createElement("span"), p1, p2);
+    return { d, p1, p2 };
+  };
+  abre.focus();
+  const c1 = conteudoC();
+  const cam1 = abrirCamada(abre, c1.d, { classe: "prj-balao" });
+  checar("ao abrir, o foco vai para o primeiro controle da camada", docC.activeElement === c1.p1);
+  tecla(c1.p2, "Escape");
+  checar("ao fechar (Esc), o foco volta para quem abriu", !cam1.el.isConnected && docC.activeElement === abre);
+  const c2 = conteudoC();
+  const cam2 = abrirCamada(abre, c2.d, { classe: "prj-balao" });
+  outro.focus();
+  cam2.fechar();
+  checar("o foco ja tinha saido da camada (clique em outro campo): fechar nao o puxa de volta", docC.activeElement === outro);
+  const c3 = conteudoC();
+  const cam3 = abrirCamada(abre, c3.d, { classe: "prj-balao", foco: (el) => el.querySelectorAll<HTMLElement>("button")[1] ?? null });
+  checar("o foco pedido (reabrir no mesmo controle)", docC.activeElement === c3.p2);
+  cam3.fechar();
+  const fo = await montar();
+  rastrearFoco(fo.doc);
+  abrirAba(fo, fo.ids.p);
+  await tique();
+  const linhaA = fo.raiz.querySelector<HTMLElement>(`.prj-lin[data-id='${fo.ids.a}']`);
+  linhaA?.focus();
+  clicarLinha(fo, fo.ids.a);
+  checar(
+    "balao da etapa: o foco entra nele",
+    !!balao(fo) && !!fo.doc.activeElement && (balao(fo)?.contains(fo.doc.activeElement) ?? false),
+    fo.doc.activeElement?.outerHTML,
+  );
+  tecla(balao(fo) ?? fo.doc.body, "Escape");
+  checar("Esc fecha e o foco volta para a linha da etapa", !balao(fo) && fo.doc.activeElement === linhaA);
+  fo.raiz.querySelector<HTMLButtonElement>(".prj-filtro")?.click();
+  checar(
+    "popover do filtro: o foco vai para o primeiro chip",
+    texto(fo.doc.activeElement).startsWith("Atrasadas") && !!fo.doc.querySelector(".prj-filtro-pop")?.contains(fo.doc.activeElement),
+  );
+  tecla(fo.doc.body, "Escape");
+  checar("e volta para o botao Filtro", fo.doc.activeElement === fo.raiz.querySelector(".prj-filtro"));
+  fo.app.destruir();
+
+  secao("app: regua do progresso grava quando o usuario para, e o balao fica aberto");
+  const rg = await montar();
+  rastrearFoco(rg.doc);
+  const gravados: number[] = [];
+  const editarEtapa = rg.un.editarEtapa.bind(rg.un);
+  rg.un.editarEtapa = (id: string, m: MudancasEtapa, hoje: string) => {
+    if (m.progresso !== undefined) gravados.push(m.progresso);
+    return editarEtapa(id, m, hoje);
+  };
+  abrirAba(rg, rg.ids.p);
+  await tique();
+  clicarLinha(rg, rg.ids.b);
+  const regua = () => balao(rg)?.querySelector<HTMLInputElement>("input[type='range']") ?? null;
+  checar("balao com a regua (medida manual)", !!regua());
+  regua()?.focus();
+  for (const v of ["5", "10", "15"]) digitar(regua(), v);
+  checar(
+    "cada seta do teclado (um change cada) ainda nao grava; o valor aparece",
+    gravados.length === 0 && texto(balao(rg)?.querySelector(".prj-balao-prog b")) === "15%",
+    gravados,
+  );
+  await tique(700);
+  checar("depois de parar, grava uma vez so, com o ultimo valor", gravados.join() === "15", gravados);
+  await tique(100);
+  checar(
+    "o redesenho da gravacao nao fecha o balao: reabre na mesma etapa, com o valor gravado",
+    texto(balao(rg)?.querySelector("h3")) === "Análise" && regua()?.value === "15" && (await rg.un.obterEtapa(rg.ids.b))?.progresso === 15,
+    { h3: texto(balao(rg)?.querySelector("h3")), v: regua()?.value },
+  );
+  checar("e o foco continua na regua (teclado)", !!regua() && rg.doc.activeElement === regua());
+  digitar(regua(), "20");
+  tecla(balao(rg) ?? rg.doc.body, "Escape");
+  checar("fechar o balao grava na hora o que ficou pendente", gravados.join() === "15,20" && !balao(rg), gravados);
+  await tique(800);
+  checar("e nada grava de novo depois", gravados.join() === "15,20", gravados);
+  await tique(100);
+  checar("Esc fechou: o redesenho nao reabre", !balao(rg));
+  clicarLinha(rg, rg.ids.b);
+  botao(balao(rg) ?? rg.doc.createElement("div"), "Concluir etapa")?.click();
+  await tique(100);
+  checar("acao do balao (concluir) fecha e o redesenho nao reabre", !balao(rg) && !!(await rg.un.obterEtapa(rg.ids.b))?.concluidaEm);
+  clicarLinha(rg, rg.ids.a);
+  await rg.un.editarEtapa(rg.ids.a, { nome: "Nota técnica revista" }, "2026-10-06");
+  await tique(100);
+  checar(
+    "gravacao de outro lugar com o balao aberto: reabre com o dado novo",
+    texto(balao(rg)?.querySelector("h3")) === "Nota técnica revista",
+  );
+  await rg.un.removerEtapa(rg.ids.a);
+  await tique(100);
+  checar("etapa excluida em outro lugar: o balao fecha", !balao(rg));
+  rg.app.destruir();
 }

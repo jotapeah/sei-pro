@@ -29,9 +29,9 @@ import { ErroValidacao } from "../modelo/validacao";
 import type { ContextoProjetos, DocumentoConferido, ProcessoDaCaixa, TipoAlerta, UsuarioDaUnidade } from "../ponte/tipos";
 import { type MudancasEtapa, moverEntreEscopos, type RepositorioProjetos } from "../repositorio";
 import { indicadorDeSincronia, limiteDeAbas, montarAbas } from "./componentes/abas";
-import { abrirBalaoEtapa } from "./componentes/balaoEtapa";
+import { abrirBalaoEtapa, type OpcoesBalao } from "./componentes/balaoEtapa";
 import { montarCabecalho } from "./componentes/cabecalho";
-import type { Camada } from "./componentes/camada";
+import { type Camada, controlesDe } from "./componentes/camada";
 import { type BotaoFiltro, criarBotaoFiltro, projetoNoFiltro } from "./componentes/filtro";
 import { criarMenuAjustes, type ExtensoesMenu } from "./componentes/menuAjustes";
 import { montarTabelaEtapas } from "./componentes/tabelaEtapas";
@@ -143,6 +143,8 @@ export class AppProjetos {
   private limiteAbas = 0;
   private filtro: BotaoFiltro | null = null;
   private balao: Camada | null = null;
+  /** De quem é o balão aberto: o redesenho (gravação, virada do dia) reabre o balão dessa etapa no lugar novo. */
+  private balaoDe: { projeto: string; etapa: string } | null = null;
   /** A Frappe falhou: a Lista fica até o usuário escolher "Gantt" de novo (spec 9). */
   private semGantt = false;
   private focarNova = false;
@@ -329,6 +331,7 @@ export class AppProjetos {
 
   private render(): void {
     if (this.destruido) return;
+    const reabrir = this.balaoParaReabrir();
     this.balao?.fechar();
     if (!this.dados.ativos.length) {
       const sinc = (this.d.sincronia ?? SEM_SINCRONIA).estado();
@@ -384,6 +387,32 @@ export class AppProjetos {
     );
     this.pintarCorpo();
     this.depoisDeDesenhar();
+    if (reabrir) this.reabrirBalao(reabrir);
+  }
+
+  /** O balão aberto agora (etapa e o controle com o foco, pela posição), para reabrir depois do redesenho. */
+  private balaoParaReabrir(): { projeto: string; etapa: string; foco: number } | null {
+    if (!this.balao || !this.balaoDe) return null;
+    const ativo = this.balao.el.ownerDocument.activeElement;
+    return { ...this.balaoDe, foco: ativo ? controlesDe(this.balao.el).indexOf(ativo as HTMLElement) : -1 };
+  }
+
+  /**
+   * O redesenho trocou as linhas (a âncora saiu da tela). Se a etapa ainda está no projeto aberto e
+   * na tela, o balão reabre nela, com o dado novo; o foco volta ao mesmo controle (a régua, pelo
+   * teclado) e, se estava fora do balão, fica onde está.
+   */
+  private reabrirBalao(r: { projeto: string; etapa: string; foco: number }): void {
+    const p = this.projetoAberto();
+    if (!p || p.projeto.id !== r.projeto || !p.etapas.some((e) => e.id === r.etapa)) return;
+    const alvo = this.alvoDaEtapa(r.etapa);
+    if (alvo) this.abrirBalao(r.projeto, r.etapa, alvo, (el) => (r.foco >= 0 ? (controlesDe(el)[r.foco] ?? null) : null));
+  }
+
+  /** A linha da lista (ou da tabela) da etapa; sem a lista, a barra do Gantt. */
+  private alvoDaEtapa(id: string): Element | undefined {
+    const comId = [...this.corpo.querySelectorAll("[data-id]")].filter((el) => el.getAttribute("data-id") === id);
+    return comId.find((el) => !el.classList.contains("bar-wrapper")) ?? comId[0];
   }
 
   private depoisDeDesenhar(): void {
@@ -575,12 +604,8 @@ export class AppProjetos {
     const fase = e?.fase;
     if (fase && this.prefs.recolhidas.includes(fase)) this.mudarPrefs((x) => ({ recolhidas: comItem(x.recolhidas, fase, false) }));
     this.escolher(id);
-    if (e) {
-      // A linha da lista (ou da tabela); sem a lista, a barra; sem nada medido, o próprio corpo.
-      const comId = [...this.corpo.querySelectorAll("[data-id]")].filter((el) => el.getAttribute("data-id") === e.id);
-      const alvo = comId.find((el) => !el.classList.contains("bar-wrapper")) ?? comId[0] ?? this.corpo;
-      this.abrirBalao(id, e.id, alvo);
-    }
+    // A linha da lista (ou da tabela); sem a lista, a barra; sem nada medido, o próprio corpo.
+    if (e) this.abrirBalao(id, e.id, this.alvoDaEtapa(e.id) ?? this.corpo);
     return true;
   }
 
@@ -756,7 +781,7 @@ export class AppProjetos {
     }
   }
 
-  private abrirBalao(projetoId: string, etapaId: string, ancora: Element): void {
+  private abrirBalao(projetoId: string, etapaId: string, ancora: Element, foco?: OpcoesBalao["foco"]): void {
     const p = this.projeto(projetoId);
     const e = p?.etapas.find((x) => x.id === etapaId);
     if (!p || !e) return;
@@ -765,7 +790,7 @@ export class AppProjetos {
     const tentar = (f: () => Promise<unknown>) => void f().catch((erro) => avisar(mensagem(erro)));
     const naTela = new Set(p.etapas.map((x) => x.id));
     this.balao?.fechar();
-    this.balao = abrirBalaoEtapa(
+    const camada: Camada = abrirBalaoEtapa(
       ancora,
       { etapa: e, projeto: p, hoje },
       {
@@ -808,9 +833,14 @@ export class AppProjetos {
         aoExcluir: () => tentar(() => this.excluirEtapa(p, e)),
       },
       () => {
+        if (this.balao !== camada) return;
         this.balao = null;
+        this.balaoDe = null;
       },
+      { foco },
     );
+    this.balao = camada;
+    this.balaoDe = { projeto: projetoId, etapa: etapaId };
   }
 
   /**

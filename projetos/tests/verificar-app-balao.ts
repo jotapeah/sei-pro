@@ -75,11 +75,22 @@ export function verificarAppBalao(): void {
   checar("abrir documento e processo", feitos.join() === "doc:1240001,proc:50300.001234/2026-11");
   const regua = el.querySelector<HTMLInputElement>("input[type='range']");
   checar("regua de progresso so com medida manual", !!regua && regua.value === "0");
+  digitar(regua, "55");
   digitar(regua, "60");
-  checar("a regua grava no change", feitos.at(-1) === "progresso:60" && texto(el.querySelector(".prj-balao-prog b")) === "60%");
+  checar(
+    "a regua mostra o valor e ainda nao grava (cada seta e um change)",
+    !feitos.some((f) => f.startsWith("progresso")) && texto(el.querySelector(".prj-balao-prog b")) === "60%",
+    feitos,
+  );
   const abrir = () => abrirBalaoEtapa(ancora, { etapa: e, projeto: p, hoje: HOJE }, acoes).el;
   botao(el, "Concluir etapa")!.click();
-  checar("toda acao fecha o balao", feitos.at(-1) === "concluir" && !doc.querySelector(".prj-balao"));
+  checar(
+    "toda acao fecha o balao; o progresso pendente grava antes, uma vez, com o ultimo valor",
+    feitos.slice(-2).join() === "progresso:60,concluir" &&
+      feitos.filter((f) => f.startsWith("progresso")).length === 1 &&
+      !doc.querySelector(".prj-balao"),
+    feitos,
+  );
   botao(abrir(), "Editar")!.click();
   checar("editar", feitos.at(-1) === "editar");
   const menu = itensDoMenu(abrir(), "Mais ações da etapa");

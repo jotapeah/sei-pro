@@ -30,6 +30,21 @@ export function telaDoApp(html = '<html><body><div id="app"></div></body></html>
   return doc;
 }
 
+/**
+ * O linkedom não acompanha o foco: aqui `focus()` passa a marcar o `activeElement` do documento,
+ * que volta a ser o `body` quando o elemento focado sai da página (como no navegador).
+ */
+export function rastrearFoco(doc: Document): void {
+  let proto = Object.getPrototypeOf(doc.createElement("button")) as Proto | null;
+  while (proto && !Object.hasOwn(proto, "focus")) proto = Object.getPrototypeOf(proto) as Proto | null;
+  if (!proto) throw new Error("sem focus() no linkedom");
+  let ativo: HTMLElement | null = null;
+  proto.focus = function (this: HTMLElement) {
+    ativo = this;
+  };
+  Object.defineProperty(doc, "activeElement", { configurable: true, get: () => (ativo?.isConnected ? ativo : doc.body) });
+}
+
 /** Tecla do linkedom (o KeyboardEvent do Node não serve aos elementos dele). */
 export function tecla(el: Element, key: string): void {
   const Ev = (el.ownerDocument.defaultView as unknown as { Event: typeof Event }).Event;
