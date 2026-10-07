@@ -52,6 +52,12 @@ export const SEM_FASE = "__sem__";
 export const PREFIXO = "projetos/";
 export const CHAVE_PREFERENCIAS = "projetos/preferencias";
 export const CHAVE_CONTADOR_PAINEL = "projetos/contadorPainel";
+/**
+ * O maior contador da aba "Projetos" do painel lateral: 2 escopos (Só eu e Toda a unidade) x 100 projetos ativos x
+ * 300 etapas (`LIMITES`). É o teto do selo no shell (`TETO_CONTADOR_PROJETOS` em favoritos/src/shell/painel.ts):
+ * acima dele a aba fica sem número. Literal, como lá (a prova confere a conta e o do shell).
+ */
+export const TETO_CONTADOR_PAINEL = 60000;
 export const CHAVE_LATERAL = "projetos/lateralAberto";
 export const chaveSyncTexto = (chaveDoEscopo: string): string => `projetos/sync/tp/${chaveDoEscopo}`;
 export const chaveSyncArquivo = (host: string, login: string): string => `projetos/sync/arquivo/${host}|${login.trim().toLowerCase()}`;

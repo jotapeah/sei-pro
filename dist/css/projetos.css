@@ -3175,6 +3175,19 @@ html[data-modo="lateral"] #app {
   background: var(--spro-destaque);
 }
 
+/* Lateral sem aba do SEI (ou sem unidade): o aviso no meio do painel. */
+.prj-lat-sem-aba {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  margin: 40px 16px;
+  color: var(--spro-suave);
+  text-align: center;
+}
+.prj-lat-sem-aba p {
+  margin: 0;
+}
+
 /*
  * Frappe Gantt 1.2.2 (MIT, https://github.com/frappe/gantt): dist/frappe-gantt.css do pacote npm,
  * formatado pelo esbuild. Ajustes do SEI Pro (tokens --spro-*, situacoes, marco, base) no fim.

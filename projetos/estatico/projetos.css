@@ -1495,3 +1495,16 @@ html[data-modo="lateral"] #app {
   width: 1px;
   background: var(--spro-destaque);
 }
+
+/* Lateral sem aba do SEI (ou sem unidade): o aviso no meio do painel. */
+.prj-lat-sem-aba {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  margin: 40px 16px;
+  color: var(--spro-suave);
+  text-align: center;
+}
+.prj-lat-sem-aba p {
+  margin: 0;
+}

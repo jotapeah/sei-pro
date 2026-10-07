@@ -73,7 +73,15 @@ export async function ligarApp(d: DepsLigacao): Promise<AppLigado> {
   });
   app = criado;
   await colab.iniciar().catch((e: unknown) => console.warn("[SEI Pro] projetos: a colaboração não iniciou:", e));
-  await criado.iniciar();
+  try {
+    await criado.iniciar();
+  } catch (e) {
+    // O app não abriu: a colaboração não fica ligada (ouvintes, arquivo ligado) sem ninguém que a desligue. No
+    // lateral, a montagem seguinte (outra unidade) teria dois arquivos ligados sincronizando o mesmo arquivo.
+    criado.destruir();
+    colab.destruir();
+    throw e;
+  }
   const aoFocar = () => colab.aoGanharFoco();
   d.janela?.addEventListener("focus", aoFocar);
   return {

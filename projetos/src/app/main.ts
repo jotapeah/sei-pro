@@ -7,28 +7,37 @@
  *   diálogos, cópias diárias e o arquivo ligado onde o navegador deixa);
  * - impressao: página só leitura, aberta pelo menu "Imprimir / salvar PDF"
  *   (o endereço é validado em `lerImpressao`: qualquer um pode abri-lo);
- * - lateral: aba "Projetos" do painel lateral (P5).
+ * - lateral: aba "Projetos" do painel lateral, ligada à aba do SEI da frente nesta
+ *   janela pela unidade (host|login|unidade): remonta ao trocar de unidade
+ *   (`lateral/montagem.ts`) com o mesmo `ligarApp` (`lateral/criar.ts`). Segue o
+ *   tema do sistema, como os Favoritos, e não imprime.
  */
 
 import { areaChrome } from "@comum/armazenamento/area";
 import { idDispositivo } from "@comum/armazenamento/dispositivo";
 import { hojeISO } from "@comum/datas/dias";
+import { novoId } from "@comum/id";
+import { lerOpcaoLegada } from "@comum/opcoes/legadas";
 import { observarAltura } from "@comum/painel/altura";
 import { emissorDeAvisoPelaPagina } from "@comum/painel/aviso";
 import { sobreposicaoNoApp } from "@comum/painel/sobreposicao";
 import { esperarConexaoDaAba } from "@comum/ponte/conexaoDaAba";
-import type { Rpc } from "@comum/ponte/rpc";
+import { PonteLateral } from "@comum/ponte/lateral";
+import type { PortaRpc, Rpc } from "@comum/ponte/rpc";
 import { temSeletorDeArquivo } from "@comum/sincronia/arquivo";
 import { definirEmissorDeAviso } from "@comum/ui/aviso";
 import { baixar, criarAbrirModal, criarConfirmar } from "@comum/ui/dialogo";
 import { h } from "@comum/ui/dom";
 import { definirJanelaQueCresce } from "@comum/ui/flutuante";
+import { CHAVE_LATERAL } from "../modelo/constantes";
 import { escoposDaUnidade } from "../modelo/escopo";
-import { CANAL_PROJETOS, type ContextoProjetos } from "../ponte/tipos";
+import { CANAL_LATERAL, CANAL_PROJETOS, type ContextoProjetos } from "../ponte/tipos";
 import { RepositorioProjetos } from "../repositorio";
 import { controleArquivo, copiasDosProjetos } from "../sincronia/arquivo";
 import { escolherArquivoLocal } from "./colaboracao/colaboracao";
 import { hashDaImpressao, lerImpressao, montarImpressao } from "./impressao";
+import { criarAppDoLateral } from "./lateral/criar";
+import { MontagemLateral } from "./lateral/montagem";
 import { ligarApp } from "./ligacao";
 import { pedidosDaAba } from "./pedidos";
 
@@ -47,6 +56,7 @@ const erro = (texto: string) => raiz.replaceChildren(h("p", { class: "prj-erro" 
 const mostrarErro = (e: unknown) => erro(`Não foi possível abrir os projetos: ${e instanceof Error ? e.message : String(e)}`);
 
 if (modo === "impressao") void iniciarImpressao().catch(mostrarErro);
+else if (modo === "lateral") void iniciarLateral().catch(mostrarErro);
 else if (conexao) void iniciarEmbutido(conexao).catch(mostrarErro);
 else erro("Este modo do painel ainda não está disponível.");
 
@@ -104,6 +114,64 @@ async function iniciarEmbutido(conectar: Promise<Rpc>): Promise<void> {
     clearTimeout(espera);
     espera = setTimeout(() => app.aoRedimensionar(), 200);
   });
+}
+
+async function iniciarLateral(): Promise<void> {
+  // Painel lateral: claro ou escuro conforme o sistema (prefers-color-scheme), sem o `data-tema` do SEI.
+  // Como o content script: a opção antiga "Gerenciar Projetos" desligada, nada de projetos (nem anúncio às abas).
+  if (!(await lerOpcaoLegada("gerenciarprojetos"))) {
+    erro("Os projetos estão desligados nas opções do SEI Pro (Gerenciar Projetos).");
+    return;
+  }
+  const area = areaChrome(chrome.storage.local, "local");
+  const dispositivo = await idDispositivo(area);
+  let janela = -1;
+  try {
+    janela = (await chrome.windows.getCurrent()).id ?? -1;
+  } catch {
+    /* sidebar do Firefox: sem API de janelas, aceita qualquer aba */
+  }
+  const ponte = new PonteLateral({
+    area,
+    chave: CHAVE_LATERAL,
+    janela,
+    novoId: () => novoId(),
+    ouvirConexoes: (cb) =>
+      chrome.runtime.onConnect.addListener((porta) => {
+        // As portas de outros canais (o painel embutido, os Favoritos, o agente) não são deste painel.
+        if (porta.name === CANAL_LATERAL) cb(porta as unknown as PortaRpc, porta.sender ?? {});
+      }),
+  });
+  const montagem = new MontagemLateral({
+    raiz,
+    ponte,
+    area,
+    agora: () => Date.now(),
+    criar: criarAppDoLateral({
+      raiz,
+      area,
+      sync: areaChrome(chrome.storage.sync, "sync"),
+      abrirModal: criarAbrirModal(),
+      baixar,
+      // O próprio arquivo (o tamanho é conferido antes de ler o texto).
+      escolherArquivo: () => escolherArquivoLocal(),
+      hoje: () => hojeISO(),
+      agora: () => Date.now(),
+      dispositivo,
+      copias: typeof indexedDB === "undefined" ? null : copiasDosProjetos(),
+      // No lateral o seletor de arquivo funciona (no iframe do painel embutido o Chrome pode recusar).
+      arquivo: (ctx, carimbo) =>
+        temSeletorDeArquivo(window) ? controleArquivo(area, { host: ctx.host, login: ctx.login }, carimbo) : null,
+    }),
+  });
+  montagem.iniciar();
+  await ponte.iniciar();
+  addEventListener("pagehide", () => void ponte.encerrar());
+  // O arquivo ligado pode ter sido mudado por outro computador enquanto o painel estava escondido.
+  addEventListener("focus", () => montagem.aoGanharFoco());
+  document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && montagem.aoGanharFoco());
+  // As abas que já estão abertas conectam ao ver o anúncio; se nenhuma vier, avisa.
+  setTimeout(() => void montagem.reagir(), 1500);
 }
 
 async function iniciarImpressao(): Promise<void> {
