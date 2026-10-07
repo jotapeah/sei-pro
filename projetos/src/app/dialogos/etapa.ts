@@ -20,7 +20,7 @@ import { documentoSemNumero, vinculoSemNumero } from "../../modelo/sigilo";
 import type { DataISO, DocumentoSei, Etapa, ItemChecklist, Medida, Registro, Responsavel, Vinculo } from "../../modelo/tipos";
 import type { DocumentoConferido, ProcessoDaCaixa, UsuarioDaUnidade } from "../../ponte/tipos";
 import type { ProjetoNaTela } from "../dados";
-import { dataCurta, dataDeFormulario, resumoDoUltimoRegistro, textoDiasUteis, textoDoRegistro } from "../formato";
+import { dataCurta, dataDeFormulario, quemDoRegistro, resumoDoUltimoRegistro, textoDiasUteis, textoDoRegistro } from "../formato";
 import { iconeProjetos } from "../icones";
 import {
   caixaDeErros,
@@ -413,7 +413,7 @@ export function abrirDialogoEtapa(c: ContextoDialogoEtapa): { fechar(): void } {
                 h(
                   "div",
                   {},
-                  h("b", {}, r.nome || r.por || "Alguém"),
+                  h("b", {}, quemDoRegistro(r)),
                   ` · ${dataCurta(hojeISO(new Date(r.quando)))} · ${textoDoRegistro(r, "etapa")}`,
                 ),
               )

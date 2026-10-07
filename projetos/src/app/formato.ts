@@ -1,6 +1,13 @@
-/** Textos curtos do painel: datas, plurais e as linhas do histórico de alterações. */
+/**
+ * Textos curtos do painel: datas, plurais e as linhas do histórico de alterações.
+ *
+ * O registro do histórico não tem teto de tamanho no texto da unidade (repositorio.ts, `entidadeValida`):
+ * o campo, os valores e o nome de quem mudou são cortados aqui, num lugar só, para o diálogo "Histórico de
+ * alterações" e para a seção Histórico do diálogo da etapa.
+ */
 
 import { type DataISO, deISO, diferencaDias, formatarData, hojeISO } from "@comum/datas/dias";
+import { SIGILOSO_DOCUMENTO, SIGILOSO_PROCESSO } from "../modelo/sigilo";
 import type { CampoHistorico, Registro } from "../modelo/tipos";
 
 export { formatarData as dataLonga };
@@ -46,27 +53,52 @@ const COM_ARTIGO: Partial<Record<CampoHistorico, string>> = {
   visibilidade: "quem vê",
 };
 
+const MAX_CAMPO = 60;
+const MAX_VALOR = 200;
+const MAX_QUEM = 100;
+
+/** Corta com "…" sem partir um caractere em dois: o par de substitutos de um emoji fica inteiro ou sai. */
+function cortar(t: string, max: number): string {
+  if (t.length <= max) return t;
+  const c = t.charCodeAt(max - 1);
+  const fim = c >= 0xd800 && c <= 0xdbff ? max - 1 : max;
+  return `${t.slice(0, fim)}…`;
+}
+
 /**
  * O rótulo do campo, só das chaves da própria tabela: o campo vem do texto da unidade (versão mais nova ou
- * editado à mão) e "constructor" ou "toString" achariam a função do objeto ("function Object() …").
+ * editado à mão) e "constructor" ou "toString" achariam a função do objeto ("function Object() …"). O campo
+ * que esta versão não conhece aparece pelo nome, cortado.
  */
 const rotuloDe = (tabela: Partial<Record<CampoHistorico, string>>, campo: CampoHistorico): string =>
-  (Object.hasOwn(tabela, campo) ? tabela[campo] : undefined) ?? campo;
+  (Object.hasOwn(tabela, campo) ? tabela[campo] : undefined) ?? cortar(String(campo), MAX_CAMPO);
+
+/** O texto de sigilo de cada campo (modelo/sigilo.ts): o número que não vai ao texto da unidade. */
+const SIGILO: Partial<Record<CampoHistorico, string>> = { processo: SIGILOSO_PROCESSO, documento: SIGILOSO_DOCUMENTO };
+
+/** O valor é o texto de sigilo do PRÓPRIO campo (uma etapa chamada "processo sigiloso" continua com o nome). */
+const ehSigilo = (campo: CampoHistorico, v: string | undefined): boolean =>
+  v !== undefined && Object.hasOwn(SIGILO, campo) && SIGILO[campo] === v;
 
 const ehData = (s: string | undefined): boolean => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
 
 function valor(campo: CampoHistorico, v: string | undefined): string {
   if (v === undefined || v === "") return "—";
+  if (ehSigilo(campo, v)) return "sigiloso";
   if (ehData(v)) return dataCurta(v);
-  if (campo === "progresso") return `${v}%`;
+  if (campo === "progresso") return `${cortar(v, MAX_VALOR)}%`;
   if (campo === "base") {
     const [a = "", b = ""] = v.split("/");
-    return ehData(a) && ehData(b) ? `${dataCurta(a)} a ${dataCurta(b)}` : v;
+    if (ehData(a) && ehData(b)) return `${dataCurta(a)} a ${dataCurta(b)}`;
   }
-  return v;
+  return cortar(v, MAX_VALOR);
 }
 
-/** "término 25/09 → 02/10" (tela 2). `tipo` muda só a criação ("criou a etapa"). */
+/**
+ * "término 25/09 → 02/10" (tela 2). `tipo` muda só a criação ("criou a etapa"). O texto de sigilo aparece
+ * como "sigiloso" ("processo 50300.000001/2026-11 → sigiloso"); com os dois lados sigilosos, "trocou o
+ * processo sigiloso".
+ */
 export function textoDoRegistro(r: Pick<Registro, "campo" | "antes" | "depois">, tipo?: "etapa" | "projeto" | "fase"): string {
   switch (r.campo) {
     case "criacao":
@@ -82,6 +114,7 @@ export function textoDoRegistro(r: Pick<Registro, "campo" | "antes" | "depois">,
     case "visibilidade":
       return `quem vê: ${valor(r.campo, r.antes)} → ${valor(r.campo, r.depois)}`;
     default:
+      if (ehSigilo(r.campo, r.antes) && ehSigilo(r.campo, r.depois)) return `trocou ${rotuloDe(COM_ARTIGO, r.campo)} sigiloso`;
       return `${rotuloDe(ROTULO, r.campo)} ${valor(r.campo, r.antes)} → ${valor(r.campo, r.depois)}`;
   }
 }
@@ -95,9 +128,12 @@ export function quandoRelativo(ms: number, agora: number): string {
   return `em ${formatarData(hojeISO(new Date(ms)))}`;
 }
 
+/** Quem mudou: o nome lido do SEI, o login ou "Alguém" (cortado: o nome vem do texto da unidade). */
+export const quemDoRegistro = (r: Pick<Registro, "nome" | "por">): string => cortar(r.nome || r.por || "Alguém", MAX_QUEM);
+
 /** Resumo da seção Histórico do diálogo da etapa: "Carla Dias alterou o término há 2 dias". */
 export function resumoDoUltimoRegistro(r: Registro, agora: number): string {
-  const quem = r.nome || r.por || "Alguém";
+  const quem = quemDoRegistro(r);
   let feito: string;
   if (r.campo === "criacao") feito = "criou a etapa";
   else if (r.campo === "conclusao") feito = r.depois ? "concluiu" : "reabriu";

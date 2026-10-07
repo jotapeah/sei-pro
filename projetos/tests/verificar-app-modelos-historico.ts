@@ -8,7 +8,7 @@ import type { AbrirModal } from "@comum/ui/dialogo";
 import type { ModeloNaTela } from "../src/app/dados";
 import { abrirHistorico, linhaDoRegistro, type NomesDoHistorico, type RegistroNaTela } from "../src/app/dialogos/historico";
 import { abrirModelos, type ContextoModelos } from "../src/app/dialogos/modelos";
-import { resumoDoUltimoRegistro } from "../src/app/formato";
+import { quemDoRegistro, resumoDoUltimoRegistro, textoDoRegistro } from "../src/app/formato";
 import { SIGILOSO_DOCUMENTO, SIGILOSO_PROCESSO } from "../src/modelo/sigilo";
 import { ErroValidacao } from "../src/modelo/validacao";
 import { MODELOS_EMBUTIDOS } from "../src/modelos/embutidos";
@@ -31,6 +31,18 @@ function modais(doc: Document) {
     };
   };
   return { abrirModal, abertos };
+}
+
+/** Nenhum meio caractere: todo substituto alto seguido de um baixo, e todo baixo depois de um alto. */
+function semMeioCaractere(t: string): boolean {
+  for (let i = 0; i < t.length; i++) {
+    const c = t.charCodeAt(i);
+    const alto = (x: number) => x >= 0xd800 && x <= 0xdbff;
+    const baixo = (x: number) => x >= 0xdc00 && x <= 0xdfff;
+    if (alto(c) && !baixo(t.charCodeAt(i + 1))) return false;
+    if (baixo(c) && !alto(t.charCodeAt(i - 1))) return false;
+  }
+  return true;
 }
 
 /** Tecla que devolve se alguém impediu o padrão (Esc no campo não pode fechar o diálogo). */
@@ -115,6 +127,15 @@ async function provarModelos(): Promise<void> {
   const linhas = [...dlg().querySelectorAll(".prj-modelo")];
   checar("os 3 embutidos e os salvos", linhas.length === 5, linhas.length);
   checar("titulo do dialogo", m.abertos.at(-1)!.titulo === "Modelos de projeto");
+  checar(
+    "Criar projeto das linhas nao e primario (como no Arquivados)",
+    linhas.every((l) => !botao(l, "Criar projeto")?.classList.contains("primario")),
+  );
+  const filhos = [...dlg().children];
+  checar(
+    "os erros ficam acima da lista (como no Historico)",
+    filhos.indexOf(dlg().querySelector(".prj-erros")!) < filhos.indexOf(dlg().querySelector(".prj-modelos")!),
+  );
   const embutido = linhas[0]!;
   checar(
     "embutido: so Criar projeto (nao renomeia nem exclui)",
@@ -314,6 +335,20 @@ async function provarHistorico(): Promise<void> {
   await abrirHistorico({ abrirModal: m.abrirModal, projetos: [], registros: async () => [], nomes });
   checar("vazio explica", /Nenhuma alteração registrada/.test(texto(h())));
 
+  // Carimbo finito mas fora do alcance de Date (só por texto forjado): sem "NaN".
+  await abrirHistorico({
+    abrirModal: m.abrirModal,
+    projetos,
+    registros: async () => [reg({ id: "q1", quando: 9e15 }), reg({ id: "q2" })],
+    nomes,
+  });
+  const diasQ = [...h().querySelectorAll(".prj-historico-dia h3")].map((x) => texto(x));
+  checar(
+    "quando invalido: 'data desconhecida', sem NaN",
+    diasQ.includes("data desconhecida") && diasQ.includes("06/10/2026") && !texto(h()).includes("NaN"),
+    [diasQ, texto(h())],
+  );
+
   // Os textos de sigilo (o processo e o documento que não vão ao texto da unidade) aparecem como texto.
   await abrirHistorico({
     abrirModal: m.abrirModal,
@@ -322,16 +357,29 @@ async function provarHistorico(): Promise<void> {
       reg({ id: "s1", campo: "processo", antes: "50300.000001/2026-11", depois: SIGILOSO_PROCESSO }),
       reg({ id: "s2", campo: "documento", antes: undefined, depois: SIGILOSO_DOCUMENTO }),
       reg({ id: "s3", alvo: "p1", campo: "processo", antes: SIGILOSO_PROCESSO, depois: SIGILOSO_PROCESSO }),
+      reg({ id: "s4", campo: "documento", antes: SIGILOSO_DOCUMENTO, depois: SIGILOSO_DOCUMENTO }),
+      reg({ id: "s5", campo: "processo", antes: SIGILOSO_PROCESSO, depois: "50300.000002/2026-22" }),
     ],
     nomes,
   });
   const sig = [...h().querySelectorAll(".prj-historico-reg")].map((x) => texto(x));
   checar(
-    "sigilo: o processo e o documento como texto",
-    sig.some((l) => l.includes("processo 50300.000001/2026-11 → processo sigiloso")) &&
-      sig.some((l) => l.includes("documento — → documento de processo sigiloso")) &&
-      sig.some((l) => l.includes("processo processo sigiloso → processo sigiloso")),
+    "sigilo: o valor sigiloso aparece como 'sigiloso'",
+    sig.some((l) => l.includes("processo 50300.000001/2026-11 → sigiloso")) &&
+      sig.some((l) => l.includes("documento — → sigiloso")) &&
+      sig.some((l) => l.includes("processo sigiloso → 50300.000002/2026-22")),
     sig,
+  );
+  checar(
+    "sigilo: os dois lados sigilosos viram 'trocou o ... sigiloso'",
+    sig.some((l) => l.endsWith("· trocou o processo sigiloso")) && sig.some((l) => l.endsWith("· trocou o documento sigiloso")),
+    sig,
+  );
+  checar(
+    "sigilo: so no proprio campo (uma etapa chamada 'processo sigiloso' fica com o nome)",
+    textoDoRegistro({ campo: "nome", antes: SIGILOSO_PROCESSO, depois: "Etapa" }) === "nome processo sigiloso → Etapa" &&
+      textoDoRegistro({ campo: "processo", antes: SIGILOSO_DOCUMENTO, depois: undefined }) ===
+        "processo documento de processo sigiloso → —",
   );
   checar("sigilo: nenhum link montado", !h().querySelector("a") && !h().querySelector("[href]"));
 
@@ -359,6 +407,23 @@ async function provarHistorico(): Promise<void> {
   checar("antes e depois enormes cortados", valores.oque.length < 450, valores.oque.length);
   const quem = linhaDoRegistro(reg({ id: "z", nome: "N".repeat(5000) }), nomes);
   checar("nome de quem mudou enorme cortado", quem.quem.length <= 101, quem.quem.length);
+  const borda = textoDoRegistro({ campo: "nome", antes: `${"a".repeat(199)}🙂zzz`, depois: "b" });
+  checar(
+    "corte na borda de um emoji nao deixa meio caractere",
+    semMeioCaractere(borda) && borda.startsWith(`nome ${"a".repeat(199)}… →`),
+    borda.slice(190, 215),
+  );
+  const nomeBorda = quemDoRegistro(reg({ id: "nb", nome: `${"N".repeat(99)}🙂N` }));
+  checar("nome de quem mudou na borda de um emoji", semMeioCaractere(nomeBorda) && nomeBorda === `${"N".repeat(99)}…`, nomeBorda.length);
+  const campoBorda = textoDoRegistro({ campo: `${"c".repeat(59)}🙂c` as RegistroNaTela["campo"], antes: "1", depois: "2" });
+  checar("campo desconhecido na borda de um emoji", semMeioCaractere(campoBorda) && campoBorda === `${"c".repeat(59)}… 1 → 2`, campoBorda);
+  checar(
+    "o resumo da etapa corta o nome e o campo",
+    resumoDoUltimoRegistro(
+      reg({ id: "rq", nome: "N".repeat(5000), campo: "c".repeat(5000) as RegistroNaTela["campo"] }),
+      reg({ id: "rq" }).quando,
+    ).length < 200,
+  );
   const proto = ["constructor", "__proto__", "toString"].map(
     (c) => linhaDoRegistro(reg({ id: c, campo: c as RegistroNaTela["campo"] }), nomes).oque,
   );

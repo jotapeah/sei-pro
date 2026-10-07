@@ -86,7 +86,7 @@ export function abrirModelos(c: ContextoModelos): { fechar(): void } {
       "button",
       {
         type: "button",
-        class: "spro-botao primario pequeno",
+        class: "spro-botao pequeno",
         onclick: () => {
           modal?.fechar();
           c.criarProjeto(m);
@@ -165,8 +165,8 @@ export function abrirModelos(c: ContextoModelos): { fechar(): void } {
     "div",
     { class: "prj-form prj-form-modelos" },
     h("p", { class: "prj-dica" }, "Para guardar um projeto como modelo, use “Salvar como modelo…” no Editar projeto."),
-    lista,
     erros.el,
+    lista,
   );
   modal = c.abrirModal({ titulo: "Modelos de projeto", icone: "camadas", conteudo });
   return { fechar: () => modal?.fechar() };

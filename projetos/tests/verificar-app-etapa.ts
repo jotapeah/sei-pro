@@ -412,4 +412,40 @@ export async function verificarAppEtapa(): Promise<void> {
   botao(cdj(), "Salvar")!.click();
   await tique();
   checar("' 1240001 ': salva o numero sem os espacos", dj.salvos[0]?.documento?.numero === "1240001", dj.salvos[0]?.documento);
+
+  secao("app: dialogo da etapa corta o historico (o registro nao tem teto no texto da unidade)");
+  const mega = "x".repeat(1_000_000);
+  const regGrande = (id: string, quando: number, extra: Partial<Registro>): Registro => ({
+    id,
+    alvo: "air",
+    projeto: "p1",
+    quando,
+    por: "carla",
+    campo: "nome",
+    atualizadoEm: 1,
+    dispositivo: "d",
+    ...extra,
+  });
+  const dg = cena({
+    etapa: air,
+    secaoAberta: "historico",
+    historico: async () => [
+      regGrande("g1", new Date(2026, 9, 5, 10).getTime(), { nome: mega, antes: mega, depois: mega }),
+      regGrande("g2", new Date(2026, 9, 4, 10).getTime(), {
+        nome: "Ana",
+        campo: "processo",
+        antes: "processo sigiloso",
+        depois: "processo sigiloso",
+      }),
+    ],
+  });
+  await tique();
+  const hg = dg.doc.querySelector(".prj-form-etapa .prj-sec[data-secao='historico']")!;
+  const linhasG = [...hg.querySelectorAll(".prj-hist > div")].map((x) => texto(x));
+  checar(
+    "valor e nome de 1 MB cortados nas linhas e no resumo",
+    (linhasG[0]?.length ?? 0) < 600 && texto(hg.querySelector(".prj-sec-res")).length < 200,
+    [linhasG[0]?.length, texto(hg.querySelector(".prj-sec-res")).length],
+  );
+  checar("o texto de sigilo do historico vale na etapa tambem", linhasG[1] === "Ana · 04/10 · trocou o processo sigiloso", linhasG[1]);
 }
