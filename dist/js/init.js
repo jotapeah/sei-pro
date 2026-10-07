@@ -488,9 +488,10 @@ function loadScriptPro() {
             if (typeof loadAtividadesPro === 'undefined') $.getScript(getUrlExtension("js/sei-pro-atividades.js"));
             // Projetos novos (js/init_projetos.js, pacote Lab) marcam o <html>: o legado so carrega sem eles ou
             // com servidor do Atividades configurado (os dois convivem; o legado vira "Projetos (Atividades)").
-            if (typeof loadProjetosPro === 'undefined' && (!document.documentElement.hasAttribute('data-seipro-projetos') || (function () {
-                try { var c = JSON.parse(localStorage.getItem('configBasePro_atividades')); return !!(c && c.URL_API && c.KEY_USER); } catch (e) { return false; }
-            })())) $.getScript(getUrlExtension("js/sei-pro-projetos.js"));
+            function servidorAtividadesConfiguradoPro() {
+                try { var c = JSON.parse(localStorage.getItem('configBasePro_atividades')); return !!(c && typeof c === 'object' && typeof c.URL_API === 'string' && c.URL_API !== ''); } catch (e) { return false; }
+            }
+            if (typeof loadProjetosPro === 'undefined' && (!document.documentElement.hasAttribute('data-seipro-projetos') || servidorAtividadesConfiguradoPro())) $.getScript(getUrlExtension("js/sei-pro-projetos.js"));
             if (typeof loadPrescricoesPro === 'undefined') $.getScript(getUrlExtension("js/sei-pro-prescricoes.js"));
             // Ferramentas de PDF: so o lado que atende os pedidos da pagina.
             // A ferramenta em si (pdf.js, Tesseract, os motores) vive na pagina

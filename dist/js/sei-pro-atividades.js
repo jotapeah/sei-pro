@@ -414,7 +414,7 @@ function getServerAtividades(param, mode) {
                                         )
                                     ? 'update' 
                                     : 'insert';
-                                initProjetos(mode_update, arrayConfigAtividades.projetos, ativData.id_projeto);
+                                if (typeof initProjetos === 'function') initProjetos(mode_update, arrayConfigAtividades.projetos, ativData.id_projeto);
                                 loadingButtonConfirm(false);
                                 resetDialogBoxPro('dialogBoxPro');
                                 alertaBoxPro('Sucess', 'check-circle', txtAlert+' com sucesso!');
@@ -647,7 +647,7 @@ function getServerAtividades(param, mode) {
                                 }
                             }
                             if (verifyConfigValue('gerenciarprojetos') && checkCapacidade('view_projetos') && isInitOffset) {
-                                initProjetos($('#projetosGanttDiv').is(':visible') ? 'refresh' : 'insert');
+                                if (typeof initProjetos === 'function') initProjetos($('#projetosGanttDiv').is(':visible') ? 'refresh' : 'insert');
                             }
                                                     
                         } else if (mode == 'pause_atividade_lista') {
