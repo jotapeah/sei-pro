@@ -1,11 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { somarDias } from "@comum/datas/dias";
+import { diferencaDias, somarDias } from "@comum/datas/dias";
+import { decorarBarra } from "../src/gantt/decorar";
 import { MODOS } from "../src/gantt/escalas";
 import { idLinhaFase, linhasDoProjeto } from "../src/gantt/linhas";
 import { COR_FERIADO, escalaQueCabe, MAX_COLUNAS, montarGantt, opcoesFrappe } from "../src/gantt/montar";
 import { tarefasDoGantt } from "../src/gantt/tarefas";
+import { LIMITE_DIAS_ETAPA } from "../src/modelo/calendario";
 import type { MudancaDeDatas } from "../src/modelo/tipos";
 import { area, esperarQuadro, instalarAmbienteGantt } from "./ambienteGantt";
 import { cenario, HOSTIL } from "./cenarioGantt";
@@ -392,4 +394,71 @@ export async function verificarGantt(): Promise<void> {
   const vazio = montarGantt(doc.createElement("div"), [], { escala: "Semana", hoje: HOJE, mostrarLista: false, moverDependentes: true });
   checar("projeto sem linhas monta sem erro", vazio.gantt !== null);
   vazio.destruir();
+
+  secao("projetos: teto de desenho igual ao da etapa");
+  {
+    const comprida = linhasDoProjeto(
+      { projeto: "p1", fases: [], etapas: [etapa({ id: "c", inicio: "2026-01-05", fim: somarDias("2026-01-05", LIMITE_DIAS_ETAPA + 5) })] },
+      { hoje: HOJE, ordem: "inicio", recolhidas: new Set<string>() },
+    );
+    const t = tarefasDoGantt(comprida)[0]!;
+    checar("barra mais longa que o limite da etapa e cortada no limite", diferencaDias(t.start, t.end) === LIMITE_DIAS_ETAPA, t);
+  }
+
+  secao("projetos: barra de fase arrastada volta ao lugar");
+  {
+    const aF = area(doc);
+    const mudF: MudancaDeDatas[][] = [];
+    const ctlF = montarGantt(aF, todas, {
+      escala: "Semana",
+      hoje: HOJE,
+      mostrarLista: true,
+      moverDependentes: true,
+      aoMudarDatas: (m) => mudF.push(m),
+    });
+    await esperarQuadro();
+    const idF = idLinhaFase("f1");
+    const xAntesF = ctlF.gantt?.get_bar(idF)?.$bar.getAttribute("x");
+    aF.querySelector(`.bar-wrapper[data-id="${idF}"]`)!.dispatchEvent(evD("mousedown", 100));
+    aF.querySelector("svg.gantt")!.dispatchEvent(evD("mousemove", 200));
+    aF.querySelector("svg.gantt")!.dispatchEvent(evD("mouseup", 200));
+    await esperarQuadro();
+    checar(
+      "fase arrastada: nada gravado e a barra volta",
+      mudF.length === 0 && ctlF.gantt?.get_bar(idF)?.$bar.getAttribute("x") === xAntesF,
+      { antes: xAntesF, depois: ctlF.gantt?.get_bar(idF)?.$bar.getAttribute("x") },
+    );
+
+    // Trocar a escala com o botão ainda pressionado: o arraste armado na escala antiga não vale.
+    aF.querySelector('.bar-wrapper[data-id="e2"]')!.dispatchEvent(evD("mousedown", 100));
+    ctlF.trocarEscala("Ano");
+    doc.documentElement.dispatchEvent(evD("mouseup", 100));
+    checar("trocar escala com o clique segurado nao grava datas", mudF.length === 0, mudF);
+    ctlF.trocarEscala("Semana");
+    await esperarQuadro();
+    mudF.length = 0;
+    aF.querySelector('.bar-wrapper[data-id="e2"]')!.dispatchEvent(evD("mousedown", 100));
+    ctlF.atualizar(todas);
+    doc.documentElement.dispatchEvent(evD("mouseup", 100));
+    checar("atualizar com o clique segurado nao grava datas", mudF.length === 0, mudF);
+    ctlF.destruir();
+  }
+
+  secao("projetos: linha de base torta nao derruba a decoracao");
+  {
+    const aB = area(doc);
+    const ctlB = montarGantt(aB, todas, { escala: "Semana", hoje: HOJE, mostrarLista: true, moverDependentes: true });
+    await esperarQuadro();
+    const barra = ctlB.gantt!.get_bar("e2")!;
+    const linha = todas.find((l) => l.id === "e2")!;
+    const torta = linha.tipo === "etapa" ? { ...linha, etapa: { ...linha.etapa, base: { inicio: "x", fim: "y" } } } : linha;
+    let erroBase: unknown = null;
+    try {
+      decorarBarra(ctlB.gantt!, barra, torta, { mostrarLista: true });
+    } catch (e) {
+      erroBase = e;
+    }
+    checar("decorarBarra com base de datas invalidas nao lanca", erroBase === null, String(erroBase));
+    ctlB.destruir();
+  }
 }

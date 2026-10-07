@@ -1,5 +1,5 @@
 import { SEM_FASE } from "../src/modelo/constantes";
-import { chaveResponsavel, contarChips, criteriosAtivos, ehMinha, FILTRO_VAZIO, filtrarEtapas } from "../src/modelo/filtro";
+import { chaveResponsavel, contarChips, criteriosAtivos, ehMinha, FILTRO_VAZIO, filtrarEtapas, filtroVazio } from "../src/modelo/filtro";
 import { etapa, HOJE } from "./fabrica";
 import { checar, secao } from "./util";
 
@@ -45,4 +45,16 @@ export function verificarFiltro(): void {
   checar("filtro vazio tem 0 criterios", criteriosAtivos(FILTRO_VAZIO) === 0);
   const n = contarChips(lista, HOJE);
   checar("numeros dos chips", n.atrasadas === 1 && n.andamento === 1 && n.proximos30 === 1, n);
+
+  secao("projetos: filtro vazio nao se altera");
+  checar(
+    "FILTRO_VAZIO congelado, inclusive as listas",
+    Object.isFrozen(FILTRO_VAZIO) && Object.isFrozen(FILTRO_VAZIO.situacoes) && Object.isFrozen(FILTRO_VAZIO.etiquetas),
+  );
+  const f1 = filtroVazio();
+  (f1.situacoes as string[]).push("atrasadas");
+  checar(
+    "filtroVazio devolve um novo a cada chamada",
+    filtroVazio().situacoes.length === 0 && f1 !== filtroVazio() && FILTRO_VAZIO.situacoes.length === 0,
+  );
 }

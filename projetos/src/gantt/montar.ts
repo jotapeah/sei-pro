@@ -7,7 +7,9 @@
  * arraste e guarda a posição (x e largura) de cada barra; ao soltar, só as
  * barras que MEXERAM (as arrastadas e os dependentes que a Frappe moveu) têm
  * as datas relidas da posição (em dias inteiros) e comparadas com as linhas.
- * Recusa (`validar`) redesenha como estava.
+ * Recusa (`validar`) redesenha como estava; barra de fase arrastada também volta.
+ * Para recusar o mesmo que o repositório, o `validar` do app usa
+ * `problemasDasMudancas` (modelo/dependencias).
  */
 
 import { diferencaDias, somarDias } from "@comum/datas/dias";
@@ -146,17 +148,32 @@ export function montarGantt(area: HTMLElement, linhas: readonly Linha[], op: Opc
   const doc = area.ownerDocument;
   const dec = { mostrarLista: op.mostrarLista };
 
-  /** Soltou o botão: relê as datas pela posição; só grava, redesenha e segura o clique se alguma data mudou. */
+  /**
+   * Soltou o botão: relê as datas pela posição; só grava, redesenha e segura o clique se alguma data
+   * mudou. Barra de fase (ou de projeto) que a Frappe deixou arrastar não tem datas próprias: volta
+   * ao lugar com um redesenho, sem gravar nada.
+   */
   const confirmar = (g: Gantt): void => {
     const mudancas: MudancaDeDatas[] = [];
+    let outraMexeu = false;
     for (const b of g.bars) {
+      if (posicoes.get(b.task.id) === posicao(b)) continue;
       const l = mapa.get(b.task.id);
-      if (l?.tipo !== "etapa" || posicoes.get(b.task.id) === posicao(b)) continue;
+      if (l?.tipo !== "etapa") {
+        outraMexeu = true;
+        continue;
+      }
       const d = datasDaBarra(g, b);
       const fim = l.etapa.marco ? d.inicio : d.fim;
       if (d.inicio !== l.etapa.inicio || fim !== l.etapa.fim) mudancas.push({ id: l.id, inicio: d.inicio, fim });
     }
-    if (!mudancas.length) return;
+    if (!mudancas.length) {
+      if (outraMexeu) {
+        ultimoArraste = Date.now();
+        desenhar(true);
+      }
+      return;
+    }
     ultimoArraste = Date.now();
     const recusa = op.validar?.(mudancas) ?? null;
     if (recusa) {
@@ -195,6 +212,9 @@ export function montarGantt(area: HTMLElement, linhas: readonly Linha[], op: Opc
   }
 
   function desenhar(manterRolagem: boolean): void {
+    // Arraste armado no desenho anterior (escala trocada ou linhas novas com o botão ainda pressionado)
+    // não vale: as posições guardadas são de outras barras.
+    pendente = false;
     const rolagem = manterRolagem ? gantt?.$container.scrollLeft : undefined;
     gantt?.destroy();
     gantt = null;

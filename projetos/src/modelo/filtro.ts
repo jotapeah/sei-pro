@@ -13,26 +13,33 @@ import type { DataISO, Etapa, Responsavel } from "./tipos";
 
 export type ChipSituacao = "atrasadas" | "andamento" | "proximos30";
 
+/** As listas são só leitura: um filtro novo é uma cópia com a lista trocada (o `FILTRO_VAZIO` é compartilhado). */
 export interface FiltroEtapas {
-  situacoes: ChipSituacao[];
+  situacoes: readonly ChipSituacao[];
   soMinhas: boolean;
   mostrarConcluidas: boolean;
   /** Chaves de `chaveResponsavel`. */
-  responsaveis: string[];
+  responsaveis: readonly string[];
   /** Ids de fase; `SEM_FASE` = as sem fase. */
-  fases: string[];
+  fases: readonly string[];
   /** Etiquetas como digitadas (comparadas sem acento e sem caixa). */
-  etiquetas: string[];
+  etiquetas: readonly string[];
 }
 
-export const FILTRO_VAZIO: FiltroEtapas = {
-  situacoes: [],
+/** Filtro sem critério, novo a cada chamada (pode ser alterado à vontade). */
+export function filtroVazio(): FiltroEtapas {
+  return { situacoes: [], soMinhas: false, mostrarConcluidas: true, responsaveis: [], fases: [], etiquetas: [] };
+}
+
+/** Filtro sem critério compartilhado, congelado por inteiro (as listas também): `{ ...FILTRO_VAZIO, ... }` copia. */
+export const FILTRO_VAZIO: Readonly<FiltroEtapas> = Object.freeze({
+  situacoes: Object.freeze([] as ChipSituacao[]),
   soMinhas: false,
   mostrarConcluidas: true,
-  responsaveis: [],
-  fases: [],
-  etiquetas: [],
-};
+  responsaveis: Object.freeze([] as string[]),
+  fases: Object.freeze([] as string[]),
+  etiquetas: Object.freeze([] as string[]),
+});
 
 export interface Eu {
   login: string;

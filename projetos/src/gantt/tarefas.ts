@@ -5,13 +5,13 @@
  */
 
 import { hojeISO, somarDias } from "@comum/datas/dias";
-import { ANO_MAX, ANO_MIN, dataValida } from "../modelo/calendario";
+import { ANO_MAX, ANO_MIN, dataValida, LIMITE_DIAS_ETAPA } from "../modelo/calendario";
 import type { DataISO } from "../modelo/tipos";
 import type { TarefaFrappe } from "../vendor/frappe-gantt/index";
 import type { Linha } from "./linhas";
 
-/** Teto de desenho (a Frappe recusa mais de 10 anos). */
-const TETO_DIAS = 3650;
+/** Teto de desenho: o mesmo da etapa (a Frappe recusa mais de 10 anos; `LIMITE_DIAS_ETAPA` fica abaixo). */
+const TETO_DIAS = LIMITE_DIAS_ETAPA;
 
 export function classesDaLinha(l: Linha): string {
   if (l.tipo === "fase") return l.resumo.total ? "st-fase" : "st-fase st-vazia";

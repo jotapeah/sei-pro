@@ -7,7 +7,7 @@
  */
 
 import { diferencaDias } from "@comum/datas/dias";
-import { meiaNoite } from "../modelo/calendario";
+import { dataValida, meiaNoite } from "../modelo/calendario";
 import { replanejada } from "../modelo/linhaDeBase";
 import type { DataISO } from "../modelo/tipos";
 import dateUtils from "../vendor/frappe-gantt/date_utils";
@@ -87,7 +87,9 @@ export function decorarBarra(g: Gantt, barra: BarraFrappe, linha: Linha | undefi
       rotulo.setAttribute("x", String(cx + s + 6));
     }
   }
-  if (e.base && replanejada(e)) {
+  // Base com data que não existe (dado antigo ou editado à mão) não desenha: lançar aqui, no
+  // requestAnimationFrame da Frappe, deixaria as barras seguintes sem decoração.
+  if (e.base && dataValida(e.base.inicio) && dataValida(e.base.fim) && replanejada(e)) {
     const xb = xDaData(g, e.base.inicio);
     const wb = (diferencaDias(e.base.inicio, e.base.fim) + 1) * pxPorDia(g);
     barra.group.append(
