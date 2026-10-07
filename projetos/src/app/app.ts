@@ -711,6 +711,9 @@ export class AppProjetos {
    * unidade" não pede o "Entendi" (nela só fica a lápide da saída, que não pergunta), e entrar nela pergunta
    * uma vez, antes da primeira gravação: recusar não deixa nada pela metade. Desistir devolve `false`: o
    * diálogo fica.
+   *
+   * Se a edição no destino falha depois de mover, o erro diz que o projeto já mudou; o diálogo continua aberto
+   * (com o escopo antigo) e salvar de novo acha o projeto já no destino: não confirma nem move outra vez, só edita.
    */
   private async salvarProjeto(p: ProjetoNaTela, r: ResultadoProjeto): Promise<boolean> {
     const id = p.projeto.id;
@@ -721,10 +724,21 @@ export class AppProjetos {
     }
     const problemas = problemasDoProjeto({ nome: nomeLimpo(r.nome), etiquetas: p.projeto.etiquetas });
     if (problemas.length) throw new ErroValidacao(problemas);
-    if (!(await this.d.confirmar(this.textoQuemVe(r.nome, r.vis), "Mudar"))) return false;
+    const origem = this.repoDe(p.vis);
     const destino = this.repoDe(r.vis);
-    await moverEntreEscopos(this.repoDe(p.vis), destino, id);
-    await destino.editarProjeto(id, mudancas);
+    const jaMovido = !(await origem.obterProjeto(id)) && !!(await destino.obterProjeto(id));
+    if (!jaMovido) {
+      if (!(await this.d.confirmar(this.textoQuemVe(r.nome, r.vis), "Mudar"))) return false;
+      await moverEntreEscopos(origem, destino, id);
+    }
+    try {
+      await destino.editarProjeto(id, mudancas);
+    } catch (e) {
+      const motivo = mensagem(e);
+      throw new ErroValidacao([
+        `O projeto já está em “${rotuloDaVis(r.vis)}”, mas o nome e o processo novos não foram salvos: ${/[.!?]$/.test(motivo) ? motivo : `${motivo}.`} Salve de novo.`,
+      ]);
+    }
     return true;
   }
 

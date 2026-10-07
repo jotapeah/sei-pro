@@ -11,8 +11,8 @@ import type { OrdemEtapas } from "../../modelo/operacoes";
 export interface ExtensoesMenu {
   /** No começo: "Sincronização…", "Modelos de projeto…". */
   sincronia?: () => EntradaMenu[];
-  /** Depois de Exportar/Imprimir: enviar, receber, importar. */
-  arquivo?: () => EntradaMenu[];
+  /** Depois de Exportar/Imprimir: enviar, receber, importar (sem projeto ativo, o que não tem o que levar some). */
+  arquivo?: (o?: { semProjetos?: boolean }) => EntradaMenu[];
   /** No fim: "Histórico de alterações". */
   fim?: () => EntradaMenu[];
 }
@@ -33,11 +33,21 @@ export interface OpcoesMenuAjustes {
   aoArquivados(): void;
 }
 
+/** A ordem das etapas num item só (menu mais curto): a dica diz a de agora e o clique passa para a próxima. */
 const ORDENS: ReadonlyArray<[OrdemEtapas, string]> = [
-  ["inicio", "Ordenar por início"],
-  ["nome", "Ordenar por nome"],
-  ["cadastro", "Ordenar por cadastro"],
+  ["inicio", "por início"],
+  ["nome", "por nome"],
+  ["cadastro", "por cadastro"],
 ];
+
+function itemDaOrdem(atual: OrdemEtapas, aoOrdenar: (o: OrdemEtapas) => void): EntradaMenu {
+  const i = Math.max(
+    0,
+    ORDENS.findIndex(([v]) => v === atual),
+  );
+  const proxima = ORDENS[(i + 1) % ORDENS.length]?.[0] ?? "inicio";
+  return { rotulo: "Ordenar etapas", icone: "ordenar", dica: ORDENS[i]?.[1], fazer: () => aoOrdenar(proxima) };
+}
 
 export function criarMenuAjustes(estado: () => OpcoesMenuAjustes): HTMLButtonElement {
   return criarMenu({
@@ -61,15 +71,11 @@ export function criarMenuAjustes(estado: () => OpcoesMenuAjustes): HTMLButtonEle
           icone: o.moverDependentes ? "check" : undefined,
           fazer: () => o.aoMoverDependentes(!o.moverDependentes),
         },
-        ...ORDENS.map(([valor, rotulo]) => ({
-          rotulo,
-          icone: o.ordemEtapas === valor ? ("check" as const) : undefined,
-          fazer: () => o.aoOrdenar(valor),
-        })),
+        itemDaOrdem(o.ordemEtapas, o.aoOrdenar),
         "-",
         o.semProjetos ? null : { rotulo: "Exportar planilha (CSV)", icone: "planilha", fazer: o.aoExportar },
         o.semProjetos ? null : { rotulo: "Imprimir / salvar PDF", icone: "documento", fazer: o.aoImprimir },
-        ...(ext.arquivo?.() ?? []),
+        ...(ext.arquivo?.({ semProjetos: !!o.semProjetos }) ?? []),
         "-",
         ...(ext.fim?.() ?? []),
       ];

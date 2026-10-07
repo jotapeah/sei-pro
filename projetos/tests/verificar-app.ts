@@ -434,7 +434,7 @@ export async function verificarApp(): Promise<void> {
   checar(
     "menu ajustes sem itens do P4 nem 'arquivados' vazio",
     itens.join("|") ===
-      "Mostrar lista de etapas|Mover dependentes ao arrastar|Ordenar por início|Ordenar por nome|Ordenar por cadastro|Exportar planilha (CSV)|Imprimir / salvar PDF",
+      "Mostrar lista de etapas|Mover dependentes ao arrastar|Ordenar etapas|Exportar planilha (CSV)|Imprimir / salvar PDF",
     itens,
   );
   z.app.destruir();

@@ -87,12 +87,6 @@ import { plural } from "../formato";
 import { comConsentimento, consentidor, gravarConsentimento, MENSAGEM_SEM_ENTENDI } from "./consentir";
 import { EstadoDaSincronia } from "./estado";
 
-/** O que a aba devolve no `sincronizarAgora` (pagina/sincronia.ts, `ResultadoSincronizar`). */
-interface RespostaSincronizar {
-  unidade?: StatusSync;
-  eu?: StatusSync | null;
-}
-
 /** O que a aba devolve no `importarAtividades` (pagina/atividades.ts, `ProjetosDoAtividades`). */
 interface RespostaAtividades {
   fonte?: unknown;
@@ -146,7 +140,12 @@ export interface DepsColaboracao {
   app(): GanchosDoApp | null;
   /** A altura do painel mudou (faixa entrou ou saiu). */
   aoRedesenhar?: () => void;
+  /** Quanto o diálogo Sincronização espera a cópia do dia antes de abrir (padrão 2 s). */
+  esperaCopia?: number;
 }
+
+/** O diálogo Sincronização espera a cópia do dia no máximo isto; depois abre com o que houver. */
+const ESPERA_COPIA_MS = 2000;
 
 /** A cópia de tudo (todas as unidades) pode crescer; acima disto não é uma cópia dos projetos. */
 const LIMITE_COPIA = 50 * 1024 * 1024;
@@ -165,6 +164,29 @@ const MENSAGEM_COPIA_MAIS_NOVA =
   "Este arquivo foi gravado por uma versão mais nova do SEI Pro. Atualize a extensão neste computador e importe de novo.";
 
 const objeto = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x);
+const ESTADOS: ReadonlySet<unknown> = new Set(["ok", "erro", "indisponivel", "nunca"]);
+/** O status de um texto como a aba devolveu, ou null se a forma não confere. */
+const comoStatus = (x: unknown): StatusSync | null => (objeto(x) && ESTADOS.has(x.estado) ? (x as unknown as StatusSync) : null);
+
+const NAO_SINCRONIZOU = "Não foi possível sincronizar agora.";
+
+/**
+ * O aviso do "Sincronizar agora", honesto: "Sincronizado." só com os textos lidos e gravados. A resposta torta
+ * (ou um texto que não chegou a ser lido) não é "Sincronizado."; o primeiro texto com erro ou indisponível diz o
+ * motivo; lido mas com alterações esperando o "Entendi", diz isso.
+ */
+export function textoDoSincronizar(r: unknown): string {
+  if (!objeto(r)) return NAO_SINCRONIZOU;
+  const unidade = comoStatus(r.unidade);
+  // O pessoal desligado vem nulo; o que vem tem de ter a forma de status.
+  const eu = r.eu === null || r.eu === undefined ? null : comoStatus(r.eu);
+  if (!unidade || (r.eu !== null && r.eu !== undefined && !eu)) return NAO_SINCRONIZOU;
+  const textos = eu ? [unidade, eu] : [unidade];
+  const ruim = textos.find((s) => s.estado === "erro" || s.estado === "indisponivel");
+  if (ruim) return typeof ruim.mensagem === "string" && ruim.mensagem ? ruim.mensagem : NAO_SINCRONIZOU;
+  if (textos.some((s) => s.aguardandoPermissao)) return "Lido do SEI; há alterações esperando o seu “Entendi”.";
+  return textos.every((s) => s.estado === "ok") ? "Sincronizado." : NAO_SINCRONIZOU;
+}
 const mesmoLogin = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 /**
@@ -220,8 +242,9 @@ export class Colaboracao {
         { rotulo: "Sincronização…", icone: "nuvem", dica: "Texto Padrão · arquivo", fazer: fazer(() => this.abrirSincronizacao()) },
         { rotulo: "Modelos de projeto…", icone: "camadas", fazer: fazer(() => this.abrirModelos()) },
       ],
-      arquivo: (): EntradaMenu[] => [
-        { rotulo: "Enviar projeto por arquivo…", icone: "baixar", fazer: fazer(() => this.enviarProjeto()) },
+      arquivo: (o): EntradaMenu[] => [
+        // Sem projeto ativo não há o que enviar (como o CSV e o Imprimir).
+        o?.semProjetos ? null : { rotulo: "Enviar projeto por arquivo…", icone: "baixar", fazer: fazer(() => this.enviarProjeto()) },
         { rotulo: "Receber projeto de arquivo…", icone: "subir", fazer: fazer(() => this.receberProjeto()) },
         d.ctx.atividades ? { rotulo: "Importar do servidor do Atividades…", icone: "subir", fazer: () => this.importarAtividades() } : null,
       ],
@@ -309,8 +332,8 @@ export class Colaboracao {
       try {
         convite = (await this.d.repos.eu.dados()).projetos.length > 0;
       } catch {
-        // Sem ler os projetos, as faixas ficam como estão até a próxima mudança.
-        return;
+        // Sem ler os projetos "Só eu", o convite fica de fora; a faixa do "Entendi" não depende deles.
+        convite = false;
       }
     }
     if (vez !== this.vezFaixas || this.destruido) return;
@@ -351,14 +374,10 @@ export class Colaboracao {
 
   /**
    * "Sincronizar agora" (os dois textos, pela aba). A aba que não responde lança (o diálogo mostra na seção); o
-   * resultado vem num aviso: "Sincronizado." ou o motivo do primeiro texto que não deu certo.
+   * resultado vem num aviso (`textoDoSincronizar`).
    */
   private async sincronizarAgora(): Promise<void> {
-    const r = await this.d.rpc.chamar<RespostaSincronizar | null>("sincronizarAgora", undefined, 120_000);
-    const ruim = [r?.unidade, r?.eu].find((s) => objeto(s) && (s.estado === "erro" || s.estado === "indisponivel"));
-    avisar(
-      ruim ? (typeof ruim.mensagem === "string" && ruim.mensagem ? ruim.mensagem : "Não foi possível sincronizar agora.") : "Sincronizado.",
-    );
+    avisar(textoDoSincronizar(await this.d.rpc.chamar<unknown>("sincronizarAgora", undefined, 120_000)));
   }
 
   /** O JSON do arquivo escolhido: o tamanho é conferido antes de ler; JSON quebrado lança com o que fazer. */
@@ -416,8 +435,21 @@ export class Colaboracao {
     await this.copiaDoDia;
   }
 
+  /** A cópia do dia, esperada no máximo `esperaCopia` (o IndexedDB preso não segura o diálogo). Nunca lança. */
+  private async esperarCopiaDoDia(): Promise<void> {
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const limite = new Promise<void>((ok) => {
+      t = setTimeout(ok, this.d.esperaCopia ?? ESPERA_COPIA_MS);
+    });
+    try {
+      await Promise.race([this.tentarCopiaDoDia(), limite]);
+    } finally {
+      clearTimeout(t);
+    }
+  }
+
   async abrirSincronizacao(): Promise<void> {
-    await this.tentarCopiaDoDia();
+    await this.esperarCopiaDoDia();
     const a = this.d.arquivo;
     const copias = this.d.copias;
     const conteudo = await montarSincronizacao({

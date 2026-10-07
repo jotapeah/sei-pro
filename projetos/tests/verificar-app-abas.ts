@@ -103,7 +103,7 @@ export async function verificarAppAbas(): Promise<void> {
   checar(
     "itens do P3 na ordem da spec",
     itens.join("|") ===
-      "Projetos arquivados|Mostrar lista de etapas|Mover dependentes ao arrastar|Ordenar por início|Ordenar por nome|Ordenar por cadastro|Exportar planilha (CSV)|Imprimir / salvar PDF",
+      "Projetos arquivados|Mostrar lista de etapas|Mover dependentes ao arrastar|Ordenar etapas|Exportar planilha (CSV)|Imprimir / salvar PDF",
     itens,
   );
   bm.click();
@@ -111,19 +111,38 @@ export async function verificarAppAbas(): Promise<void> {
     .filter((i) => i.querySelector(".spro-menu-icone svg"))
     .map((i) => texto(i));
   bm.click();
+  const dicaDaOrdem = () => {
+    bm.click();
+    const item = [...docM.querySelectorAll(".spro-menu-pop [role='menuitem']")].find(
+      (i) => texto(i.querySelector(".spro-menu-rotulo")) === "Ordenar etapas",
+    );
+    const dica = texto(item?.querySelector(".spro-menu-dica"));
+    bm.click();
+    return dica;
+  };
   checar(
-    "marcaveis com o estado atual",
-    marcados.includes("Mostrar lista de etapas") &&
-      !marcados.includes("Mover dependentes ao arrastar") &&
-      marcados.includes("Ordenar por nome"),
+    "marcaveis com o estado atual (e a ordem num item so, com a de agora na dica)",
+    marcados.includes("Mostrar lista de etapas") && !marcados.includes("Mover dependentes ao arrastar") && dicaDaOrdem() === "por nome",
+    dicaDaOrdem(),
   );
   itemDoMenu(docM, "Ajustes dos projetos", "Mostrar lista de etapas");
   itemDoMenu(docM, "Ajustes dos projetos", "Mover dependentes ao arrastar");
-  itemDoMenu(docM, "Ajustes dos projetos", "Ordenar por cadastro");
+  itemDoMenu(docM, "Ajustes dos projetos", "Ordenar etapas");
   itemDoMenu(docM, "Ajustes dos projetos", "Exportar planilha (CSV)");
   itemDoMenu(docM, "Ajustes dos projetos", "Imprimir / salvar PDF");
   itemDoMenu(docM, "Ajustes dos projetos", "Projetos arquivados");
   checar("cada item faz o seu", feitos.join() === "lista:false,mover:true,ordem:cadastro,csv,pdf,arq", feitos);
+  op.ordemEtapas = "cadastro";
+  const dicaCadastro = dicaDaOrdem();
+  itemDoMenu(docM, "Ajustes dos projetos", "Ordenar etapas");
+  op.ordemEtapas = "inicio";
+  const dicaInicio = dicaDaOrdem();
+  itemDoMenu(docM, "Ajustes dos projetos", "Ordenar etapas");
+  checar(
+    "Ordenar etapas passa para a proxima ordem (e volta ao comeco)",
+    dicaCadastro === "por cadastro" && dicaInicio === "por início" && feitos.slice(-2).join() === "ordem:inicio,ordem:nome",
+    { dicaCadastro, dicaInicio, feitos },
+  );
   const comExt = criarMenuAjustes(() => ({
     ...op,
     arquivados: 0,

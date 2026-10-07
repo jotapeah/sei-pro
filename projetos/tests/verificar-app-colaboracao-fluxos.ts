@@ -40,10 +40,10 @@ import type { Projeto } from "../src/modelo/tipos";
 import { MODELOS_EMBUTIDOS } from "../src/modelos/embutidos";
 import type { ContextoProjetos } from "../src/ponte/tipos";
 import { RepositorioProjetos } from "../src/repositorio";
-import type { EnvelopeArquivo } from "../src/sincronia/arquivo";
+import type { ArmazemCopiasProjetos, EnvelopeArquivo } from "../src/sincronia/arquivo";
 import { CHAVE_CONSENTIMENTO, chaveDoConsentimento } from "../src/sincronia/consentimento";
 import { chaveStatusTexto } from "../src/sincronia/textoPadrao";
-import { digitar, marcar, telaDoApp, texto } from "./apoioApp";
+import { digitar, escolherCombo, itensDoMenu, marcar, telaDoApp, texto } from "./apoioApp";
 import { ESCOPO_EU, ESCOPO_UN } from "./apoioRepositorio";
 import { HOJE } from "./fabrica";
 import { ganttFalso } from "./ganttFalso";
@@ -91,8 +91,8 @@ function syncQueFalha(falha: { ler: boolean; gravar: boolean }): Area {
   };
 }
 
-/** storage.local cuja memória do sigilo não lê enquanto `falha.ler` (o resto lê e grava normalmente). */
-function areaComMemoriaQueFalha(falha: { ler: boolean }): Area {
+/** storage.local cuja memória do sigilo não lê (`falha.ler`) ou não grava (`falha.gravar`); o resto lê e grava normalmente. */
+function areaComMemoriaQueFalha(falha: { ler: boolean; gravar?: boolean }): Area {
   const base = areaMemoria();
   const daMemoria = (ks: string[]) => ks.some((k) => k.startsWith("projetos/sigilo/"));
   return {
@@ -101,6 +101,10 @@ function areaComMemoriaQueFalha(falha: { ler: boolean }): Area {
       const ks = ch === null || ch === undefined ? ["projetos/sigilo/"] : typeof ch === "string" ? [ch] : ch;
       if (falha.ler && daMemoria(ks)) throw new Error("falha simulada ao ler o storage");
       return base.obter(ch);
+    },
+    gravar: async (i) => {
+      if (falha.gravar && daMemoria(Object.keys(i))) throw new Error("falha simulada ao gravar o storage");
+      return base.gravar(i);
     },
     aoMudar: base.aoMudar.bind(base),
   };
@@ -119,7 +123,8 @@ function montar(
     area?: Area;
     sync?: Area;
     sincronizado?: unknown;
-    copias?: boolean;
+    copias?: boolean | ArmazemCopiasProjetos;
+    esperaCopia?: number;
     arquivo?: ArquivoLigado;
     /** Operações do RPC que falham (a aba fechada): op → mensagem. */
     falhar?: Record<string, string>;
@@ -154,7 +159,7 @@ function montar(
   const abertos: string[] = [];
   const doModelo: string[] = [];
   const resposta = {
-    sincronizado: o.sincronizado ?? { unidade: { estado: "ok", quando: AGORA, pendente: false }, eu: null },
+    sincronizado: (o.sincronizado ?? { unidade: { estado: "ok", quando: AGORA, pendente: false }, eu: null }) as unknown,
     atividades: { fonte: "servidor", projetos: [projetoCompleto()] } as Record<string, unknown>,
     apagou: true,
   };
@@ -189,7 +194,8 @@ function montar(
     hoje: () => HOJE,
     agora: () => AGORA,
     carimbo,
-    copias: o.copias ? copiasEmMemoria<EnvelopeArquivo>() : null,
+    copias: typeof o.copias === "object" ? o.copias : o.copias ? copiasEmMemoria<EnvelopeArquivo>() : null,
+    esperaCopia: o.esperaCopia,
     arquivo: o.arquivo ?? null,
     app: (): GanchosDoApp => app,
     aoRedesenhar: () => void redesenhos.n++,
@@ -233,6 +239,11 @@ export async function verificarAppColaboracaoFluxos(): Promise<void> {
       "Enviar projeto por arquivo…,Receber projeto de arquivo…,Importar do servidor do Atividades…",
   );
   checar("Historico de alteracoes no fim", rotulos(ext.fim?.() ?? []).join() === "Histórico de alterações");
+  checar(
+    "sem projeto ativo: sem o Enviar (como o CSV e o Imprimir)",
+    rotulos((ext.arquivo?.({ semProjetos: true }) ?? []).filter(Boolean)).join() ===
+      "Receber projeto de arquivo…,Importar do servidor do Atividades…",
+  );
   const semServidor = montar({ atividades: false });
   destruir.push(semServidor);
   checar(
@@ -795,6 +806,88 @@ export async function verificarAppColaboracaoFluxos(): Promise<void> {
     feitos,
   );
 
+  secao("colaboracao: a Sincronizacao abre sem esperar a copia do dia pendurada");
+  const baseCopias = copiasEmMemoria<EnvelopeArquivo>();
+  let soltarCopia: () => void = () => undefined;
+  const presa = new Promise<void>((ok) => {
+    soltarCopia = ok;
+  });
+  const copiasLentas: ArmazemCopiasProjetos = {
+    listar: (d) => baseCopias.listar(d),
+    gravar: async (c) => {
+      await presa;
+      return baseCopias.gravar(c);
+    },
+    apagar: (id) => baseCopias.apagar(id),
+  };
+  const pend = montar({ copias: copiasLentas, esperaCopia: 20 });
+  destruir.push(pend);
+  await pend.repos.eu.criarProjeto({ nome: "Meu" });
+  await pend.c.iniciar();
+  const abriu = await Promise.race([pend.c.abrirSincronizacao().then(() => "abriu"), tique(300).then(() => "pendurado")]);
+  checar("a copia do dia que nao termina nao segura o dialogo", abriu === "abriu" && pend.ultimo()?.titulo === "Sincronização", abriu);
+  soltarCopia();
+  await tique(20);
+  checar("a copia termina depois, normalmente", (await baseCopias.listar({ host: ESCOPO_UN.host, login: "ana" })).length === 1);
+
+  secao("colaboracao: o Sincronizado so quando sincronizou");
+  const hon = montar();
+  destruir.push(hon);
+  await hon.c.iniciar();
+  const sincronizarCom = async (resposta: unknown): Promise<string | undefined> => {
+    hon.resposta.sincronizado = resposta;
+    await hon.c.abrirSincronizacao();
+    botao(hon.ultimo().conteudo.querySelector("[data-secao='unidade']")!, "Sincronizar agora")?.click();
+    await tique(10);
+    return avisos.at(-1);
+  };
+  const tortas: unknown[] = [null, "ok", { unidade: 5 }, { unidade: { estado: "talvez", quando: 1 } }, { eu: null }];
+  const ditos: Array<string | undefined> = [];
+  for (const t of tortas) ditos.push(await sincronizarCom(t));
+  checar(
+    "resposta torta da aba: nao diz Sincronizado",
+    ditos.every((d) => d === "Não foi possível sincronizar agora."),
+    ditos,
+  );
+  checar(
+    "lido mas esperando o Entendi: diz isso",
+    (await sincronizarCom({
+      unidade: { estado: "ok", quando: AGORA, ultimoOk: AGORA, pendente: true, aguardandoPermissao: true },
+      eu: null,
+    })) === "Lido do SEI; há alterações esperando o seu “Entendi”.",
+    avisos.at(-1),
+  );
+  checar(
+    "o pessoal torto (nem nulo nem status) tambem nao e Sincronizado",
+    (await sincronizarCom({ unidade: { estado: "ok", quando: AGORA, pendente: false }, eu: "x" })) ===
+      "Não foi possível sincronizar agora.",
+    avisos.at(-1),
+  );
+  checar(
+    "os dois em dia: Sincronizado",
+    (await sincronizarCom({
+      unidade: { estado: "ok", quando: AGORA, pendente: false },
+      eu: { estado: "ok", quando: AGORA, pendente: false },
+    })) === "Sincronizado.",
+  );
+
+  secao("colaboracao: sem ler os projetos Só eu, a faixa do Entendi aparece assim mesmo");
+  const semEu = montar();
+  destruir.push(semEu);
+  await semEu.repos.eu.criarProjeto({ nome: "Meu" });
+  await semEu.area.gravar({
+    [chaveStatusTexto(ESCOPO_UN)]: { estado: "ok", quando: AGORA, pendente: true, aguardandoPermissao: true },
+  });
+  (semEu.repos.eu as { dados: RepositorioProjetos["dados"] }).dados = async () => {
+    throw new Error("O storage não respondeu.");
+  };
+  await semEu.c.iniciar();
+  checar(
+    "o convite fica de fora e o aguardando aparece",
+    !!semEu.c.faixas.querySelector("[data-faixa='aguardando']") && !semEu.c.faixas.querySelector("[data-faixa='convite']"),
+    semEu.c.faixas.children.length,
+  );
+
   secao("dialogo Sincronizacao: aoMudar que avisa na hora nao quebra a montagem");
   let quebrou: unknown = null;
   const situ = await m.c.provedor.ler();
@@ -847,22 +940,23 @@ export async function verificarAppColaboracaoFluxos(): Promise<void> {
 }
 
 /** "Quem vê" pelo app de verdade (AppProjetos com o repositório da unidade que pergunta o "Entendi"). */
-async function verificarQuemVe(): Promise<void> {
-  const falha = { ler: false };
-  const area = areaComMemoriaQueFalha(falha);
-  const x = montar({ area });
+/** O processo sigiloso da caixa (com o número): escolhê-lo no diálogo grava a memória do sigilo. */
+const DA_CAIXA = "50300.000777/2026-02";
+
+/** O AppProjetos de verdade com o repositório da unidade que pergunta o "Entendi" (como o main.ts da T13 monta). */
+function montarApp(x: ReturnType<typeof montar>, area: Area, confirmacoes: string[]): AppProjetos {
   const doc = x.doc;
-  const confirmacoes: string[] = [];
-  const g = ganttFalso();
-  let app: AppProjetos | null = null;
-  const p = await x.repos.unidade.criarProjeto({ nome: "Pregão 2027" });
-  const s = await x.repos.unidade.criarProjeto({ nome: "Apuração", processo: { protocolo: SIGILOSO, sigiloso: true } });
-  app = new AppProjetos({
+  return new AppProjetos({
     raiz: doc.getElementById("app")!,
     ctx: CTX,
     area,
     repos: x.c.repos,
-    rpc: { chamar: async <T>(): Promise<T> => [] as T },
+    rpc: {
+      chamar: async <T>(op: string): Promise<T> =>
+        (op === "processosDaCaixa"
+          ? [{ protocolo: DA_CAIXA, idProcedimento: "77", tipo: "Apuração", especificacao: "Sindicância", sigiloso: true }]
+          : []) as T,
+    },
     abrirModal: (o) => {
       const modal = { titulo: o.titulo, conteudo: o.conteudo, aberto: true, fechar: () => undefined };
       doc.body.append(o.conteudo);
@@ -882,17 +976,28 @@ async function verificarQuemVe(): Promise<void> {
     baixar: () => undefined,
     hoje: () => HOJE,
     agora: () => AGORA,
-    montarGantt: g.montar,
+    montarGantt: ganttFalso().montar,
     largura: () => 1000,
     sincronia: x.c.provedor,
     extensoesMenu: x.c.extensoesMenu,
   });
+}
+
+async function verificarQuemVe(): Promise<void> {
+  const falha = { ler: false, gravar: false };
+  const area = areaComMemoriaQueFalha(falha);
+  const x = montar({ area });
+  const doc = x.doc;
+  const confirmacoes: string[] = [];
+  const p = await x.repos.unidade.criarProjeto({ nome: "Pregão 2027" });
+  const s = await x.repos.unidade.criarProjeto({ nome: "Apuração", processo: { protocolo: SIGILOSO, sigiloso: true } });
+  const app = montarApp(x, area, confirmacoes);
   await x.c.iniciar();
   await app.iniciar();
   const raiz = doc.getElementById("app")!;
   const form = () => doc.querySelector<HTMLElement>(".prj-form-projeto");
   const editar = async (id: string, nome: string, vis: "eu" | "unidade") => {
-    app?.focarProjeto(id);
+    app.focarProjeto(id);
     await tique();
     botao(raiz, "Editar projeto")?.click();
     digitar(form()?.querySelector("input[name='nome']"), nome);
@@ -954,6 +1059,62 @@ async function verificarQuemVe(): Promise<void> {
     texto(form()?.querySelector(".prj-erros")),
   );
   falha.ler = false;
+  botao(form()!, "Cancelar")?.click();
+
+  // A edição no destino falha DEPOIS de mover (a memória do sigilo não grava o processo sigiloso escolhido): a
+  // mensagem diz que o projeto já mudou, e salvar de novo só edita (sem perguntar nem mover outra vez).
+  falha.gravar = true;
+  const antesDaNova = confirmacoes.length;
+  app.focarProjeto(p.id);
+  await tique();
+  botao(raiz, "Editar projeto")?.click();
+  await tique(10);
+  digitar(form()?.querySelector("input[name='nome']"), "Pregão com processo");
+  escolherCombo(form()!, "Processo SEI", DA_CAIXA);
+  marcar(form()?.querySelector("input[value='eu']"));
+  botao(form()!, "Salvar")?.click();
+  await tique(80);
+  const erroPosMover = texto(form()?.querySelector(".prj-erros"));
+  checar(
+    "a edicao que falha depois de mover: diz que o projeto ja esta no destino e o que fazer",
+    erroPosMover.startsWith("O projeto já está em “Só eu”, mas o nome e o processo novos não foram salvos: ") &&
+      erroPosMover.endsWith(" Salve de novo.") &&
+      (await x.repos.eu.obterProjeto(p.id))?.nome === "Pregão de volta" &&
+      !(await x.repos.unidade.obterProjeto(p.id)),
+    { erroPosMover, eu: (await x.repos.eu.obterProjeto(p.id))?.nome, un: !!(await x.repos.unidade.obterProjeto(p.id)) },
+  );
+  falha.gravar = false;
+  botao(form()!, "Salvar")?.click();
+  await tique(80);
+  const salvoNoDestino = await x.repos.eu.obterProjeto(p.id);
+  checar(
+    "salvar de novo: so edita no destino (sem nova confirmacao nem novo mover) e o dialogo fecha",
+    confirmacoes.length === antesDaNova + 1 &&
+      salvoNoDestino?.nome === "Pregão com processo" &&
+      salvoNoDestino.processo?.protocolo === DA_CAIXA &&
+      !form(),
+    { confirmacoes: confirmacoes.length - antesDaNova, nome: salvoNoDestino?.nome, processo: salvoNoDestino?.processo, form: !!form() },
+  );
   app.destruir();
   x.c.destruir();
+
+  secao("colaboracao: sem projeto ativo o menu do app nao oferece o Enviar");
+  const vazio = montar();
+  const appVazio = montarApp(vazio, vazio.area, []);
+  await vazio.c.iniciar();
+  await appVazio.iniciar();
+  const itensVazio = itensDoMenu(vazio.doc.getElementById("app")!, "Ajustes dos projetos");
+  checar(
+    "sem projeto: Receber fica, Enviar some",
+    itensVazio.includes("Receber projeto de arquivo…") && !itensVazio.includes("Enviar projeto por arquivo…"),
+    itensVazio,
+  );
+  await vazio.repos.eu.criarProjeto({ nome: "Primeiro" });
+  await tique(80);
+  checar(
+    "com projeto: o Enviar volta",
+    itensDoMenu(vazio.doc.getElementById("app")!, "Ajustes dos projetos").includes("Enviar projeto por arquivo…"),
+  );
+  appVazio.destruir();
+  vazio.c.destruir();
 }
