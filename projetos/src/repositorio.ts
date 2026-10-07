@@ -92,7 +92,7 @@ import {
   problemasDoModelo,
   problemasDoProjeto,
 } from "./modelo/validacao";
-import { indiceDeProcessos, RE_DOCUMENTO, RE_ID_PROCEDIMENTO, RE_PROTOCOLO, type VinculoProcesso } from "./modelo/vinculos";
+import { chaveProtocolo, indiceDeProcessos, RE_DOCUMENTO, RE_ID_PROCEDIMENTO, RE_PROTOCOLO, type VinculoProcesso } from "./modelo/vinculos";
 import { aplicarModelo } from "./modelos/aplicar";
 import { modeloDoProjeto } from "./modelos/salvar";
 
@@ -765,13 +765,69 @@ export class RepositorioProjetos {
   async concluirEtapa(id: string, hoje: DataISO, documento?: DocumentoSei | null): Promise<Etapa> {
     const atual = await this.obterEtapa(id);
     if (!atual) throw new ErroValidacao(["A etapa não existe mais."]);
-    // A mesma regra do diálogo e da importação: o Agente (P5) grava por aqui, sem passar pelo diálogo.
+    return this.gravarConclusao(atual, hoje, documento);
+  }
+
+  /**
+   * Concluir pelos balões da caixa, da árvore e do lateral: só a etapa ainda aberta (concluir de novo trocaria a
+   * data da conclusão e o documento). Devolve a etapa concluída, ou null se ela já estava concluída ou não existe
+   * mais (outro computador, outra aba, o painel), sem gravar nada. O documento segue a regra de sempre
+   * (`problemasDoDocumento`; o da etapa sigilosa é marcado pela gravação: `marcasAoGravar`).
+   */
+  async concluirSeAberta(id: string, hoje: DataISO, documento?: DocumentoSei): Promise<Etapa | null> {
+    const atual = await this.obterEtapa(id);
+    if (!atual || atual.concluidaEm) return null;
+    return this.gravarConclusao(atual, hoje, documento);
+  }
+
+  private async gravarConclusao(atual: Etapa, hoje: DataISO, documento?: DocumentoSei | null): Promise<Etapa> {
+    // A mesma regra do diálogo e da importação: o Agente (P5) e os balões gravam por aqui, sem passar pelo diálogo.
     const problemas = documento ? problemasDoDocumento(documento) : [];
     if (problemas.length) throw new ErroValidacao(problemas);
     const c = this.carimbo();
     const e = concluir(atual, hoje, c, documento);
-    await this.salvar(this.entradas(this.etapas, [[id, e]]), registrosDeEtapa(atual, e), c);
+    await this.salvar(this.entradas(this.etapas, [[atual.id, e]]), registrosDeEtapa(atual, e), c);
     return e;
+  }
+
+  /**
+   * O SEI mostrou o processo como sigiloso (a linha da caixa, a árvore): todo vínculo deste escopo com esse
+   * número (`chaveProtocolo`: com ou sem pontuação, com letras), do projeto e das etapas, vivo ou lápide, passa a
+   * `sigiloso: true` numa gravação só, pela máquina da P4 (modelo/sigilo.ts): a marca gruda sem mudar o carimbo
+   * (como as de `marcasDeSigilo`; nenhum registro novo, e o histórico nunca leva o número), a gravação marca junto o
+   * que a regra deduz (o documento da etapa que herda o processo) e a memória do sigilo guarda o número como local
+   * (`marcasAoGravar`: esta gravação mudou o campo). Já marcado, nada é gravado no escopo, mas a tela promove a
+   * memória a local. Falha fechada: memória ilegível lança `ErroMemoriaSigilo` sem gravar nada. Devolve quantos
+   * vínculos foram marcados (0: número sem dígito, nenhum vínculo com ele ou todos já marcados).
+   */
+  async marcarSigiloso(protocolo: string): Promise<number> {
+    const k = typeof protocolo === "string" ? chaveProtocolo(protocolo) : "";
+    if (!k) return 0;
+    const doNumero = (v: Vinculo | undefined): v is Vinculo => !!v && typeof v.protocolo === "string" && chaveProtocolo(v.protocolo) === k;
+    const [projetos, etapas] = await Promise.all([this.projetos.listar(), this.etapas.listar()]);
+    const marcar = <T extends Projeto | Etapa>(x: T): T => ({ ...x, processo: { ...(x.processo as Vinculo), sigiloso: true } });
+    const ps = projetos.filter((p) => doNumero(p.processo) && p.processo.sigiloso !== true).map(marcar);
+    const es = etapas.filter((e) => doNumero(e.processo) && e.processo.sigiloso !== true).map(marcar);
+    if (!ps.length && !es.length) {
+      if ([...projetos, ...etapas].some((x) => doNumero(x.processo)))
+        await this.lembrarSigilo({ processos: [k], documentos: [] }, "local", { promover: true });
+      return 0;
+    }
+    await this.salvar(
+      {
+        ...this.entradas(
+          this.projetos,
+          ps.map((p) => [p.id, p]),
+        ),
+        ...this.entradas(
+          this.etapas,
+          es.map((e) => [e.id, e]),
+        ),
+      },
+      [],
+      this.carimbo(),
+    );
+    return ps.length + es.length;
   }
 
   async reabrirEtapa(id: string): Promise<Etapa> {

@@ -65,6 +65,13 @@ export function protocoloNoTexto(t: string): string | null {
 
 const chaveDe = (v: Vinculo | undefined): string => (typeof v?.protocolo === "string" && v.protocolo ? chaveProtocolo(v.protocolo) : "");
 
+/**
+ * A etapa tem processo próprio: com número, ou o vínculo vazio marcado (`VINCULO_VAZIO` de `sigilo.ts`: o
+ * processo sigiloso que chegou sem número do Texto Padrão). O protocolo vazio SEM a marca é "sem processo",
+ * como a tela o mostra (o balão e o diálogo caem no processo do projeto).
+ */
+const processoProprio = (v: Vinculo | undefined): boolean => !!v && (!!v.protocolo || v.sigiloso === true);
+
 export function indiceDeProcessos(
   escopos: ReadonlyArray<{ vis: Vis; projetos: readonly Projeto[]; etapas: readonly Etapa[] }>,
 ): Map<string, VinculoProcesso[]> {
@@ -89,9 +96,12 @@ export function indiceDeProcessos(
     for (const e of esc.etapas) {
       const p = projetos.get(e.projeto);
       if (!p || e.removidoEm !== undefined) continue;
-      const k = chaveDe(e.processo) || chaveDe(p.processo);
+      // Com processo próprio, a etapa é dele, mesmo sem número (o sigiloso que chegou vazio do Texto Padrão):
+      // não cai no processo do projeto, onde mostraria a etapa de um processo sigiloso como se fosse deste.
+      const propria = processoProprio(e.processo);
+      const k = propria ? chaveDe(e.processo) : chaveDe(p.processo);
       if (!k) continue;
-      pegar(k, esc.vis, p, e.processo ? "etapa" : "projeto").etapas.push(e);
+      pegar(k, esc.vis, p, propria ? "etapa" : "projeto").etapas.push(e);
     }
   }
   return indice;

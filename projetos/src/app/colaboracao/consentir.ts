@@ -16,7 +16,9 @@ import type { RepositorioProjetos } from "../../repositorio";
  *   projeto nos dois lugares); a saída da unidade espera o "Entendi" na sincronia, com a faixa;
  * - `limpar`: só apaga deste navegador lápides que a exportação já poda (nada muda no texto);
  * - `registrar`: só anota o escopo por extenso (fora das entidades, não vai ao texto);
- * - `lembrarSigilo`: a memória do sigilo deste navegador, que nunca vai a lugar nenhum.
+ * - `lembrarSigilo`: a memória do sigilo deste navegador, que nunca vai a lugar nenhum;
+ * - `marcarSigiloso`: o sigilo que a tela do SEI mostrou é proteção (decisão 10 da P5): a marca só tira o número
+ *   do que vai ao texto (o vínculo vai vazio), nunca põe nada, então grava sem perguntar.
  * Método novo no repositório: a prova `verificar-app-colaboracao.ts` exige que ele entre numa das listas.
  */
 export const METODOS_QUE_GRAVAM: ReadonlySet<string> = new Set([
@@ -35,6 +37,7 @@ export const METODOS_QUE_GRAVAM: ReadonlySet<string> = new Set([
   "editarEtapa",
   "moverDatas",
   "concluirEtapa",
+  "concluirSeAberta",
   "reabrirEtapa",
   "removerEtapa",
   "restaurarEtapa",

@@ -445,6 +445,9 @@ export async function verificarAppColaboracao(): Promise<void> {
     limpar: (r) => r.limpar(AGORA),
     registrar: (r) => r.registrar(),
     lembrarSigilo: (r) => r.lembrarSigilo(nenhumNumero(), "aprendida"),
+    // A marca do sigilo visto na tela (decisão 10 da P5): a prova de que grava sem perguntar está em
+    // `verificar-integracao-modelo.ts`; aqui, um número que nenhum vínculo tem.
+    marcarSigiloso: (r) => r.marcarSigiloso("50300.000999/2026-99"),
   };
   // `private` no TypeScript: só a própria classe chama, com `this` = o repositório cru (sem passar pelo Proxy).
   const PRIVADOS = [
@@ -461,6 +464,7 @@ export async function verificarAppColaboracao(): Promise<void> {
     "exigirProjeto",
     "etapasDoProjeto",
     "conferirEtapa",
+    "gravarConclusao",
     "envelopeDe",
     "mesclarEm",
   ];
@@ -526,7 +530,10 @@ export async function verificarAppColaboracao(): Promise<void> {
     { perguntas: perguntasG - perguntasAntes, escritas: cont.escritas() - escritasAntes },
   );
   for (const gravar of Object.values(FORA_DO_ENTENDI)) await gravar(negado);
-  checar("limpar, registrar e a memoria do sigilo nao perguntam (nada disso muda o texto)", perguntasG === perguntasAntes);
+  checar(
+    "limpar, registrar, a memoria do sigilo e marcar sigilo nao perguntam (nada disso poe coisa nova no texto)",
+    perguntasG === perguntasAntes,
+  );
   const codigo = (await fontes(join(RAIZ, "src"))).filter((f) => f.nome !== join("src", "repositorio.ts"));
   const porColecao = codigo.filter((f) =>
     /\.(projetos|fases|etapas|registros|modelos)\s*\.\s*(gravar|gravarVarios|apagar)\s*\(/.test(f.codigo),
