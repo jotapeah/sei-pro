@@ -83,6 +83,41 @@ export async function verificarAppCsv(): Promise<void> {
   const hash = hashDaImpressao(par);
   checar("parametros no endereco e de volta", JSON.stringify(lerImpressao(hash)) === JSON.stringify(par));
   checar("endereco estranho nao imprime", lerImpressao("#modo=impressao&host=x") === null && lerImpressao("#modo=embutido") === null);
+  // O hash vira a chave do armazenamento (projetos/<host>|<login>|u:<unidade>/...): nada que mude o escopo passa.
+  const comHash = (troca: Record<string, string>) =>
+    lerImpressao(`#${new URLSearchParams({ ...par, lista: "1", modo: "impressao", ...troca }).toString()}`);
+  const NUL = String.fromCharCode(0);
+  const LF = String.fromCharCode(10);
+  const DEL = String.fromCharCode(0x7f);
+  const maliciosos = {
+    "host com |": comHash({ host: "sei.x.gov.br|ana|u:110/un/p" }),
+    "host com /": comHash({ host: "sei.x.gov.br/../outro" }),
+    "login com |": comHash({ login: "ana|u:999" }),
+    "login com /": comHash({ login: "ana/un" }),
+    "login com NUL": comHash({ login: `ana${NUL}` }),
+    "host com quebra de linha": comHash({ host: `sei.x.gov.br${LF}` }),
+    "login com DEL": comHash({ login: `ana${DEL}` }),
+    "unidade com letra": comHash({ unidade: "110a" }),
+    "unidade com | (outro escopo)": comHash({ unidade: "110|u:2" }),
+    "unidade negativa": comHash({ unidade: "-110" }),
+    "host com 201 caracteres": comHash({ host: "a".repeat(201) }),
+    "login com 201 caracteres": comHash({ login: "a".repeat(201) }),
+    "unidade com 201 digitos": comHash({ unidade: "1".repeat(201) }),
+    "projeto com 201 caracteres": comHash({ projeto: "p".repeat(201) }),
+    "projeto com controle": comHash({ projeto: `p1${LF}` }),
+    "| codificado (%7C)": lerImpressao("#modo=impressao&host=sei.x.gov.br%7Cana&login=ana&unidade=110&projeto=todos&escala=Dia"),
+  };
+  const passaram = Object.entries(maliciosos)
+    .filter(([, v]) => v !== null)
+    .map(([k]) => k);
+  checar("hash malicioso nao imprime (|, /, controle, mais de 200, unidade nao numerica)", passaram.length === 0, passaram);
+  checar(
+    "no limite (200 caracteres; login com ponto, arroba e hifen; host com porta) imprime",
+    comHash({ host: "a".repeat(200) }) !== null &&
+      comHash({ login: "a".repeat(200) }) !== null &&
+      comHash({ unidade: "1".repeat(200) }) !== null &&
+      comHash({ login: "ana.lima-2@orgao", host: "sei.x.gov.br:8443" })?.login === "ana.lima-2@orgao",
+  );
   const area = areaMemoria();
   const { repo: un } = novoRepo(ESCOPO_UN, area, "u");
   const { repo: eu } = novoRepo(ESCOPO_EU, area, "e");

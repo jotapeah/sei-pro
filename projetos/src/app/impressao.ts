@@ -42,11 +42,40 @@ export function hashDaImpressao(p: ParametrosImpressao): string {
   return `#${q.toString()}`;
 }
 
+/** Teto de cada parâmetro do endereço de impressão. */
+const TETO_PARAMETRO = 200;
+
+/** Caractere de controle (C0, DEL e C1): nada disso vem de um contexto do SEI. */
+function temControle(s: string): boolean {
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c < 0x20 || (c >= 0x7f && c <= 0x9f)) return true;
+  }
+  return false;
+}
+
+/** Texto não vazio, até o teto, sem controle. */
+const textoValido = (s: string): boolean => s.length > 0 && s.length <= TETO_PARAMETRO && !temControle(s);
+/**
+ * Host e login entram na chave do armazenamento (`projetos/<host>|<login>|u:<unidade>/...`): com `|`
+ * ou `/`, um endereço forjado leria o escopo de outra pessoa ou de outra unidade.
+ */
+const parteDaChave = (s: string): boolean => textoValido(s) && !/[|/]/.test(s);
+
+/**
+ * Lê e VALIDA o endereço (qualquer um pode abrir `html/projetos.html#...`): host e login sem `|`, `/`
+ * nem controle; unidade só com dígitos; tudo com até 200 caracteres. Fora disso, null (não imprime).
+ */
 export function lerImpressao(hash: string): ParametrosImpressao | null {
   const q = new URLSearchParams(hash.replace(/^#/, ""));
   const escala = q.get("escala");
-  const [host, login, unidade, projeto] = ["host", "login", "unidade", "projeto"].map((k) => q.get(k) ?? "");
-  if (q.get("modo") !== "impressao" || !host || !login || !unidade || !projeto || !ehEscala(escala)) return null;
+  const host = q.get("host") ?? "";
+  const login = q.get("login") ?? "";
+  const unidade = q.get("unidade") ?? "";
+  const projeto = q.get("projeto") ?? "";
+  if (q.get("modo") !== "impressao" || !ehEscala(escala)) return null;
+  if (!parteDaChave(host) || !parteDaChave(login) || !textoValido(projeto)) return null;
+  if (unidade.length > TETO_PARAMETRO || !/^[0-9]+$/.test(unidade)) return null;
   return { host, login, unidade, projeto, escala, lista: q.get("lista") === "1" };
 }
 
