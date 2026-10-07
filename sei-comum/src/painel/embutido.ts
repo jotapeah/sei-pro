@@ -12,7 +12,7 @@
 
 import { criarRpc, type PortaRpc, type Rpc, type Tratador } from "../ponte/rpc";
 import { h, icone } from "../ui/dom";
-import { type AvisarNaPagina, validarPrefixo } from "./aviso";
+import { type AvisarComAcoes, type AvisarNaPagina, validarPrefixo } from "./aviso";
 import { criarSobreposicao, type Sobreposicao } from "./sobreposicao";
 
 /** A ordem do painel `id` no `optionsPro` do legado (localStorage do SEI), ou null. */
@@ -203,6 +203,8 @@ export function tratadoresDoPainel(d: {
   iframe: HTMLIFrameElement | null;
   sobreposicao?: Sobreposicao | null;
   avisar?: AvisarNaPagina | null;
+  /** Aviso com mais de uma ação ("Informar documento" e "Desfazer"): devolve o índice clicado. */
+  avisarAcoes?: AvisarComAcoes | null;
 }): Record<string, Tratador> {
   return {
     altura: (args) => {
@@ -213,14 +215,14 @@ export function tratadoresDoPainel(d: {
     },
     sobrepor: (args) => (d.sobreposicao ? d.sobreposicao.ligar((args as { ativo?: unknown } | null)?.ativo === true) : false),
     aviso: (args) => {
-      const a = (args ?? {}) as { texto?: unknown; acao?: unknown; ms?: unknown };
+      const a = (args ?? {}) as { texto?: unknown; acao?: unknown; acoes?: unknown; ms?: unknown };
+      const n = Number(a.ms);
+      const ms = Number.isFinite(n) ? n : 7000;
+      const texto = String(a.texto ?? "").slice(0, 400);
+      const acoes = Array.isArray(a.acoes) ? a.acoes.slice(0, 3).map((x) => String(x).slice(0, 40)) : [];
+      if (acoes.length > 1 && d.avisarAcoes) return d.avisarAcoes(texto, acoes, ms);
       if (!d.avisar) return false;
-      const ms = Number(a.ms);
-      return d.avisar(
-        String(a.texto ?? "").slice(0, 400),
-        a.acao ? String(a.acao).slice(0, 40) : undefined,
-        Number.isFinite(ms) ? ms : 7000,
-      );
+      return d.avisar(texto, a.acao ? String(a.acao).slice(0, 40) : undefined, ms);
     },
   };
 }
@@ -234,7 +236,7 @@ export function ligarPortaDoPainel(
   m: Pick<PainelMontado, "iframe" | "sobreposicao" | "fechar">,
   conectar: () => PortaRpc,
   tratadores: Record<string, Tratador>,
-): { fechar(): void } {
+): { fechar(): void; rpc(): Rpc | null } {
   let rpc: Rpc | null = null;
   m.iframe.addEventListener("load", () => {
     rpc?.fechar();
@@ -246,5 +248,7 @@ export function ligarPortaDoPainel(
       rpc?.fechar();
       m.fechar();
     },
+    // A aba também chama o app (Projetos: a pílula de alerta do título pede o filtro).
+    rpc: () => (rpc?.aberta ? rpc : null),
   };
 }

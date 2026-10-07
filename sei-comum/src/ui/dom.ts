@@ -237,6 +237,10 @@ const ICONES = {
     ["rect", { x: "3", y: "6.5", width: "18", height: "11", rx: "2" }],
     ["path", { d: "M7 10h.01M10.3 10h.01M13.7 10h.01M17 10h.01M8 14h8" }],
   ],
+  gantt: [
+    ["path", { d: "M4 5h9M7 12h11M4 19h7" }],
+    ["path", { d: "M3 3v18" }],
+  ],
 } satisfies Record<string, Forma[]>;
 
 export type NomeIcone = keyof typeof ICONES;

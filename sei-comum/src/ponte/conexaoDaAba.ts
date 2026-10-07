@@ -9,9 +9,10 @@
  * a origem do pai (`document.referrer`), aceitando a primeira porta dessa origem.
  */
 
-import { criarRpc, type Rpc } from "./rpc";
+import { criarRpc, type Rpc, type Tratador } from "./rpc";
 
-export function esperarConexaoDaAba(canal: string): Promise<Rpc> {
+/** `tratadores`: o que a aba pode pedir ao app (o objeto é lido a cada pedido: dá para preencher depois). */
+export function esperarConexaoDaAba(canal: string, tratadores: Record<string, Tratador> = {}): Promise<Rpc> {
   const minhaAba = (async () => {
     try {
       return (await chrome.tabs?.getCurrent?.())?.id;
@@ -39,7 +40,7 @@ export function esperarConexaoDaAba(canal: string): Promise<Rpc> {
         }
         aceita = true;
         console.info(`[SEI Pro] ${canal} conectado`, aba !== undefined ? "pela aba" : "pela origem");
-        ok(criarRpc(porta));
+        ok(criarRpc(porta, tratadores));
       });
     });
   });

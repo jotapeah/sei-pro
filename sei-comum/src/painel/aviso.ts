@@ -11,10 +11,12 @@
  */
 
 import type { Rpc } from "../ponte/rpc";
-import { type EmissorAviso, mostrarAviso } from "../ui/aviso";
+import { type EmissorAviso, listaDeAcoes, mostrarAviso } from "../ui/aviso";
 import { h } from "../ui/dom";
 
 export type AvisarNaPagina = (texto: string, acao: string | undefined, ms: number) => Promise<boolean>;
+/** Mais de uma ação: a promessa diz o índice da ação clicada, ou -1. */
+export type AvisarComAcoes = (texto: string, acoes: readonly string[], ms: number) => Promise<number>;
 
 const caixa = (prefixo: string) =>
   "position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:2147483646;display:flex;align-items:center;gap:12px;" +
@@ -31,27 +33,32 @@ export function validarPrefixo(prefixo: string): string {
   return prefixo;
 }
 
-export function avisoNaPagina(doc: Document, temaEscuro: boolean, prefixo = "spro-painel"): AvisarNaPagina {
+export function avisoComAcoesNaPagina(doc: Document, temaEscuro: boolean, prefixo = "spro-painel"): AvisarComAcoes {
   const classe = `${validarPrefixo(prefixo)}-aviso`;
-  return (texto, acao, ms) =>
-    new Promise<boolean>((resolver) => {
+  return (texto, acoes, ms) =>
+    new Promise<number>((resolver) => {
       for (const velho of doc.querySelectorAll(`.${classe}`)) velho.remove();
       let feito = false;
-      const terminar = (acionado: boolean) => {
+      const terminar = (indice: number) => {
         if (feito) return;
         feito = true;
         el.remove();
-        resolver(acionado);
+        resolver(indice);
       };
       const el = h(
         "div",
         { class: classe, role: "status", style: caixa(prefixo) + (temaEscuro ? ";background:#2b3036" : "") },
         h("span", { style: "flex:1" }, texto),
-        acao ? h("button", { type: "button", style: BOTAO, onclick: () => terminar(true) }, acao) : null,
+        ...acoes.map((rotulo, i) => h("button", { type: "button", style: BOTAO, onclick: () => terminar(i) }, rotulo)),
       );
       (doc.body ?? doc.documentElement).append(el);
-      setTimeout(() => terminar(false), Math.max(10, Math.min(ms, 60_000)));
+      setTimeout(() => terminar(-1), Math.max(10, Math.min(ms, 60_000)));
     });
+}
+
+export function avisoNaPagina(doc: Document, temaEscuro: boolean, prefixo = "spro-painel"): AvisarNaPagina {
+  const avisar = avisoComAcoesNaPagina(doc, temaEscuro, prefixo);
+  return (texto, acao, ms) => avisar(texto, acao ? [acao] : [], ms).then((i) => i === 0);
 }
 
 /** Emissor de avisos do app embutido (ui/aviso.ts `definirEmissorDeAviso`): o aviso vai para o rodapé da tela do SEI. */
@@ -59,9 +66,15 @@ export function emissorDeAvisoPelaPagina(rpc: Pick<Rpc, "chamar">, doc: Document
   return (texto, acao, ms) => {
     // Com diálogo aberto, o iframe já cobre a tela: o aviso fica no próprio app.
     if (doc.documentElement.dataset.sobreposto) return false;
+    const acoes = listaDeAcoes(acao);
+    // `acao` (a primeira) continua indo: é o que uma aba de versão anterior entende.
+    const rotulos = acoes.length > 1 ? acoes.map((a) => a.rotulo) : undefined;
     rpc
-      .chamar<boolean>("aviso", { texto, acao: acao?.rotulo, ms }, ms + 5000)
-      .then((acionado) => acionado && acao?.fazer())
+      .chamar<boolean | number>("aviso", { texto, acao: acoes[0]?.rotulo, acoes: rotulos, ms }, ms + 5000)
+      .then((r) => {
+        const i = typeof r === "number" ? r : r === true ? 0 : -1;
+        acoes[i]?.fazer();
+      })
       .catch(() => mostrarAviso(doc, texto, acao, ms));
     return true;
   };

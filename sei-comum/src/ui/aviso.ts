@@ -5,6 +5,14 @@ export interface AcaoAviso {
   fazer(): void;
 }
 
+/** Uma ação, várias (o aviso de "concluída": "Informar documento" e "Desfazer") ou nenhuma. */
+export type AcoesAviso = AcaoAviso | readonly AcaoAviso[] | undefined;
+
+export function listaDeAcoes(a: AcoesAviso): AcaoAviso[] {
+  if (a === undefined) return [];
+  return "rotulo" in a ? [a] : [...a];
+}
+
 /**
  * Quem mostra o aviso fora do app, quando o app mora num iframe que não é o
  * lugar certo para ele (por exemplo, um iframe que cresce com o conteúdo: um
@@ -12,7 +20,7 @@ export interface AcaoAviso {
  * na tela visível da página hospedeira. Devolve false para o app mostrar ele
  * mesmo.
  */
-export type EmissorAviso = (texto: string, acao: AcaoAviso | undefined, ms: number) => boolean;
+export type EmissorAviso = (texto: string, acao: AcoesAviso, ms: number) => boolean;
 
 let emissor: EmissorAviso | null = null;
 
@@ -20,8 +28,8 @@ export function definirEmissorDeAviso(e: EmissorAviso | null): void {
   emissor = e;
 }
 
-/** Aviso curto (toast) no rodapé da tela, com uma ação opcional ("Desfazer"). */
-export function avisar(texto: string, acao?: AcaoAviso, ms = 7000): void {
+/** Aviso curto (toast) no rodapé da tela, com uma ação opcional ("Desfazer") ou mais de uma. */
+export function avisar(texto: string, acao?: AcoesAviso, ms = 7000): void {
   if (emissor?.(texto, acao, ms)) return;
   mostrarAviso(document, texto, acao, ms);
 }
@@ -49,7 +57,7 @@ export function destinoDoAviso(doc: Document): HTMLElement {
   return dialogo ?? doc.body ?? doc.documentElement;
 }
 
-export function mostrarAviso(doc: Document, texto: string, acao: AcaoAviso | undefined, ms: number): HTMLElement {
+export function mostrarAviso(doc: Document, texto: string, acao: AcoesAviso, ms: number): HTMLElement {
   const fundo = doc.body ?? doc.documentElement;
   // Um aviso por vez, esteja o anterior no body ou num diálogo.
   for (const lugar of [fundo, ...doc.querySelectorAll("dialog")])
@@ -59,19 +67,19 @@ export function mostrarAviso(doc: Document, texto: string, acao: AcaoAviso | und
     { class: "spro-aviso", role: "status" },
     icone("check", 16),
     h("span", {}, texto),
-    acao
-      ? h(
-          "button",
-          {
-            type: "button",
-            onclick: () => {
-              el.remove();
-              acao.fazer();
-            },
+    ...listaDeAcoes(acao).map((a) =>
+      h(
+        "button",
+        {
+          type: "button",
+          onclick: () => {
+            el.remove();
+            a.fazer();
           },
-          acao.rotulo,
-        )
-      : null,
+        },
+        a.rotulo,
+      ),
+    ),
   );
   // Camada de cima (popover): por cima do véu de um diálogo aberto, e não escondido atrás dele.
   el.setAttribute("popover", "manual");
