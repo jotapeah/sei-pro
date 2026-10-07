@@ -229,14 +229,26 @@ export function marcasDeSigilo(
   return { p: p2.filter((x, i) => x !== final.p[i]), e: e3.filter((x, i) => x !== final.e[i]) };
 }
 
-/** O que o estado marca (vínculos e documentos `sigiloso: true`, vivos ou lápides): vai para a memória do sigilo. */
-export function marcadosNoEstado(projetos: readonly Projeto[], etapas: readonly Etapa[]): Numeros {
+/**
+ * O que o estado marca (vínculos e documentos `sigiloso: true`, vivos ou lápides): vai para a memória do sigilo.
+ * Com `campos`, só o vínculo dos itens que `campos.processo` aceita e o documento das etapas que `campos.documento`
+ * aceita (os campos que uma gravação mudou).
+ */
+export function marcadosNoEstado(
+  projetos: readonly Projeto[],
+  etapas: readonly Etapa[],
+  campos?: { processo(x: Projeto | Etapa): boolean; documento(x: Etapa): boolean },
+): Numeros {
   const saida = nenhumNumero();
   for (const x of [...projetos, ...etapas]) {
+    if (campos && !campos.processo(x)) continue;
     const k = x.processo?.sigiloso === true && typeof x.processo.protocolo === "string" ? chaveProtocolo(x.processo.protocolo) : "";
     if (k) saida.processos.push(k);
   }
-  for (const x of etapas) if (x.documento?.sigiloso === true && x.documento.numero) saida.documentos.push(x.documento.numero);
+  for (const x of etapas) {
+    if (campos && !campos.documento(x)) continue;
+    if (x.documento?.sigiloso === true && x.documento.numero) saida.documentos.push(x.documento.numero);
+  }
   return saida;
 }
 
@@ -271,12 +283,14 @@ export function aprendidoDosRegistros(
  * etapa sigilosa, o marcado e o de número sigiloso trocados pelo marcador `DOCUMENTO_VAZIO`; registros raspados
  * (`rasparRegistro`). Número de documento sigiloso é o que `s` conhece (marcado ou na memória) e, nesta mesma
  * montagem, o documento de etapa sigilosa e os números dos registros "documento" dela: o mesmo número sai de
- * qualquer etapa e de qualquer registro já na primeira vez, sem esperar a memória. Devolve também tudo o que
- * raspou (chaves de processo e números de documento), para a memória do sigilo.
+ * qualquer etapa e de qualquer registro já na primeira vez, sem esperar a memória. Devolve também o que raspou
+ * (chaves de processo e números de documento), para a memória do sigilo; com `contar`, só o que raspou dos itens
+ * e registros que ele aceita (o corte é o mesmo: a gravação daqui separa assim o que é deste dispositivo).
  */
 export function cortarSigilo(
   ent: { p: readonly Projeto[]; e: readonly Etapa[]; h: readonly Registro[] },
   s: SigiloDoEnvelope,
+  contar: (x: Projeto | Etapa | Registro) => boolean = () => true,
 ): { p: Projeto[]; e: Etapa[]; h: Registro[]; raspados: Numeros } {
   const raspados = nenhumNumero();
   const doProcesso = (t: string | undefined) => {
@@ -292,26 +306,27 @@ export function cortarSigilo(
   const corte: SigiloDoEnvelope = { ...s, documentos };
   const p = ent.p.map((x): Projeto => {
     if (!corte.projetos.has(x.id)) return x;
-    doProcesso(x.processo?.protocolo);
+    if (contar(x)) doProcesso(x.processo?.protocolo);
     return { ...x, processo: VINCULO_VAZIO };
   });
   const e = ent.e.map((x): Etapa => {
     const sigilosa = corte.etapas.has(x.id);
+    const conta = contar(x);
     let y = x;
     const d = y.documento;
     if (d && (sigilosa || d.sigiloso || documentos.has(d.numero))) {
-      if (d.numero) raspados.documentos.push(d.numero);
+      if (d.numero && conta) raspados.documentos.push(d.numero);
       y = { ...y, documento: DOCUMENTO_VAZIO };
     }
     if (sigilosa && y.processo) {
-      doProcesso(y.processo.protocolo);
+      if (conta) doProcesso(y.processo.protocolo);
       y = { ...y, processo: VINCULO_VAZIO };
     }
     return y;
   });
   const h = ent.h.map((r) => {
     const x = rasparRegistro(r, corte);
-    if (x !== r) {
+    if (x !== r && contar(r)) {
       for (const lado of ["antes", "depois"] as const) {
         const t = r[lado];
         if (!t || x[lado] === t) continue;

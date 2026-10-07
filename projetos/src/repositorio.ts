@@ -292,7 +292,7 @@ export class RepositorioProjetos {
     const regs = carimbarRegistros(novos, c, this.gerarId);
     await this.area.gravar({
       ...itens,
-      ...(await this.marcasAoGravar(itens, regs, copia)),
+      ...(await this.marcasAoGravar(itens, regs, copia, c.dispositivo)),
       ...this.entradas(
         this.registros,
         regs.map((r) => [r.id, r]),
@@ -306,34 +306,35 @@ export class RepositorioProjetos {
    * noutro projeto ou etapa, ou já conhecido na memória do sigilo; o documento da etapa que ficou
    * sigilosa) vão na mesma gravação, sem mudar o carimbo dos itens marcados. Na memória entra o que fica
    * marcado e tudo o que o envelope rasparia do estado de agora (a gravação que marca já guarda o que o
-   * texto raspará, mesmo que nenhum texto seja montado antes de o processo mudar). Local (e promove a
-   * aprendida) é só o que ESTA gravação causou: o que passa a ser marcado ou raspado agora e antes não era,
-   * e o que fica marcado nos campos de vínculo e documento que ela mudou. O resto (dado de colega que já
-   * estava aqui) é aprendida, com o teto; e tudo é aprendida quando a gravação só copia (`copia`: o
-   * `importar` com anotações, que é o "Quem vê", e o "Duplicar", que copia o vínculo de outro projeto). Só lê
-   * o escopo quando a gravação mexe em vínculo ou documento.
+   * texto raspará, mesmo que nenhum texto seja montado antes de o processo mudar), como aprendida (com o
+   * teto). Local (e promove a aprendida) é só o que ESTA gravação causou, campo a campo (rodada 5):
+   * - a marca do campo de vínculo ou de documento que ela mudou (digitar só o documento numa etapa do colega
+   *   não promove o processo dela);
+   * - o número marcado nesse campo antes, que sai do estado com ela (foi este dispositivo que o tirou: sem isso,
+   *   com as aprendidas cheias, os registros daqui com ele voltariam ao texto);
+   * - o que passa a ser marcado ou raspado agora e antes não era, nos itens vivos e nos registros deste
+   *   `dispositivo` (o documento antigo da própria etapa, quando o usuário marca o processo do projeto). Em lápide
+   *   ou em item de colega, essa cascata é aprendida: só o que o usuário marcou é local.
+   * Tudo é aprendida quando a gravação só copia (`copia`: o `importar` com anotações, que é o "Quem vê", e os
+   * "Duplicar", que copiam o vínculo de outro item). Só lê o escopo quando a gravação mexe em vínculo ou documento.
    */
   private async marcasAoGravar(
     itens: Record<string, unknown>,
     regs: readonly Registro[],
     copia: boolean,
+    dispositivo: string,
   ): Promise<Record<string, unknown>> {
     const doTipo = (prefixo: string) => Object.entries(itens).filter(([k]) => k.startsWith(prefixo));
     const ps = doTipo(this.projetos.prefixo);
     const es = doTipo(this.etapas.prefixo);
     if (!ps.length && !es.length) return {};
     const antes = await this.area.obter([...ps, ...es].map(([k]) => k));
-    const doSigilo = (x: unknown) => {
-      const o = x as { processo?: unknown; documento?: unknown } | undefined;
-      return jsonEstavel([o?.processo ?? null, o?.documento ?? null]);
-    };
-    const mudados = new Set(
-      ps
-        .concat(es)
-        .filter(([k, v]) => doSigilo(antes[k]) !== doSigilo(v))
-        .map(([, v]) => (v as { id: string }).id),
-    );
-    if (!mudados.size) return {};
+    const campo = (x: unknown, k: "processo" | "documento") => jsonEstavel((x as Record<string, unknown> | undefined)?.[k] ?? null);
+    const mudou = (k: "processo" | "documento", lista: ReadonlyArray<[string, unknown]>) =>
+      new Set(lista.filter(([chave, v]) => campo(antes[chave], k) !== campo(v, k)).map(([, v]) => (v as { id: string }).id));
+    const mudouP = mudou("processo", [...ps, ...es]);
+    const mudouD = mudou("documento", es);
+    if (!mudouP.size && !mudouD.size) return {};
     const [projetos, etapas, registros, lida] = await Promise.all([
       this.projetos.listar(),
       this.etapas.listar(),
@@ -357,21 +358,20 @@ export class RepositorioProjetos {
       final.e,
       m.e.map((x) => [x.id, x]),
     );
-    const corte = cortarSigilo({ p: p2, e: e2, h: [...registros, ...regs] }, sigiloDoEnvelope(p2, e2, conhecidos));
-    const depois = juntarNumeros(marcadosNoEstado(p2, e2), corte.raspados);
+    const s = sigiloDoEnvelope(p2, e2, conhecidos);
+    const ent = { p: p2, e: e2, h: [...registros, ...regs] };
+    const depois = juntarNumeros(marcadosNoEstado(p2, e2), cortarSigilo(ent, s).raspados);
     let local = nenhumNumero();
     if (!copia) {
       const corteAntes = cortarSigilo({ p: projetos, e: etapas, h: registros }, sigiloDoEnvelope(projetos, etapas, conhecidos));
       const ja = juntarNumeros(marcadosNoEstado(projetos, etapas), corteAntes.raspados);
-      const jaP = new Set(ja.processos);
-      const jaD = new Set(ja.documentos);
-      const nosMudados = marcadosNoEstado(
-        p2.filter((x) => mudados.has(x.id)),
-        e2.filter((x) => mudados.has(x.id)),
-      );
+      const nosCampos = { processo: (x: { id: string }) => mudouP.has(x.id), documento: (x: { id: string }) => mudouD.has(x.id) };
+      const proprio = (x: Versionada) => x.dispositivo === dispositivo && x.removidoEm === undefined;
+      const daqui = juntarNumeros(marcadosNoEstado(p2.filter(proprio), e2.filter(proprio)), cortarSigilo(ent, s, proprio).raspados);
       local = juntarNumeros(
-        { processos: depois.processos.filter((n) => !jaP.has(n)), documentos: depois.documentos.filter((n) => !jaD.has(n)) },
-        nosMudados,
+        marcadosNoEstado(p2, e2, nosCampos),
+        foraDe(marcadosNoEstado(projetos, etapas, nosCampos), depois),
+        foraDe(daqui, ja),
       );
     }
     return {
@@ -672,6 +672,46 @@ export class RepositorioProjetos {
     const e = novaEtapa(d, this.gerarId(), indiceEntre(maiorOrdem(doProjeto), null), c);
     await this.conferirEtapa(e, doProjeto);
     await this.salvar(this.entradas(this.etapas, [[e.id, e]]), registrosDeEtapa(undefined, e), c);
+    return e;
+  }
+
+  /**
+   * "Duplicar" do balão: a cópia da etapa no mesmo projeto ("Cópia de ..."), com as mesmas datas, fase, processo
+   * e dependências vivas; a execução recomeça (sem conclusão nem documento, progresso 0, checklist desmarcado).
+   * Grava como cópia, como o `duplicarProjeto`: o vínculo copiado (talvez de um colega) não é marcar aqui.
+   */
+  async duplicarEtapa(id: string): Promise<Etapa> {
+    const origem = await this.obterEtapa(id);
+    if (!origem) throw new ErroValidacao(["A etapa não existe mais."]);
+    await this.exigirProjeto(origem.projeto);
+    const doProjeto = await this.etapasDoProjeto(origem.projeto);
+    if (doProjeto.length >= LIMITES.etapasPorProjeto)
+      throw new ErroValidacao([`Um projeto pode ter até ${LIMITES.etapasPorProjeto} etapas.`]);
+    const vivas = new Set(doProjeto.map((x) => x.id));
+    const c = this.carimbo();
+    const e = novaEtapa(
+      {
+        projeto: origem.projeto,
+        nome: `Cópia de ${origem.nome}`.slice(0, LIMITES.nome),
+        inicio: origem.inicio,
+        fim: origem.fim,
+        marco: origem.marco,
+        fase: origem.fase,
+        // Dependência de etapa excluída não vale para a etapa nova (a conferência recusaria).
+        dependeDe: origem.dependeDe.filter((d) => vivas.has(d)),
+        responsavel: origem.responsavel,
+        medida: origem.medida,
+        checklist: origem.checklist.map((i) => ({ ...i, feito: false })),
+        processo: origem.processo,
+        etiquetas: origem.etiquetas,
+        observacoes: origem.observacoes,
+      },
+      this.gerarId(),
+      indiceEntre(maiorOrdem(doProjeto), null),
+      c,
+    );
+    await this.conferirEtapa(e, doProjeto);
+    await this.salvar(this.entradas(this.etapas, [[e.id, e]]), registrosDeEtapa(undefined, e), c, true);
     return e;
   }
 
@@ -1205,6 +1245,13 @@ function entidadesDe(tudo: Record<string, unknown>, base: string): Entidades {
   const lista = Object.entries(tudo);
   const de = <T>(t: string) => lista.filter(([k]) => k.startsWith(`${base}${t}/`)).map(([, v]) => v as T);
   return { p: de<Projeto>("p"), f: de<Fase>("f"), e: de<Etapa>("e"), h: de<Registro>("h"), m: de<Modelo>("m") };
+}
+
+/** Os números de `n` que não estão em `de`. */
+function foraDe(n: Numeros, de: Numeros): Numeros {
+  const p = new Set(de.processos);
+  const d = new Set(de.documentos);
+  return { processos: n.processos.filter((x) => !p.has(x)), documentos: n.documentos.filter((x) => !d.has(x)) };
 }
 
 /** A lista com as versões que vão ser gravadas por cima (pelo id). */

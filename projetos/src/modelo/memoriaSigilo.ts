@@ -8,14 +8,26 @@
  *   fora de todo escopo, UMA CHAVE POR NÚMERO (`p/<chave>`, `d/<número>`), com a origem no valor. Gravar
  *   uma entrada nunca reescreve as outras: dois contextos (o app e a aba) somando ao mesmo tempo não se
  *   apagam (com uma chave só, a última gravação levava o que a outra tinha somado).
- * - Origem: "local" (marcada aqui, pela caixa ou pelo vínculo, ou raspada na montagem do texto, na gravação
- *   ou na poda) ou "aprendida" (vinda de fora: cópia ou registro de um colega, na mescla). Uma aprendida que
- *   depois é vista numa gravação daqui vira local.
+ * - Origem (decidida por quem grava, pela operação; nunca por um campo do item, que vem no texto e qualquer um
+ *   copia): "local" é só o que uma gravação deste dispositivo causou (`marcasAoGravar` no repositório): a marca
+ *   do campo de vínculo ou de documento que ela mudou, o número marcado nesse campo que sai do estado com ela,
+ *   e o que passa a ser marcado ou raspado nos itens vivos e nos registros deste dispositivo. Todo o resto é
+ *   "aprendida": a mescla, a montagem do texto, a poda, as cópias ("Quem vê", "Duplicar") e a cascata em lápide
+ *   ou em item de colega. Uma aprendida que uma gravação daqui marca vira local.
  * - Nada é despejado, nunca: um colega não consegue empurrar para fora um número sigiloso de verdade.
  *   As locais não têm teto. As aprendidas têm teto de `TETO_APRENDIDAS` (20000) por conjunto: com ele cheio,
- *   uma aprendida nova simplesmente não entra. Custo: este computador não fica sabendo do sigilo desse número
- *   pelo colega; se só o colega sabe (só ele o raspa), o número continua indo no texto gravado daqui e os dois
- *   regravam o texto a cada rodada (o vai-e-volta da rodada 1), até ele ser visto aqui.
+ *   uma aprendida nova simplesmente não entra. O teto é aproximado: cada gravação conta as aprendidas que leu,
+ *   sem trava entre elas, e duas gravações simultâneas de escopos diferentes (o `importar` do "Só eu" e o da
+ *   unidade, cada um com a sua trava) podem passar dele: cada uma soma no máximo o que faltava quando leu,
+ *   então o excesso é o que a outra somou no meio (nunca o dobro do teto). As entradas são chaves separadas:
+ *   nenhuma apaga a outra, e a gravação seguinte, cheia, não soma mais nada.
+ * - Custo do teto cheio: este computador não fica sabendo do sigilo de um número pelo colega. Enquanto a
+ *   marca está no estado daqui (o sigilo gruda), nada vaza; quando ela sai por uma gravação DESTE dispositivo
+ *   (tirar ou trocar o documento ou o processo), o número entra como local e continua raspado. O que sobra é a
+ *   saída feita pelo COLEGA: um número que ficou sigiloso aqui só pela marca dele e está num registro escrito
+ *   aqui volta a ir no texto gravado daqui quando o colega troca o processo, e os dois regravam o texto a cada
+ *   rodada (o vai-e-volta da rodada 1), até o número ser marcado aqui. Fechar isso pediria um índice local dos
+ *   registros criados aqui.
  * - Falha fechada: a leitura que não dá (erro do storage) lança; a chave única da rodada 2
  *   (`chaveMemoriaSigiloLegada`) é lida como locais, e se estiver torta com algo dentro lança
  *   `ErroMemoriaSigilo` (só a torta sem nada dentro conta como vazia). Numa entrada por número, o valor torto

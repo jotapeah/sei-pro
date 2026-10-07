@@ -818,7 +818,6 @@ export class AppProjetos {
     const repo = this.repoDe(p.vis);
     const hoje = this.d.hoje();
     const tentar = (f: () => Promise<unknown>) => void f().catch((erro) => avisar(mensagem(erro)));
-    const naTela = new Set(p.etapas.map((x) => x.id));
     this.balao?.fechar();
     const camada: Camada = abrirBalaoEtapa(
       ancora,
@@ -839,24 +838,10 @@ export class AppProjetos {
         },
         aoAbrirDocumento: (numero) => tentar(() => this.d.rpc.chamar("abrirDocumento", { numero })),
         aoAbrirProcesso: (v, ev) => this.abrirProcesso(v, ev),
+        // A cópia grava como cópia (o vínculo copiado, talvez de um colega, não é marcar aqui).
         aoDuplicar: () =>
           tentar(async () => {
-            await repo.criarEtapa({
-              projeto: p.projeto.id,
-              nome: `Cópia de ${e.nome}`.slice(0, 200),
-              inicio: e.inicio,
-              fim: e.fim,
-              marco: e.marco,
-              fase: e.fase,
-              // Dependência de etapa excluída não vale para a etapa nova (o repositório recusaria).
-              dependeDe: e.dependeDe.filter((d) => naTela.has(d)),
-              responsavel: e.responsavel,
-              medida: e.medida,
-              checklist: e.checklist.map((i) => ({ ...i, feito: false })),
-              processo: e.processo,
-              etiquetas: e.etiquetas,
-              observacoes: e.observacoes,
-            });
+            await repo.duplicarEtapa(e.id);
             avisar("Etapa duplicada.");
           }),
         aoMoverFase: (f) => tentar(() => repo.editarEtapa(e.id, { fase: f }, hoje)),
