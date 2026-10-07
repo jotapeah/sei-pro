@@ -44,7 +44,7 @@ import { alertasDaUnidade, carregarUnidade, type DadosUnidade, type ProjetoNaTel
 import { abrirArquivados, abrirInformarDocumento, pedirNomeDoModelo } from "./dialogos/apoio";
 import { abrirDialogoEtapa, type ResultadoEtapa } from "./dialogos/etapa";
 import { abrirDialogoProjeto, type ResultadoProjeto } from "./dialogos/projeto";
-import { cotaCheia, TEXTO_COTA_CHEIA } from "./erros";
+import { mensagemDoErro as mensagem } from "./erros";
 import { dataCurta, plural } from "./formato";
 import type { ParametrosImpressao } from "./impressao";
 import {
@@ -86,14 +86,6 @@ export interface DepsApp {
   /** De quanto em quanto o app confere a virada do dia (padrão: 1 minuto). */
   conferirDiaMs?: number;
 }
-
-/** Erro de uma ação: a mensagem do repositório (ErroValidacao), a da cota cheia (spec 9) ou a do erro. */
-const mensagem = (e: unknown): string => {
-  const m = (e as { mensagens?: unknown })?.mensagens;
-  if (Array.isArray(m) && m.length) return m.map(String).join(" ");
-  if (cotaCheia(e)) return TEXTO_COTA_CHEIA;
-  return e instanceof Error ? e.message : String(e);
-};
 
 /** Mudança de preferências: o pedaço novo, ou uma função do que está gravado (reaplicada na fila). */
 type MudancaPrefs = Partial<Preferencias> | ((p: Preferencias) => Partial<Preferencias>);

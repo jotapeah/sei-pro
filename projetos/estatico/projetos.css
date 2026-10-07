@@ -977,3 +977,74 @@ html[data-modo="impressao"] .prj-gantt {
   gap: 4px;
   padding-left: 18px;
 }
+
+/* ---------- P4: dialogo Sincronizacao ---------- */
+.prj-sync {
+  min-width: min(520px, 86vw);
+}
+.prj-sync-secao {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--spro-fundo);
+  border: 1px solid var(--spro-borda);
+  border-radius: var(--spro-raio-g);
+}
+.prj-sync-secao h3 {
+  margin: 0;
+  font-size: 13.5px;
+}
+.prj-sync-secao p {
+  margin: 0;
+}
+.prj-sync-corpo {
+  display: grid;
+  gap: 8px;
+}
+.prj-sync-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+/* Acao em curso: aria-disabled (o disabled tiraria o foco do teclado). */
+.prj-sync [aria-disabled="true"] {
+  cursor: progress;
+  opacity: 0.6;
+}
+.prj-sync-situacao,
+.prj-sync-aviso {
+  color: var(--spro-texto);
+}
+.prj-sync-erro {
+  color: var(--spro-perigo);
+}
+.prj-sync-extra:empty,
+.prj-sync-aviso:empty {
+  display: none;
+}
+.prj-sync-substituido {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.prj-copias {
+  display: grid;
+  gap: 2px;
+  max-height: 220px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+.prj-copias li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 6px 5px 8px;
+  border-radius: var(--spro-raio);
+}
+.prj-copias li:hover {
+  background: var(--spro-fundo-2);
+}

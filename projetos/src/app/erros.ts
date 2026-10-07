@@ -12,3 +12,11 @@ export function cotaCheia(e: unknown): boolean {
   const texto = `${typeof x?.name === "string" ? x.name : ""} ${typeof x?.message === "string" ? x.message : typeof e === "string" ? e : ""}`;
   return /quota/i.test(texto);
 }
+
+/** Erro de uma ação: a mensagem do repositório (ErroValidacao), a da cota cheia (spec 9) ou a do erro. */
+export function mensagemDoErro(e: unknown): string {
+  const m = (e as { mensagens?: unknown })?.mensagens;
+  if (Array.isArray(m) && m.length) return m.map(String).join(" ");
+  if (cotaCheia(e)) return TEXTO_COTA_CHEIA;
+  return e instanceof Error ? e.message : String(e);
+}
