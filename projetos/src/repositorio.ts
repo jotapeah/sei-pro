@@ -12,9 +12,9 @@ import { novoId } from "@comum/id";
 import { indiceEntre, indiceValido } from "@comum/ordem/indice";
 import { mesclar, purgarLapides, type Versionada } from "@comum/sincronia/entidade";
 import { normalizarTexto } from "@comum/texto";
-import { dataValida, LIMITE_DIAS_ETAPA } from "./modelo/calendario";
-import { DIAS_LAPIDE_EU, DIAS_LAPIDE_UNIDADE, LIMITES } from "./modelo/constantes";
-import { validarDependencias, violacoesDeDatas } from "./modelo/dependencias";
+import { dataNaFaixa, LIMITE_DIAS_ETAPA } from "./modelo/calendario";
+import { DIAS_LAPIDE_EU, DIAS_LAPIDE_UNIDADE, FOLGA_RELOGIO_MS, LIMITES } from "./modelo/constantes";
+import { problemasDasMudancas, validarDependencias, violacoesDeDatas } from "./modelo/dependencias";
 import { baseDoEscopo, chaveMeta, prefixoDe, rotuloDaVis } from "./modelo/escopo";
 import {
   type ApoioHistorico,
@@ -60,6 +60,7 @@ import {
   checklistLimpo,
   ErroValidacao,
   etiquetasLimpas,
+  idValido,
   nomeLimpo,
   problemasDaEstruturaDoModelo,
   problemasDaEtapa,
@@ -76,6 +77,17 @@ export interface Dados {
   fases: Fase[];
   etapas: Etapa[];
   modelos: Modelo[];
+}
+
+/**
+ * Resultado de `importar`. `ignorados` = tudo o que não entrou (malformado, carimbo do futuro ou
+ * além dos tetos da spec 5.4); `excedentes` = a parte dos ignorados que só passou dos tetos.
+ */
+export interface ResultadoImportacao {
+  novos: number;
+  atualizados: number;
+  ignorados: number;
+  excedentes: number;
 }
 
 /** Só campo opcional aceita `undefined` (apaga); nos obrigatórios ele é ignorado. */
@@ -191,9 +203,12 @@ export class RepositorioProjetos {
         regs.map((r) => [r.id, r]),
       ),
     });
-    if (!regs.length) return;
-    const sobra = excedentes(await this.registros.listar(), LIMITES.historico);
-    await this.registros.apagar(sobra);
+    if (regs.length) await this.podarHistorico();
+  }
+
+  /** Os 300 registros mais recentes ficam (spec 5.4). `Area` não grava e remove juntos: é outra chamada. */
+  private async podarHistorico(): Promise<void> {
+    await this.registros.apagar(excedentes(await this.registros.listar(), LIMITES.historico));
   }
 
   private async apoio(projeto: string): Promise<ApoioHistorico> {
@@ -488,11 +503,15 @@ export class RepositorioProjetos {
   }
 
   /**
-   * Datas de um arraste no Gantt (ou de dependentes deslocadas). Aplica a regra
-   * da linha de base; recusa (sem gravar nada) se sobrar violação de datas.
+   * Datas de um arraste no Gantt (ou de dependentes deslocadas). Recusa (sem gravar nada) o que
+   * `problemasDasMudancas` recusa: data que não existe, fora de 2000 a 2100, etapa de mais de ~10
+   * anos, ou violação NOVA de dependência (inclusive a predecessora que passa por cima da sucessora
+   * parada); violação que já existia não trava. Aplica a regra da linha de base.
    */
   async moverDatas(mudancas: readonly MudancaDeDatas[], hoje: DataISO): Promise<Etapa[]> {
     const todas = (await this.etapas.listar()).filter(vivo);
+    const problemas = problemasDasMudancas(todas, mudancas);
+    if (problemas.length) throw new ErroValidacao(problemas);
     const porId = new Map(todas.map((e) => [e.id, e]));
     const novas = new Map<string, Etapa>();
     for (const m of mudancas) {
@@ -502,9 +521,6 @@ export class RepositorioProjetos {
       novas.set(m.id, { ...atual, ...aplicarDatas(atual, m.inicio, fim, hoje) });
     }
     if (!novas.size) return [];
-    const depois = todas.map((e) => novas.get(e.id) ?? e);
-    const problemas = violacoesDeDatas(depois, new Set(novas.keys()));
-    if (problemas.length) throw new ErroValidacao(problemas);
     const c = this.carimbo();
     const gravadas = [...novas.values()].map((e) => editar(porId.get(e.id)!, { inicio: e.inicio, fim: e.fim, base: e.base }, c));
     const registros = gravadas.flatMap((e) => registrosDeEtapa(porId.get(e.id), e));
@@ -663,36 +679,56 @@ export class RepositorioProjetos {
   /**
    * Mescla entidades vindas de fora (Texto Padrão, arquivo, outro escopo): por
    * entidade vence a gravação mais recente (`mesclar` do sei-comum). Item
-   * malformado é ignorado. Vínculo sigiloso que chega vazio (sem número) mantém
-   * o número que este computador já tinha. Tudo vai num `area.gravar` só (um aviso
-   * em `aoMudar`); `anotacoes` (registros do histórico a criar junto, com o carimbo)
-   * entram nessa mesma gravação.
+   * malformado (`entidadeValida`) ou com carimbo mais de 1 dia à frente do relógio
+   * daqui é ignorado; dependência repetida sai. Tetos da spec 5.4: 100 projetos
+   * ativos, 300 etapas vivas por projeto, 50 modelos vivos (o que já contava aqui
+   * fica; dos que passariam a contar, entram os primeiros pelo id) e os 300
+   * registros mais recentes; o excedente é ignorado e contado em `excedentes`.
+   * Vínculo sigiloso que chega vazio (sem número) mantém o número que este
+   * computador já tinha. Tudo vai num `area.gravar` só (um aviso em `aoMudar`);
+   * `anotacoes` (registros do histórico a criar junto, com o carimbo) entram nessa
+   * mesma gravação. Registros antigos daqui além dos 300 são podados depois.
    */
-  async importar(
-    ent: Partial<Entidades>,
-    anotacoes?: { registros: RegistroNovo[]; carimbo: Carimbo },
-  ): Promise<{ novos: number; atualizados: number; ignorados: number }> {
-    const soma = { novos: 0, atualizados: 0, ignorados: 0 };
+  async importar(ent: Partial<Entidades>, anotacoes?: { registros: RegistroNovo[]; carimbo: Carimbo }): Promise<ResultadoImportacao> {
+    const agora = this.carimbo().agora;
+    const soma: ResultadoImportacao = { novos: 0, atualizados: 0, ignorados: 0, excedentes: 0 };
     let itens: Record<string, unknown> = {};
+    let importouRegistros = false;
     const mesclarCol = async <T extends Versionada>(
       col: Colecao<T>,
       lista: readonly unknown[] | undefined,
       tipo: keyof Entidades,
+      teto: (locais: ReadonlyMap<string, T>, vencedoras: readonly T[]) => Set<string>,
       combinar?: (vencedor: T, local: T | undefined) => T,
     ) => {
-      const r = await this.mesclarEm(col, lista ?? [], tipo, combinar);
+      const r = await this.mesclarEm(col, lista ?? [], tipo, agora, teto, combinar);
       soma.novos += r.novos;
       soma.atualizados += r.atualizados;
       soma.ignorados += r.ignorados;
+      soma.excedentes += r.excedentes;
+      if (tipo === "h" && r.gravar.length) importouRegistros = true;
       itens = { ...itens, ...this.entradas(col, r.gravar) };
     };
-    await mesclarCol(this.projetos, ent.p, "p", manterNumeroSigiloso);
-    await mesclarCol(this.fases, ent.f, "f");
-    await mesclarCol(this.etapas, ent.e, "e", manterNumeroSigiloso);
-    await mesclarCol(this.registros, ent.h, "h");
-    await mesclarCol(this.modelos, ent.m, "m");
+    await mesclarCol(
+      this.projetos,
+      ent.p,
+      "p",
+      (l, v) => alemDoTeto(l, v, (x) => (vivo(x) && x.arquivadoEm === undefined ? "" : null), LIMITES.projetosAtivos),
+      manterNumeroSigiloso,
+    );
+    await mesclarCol(this.fases, ent.f, "f", () => new Set());
+    await mesclarCol(
+      this.etapas,
+      ent.e,
+      "e",
+      (l, v) => alemDoTeto(l, v, (x) => (vivo(x) ? x.projeto : null), LIMITES.etapasPorProjeto),
+      manterNumeroSigiloso,
+    );
+    await mesclarCol(this.registros, ent.h, "h", registrosAlemDoTeto);
+    await mesclarCol(this.modelos, ent.m, "m", (l, v) => alemDoTeto(l, v, (x) => (vivo(x) ? "" : null), LIMITES.modelos));
     if (anotacoes) await this.salvar(itens, anotacoes.registros, anotacoes.carimbo);
     else if (Object.keys(itens).length) await this.area.gravar(itens);
+    if (importouRegistros && !anotacoes?.registros.length) await this.podarHistorico();
     return soma;
   }
 
@@ -700,23 +736,28 @@ export class RepositorioProjetos {
     col: Colecao<T>,
     itens: readonly unknown[],
     tipo: keyof Entidades,
+    agora: number,
+    teto: (locais: ReadonlyMap<string, T>, vencedoras: readonly T[]) => Set<string>,
     combinar: (vencedor: T, local: T | undefined) => T = (v) => v,
-  ): Promise<{ gravar: Array<[string, T]>; novos: number; atualizados: number; ignorados: number }> {
+  ): Promise<{ gravar: Array<[string, T]>; novos: number; atualizados: number; ignorados: number; excedentes: number }> {
     const locais = await col.listar();
-    const validos = itens.filter((x) => entidadeValida(x, tipo)) as T[];
+    const validos = itens.filter((x) => entidadeValida(x, tipo, agora)).map((x) => sanear(x as T, tipo));
     const porId = new Map(locais.map((i) => [i.id, i]));
+    // `mesclar` devolve o próprio objeto vencedor: se é o local, nada a gravar.
+    const vencedoras = mesclar(locais, validos).filter((v) => v !== porId.get(v.id));
+    const fora = teto(porId, vencedoras);
     const gravar: Array<[string, T]> = [];
     let novos = 0;
     let atualizados = 0;
-    // `mesclar` devolve o próprio objeto vencedor: se é o local, nada a gravar.
-    for (const vencedor of mesclar(locais, validos)) {
+    for (const vencedor of vencedoras) {
+      if (fora.has(vencedor.id)) continue;
       const atual = porId.get(vencedor.id);
-      if (vencedor === atual) continue;
       gravar.push([vencedor.id, combinar(vencedor, atual)]);
       if (atual) atualizados += 1;
       else novos += 1;
     }
-    return { gravar, novos, atualizados, ignorados: itens.length - validos.length };
+    const invalidos = itens.length - validos.length;
+    return { gravar, novos, atualizados, ignorados: invalidos + fora.size, excedentes: fora.size };
   }
 
   /**
@@ -779,66 +820,183 @@ export class RepositorioProjetos {
   }
 }
 
-/** Vínculo sigiloso que chegou sem número (Texto Padrão) mantém o número deste computador. */
+/**
+ * Vínculo sigiloso que chegou sem número (Texto Padrão) mantém o número deste computador, mesmo que
+ * aqui ainda não se soubesse do sigilo (o vínculo local passa a ser sigiloso). Se os dois lados têm
+ * `idProcedimento` e eles diferem, não é o mesmo processo: fica o que chegou.
+ */
 export function manterNumeroSigiloso<T extends { processo?: Vinculo }>(vencedor: T, local: T | undefined): T {
   const v = vencedor.processo;
   const l = local?.processo;
-  if (!v?.sigiloso || v.protocolo || !l?.sigiloso || !l.protocolo) return vencedor;
+  if (!v?.sigiloso || v.protocolo || !l?.protocolo) return vencedor;
+  if (v.idProcedimento && l.idProcedimento && v.idProcedimento !== l.idProcedimento) return vencedor;
   return { ...vencedor, processo: semVazios({ ...v, protocolo: l.protocolo, idProcedimento: v.idProcedimento ?? l.idProcedimento }) };
 }
 
+/** Dependência repetida sai (a Frappe desenharia a seta duas vezes). Só copia quando há o que tirar. */
+function sanear<T>(x: T, tipo: keyof Entidades): T {
+  if (tipo !== "e") return x;
+  const e = x as unknown as Etapa;
+  const deps = [...new Set(e.dependeDe)];
+  return deps.length === e.dependeDe.length ? x : ({ ...e, dependeDe: deps } as unknown as T);
+}
+
+const compararIds = (a: { id: string }, b: { id: string }): number => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+/**
+ * Vencedoras da mescla que passariam de um teto (spec 5.4), por grupo (`grupo` devolve null para o
+ * que não conta, como lápide e arquivado). O que já contava aqui no mesmo grupo fica; das que passam
+ * a contar agora, entram as primeiras pelo id até o teto. Devolve os ids que ficam de fora.
+ */
+function alemDoTeto<T extends Versionada>(
+  locais: ReadonlyMap<string, T>,
+  vencedoras: readonly T[],
+  grupo: (x: T) => string | null,
+  teto: number,
+): Set<string> {
+  const conta = new Map<string, number>();
+  const somar = (g: string) => conta.set(g, (conta.get(g) ?? 0) + 1);
+  const trocadas = new Set(vencedoras.map((v) => v.id));
+  for (const [id, l] of locais) {
+    const g = trocadas.has(id) ? null : grupo(l);
+    if (g !== null) somar(g);
+  }
+  const entrando: T[] = [];
+  for (const v of vencedoras) {
+    const g = grupo(v);
+    if (g === null) continue;
+    const l = locais.get(v.id);
+    if (l && grupo(l) === g) somar(g);
+    else entrando.push(v);
+  }
+  const fora = new Set<string>();
+  for (const v of entrando.sort(compararIds)) {
+    const g = grupo(v) as string;
+    if ((conta.get(g) ?? 0) >= teto) fora.add(v.id);
+    else somar(g);
+  }
+  return fora;
+}
+
+/** Registros: ficam os 300 mais recentes do escopo (como a poda); os que chegam e não estariam entre eles ficam de fora. */
+function registrosAlemDoTeto(locais: ReadonlyMap<string, Registro>, vencedoras: readonly Registro[]): Set<string> {
+  const final = new Map(locais);
+  for (const v of vencedoras) final.set(v.id, v);
+  const chegando = new Set(vencedoras.map((v) => v.id));
+  return new Set(excedentes([...final.values()], LIMITES.historico).filter((id) => chegando.has(id)));
+}
+
 const texto = (x: unknown): x is string => typeof x === "string";
+const textoAte =
+  (max: number) =>
+  (x: unknown): x is string =>
+    texto(x) && x.length <= max;
+const finito = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x);
+const objeto = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x);
+const opcional = (x: unknown, ok: (v: unknown) => boolean): boolean => x === undefined || ok(x);
+const listaDe = (x: unknown, max: number, ok: (v: unknown) => boolean): boolean =>
+  Array.isArray(x) && x.length <= max && x.every((v) => ok(v));
+const MEDIDAS: ReadonlySet<unknown> = new Set(["manual", "tempo", "checklist"]);
+
+const nomeValido = textoAte(LIMITES.nome);
+const etiquetasValidas = (x: unknown): boolean => listaDe(x, LIMITES.etiquetas, textoAte(LIMITES.etiquetaTexto));
+const origemValida = (x: unknown): boolean => opcional(x, (o) => objeto(o) && opcional(o.atividades, finito));
+const responsavelValido = (x: unknown): boolean => opcional(x, (r) => objeto(r) && nomeValido(r.nome) && opcional(r.login, texto));
+const itemValido = (x: unknown): boolean =>
+  objeto(x) && texto(x.id) && textoAte(LIMITES.checklistTexto)(x.texto) && typeof x.feito === "boolean";
+const progressoValido = (x: unknown): boolean => finito(x) && x >= 0 && x <= 100;
+
+/** Datas de etapa (ou da base): existem, de 2000 a 2100, até `LIMITE_DIAS_ETAPA` e (`emOrdem`) término >= início. */
+function datasValidas(inicio: unknown, fim: unknown, emOrdem: boolean): boolean {
+  if (!dataNaFaixa(inicio) || !dataNaFaixa(fim)) return false;
+  if (emOrdem && fim < inicio) return false;
+  return diferencaDias(inicio, fim) <= LIMITE_DIAS_ETAPA;
+}
+
+const baseValida = (x: unknown): boolean => opcional(x, (b) => objeto(b) && datasValidas(b.inicio, b.fim, true));
 
 /** `processo` opcional: objeto com `protocolo` texto, `idProcedimento` texto ou ausente, `sigiloso` booleano ou ausente. */
 function vinculoValido(v: unknown): boolean {
   if (v === undefined) return true;
-  if (!v || typeof v !== "object") return false;
-  const o = v as Record<string, unknown>;
-  return (
-    texto(o.protocolo) &&
-    (o.idProcedimento === undefined || texto(o.idProcedimento)) &&
-    (o.sigiloso === undefined || typeof o.sigiloso === "boolean")
-  );
+  if (!objeto(v)) return false;
+  return texto(v.protocolo) && opcional(v.idProcedimento, texto) && opcional(v.sigiloso, (b) => typeof b === "boolean");
 }
 
 /** `documento` opcional: `numero` texto, `titulo` texto ou ausente. */
 function documentoValido(d: unknown): boolean {
   if (d === undefined) return true;
-  if (!d || typeof d !== "object") return false;
-  const o = d as Record<string, unknown>;
-  return texto(o.numero) && (o.titulo === undefined || texto(o.titulo));
+  if (!objeto(d)) return false;
+  return texto(d.numero) && opcional(d.titulo, texto);
 }
 
-/** Forma mínima de cada tipo (arquivo editado à mão ou de versão estranha não entra). */
-export function entidadeValida(x: unknown, tipo: keyof Entidades): boolean {
-  if (!x || typeof x !== "object") return false;
-  const o = x as Record<string, unknown>;
-  if (!texto(o.id) || !o.id || typeof o.atualizadoEm !== "number" || !Number.isFinite(o.atualizadoEm) || !texto(o.dispositivo))
-    return false;
-  if (o.removidoEm !== undefined && typeof o.removidoEm !== "number") return false;
+/**
+ * Forma completa de cada tipo, campo a campo: o Texto Padrão da unidade é compartilhado e pode ser
+ * editado à mão, e um item torto derrubaria o painel de todos (lista, filtro, Gantt). Ids (inclusive
+ * os referenciados em `projeto`, `fase`, `dependeDe` e `alvo`) casam com `RE_ID`; textos e listas
+ * respeitam os limites da spec 5.4 (os do diálogo, para o item continuar editável); datas existem e
+ * ficam de 2000 a 2100. Com `agora`, carimbo (`atualizadoEm`, `removidoEm`) mais de
+ * `FOLGA_RELOGIO_MS` à frente é recusado. Texto do histórico (`antes`/`depois`) não tem teto.
+ */
+export function entidadeValida(x: unknown, tipo: keyof Entidades, agora?: number): boolean {
+  if (!objeto(x)) return false;
+  const o = x;
+  const teto = agora === undefined ? Number.POSITIVE_INFINITY : agora + FOLGA_RELOGIO_MS;
+  const carimbo = (n: unknown): boolean => finito(n) && n <= teto;
+  if (!idValido(o.id) || !carimbo(o.atualizadoEm) || !texto(o.dispositivo)) return false;
+  if (!opcional(o.removidoEm, carimbo) || !opcional(o.alteradoPor, texto)) return false;
   switch (tipo) {
     case "p":
-      return texto(o.nome) && Array.isArray(o.etiquetas) && texto(o.ordem) && vinculoValido(o.processo);
+      return (
+        nomeValido(o.nome) &&
+        etiquetasValidas(o.etiquetas) &&
+        texto(o.ordem) &&
+        finito(o.criadoEm) &&
+        opcional(o.arquivadoEm, finito) &&
+        vinculoValido(o.processo) &&
+        origemValida(o.origem)
+      );
     case "f":
-      return texto(o.projeto) && texto(o.nome) && texto(o.ordem);
+      return idValido(o.projeto) && nomeValido(o.nome) && texto(o.ordem);
     case "e":
       return (
-        texto(o.projeto) &&
-        texto(o.nome) &&
+        idValido(o.projeto) &&
+        opcional(o.fase, idValido) &&
         texto(o.ordem) &&
-        dataValida(o.inicio) &&
-        dataValida(o.fim) &&
-        diferencaDias(o.inicio, o.fim) <= LIMITE_DIAS_ETAPA &&
-        Array.isArray(o.dependeDe) &&
-        Array.isArray(o.checklist) &&
-        Array.isArray(o.etiquetas) &&
+        nomeValido(o.nome) &&
+        datasValidas(o.inicio, o.fim, false) &&
+        typeof o.marco === "boolean" &&
+        listaDe(o.dependeDe, LIMITES.etapasPorProjeto, idValido) &&
+        responsavelValido(o.responsavel) &&
+        MEDIDAS.has(o.medida) &&
+        progressoValido(o.progresso) &&
+        listaDe(o.checklist, LIMITES.checklistItens, itemValido) &&
         vinculoValido(o.processo) &&
-        documentoValido(o.documento)
+        documentoValido(o.documento) &&
+        etiquetasValidas(o.etiquetas) &&
+        opcional(o.observacoes, textoAte(LIMITES.observacoes)) &&
+        opcional(o.concluidaEm, dataNaFaixa) &&
+        baseValida(o.base) &&
+        finito(o.criadoEm) &&
+        origemValida(o.origem)
       );
     case "h":
-      return texto(o.alvo) && texto(o.projeto) && typeof o.quando === "number" && texto(o.campo);
+      return (
+        idValido(o.alvo) &&
+        idValido(o.projeto) &&
+        finito(o.quando) &&
+        texto(o.por) &&
+        opcional(o.nome, texto) &&
+        texto(o.campo) &&
+        opcional(o.antes, texto) &&
+        opcional(o.depois, texto)
+      );
     case "m":
-      return texto(o.nome) && problemasDaEstruturaDoModelo(o.fases, o.etapas).length === 0;
+      return (
+        nomeValido(o.nome) &&
+        opcional(o.descricao, textoAte(LIMITES.observacoes)) &&
+        finito(o.criadoEm) &&
+        problemasDaEstruturaDoModelo(o.fases, o.etapas).length === 0
+      );
   }
 }
 
@@ -900,7 +1058,10 @@ export async function moverEntreEscopos(origem: RepositorioProjetos, destino: Re
     ],
     carimbo: cDestino,
   });
-  if (r.ignorados > 0 || !(await destino.obterProjeto(id)))
+  // Registro antigo além dos 300 do destino é excedente (a poda o tiraria de qualquer jeito); o resto tem de estar vivo lá.
+  const conferido = await destino.dados();
+  const vivosNoDestino = new Set([...conferido.projetos, ...conferido.fases, ...conferido.etapas].map((x) => x.id));
+  if (r.ignorados > r.excedentes || [p, ...fases, ...etapas].some((x) => !vivosNoDestino.has(x.id)))
     throw new ErroValidacao(["Não foi possível confirmar a cópia no destino; o projeto continua na origem."]);
   await origem.lapidarMovidos({ p, f: fases, e: etapas, h: registros }, origem.carimboAtual());
   return (await destino.obterProjeto(id)) as Projeto;

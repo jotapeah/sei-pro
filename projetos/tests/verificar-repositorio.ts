@@ -1,4 +1,5 @@
 import { areaMemoria } from "@comum/armazenamento/area";
+import { linhasDoProjeto } from "../src/gantt/linhas";
 import { LIMITES } from "../src/modelo/constantes";
 import { ErroValidacao } from "../src/modelo/validacao";
 import { ESCOPO_EU, novoRepo } from "./apoioRepositorio";
@@ -244,5 +245,96 @@ export async function verificarRepositorio(): Promise<void> {
     );
     const p2 = await r.editarProjeto(pr.id, { nome: undefined, etiquetas: undefined } as never);
     checar("projeto: undefined em campo obrigatorio e ignorado", p2.nome === "U" && p2.etiquetas.join() === "x");
+  }
+
+  secao("projetos: repositorio - arraste confere as sucessoras");
+  {
+    const { repo: r } = novoRepo();
+    const pr = await r.criarProjeto({ nome: "P" });
+    const a = await r.criarEtapa({ projeto: pr.id, nome: "A", inicio: "2026-10-12", fim: "2026-10-16" });
+    const b = await r.criarEtapa({ projeto: pr.id, nome: "B", inicio: "2026-10-19", fim: "2026-10-23", dependeDe: [a.id] });
+    const pulou = await lanca(() => r.moverDatas([{ id: a.id, inicio: "2026-10-26", fim: "2026-10-30" }], HOJE));
+    checar(
+      "A arrastada por cima de B (sem mover dependentes) e recusada",
+      mensagens(pulou) === "“B” não pode começar antes de “A”, da qual depende.",
+      mensagens(pulou),
+    );
+    checar("recusa nao gravou A", (await r.obterEtapa(a.id))?.inicio === "2026-10-12");
+    const b2 = await r.editarEtapa(b.id, { inicio: "2026-10-09", fim: "2026-10-20" }, HOJE);
+    checar("o dialogo deixa B comecar antes de A", b2.inicio === "2026-10-09");
+    const juntas = await lanca(() =>
+      r.moverDatas(
+        [
+          { id: a.id, inicio: "2026-10-15", fim: "2026-10-19" },
+          { id: b.id, inicio: "2026-10-12", fim: "2026-10-23" },
+        ],
+        HOJE,
+      ),
+    );
+    checar("arrastar A +3 com B junto (violacao antiga) e aceito", juntas === null, mensagens(juntas));
+  }
+
+  secao("projetos: repositorio - moverDatas recusa data impossivel e etapa de decadas");
+  {
+    const { repo: r } = novoRepo();
+    const pr = await r.criarProjeto({ nome: "P" });
+    const f = await r.criarFase(pr.id, "F");
+    const a = await r.criarEtapa({ projeto: pr.id, nome: "A", inicio: "2026-10-12", fim: "2026-10-16", fase: f.id, medida: "tempo" });
+    const impossivel = await lanca(() => r.moverDatas([{ id: a.id, inicio: "2026-13-45", fim: "2026-13-46" }], HOJE));
+    checar("2026-13-45 recusada", mensagens(impossivel) === "Datas inválidas para “A”.", mensagens(impossivel));
+    checar("nada gravado", (await r.obterEtapa(a.id))?.inicio === "2026-10-12");
+    const vinte = await lanca(() => r.moverDatas([{ id: a.id, inicio: "2026-10-12", fim: "2046-10-12" }], HOJE));
+    checar("etapa de 20 anos recusada", mensagens(vinte) === "“A” pode durar no máximo cerca de 10 anos.", mensagens(vinte));
+    const fora = await lanca(() => r.moverDatas([{ id: a.id, inicio: "2101-01-03", fim: "2101-01-05" }], HOJE));
+    checar("ano 2101 recusado", mensagens(fora) === "“A” só pode ter datas entre 2000 e 2100.", mensagens(fora));
+    // Data impossível que já estava gravada (versão antiga, gravação direta): as linhas não lançam.
+    await r.etapas.gravar(a.id, { ...(await r.etapas.obter(a.id))!, inicio: "2026-13-45", fim: "2026-13-46" });
+    const d = await r.dados();
+    let linhas: ReturnType<typeof linhasDoProjeto> = [];
+    const erro = await lanca(() => {
+      linhas = linhasDoProjeto(
+        { projeto: pr.id, fases: d.fases, etapas: d.etapas },
+        { hoje: HOJE, ordem: "inicio", recolhidas: new Set() },
+      );
+    });
+    checar("linhasDoProjeto com data impossivel gravada (fase, medida tempo) nao lanca", erro === null, erro?.message);
+    const linhaFase = linhas.find((l) => l.tipo === "fase");
+    checar(
+      "fase com data impossivel ancora em datas validas",
+      linhaFase?.tipo === "fase" && linhaFase.inicio === HOJE && linhaFase.fim === HOJE,
+      linhaFase,
+    );
+  }
+
+  secao("projetos: repositorio - ciclo vindo da mescla nao trava outra etapa");
+  {
+    const { repo: r } = novoRepo();
+    const pr = await r.criarProjeto({ nome: "P" });
+    const x = await r.criarEtapa({ projeto: pr.id, nome: "X", inicio: "2026-10-13", fim: "2026-10-16" });
+    const y = await r.criarEtapa({ projeto: pr.id, nome: "Y", inicio: "2026-10-13", fim: "2026-10-16" });
+    const z = await r.criarEtapa({ projeto: pr.id, nome: "Z", inicio: "2026-10-13", fim: "2026-10-16" });
+    await r.editarEtapa(x.id, { dependeDe: [y.id] }, HOJE);
+    await r.importar({ e: [{ ...(await r.obterEtapa(y.id))!, dependeDe: [x.id], atualizadoEm: 99_999, dispositivo: "dev-b" }] });
+    const ren = await lanca(() => r.editarEtapa(z.id, { nome: "Z renomeada" }, HOJE));
+    checar("renomear Z (sem relacao com o ciclo) passa", ren === null, mensagens(ren));
+    const emX = await lanca(() => r.editarEtapa(x.id, { nome: "X2" }, HOJE));
+    checar("editar X (no ciclo) mostra o ciclo", mensagens(emX).startsWith("Dependência circular: “X” → “Y”"), mensagens(emX));
+    checar("tirar a dependencia desfaz o ciclo", (await r.editarEtapa(x.id, { dependeDe: [] }, HOJE)).dependeDe.length === 0);
+  }
+
+  secao("projetos: repositorio - linha de base no segundo replanejamento");
+  {
+    const { repo: r } = novoRepo();
+    const pr = await r.criarProjeto({ nome: "P" });
+    const e = await r.criarEtapa({ projeto: pr.id, nome: "E", inicio: "2026-10-01", fim: "2026-10-09" });
+    const e1 = await r.editarEtapa(e.id, { inicio: "2026-10-20", fim: "2026-10-28" }, "2026-10-06");
+    const e2 = await r.editarEtapa(e.id, { fim: "2026-10-30" }, "2026-10-07");
+    checar(
+      "a base continua 01/10 a 09/10 depois da segunda edicao",
+      e1.base?.inicio === "2026-10-01" && e2.base?.inicio === "2026-10-01" && e2.base?.fim === "2026-10-09",
+      e2.base,
+    );
+    const m = await r.moverDatas([{ id: e.id, inicio: "2026-10-21", fim: "2026-10-30" }], "2026-10-08");
+    checar("arrastar depois tambem mantem a base", m[0]?.base?.inicio === "2026-10-01", m[0]?.base);
   }
 }

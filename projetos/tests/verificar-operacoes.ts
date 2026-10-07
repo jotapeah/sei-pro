@@ -1,4 +1,11 @@
-import { carimbarRegistros, excedentes, registrosDeEtapa, registrosDeFase, registrosDeProjeto } from "../src/modelo/historico";
+import {
+  carimbarRegistros,
+  excedentes,
+  registrosDeEtapa,
+  registrosDeFase,
+  registrosDeProjeto,
+  textosDoVinculo,
+} from "../src/modelo/historico";
 import {
   compararEtapas,
   concluir,
@@ -39,6 +46,20 @@ export function verificarOperacoes(): void {
   checar("30 de fevereiro", problemasDaEtapa({ ...base, inicio: "2026-02-30" }).join() === "Informe datas válidas.");
   checar("termino antes do inicio", problemasDaEtapa({ ...base, fim: "2026-10-01" }).join() === "O término não pode ser antes do início.");
   checar("inicio igual ao termino passa", problemasDaEtapa({ ...base, fim: base.inicio }).length === 0);
+  checar(
+    "ano 2206 recusado (faixa do calendario)",
+    problemasDaEtapa({ ...base, inicio: "2206-10-06", fim: "2206-10-07" }).join() === "Use datas entre 2000 e 2100.",
+    problemasDaEtapa({ ...base, inicio: "2206-10-06", fim: "2206-10-07" }),
+  );
+  checar(
+    "ano 1999 recusado",
+    problemasDaEtapa({ ...base, inicio: "1999-12-27", fim: "2000-01-03" }).join() === "Use datas entre 2000 e 2100.",
+  );
+  checar(
+    "bordas 2000-01-01 e 2100-12-31 passam",
+    problemasDaEtapa({ ...base, inicio: "2000-01-01", fim: "2000-01-03" }).length === 0 &&
+      problemasDaEtapa({ ...base, inicio: "2100-12-27", fim: "2100-12-31" }).length === 0,
+  );
   checar("progresso 101", problemasDaEtapa({ ...base, progresso: 101 }).join() === "O progresso vai de 0 a 100.");
   const itens = (n: number, t = "item") => Array.from({ length: n }, (_, i) => ({ id: String(i), texto: t, feito: false }));
   checar("51 itens de checklist", problemasDaEtapa({ ...base, checklist: itens(51) }).join() === "O checklist pode ter até 50 itens.");
@@ -54,6 +75,16 @@ export function verificarOperacoes(): void {
   checar(
     "observacoes com 2001",
     problemasDaEtapa({ ...base, observacoes: "o".repeat(2001) }).join() === "As observações podem ter até 2.000 caracteres.",
+  );
+  checar(
+    "responsavel com nome de 201 (o mesmo teto da importacao)",
+    problemasDaEtapa({ ...base, responsavel: { nome: "r".repeat(201) } }).join() === "O nome do responsável pode ter até 200 caracteres.",
+    problemasDaEtapa({ ...base, responsavel: { nome: "r".repeat(201) } }),
+  );
+  checar(
+    "modelo com descricao de 2001 (o mesmo teto da importacao)",
+    problemasDoModelo({ nome: "M", fases: [], etapas: [], descricao: "d".repeat(2001) }).join() ===
+      "A descrição pode ter até 2.000 caracteres.",
   );
   checar("projeto sem nome", problemasDoProjeto({ nome: "", etiquetas: [] }).join() === "Informe o nome do projeto.");
   checar(
@@ -129,6 +160,14 @@ export function verificarOperacoes(): void {
     ed.atualizadoEm === 2_000 && ed.dispositivo === "dev-b" && ed.alteradoPor === "bia" && ed.nome === "Y",
   );
   checar("editar sem 'por' mantem o alteradoPor anterior", editar(ed, { nome: "Z" }, { agora: 3, dispositivo: "x" }).alteradoPor === "bia");
+  const adiantada = { ...e2, atualizadoEm: 5_000 };
+  checar("editar item com carimbo adiantado carimba acima dele", editar(adiantada, { nome: "W" }, C2).atualizadoEm === 5_001);
+  checar(
+    "remover e restaurar tambem carimbam acima",
+    remover(adiantada, C2).atualizadoEm === 5_001 &&
+      remover(adiantada, C2).removidoEm === 2_000 &&
+      restaurar({ ...adiantada, removidoEm: 4_000 }, C2).atualizadoEm === 5_001,
+  );
   checar("editar com undefined apaga o campo", !("observacoes" in editar({ ...e2, observacoes: "o" }, { observacoes: undefined }, C2)));
   const rem = remover(e2, C2);
   checar("remover grava lapide", rem.removidoEm === 2_000);
@@ -201,6 +240,32 @@ export function verificarOperacoes(): void {
   );
   checar("fase pelo nome", regs.find((r) => r.campo === "fase")?.depois === "Deliberação");
   checar("processo sigiloso nao vaza o numero", regs.find((r) => r.campo === "processo")?.depois === "processo sigiloso");
+  {
+    const X = "50300.000001/2026-11";
+    const comNumero = { ...antes, processo: { protocolo: X } };
+    const marcado = { ...antes, processo: { protocolo: X, sigiloso: true } };
+    const semNumero = { ...antes, processo: { protocolo: "", sigiloso: true } };
+    const vaza = (rs: ReturnType<typeof registrosDeEtapa>) => rs.some((r) => `${r.antes ?? ""}${r.depois ?? ""}`.includes("50300"));
+    checar("marcar como sigiloso o mesmo processo nao leva o numero no antes", !vaza(registrosDeEtapa(comNumero, marcado, apoio)));
+    checar("vinculo que chega sigiloso e vazio nao leva o numero", !vaza(registrosDeEtapa(comNumero, semNumero, apoio)));
+    checar("desmarcar o sigilo do mesmo processo nao leva o numero", !vaza(registrosDeEtapa(marcado, comNumero, apoio)));
+    checar(
+      "projeto: marcar como sigiloso nao leva o numero",
+      !registrosDeProjeto(
+        projeto({ id: "p", processo: { protocolo: X } }),
+        projeto({ id: "p", processo: { protocolo: "50300000001202611", sigiloso: true } }),
+      ).some((r) => `${r.antes ?? ""}${r.depois ?? ""}`.includes("50300")),
+    );
+    checar(
+      "textosDoVinculo: processos diferentes mostram o que nao e sigiloso",
+      textosDoVinculo({ protocolo: "1.1" }, { protocolo: X, sigiloso: true }).join() === "1.1,processo sigiloso",
+    );
+    checar("textosDoVinculo: sem sigilo, os numeros", textosDoVinculo({ protocolo: "1" }, { protocolo: "2" }).join() === "1,2");
+    checar(
+      "textosDoVinculo: tirar o vinculo sigiloso",
+      textosDoVinculo({ protocolo: X, sigiloso: true }, undefined)[0] === "processo sigiloso",
+    );
+  }
   checar("dependencias pelos nomes", regs.find((r) => r.campo === "dependencias")?.depois === "Nota");
   checar(
     "criacao",

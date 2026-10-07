@@ -13,6 +13,12 @@ export const LIMITES = {
   modelos: 50,
 } as const;
 
+/**
+ * Relógio de outro computador adiantado que a mesclagem ainda aceita (1 dia). Carimbo além disso é
+ * recusado: venceria toda edição até o relógio daqui alcançá-lo, e a lápide nunca seria limpa.
+ */
+export const FOLGA_RELOGIO_MS = 86_400_000;
+
 /** Lápides: a unidade tem usuários eventuais, que não podem ressuscitar exclusões (spec 6.1). */
 export const DIAS_LAPIDE_UNIDADE = 180;
 export const DIAS_LAPIDE_EU = 90;

@@ -34,11 +34,20 @@ export function semVazios<T extends object>(o: T): T {
   return o;
 }
 
+/**
+ * Carimbo da gravação: o relógio, mas sempre acima do carimbo que o item já tem. Um item que chegou
+ * com o relógio de outro computador adiantado não fica imune à edição local (senão a versão dele
+ * venceria todas as mesclagens até o relógio daqui alcançar o dele).
+ */
+function carimboSeguinte(item: Entidade, agora: number): number {
+  return Number.isFinite(item.atualizadoEm) ? Math.max(agora, item.atualizadoEm + 1) : agora;
+}
+
 export function editar<T extends Entidade>(item: T, mudancas: Mudancas<T>, c: Carimbo): T {
   return semVazios({
     ...item,
     ...mudancas,
-    atualizadoEm: c.agora,
+    atualizadoEm: carimboSeguinte(item, c.agora),
     dispositivo: c.dispositivo,
     alteradoPor: c.por ?? item.alteradoPor,
   } as T);

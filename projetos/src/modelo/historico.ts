@@ -6,6 +6,7 @@
  */
 
 import type { CampoHistorico, Carimbo, Etapa, Fase, Projeto, Registro, Vinculo } from "./tipos";
+import { chaveProtocolo } from "./vinculos";
 
 export interface RegistroNovo {
   alvo: string;
@@ -22,9 +23,29 @@ export interface ApoioHistorico {
 
 export const SEM_APOIO: ApoioHistorico = { nomeDaFase: () => undefined, nomeDaEtapa: () => undefined };
 
+const SIGILOSO = "processo sigiloso";
+
 export function textoDoVinculo(v: Vinculo | undefined): string | undefined {
   if (!v) return undefined;
-  return v.sigiloso ? "processo sigiloso" : v.protocolo || undefined;
+  return v.sigiloso ? SIGILOSO : v.protocolo || undefined;
+}
+
+const chaveDoVinculo = (v: Vinculo | undefined): string => (v && typeof v.protocolo === "string" ? chaveProtocolo(v.protocolo) : "");
+
+/**
+ * Antes e depois do registro "processo". Se um dos lados é sigiloso e os dois são o mesmo processo
+ * (mesma `chaveProtocolo`) ou um deles não tem número (chegou vazio, foi tirado), os dois lados viram
+ * "processo sigiloso": marcar como sigiloso um vínculo que já existia não pode levar o número no
+ * `antes` (nem desmarcar, no `depois`). Iguais, o registro nem nasce. Processos diferentes mostram
+ * o número do que não é sigiloso.
+ */
+export function textosDoVinculo(antes: Vinculo | undefined, depois: Vinculo | undefined): [string | undefined, string | undefined] {
+  const textos: [string | undefined, string | undefined] = [textoDoVinculo(antes), textoDoVinculo(depois)];
+  if (!antes?.sigiloso && !depois?.sigiloso) return textos;
+  const a = chaveDoVinculo(antes);
+  const d = chaveDoVinculo(depois);
+  if (a !== d && a && d) return textos;
+  return [antes ? SIGILOSO : undefined, depois ? SIGILOSO : undefined];
 }
 
 function ciclo<T extends { removidoEm?: number }>(
@@ -72,7 +93,7 @@ export function registrosDeEtapa(antes: Etapa | undefined, depois: Etapa | undef
           .join("; ")
       : undefined;
   if ([...a.dependeDe].sort().join() !== [...d.dependeDe].sort().join()) reg("dependencias", deps(a.dependeDe), deps(d.dependeDe));
-  reg("processo", textoDoVinculo(a.processo), textoDoVinculo(d.processo));
+  reg("processo", ...textosDoVinculo(a.processo, d.processo));
   reg("documento", a.documento?.numero, d.documento?.numero);
   const datasIguais = a.inicio === d.inicio && a.fim === d.fim;
   const textoBase = (e: Etapa) => (e.base ? `${e.base.inicio}/${e.base.fim}` : undefined);
@@ -89,7 +110,7 @@ export function registrosDeProjeto(antes: Projeto | undefined, depois: Projeto |
   const d = depois!;
   const saida: RegistroNovo[] = [];
   campo(saida, d.id, d.id, "nome", a.nome, d.nome);
-  campo(saida, d.id, d.id, "processo", textoDoVinculo(a.processo), textoDoVinculo(d.processo));
+  campo(saida, d.id, d.id, "processo", ...textosDoVinculo(a.processo, d.processo));
   if ((a.arquivadoEm === undefined) !== (d.arquivadoEm === undefined))
     saida.push({ alvo: d.id, projeto: d.id, campo: "arquivamento", depois: d.arquivadoEm === undefined ? "reativado" : "arquivado" });
   return saida;
