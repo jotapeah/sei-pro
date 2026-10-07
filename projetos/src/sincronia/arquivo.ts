@@ -409,6 +409,24 @@ function sumidos(daCopia: unknown, aqui: readonly Versionada[], c: Carimbo): Ver
   );
 }
 
+/** O que voltou de fato ao restaurar uma cópia, por tipo (o diálogo diz "Voltaram 1 projeto, 2 fases e 5 etapas."). */
+export interface ResultadoRestauracao {
+  projetos: number;
+  fases: number;
+  etapas: number;
+  modelos: number;
+  /** Registros do histórico que faltavam aqui. */
+  registros: number;
+}
+
+const TIPO_RESTAURADO: Record<keyof Entidades, keyof ResultadoRestauracao> = {
+  p: "projetos",
+  f: "fases",
+  e: "etapas",
+  m: "modelos",
+  h: "registros",
+};
+
 /** Os registros do histórico da cópia que aqui não existem: entram como vieram (registro não muda depois de gravado). */
 function ausentes(daCopia: unknown, aqui: readonly Versionada[]): Versionada[] {
   const ids = new Set(aqui.map((x) => x.id));
@@ -421,15 +439,15 @@ function ausentes(daCopia: unknown, aqui: readonly Versionada[]): Versionada[] {
  * excluído volta com as fases e as etapas que foram junto); os registros do histórico que faltam entram como vieram.
  * O que está vivo aqui fica como está, mesmo que difira da cópia (a edição de um colega depois da cópia não é
  * desfeita) e não é recarimbado. A memória do sigilo da cópia volta como no `importarTudo`. A cópia vem do
- * IndexedDB e passa pela mesma leitura do arquivo: torta, nada é restaurado (`ErroValidacao`). Devolve quantos
- * itens voltaram de fato (os escolhidos que estão vivos depois da mescla).
+ * IndexedDB e passa pela mesma leitura do arquivo: torta, nada é restaurado (`ErroValidacao`). Devolve o que
+ * voltou de fato, por tipo (os escolhidos que estão vivos depois da mescla).
  */
-export async function restaurarCopia(area: Area, copia: CopiaProjetos, d: Dono, carimbo: () => Carimbo): Promise<number> {
+export async function restaurarCopia(area: Area, copia: CopiaProjetos, d: Dono, carimbo: () => Carimbo): Promise<ResultadoRestauracao> {
   const env = lerEnvelopeArquivo((copia as { envelope?: unknown } | null)?.envelope);
   if (!env) throw new ErroValidacao(["Esta cópia está danificada e não pode ser restaurada. Escolha a de outro dia."]);
   const c = carimbo();
   await devolverSigilo(area, env.sigilo, d);
-  let voltaram = 0;
+  const voltaram: ResultadoRestauracao = { projetos: 0, fases: 0, etapas: 0, modelos: 0, registros: 0 };
   for (const s of escoposDoDono(env, d)) {
     const repo = repoDe(area, s.escopo, () => c);
     const aqui = await repo.entidades();
@@ -445,7 +463,7 @@ export async function restaurarCopia(area: Area, copia: CopiaProjetos, d: Dono, 
     const depois = await repo.entidades();
     for (const k of LISTAS) {
       const ids = new Set(escolhidos[k].map((x) => x.id));
-      voltaram += (depois[k] as Versionada[]).filter((x) => ids.has(x.id) && x.removidoEm === undefined).length;
+      voltaram[TIPO_RESTAURADO[k]] += (depois[k] as Versionada[]).filter((x) => ids.has(x.id) && x.removidoEm === undefined).length;
     }
   }
   return voltaram;

@@ -2698,8 +2698,12 @@ html[data-modo="impressao"] .prj-gantt {
   color: var(--spro-perigo);
 }
 .prj-sync-extra:empty,
-.prj-sync-aviso:empty {
+.prj-sync-acoes:empty {
   display: none;
+}
+/* Vazio, o aviso fica na arvore (role=status: o leitor de tela so anuncia mudanca em quem ja estava la) sem ocupar o gap. */
+.prj-sync-aviso:empty {
+  margin-top: -8px;
 }
 .prj-sync-substituido {
   display: flex;

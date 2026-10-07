@@ -14,6 +14,7 @@ import { SincroniaArquivo } from "@comum/sincronia/arquivo";
 import { jsonEstavel } from "@comum/sincronia/assinatura";
 import { copiasEmMemoria } from "@comum/sincronia/copias";
 import { prefixoMemoriaSigilo } from "../src/modelo/constantes";
+import { chaveEscopo } from "../src/modelo/escopo";
 import { ErroMemoriaSigilo, lerMemoria, TETO_APRENDIDAS } from "../src/modelo/memoriaSigilo";
 import type { Escopo, Projeto } from "../src/modelo/tipos";
 import { RepositorioProjetos } from "../src/repositorio";
@@ -289,7 +290,7 @@ export async function verificarSincroniaArquivo(): Promise<void> {
   const restaurados = await restaurarCopia(area, copia!, DONO, carimbo);
   checar(
     "restaurar traz de volta o excluido depois da copia e mantem o criado depois",
-    restaurados >= 1 && !!(await un.obterProjeto(alvo!.id)) && !!(await un.obterProjeto(novo.id)),
+    restaurados.projetos === 1 && !!(await un.obterProjeto(alvo!.id)) && !!(await un.obterProjeto(novo.id)),
     restaurados,
   );
 
@@ -366,8 +367,29 @@ async function verificarRestaurarRecupera(): Promise<void> {
     "e o criado depois da copia fica",
     d.projetos.some((x) => x.id === p3.id),
   );
-  checar("o numero devolvido e o que voltou de fato: P2, a fase, as duas etapas, a etapa do P1 e o modelo", n === 6, n);
-  checar("restaurar de novo nao traz mais nada (tudo ja esta vivo)", (await restaurarCopia(area, copia!, DONO, carimbo)) === 0);
+  checar(
+    "o que voltou de fato, por tipo: P2, a fase, as duas etapas e a do P1, o modelo (registros: nenhum sumiu)",
+    jsonEstavel(n) === jsonEstavel({ projetos: 1, fases: 1, etapas: 3, modelos: 1, registros: 0 }),
+    n,
+  );
+  checar(
+    "restaurar de novo nao traz mais nada (tudo ja esta vivo)",
+    jsonEstavel(await restaurarCopia(area, copia!, DONO, carimbo)) ===
+      jsonEstavel({ projetos: 0, fases: 0, etapas: 0, modelos: 0, registros: 0 }),
+  );
+  {
+    // O registro do histórico que sumiu daqui (podado, outro perfil) volta e é contado à parte.
+    const areaR = areaMemoria();
+    const unR = new RepositorioProjetos(areaR, un.escopo, carimbo);
+    const daCopia = copia!.envelope.escopos.find((x) => chaveEscopo(x.escopo) === chaveEscopo(un.escopo))!.entidades;
+    await unR.importar({ ...daCopia, h: [] });
+    const r = await restaurarCopia(areaR, copia!, DONO, carimbo);
+    checar(
+      "registros do historico ausentes voltam e sao contados como registros",
+      r.registros === daCopia.h.length && r.registros > 0 && r.projetos + r.fases + r.etapas + r.modelos === 0,
+      r,
+    );
+  }
 
   secao("restaurar: copia torta no IndexedDB nao restaura nada nem lanca TypeError");
   {
@@ -390,7 +412,7 @@ async function verificarRestaurarRecupera(): Promise<void> {
     );
     checar(
       "itens tortos na copia: ficam de fora, sem TypeError, e o resto volta",
-      typeof r2 === "number" && r2 >= 1 && (await new RepositorioProjetos(areaT, un.escopo, carimbo).dados()).projetos.length >= 1,
+      typeof r2 === "object" && r2.projetos >= 1 && (await new RepositorioProjetos(areaT, un.escopo, carimbo).dados()).projetos.length >= 1,
       r2,
     );
   }
@@ -502,7 +524,7 @@ async function verificarMemoriaNoArquivo(): Promise<void> {
     const memNova = await memoriaDaAna(areaNova);
     checar(
       "restaurar devolve a memoria, como local",
-      n >= 1 && memNova.p.get(CHAVE_X) === "local" && memNova.d.get(DOC) === "local",
+      n.projetos >= 1 && memNova.p.get(CHAVE_X) === "local" && memNova.d.get(DOC) === "local",
       memNova,
     );
     const com = await textoNoPerfilNovo(areaNova);

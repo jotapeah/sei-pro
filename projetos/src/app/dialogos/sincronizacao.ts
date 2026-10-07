@@ -8,21 +8,23 @@
  * "apagar" (é de todos).
  *
  * Restaurar uma cópia RECUPERA (sincronia/arquivo.ts): só volta o que foi
- * excluído ou sumiu depois dela, e o que existe hoje não muda. O aviso diz
- * quantos itens voltaram de fato.
+ * excluído ou sumiu depois dela, e o que existe hoje não muda. O aviso diz o
+ * que voltou de fato, por tipo ("Voltaram 1 projeto, 2 fases e 5 etapas.").
  *
  * Tudo o que vem de fora entra como texto (`h()`): a sigla, o nome do arquivo,
  * o motivo do texto inválido e as mensagens de erro (inclusive a da memória do
  * sigilo ilegível, que para o arquivo e a cópia do dia). O erro de uma ação
- * aparece na própria seção, numa linha lida pelo leitor de tela.
+ * aparece na própria seção, numa linha lida pelo leitor de tela; a situação
+ * que não pôde ser lida também (o diálogo abre assim mesmo).
  */
 
 import { formatarData, hojeISO } from "@comum/datas/dias";
 import type { StatusArquivo } from "@comum/sincronia/arquivo";
 import { h } from "@comum/ui/dom";
-import type { CopiaProjetos } from "../../sincronia/arquivo";
+import type { Vis } from "../../modelo/tipos";
+import type { CopiaProjetos, ResultadoRestauracao } from "../../sincronia/arquivo";
 import type { TextoSubstituido } from "../../sincronia/textoPadrao";
-import { linhaDoTexto, type SituacaoSincronia, type SituacaoTexto } from "../colaboracao/estado";
+import { linhaDoTexto, type SituacaoSincronia } from "../colaboracao/estado";
 import { mensagemDoErro } from "../erros";
 import { plural } from "../formato";
 
@@ -31,6 +33,12 @@ export interface DepsSincronizacao {
   agora(): number;
   /** Relê a situação dos dois textos (o content script grava o status). */
   situacao(): Promise<SituacaoSincronia>;
+  /**
+   * A situação mudou com o diálogo aberto (uma rodada em segundo plano): o diálogo repinta as linhas dos textos com a
+   * situação recebida (sem reler: no app, reler dispararia o aviso de novo). Devolve a desinscrição, que o diálogo
+   * chama na primeira mudança depois de fechado (fora da página).
+   */
+  aoMudar?(f: (s: SituacaoSincronia) => void): () => void;
   /** "Sincronizar agora": os dois textos (o pessoal só se ligado), pela aba do SEI. */
   sincronizar(): Promise<void>;
   pessoal: {
@@ -53,8 +61,8 @@ export interface DepsSincronizacao {
   importar(): Promise<string | undefined>;
   copias: {
     listar(): Promise<CopiaProjetos[]>;
-    /** Quantos itens voltaram de fato (`restaurarCopia`). */
-    restaurar(c: CopiaProjetos): Promise<number>;
+    /** O que voltou de fato, por tipo (`restaurarCopia`). */
+    restaurar(c: CopiaProjetos): Promise<ResultadoRestauracao>;
     /** A cópia de hoje que não pôde ser feita (a memória do sigilo ilegível): a mensagem do erro. */
     falhaDoDia?(): string | null;
   } | null;
@@ -106,8 +114,33 @@ function repor(alvo: HTMLElement, ...filhos: Node[]): void {
 const dica = (t: string, extra?: string) => h("p", { class: extra ? `prj-dica ${extra}` : "prj-dica" }, t);
 const acoes = (...filhos: Node[]) => h("div", { class: "prj-sync-acoes" }, ...filhos);
 
-function substituido(s: TextoSubstituido | undefined, baixar: DepsSincronizacao["baixar"]): HTMLElement | null {
-  if (!s) return null;
+const DIA = 86_400_000;
+/** O aviso do texto inválido substituído some depois disso (o motor já regravou; ninguém mais procura o antigo). */
+const DIAS_AVISO_SUBSTITUIDO = 30;
+
+const PARTES: ReadonlyArray<[Exclude<keyof ResultadoRestauracao, "registros">, string, string]> = [
+  ["projetos", "projeto", "projetos"],
+  ["fases", "fase", "fases"],
+  ["etapas", "etapa", "etapas"],
+  ["modelos", "modelo", "modelos"],
+];
+
+/**
+ * "Voltaram 1 projeto, 2 fases e 5 etapas." / "Voltou 1 etapa." ("Voltou" só com uma parte e 1). Os registros do
+ * histórico só aparecem quando são tudo o que voltou (eles vêm junto de quase toda restauração).
+ */
+function textoDaRestauracao(r: ResultadoRestauracao): string {
+  let partes = PARTES.filter(([k]) => r[k] > 0).map(([k, um, varios]) => ({ n: r[k], t: plural(r[k], um, varios) }));
+  if (!partes.length && r.registros > 0)
+    partes = [{ n: r.registros, t: plural(r.registros, "registro do histórico", "registros do histórico") }];
+  if (!partes.length) return "Nada para recuperar: tudo o que estava na cópia ainda existe.";
+  const lista = partes.map((p) => p.t);
+  const juntos = lista.length === 1 ? lista[0] : `${lista.slice(0, -1).join(", ")} e ${lista.at(-1)}`;
+  return `${partes.length === 1 && partes[0]!.n === 1 ? "Voltou" : "Voltaram"} ${juntos}.`;
+}
+
+function substituido(s: TextoSubstituido | undefined, vis: Vis, agora: number, baixar: DepsSincronizacao["baixar"]): HTMLElement | null {
+  if (!s || agora - s.quando > DIAS_AVISO_SUBSTITUIDO * DIA) return null;
   const dia = hojeISO(new Date(s.quando));
   return h(
     "p",
@@ -118,7 +151,9 @@ function substituido(s: TextoSubstituido | undefined, baixar: DepsSincronizacao[
       {
         type: "button",
         class: "spro-botao fantasma pequeno",
-        onclick: () => baixar(`projetos-texto-antigo-${dia}.html`, s.html, "text/html;charset=utf-8"),
+        "aria-label": vis === "unidade" ? "Baixar o texto antigo da unidade" : "Baixar o texto antigo pessoal",
+        // Texto simples: o HTML de fora, aberto como página, rodaria o que tivesse dentro.
+        onclick: () => baixar(`projetos-texto-antigo-${dia}.txt`, s.html, "text/plain;charset=utf-8"),
       },
       "Baixar o texto antigo",
     ),
@@ -128,75 +163,101 @@ function substituido(s: TextoSubstituido | undefined, baixar: DepsSincronizacao[
 export async function montarSincronizacao(d: DepsSincronizacao): Promise<HTMLElement> {
   const avisoUn = linhaDeAviso();
   const avisoEu = linhaDeAviso();
+  const dicaUn = dica("");
+  const dicaEu = dica("");
   const linhaUn = h("p", { class: "prj-dica prj-sync-situacao", "data-texto": "unidade" });
   const linhaEu = h("p", { class: "prj-dica prj-sync-situacao", "data-texto": "eu" });
   const extrasUn = h("div", { class: "prj-sync-extra" });
   const extrasEu = h("div", { class: "prj-sync-extra" });
   const acoesEu = acoes();
-  let situ = await d.situacao();
+  /** A última situação lida (null: nenhuma leitura deu certo ainda). */
+  let situ: SituacaoSincronia | null = null;
+  const noTexto = (nome: string | undefined) => (nome ? `no texto “${nome}”` : "num Texto Padrão");
 
-  const pintarTexto = (t: SituacaoTexto, linha: HTMLElement, extras: HTMLElement) => {
-    linha.textContent = linhaDoTexto(t, d.agora());
-    extras.replaceChildren(...[substituido(t.substituido, d.baixar)].filter((x): x is HTMLElement => !!x));
-  };
   const apagar = async (pergunta: string) => {
     if (!(await d.confirmar(pergunta, "Apagar"))) return;
-    const excluiu = await d.pessoal.apagar();
-    await pintar();
-    avisoEu.avisar(excluiu ? `O texto “${situ.eu.nome}” foi apagado do SEI.` : `Não havia o texto “${situ.eu.nome}” no SEI.`);
+    const nome = situ?.eu.nome ?? "";
+    let excluiu: boolean;
+    try {
+      excluiu = await d.pessoal.apagar();
+    } finally {
+      // O controle grava "desligado" antes de excluir: mesmo com erro, a seção mostra o estado de agora.
+      await pintar();
+    }
+    avisoEu.avisar(excluiu ? `O texto “${nome}” foi apagado do SEI.` : `Não havia o texto “${nome}” no SEI.`);
   };
-  const pintar = async (reler = true) => {
-    if (reler) situ = await d.situacao();
-    pintarTexto(situ.unidade, linhaUn, extrasUn);
-    pintarTexto(situ.eu, linhaEu, extrasEu);
-    repor(
-      acoesEu,
-      ...(situ.eu.consentimento === "ligado"
-        ? [
-            botao(
-              "Desligar",
-              async () => {
-                await d.pessoal.desligar();
-                await pintar();
-              },
-              avisoEu.avisar,
-            ),
-            botao(
-              "Desligar e apagar do SEI",
-              () => apagar(`Apagar do SEI o texto “${situ.eu.nome}” e desligar? Os projetos continuam neste navegador.`),
-              avisoEu.avisar,
-              "spro-botao perigo",
-            ),
-          ]
-        : [
-            botao(
-              "Ligar…",
-              async () => {
-                if (await d.pessoal.ligar()) await pintar();
-              },
-              avisoEu.avisar,
-              "spro-botao primario",
-            ),
-            // Desligado não quer dizer apagado: um texto que ficou no SEI ainda pode ser excluído daqui.
-            botao(
-              "Apagar o texto do SEI",
-              () => apagar(`Apagar do SEI o texto “${situ.eu.nome}”, se ele existir? Os projetos continuam neste navegador.`),
-              avisoEu.avisar,
-              "spro-botao perigo",
-            ),
-          ]),
+  const botoesEu = (s: SituacaoSincronia): HTMLElement[] => {
+    const ligar = botao(
+      "Ligar…",
+      async () => {
+        if (await d.pessoal.ligar()) await pintar();
+      },
+      avisoEu.avisar,
+      "spro-botao primario",
     );
+    if (s.eu.consentimento === "ligado")
+      return [
+        botao(
+          "Desligar",
+          async () => {
+            await d.pessoal.desligar();
+            await pintar();
+          },
+          avisoEu.avisar,
+        ),
+        botao(
+          "Desligar e apagar do SEI",
+          () => apagar(`Apagar do SEI o texto “${s.eu.nome}” e desligar? Os projetos continuam neste navegador.`),
+          avisoEu.avisar,
+          "spro-botao perigo",
+        ),
+      ];
+    // Quem nunca ligou não tem texto pessoal no SEI: só "Ligar…".
+    if (s.eu.consentimento !== "desligado") return [ligar];
+    return [
+      ligar,
+      // Desligado não quer dizer apagado: um texto que ficou no SEI ainda pode ser excluído daqui.
+      botao(
+        "Apagar o texto do SEI",
+        () => apagar(`Apagar do SEI o texto “${s.eu.nome}”, se ele existir? Os projetos continuam neste navegador.`),
+        avisoEu.avisar,
+        "spro-botao perigo",
+      ),
+    ];
   };
-  await pintar(false);
+  /** Pinta a situação (`erro`: a leitura falhou; as linhas dizem isso e o resto fica como na última leitura). */
+  const desenhar = (erro: string | null) => {
+    dicaUn.textContent = `Os projetos de “Toda a unidade” ficam ${noTexto(situ?.unidade.nome)}, que todos da ${d.sigla} com SEI Pro leem e gravam. O número de processo sigiloso não vai.`;
+    dicaEu.textContent = `Seus projetos de “Só eu” podem ficar ${noTexto(situ?.eu.nome)}, para você vê-los em outro computador.`;
+    for (const [t, linha, extras] of [
+      [situ?.unidade, linhaUn, extrasUn],
+      [situ?.eu, linhaEu, extrasEu],
+    ] as const) {
+      linha.textContent = erro ? `Não foi possível ler a situação da sincronia: ${erro}` : t ? linhaDoTexto(t, d.agora()) : "";
+      if (erro) linha.classList.add("prj-sync-erro");
+      else linha.classList.remove("prj-sync-erro");
+      const aviso = t ? substituido(t.substituido, t.vis, d.agora(), d.baixar) : null;
+      extras.replaceChildren(...(aviso ? [aviso] : []));
+    }
+    repor(acoesEu, ...(situ ? botoesEu(situ) : []));
+  };
+  /** Relê (ou usa a situação recebida) e pinta. Nunca lança: a falha vira a linha das seções. */
+  async function pintar(nova?: SituacaoSincronia): Promise<void> {
+    try {
+      situ = nova ?? (await d.situacao());
+      desenhar(null);
+    } catch (e) {
+      desenhar(mensagemDoErro(e));
+    }
+  }
+  await pintar();
 
   const secoes: HTMLElement[] = [
     h(
       "section",
       { class: "prj-sync-secao", "data-secao": "unidade" },
       h("h3", {}, `Texto Padrão da ${d.sigla}`),
-      dica(
-        `Os projetos de “Toda a unidade” ficam no texto “${situ.unidade.nome}”, que todos da ${d.sigla} com SEI Pro leem e gravam. O número de processo sigiloso não vai.`,
-      ),
+      dicaUn,
       linhaUn,
       extrasUn,
       acoes(
@@ -215,7 +276,7 @@ export async function montarSincronizacao(d: DepsSincronizacao): Promise<HTMLEle
       "section",
       { class: "prj-sync-secao", "data-secao": "eu" },
       h("h3", {}, "Texto Padrão pessoal"),
-      dica(`Seus projetos de “Só eu” podem ficar no texto “${situ.eu.nome}”, para você vê-los em outro computador.`),
+      dicaEu,
       linhaEu,
       extrasEu,
       acoesEu,
@@ -289,7 +350,14 @@ export async function montarSincronizacao(d: DepsSincronizacao): Promise<HTMLEle
                   acao(() => a.escolher("existente")),
                   avisoArq.avisar,
                 ),
-                botao("Parar de usar o arquivo", acao(a.esquecer), avisoArq.avisar),
+                botao(
+                  "Parar de usar o arquivo",
+                  async () => {
+                    await acao(a.esquecer)();
+                    avisoArq.avisar("O arquivo continua na pasta. Para voltar a usá-lo: “Usar um arquivo existente…”.");
+                  },
+                  avisoArq.avisar,
+                ),
               ]
             : [
                 botao(
@@ -343,13 +411,10 @@ export async function montarSincronizacao(d: DepsSincronizacao): Promise<HTMLEle
           async () => {
             const pergunta = `Restaurar a cópia de ${dia}? Traz de volta o que foi excluído ou sumiu desde então. O que existe hoje não muda.`;
             if (!(await d.confirmar(pergunta, "Restaurar"))) return;
-            const n = await c.restaurar(x);
-            avisoCp.avisar(
-              n > 0 ? `${plural(n, "item voltou", "itens voltaram")}.` : "Nada para recuperar: tudo o que estava na cópia ainda existe.",
-            );
+            avisoCp.avisar(textoDaRestauracao(await c.restaurar(x)));
           },
           avisoCp.avisar,
-          "spro-botao",
+          "spro-botao fantasma pequeno",
           `Restaurar a cópia de ${dia}`,
         ),
       );
@@ -373,5 +438,15 @@ export async function montarSincronizacao(d: DepsSincronizacao): Promise<HTMLEle
     );
   }
 
-  return h("div", { class: "prj-form prj-sync" }, ...secoes);
+  const raiz = h("div", { class: "prj-form prj-sync" }, ...secoes);
+  // Ao vivo: a situação que muda com o diálogo aberto repinta as linhas. Fechado (fora da página), desinscreve na
+  // primeira mudança. Quem chama põe o diálogo na página logo depois de montar (no mesmo passo).
+  const sair = d.aoMudar?.((s) => {
+    if (!raiz.isConnected) {
+      sair?.();
+      return;
+    }
+    void pintar(s);
+  });
+  return raiz;
 }

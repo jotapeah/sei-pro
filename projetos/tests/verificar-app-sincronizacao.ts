@@ -1,8 +1,12 @@
 /**
  * O diálogo "Sincronização": as quatro seções, os botões de cada estado, o texto antigo guardado, a cópia que
- * RECUPERA (só o que sumiu volta; o aviso diz quantos itens voltaram de fato) e os erros como texto (a memória
- * do sigilo ilegível no arquivo e na cópia do dia, a aba do SEI fechada, a cópia danificada).
+ * RECUPERA (só o que sumiu volta; o aviso diz o que voltou, por tipo) e os erros como texto (a memória do sigilo
+ * ilegível no arquivo e na cópia do dia, a aba do SEI fechada, a cópia danificada, a situação que não lê).
  */
+
+import { readFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import type { StatusArquivo } from "@comum/sincronia/arquivo";
 import { criarAbrirModal } from "@comum/ui/dialogo";
@@ -10,17 +14,20 @@ import type { SituacaoSincronia } from "../src/app/colaboracao/estado";
 import { type DepsSincronizacao, montarSincronizacao } from "../src/app/dialogos/sincronizacao";
 import { ErroMemoriaSigilo } from "../src/modelo/memoriaSigilo";
 import { ErroValidacao } from "../src/modelo/validacao";
-import type { CopiaProjetos } from "../src/sincronia/arquivo";
+import type { CopiaProjetos, ResultadoRestauracao } from "../src/sincronia/arquivo";
 import { rastrearFoco, telaDoApp, texto } from "./apoioApp";
 import { HOSTIL } from "./cenarioGantt";
 import { botao, checar, secao, tique } from "./util";
 
+const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const AGORA = Date.UTC(2026, 9, 6, 12);
+const DIA = 86_400_000;
 const MEMORIA = new ErroMemoriaSigilo().message;
+const NADA: ResultadoRestauracao = { projetos: 0, fases: 0, etapas: 0, modelos: 0, registros: 0 };
 
 function deps(m: Partial<DepsSincronizacao> = {}, situ?: Partial<SituacaoSincronia>) {
   const feitos: string[] = [];
-  const baixados: Array<{ nome: string; conteudo: string }> = [];
+  const baixados: Array<{ nome: string; conteudo: string; tipo: string }> = [];
   const perguntas: string[] = [];
   const resposta = { sim: true };
   let situacao: SituacaoSincronia = {
@@ -57,14 +64,17 @@ function deps(m: Partial<DepsSincronizacao> = {}, situ?: Partial<SituacaoSincron
     exportar: async () => void feitos.push("exportar"),
     importar: async () => void feitos.push("importar"),
     copias: null,
-    baixar: (nome, conteudo) => baixados.push({ nome, conteudo }),
+    baixar: (nome, conteudo, tipo) => baixados.push({ nome, conteudo, tipo }),
     confirmar: async (t) => {
       perguntas.push(t);
       return resposta.sim;
     },
     ...m,
   };
-  return { d, feitos, baixados, perguntas, resposta };
+  const definir = (s: Partial<SituacaoSincronia>) => {
+    situacao = { ...situacao, ...s };
+  };
+  return { d, feitos, baixados, perguntas, resposta, definir, situacao: () => situacao };
 }
 
 const ARQUIVO_LIGADO = (status: () => StatusArquivo | null, extra: Partial<NonNullable<DepsSincronizacao["arquivo"]>> = {}) => ({
@@ -105,6 +115,7 @@ export async function verificarAppSincronizacao(): Promise<void> {
     /Desligado/.test(texto(el.querySelector("[data-texto='eu']"))) && !!botao(el, "Ligar…"),
   );
   checar("o texto da unidade nao tem apagar (e de todos)", !texto(el.querySelector("[data-secao='unidade']")).includes("Apagar"));
+  checar("quem nunca ligou o pessoal nao ve Apagar o texto do SEI (so Ligar…)", !botao(el, "Apagar o texto do SEI"));
   checar(
     "Sincronizar agora so na secao da unidade (vale para os dois textos)",
     !!botao(el.querySelector("[data-secao='unidade']")!, "Sincronizar agora") &&
@@ -163,7 +174,7 @@ export async function verificarAppSincronizacao(): Promise<void> {
   telaDoApp();
   const status: StatusArquivo = { estado: "ok", quando: AGORA, nome: "projetos.json" };
   const restaurados: string[] = [];
-  let voltam = 5;
+  let voltam: ResultadoRestauracao = { ...NADA, projetos: 1, fases: 2, etapas: 5, registros: 4 };
   const b = deps(
     {
       arquivo: ARQUIVO_LIGADO(() => status),
@@ -200,10 +211,14 @@ export async function verificarAppSincronizacao(): Promise<void> {
   const subst = el2.querySelector(".prj-sync-substituido");
   checar("o texto pessoal que estava invalido: avisa e oferece baixar o antigo", /estava inválido/.test(texto(subst)));
   checar("sem corte, nao fala de pedaco", !/só o começo/.test(texto(subst)));
-  botao(el2, "Baixar o texto antigo")?.click();
+  const baixarEu = botao(el2, "Baixar o texto antigo");
+  checar("o Baixar diz de qual texto ao leitor de tela", baixarEu?.getAttribute("aria-label") === "Baixar o texto antigo pessoal");
+  baixarEu?.click();
   checar(
-    "baixa o html guardado",
-    b.baixados[0]?.conteudo === "<p>antigo</p>" && /projetos-texto-antigo-2026-10-06\.html/.test(b.baixados[0]?.nome ?? ""),
+    "baixa o guardado como texto simples (.txt, nunca uma pagina que o navegador abriria)",
+    b.baixados[0]?.conteudo === "<p>antigo</p>" &&
+      b.baixados[0]?.nome === "projetos-texto-antigo-2026-10-06.txt" &&
+      b.baixados[0]?.tipo === "text/plain;charset=utf-8",
     b.baixados,
   );
   checar("a copia mostra o dia e os projetos", /06\/10\/2026 — 3 projetos/.test(texto(el2.querySelector(".prj-copias"))));
@@ -220,6 +235,7 @@ export async function verificarAppSincronizacao(): Promise<void> {
     "o Restaurar de cada copia diz o dia ao leitor de tela",
     restaurar?.getAttribute("aria-label") === "Restaurar a cópia de 06/10/2026",
   );
+  checar("o Restaurar e discreto (fantasma pequeno)", restaurar?.className === "spro-botao fantasma pequeno", restaurar?.className);
   b.resposta.sim = false;
   restaurar?.click();
   await tique();
@@ -234,19 +250,36 @@ export async function verificarAppSincronizacao(): Promise<void> {
   restaurar?.click();
   await tique();
   checar("restaurar (com confirmacao)", restaurados.join() === "2026-10-06");
-  checar("o aviso com o numero real do que voltou", texto(aviso(el2, "copias")) === "5 itens voltaram.", texto(aviso(el2, "copias")));
+  const avisoCp = () => texto(aviso(el2, "copias"));
+  checar(
+    "o aviso do que voltou, por tipo (sem os registros quando volta mais)",
+    avisoCp() === "Voltaram 1 projeto, 2 fases e 5 etapas.",
+    avisoCp(),
+  );
   checar("o aviso e lido pelo leitor de tela", aviso(el2, "copias")?.getAttribute("role") === "status");
-  voltam = 1;
-  restaurar?.click();
-  await tique();
-  checar("um so item no singular", texto(aviso(el2, "copias")) === "1 item voltou.", texto(aviso(el2, "copias")));
-  voltam = 0;
-  restaurar?.click();
-  await tique();
+  const restaurarCom = async (r: Partial<ResultadoRestauracao>) => {
+    voltam = { ...NADA, ...r };
+    restaurar?.click();
+    await tique();
+    return avisoCp();
+  };
+  checar("uma parte so, com 1: Voltou", (await restaurarCom({ etapas: 1 })) === "Voltou 1 etapa.", avisoCp());
+  checar("uma parte so, com mais de 1: Voltaram", (await restaurarCom({ projetos: 2 })) === "Voltaram 2 projetos.", avisoCp());
+  checar(
+    "duas partes com 1 cada: Voltaram, com e",
+    (await restaurarCom({ projetos: 1, modelos: 1 })) === "Voltaram 1 projeto e 1 modelo.",
+    avisoCp(),
+  );
+  checar(
+    "so registros: Voltaram N registros do historico",
+    (await restaurarCom({ registros: 3 })) === "Voltaram 3 registros do histórico.",
+    avisoCp(),
+  );
+  checar("um registro so: Voltou", (await restaurarCom({ registros: 1 })) === "Voltou 1 registro do histórico.", avisoCp());
   checar(
     "nada voltou: diz que tudo ainda existe",
-    texto(aviso(el2, "copias")) === "Nada para recuperar: tudo o que estava na cópia ainda existe.",
-    texto(aviso(el2, "copias")),
+    (await restaurarCom({})) === "Nada para recuperar: tudo o que estava na cópia ainda existe.",
+    avisoCp(),
   );
 
   secao("app: Sincronizacao mostra os erros como texto");
@@ -287,6 +320,10 @@ export async function verificarAppSincronizacao(): Promise<void> {
   checar("arquivo parado pela memoria do sigilo: a mensagem como texto", texto(arq).includes(`Erro no arquivo: ${MEMORIA}`), texto(arq));
   checar("o erro do arquivo em destaque", !!arq?.querySelector(".prj-sync-erro"));
   checar("o texto substituido da unidade: motivo hostil como texto", texto(el3.querySelector(".prj-sync-substituido")).includes(HOSTIL));
+  checar(
+    "o Baixar da unidade diz de qual texto",
+    botao(el3, "Baixar o texto antigo")?.getAttribute("aria-label") === "Baixar o texto antigo da unidade",
+  );
   checar("cortado: diz que so o comeco ficou guardado", /só o começo/.test(texto(el3.querySelector(".prj-sync-substituido"))));
   checar("nada de html hostil vira elemento", !el3.querySelector("img"));
   const cps = el3.querySelector("[data-secao='copias']");
@@ -322,7 +359,7 @@ export async function verificarAppSincronizacao(): Promise<void> {
       listar: async () => {
         throw new Error("IndexedDB fechado");
       },
-      restaurar: async () => 0,
+      restaurar: async () => NADA,
     },
   });
   const el4 = await montarSincronizacao(e.d);
@@ -337,6 +374,212 @@ export async function verificarAppSincronizacao(): Promise<void> {
   botao(el4, "Importar de um arquivo…")?.click();
   await tique();
   checar("importar: a frase do resultado aparece", texto(aviso(el4, "arquivo")) === "3 projetos novos.");
-  const vazio = deps({ copias: { listar: async () => [], restaurar: async () => 0 } });
+  const vazio = deps({ copias: { listar: async () => [], restaurar: async () => NADA } });
   checar("sem copias ainda", /Ainda não há cópias/.test(texto(await montarSincronizacao(vazio.d))));
+
+  await verificarRodada1();
+}
+
+/** Rodada 1 da revisão: aviso que fica na árvore, ao vivo, apagar que falha, 30 dias, situação que não lê, caminhos sem prova. */
+async function verificarRodada1(): Promise<void> {
+  secao("app: Sincronizacao, a linha de aviso fica na arvore (o leitor de tela anuncia)");
+  const css = await readFile(join(RAIZ, "estatico/projetos.css"), "utf8");
+  const regras = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].filter((m) => m[1]!.includes("prj-sync-aviso"));
+  checar(
+    "nenhuma regra esconde o aviso (display: none tira do leitor de tela)",
+    regras.length > 0 && regras.every((m) => !/display:\s*none/.test(m[2]!)),
+    regras.map((m) => m[0]),
+  );
+  checar(
+    "vazio, o aviso nao ocupa espaco: margem negativa igual ao gap da secao",
+    regras.some((m) => /\.prj-sync-aviso:empty/.test(m[1]!) && /margin-top:\s*-8px/.test(m[2]!)) &&
+      /\.prj-sync-secao \{[^}]*gap: 8px/.test(css),
+  );
+
+  secao("app: Sincronizacao repinta quando a sincronia muda e se desinscreve fechada");
+  const doc = telaDoApp();
+  let ouvinte: ((s: SituacaoSincronia) => void) | null = null;
+  let saidas = 0;
+  const a = deps({
+    aoMudar: (f) => {
+      ouvinte = f;
+      return () => {
+        saidas++;
+        ouvinte = null;
+      };
+    },
+  });
+  const el = await montarSincronizacao(a.d);
+  doc.body.append(el);
+  checar("inscreve ao montar", !!ouvinte);
+  const linhaUn = () => texto(el.querySelector("[data-texto='unidade']"));
+  const mudou: SituacaoSincronia = {
+    unidade: { ...a.situacao().unidade, status: { estado: "erro", quando: AGORA, pendente: false, mensagem: "o SEI recusou" } },
+    eu: { ...a.situacao().eu, consentimento: "ligado" },
+  };
+  (ouvinte as ((s: SituacaoSincronia) => void) | null)?.(mudou);
+  await tique();
+  checar("a linha da unidade repinta com a situacao nova", linhaUn() === "Erro: o SEI recusou", linhaUn());
+  checar("e as acoes do pessoal tambem (ligado em outro lugar)", !!botao(el, "Desligar") && !botao(el, "Ligar…"));
+  el.remove();
+  (ouvinte as ((s: SituacaoSincronia) => void) | null)?.({ ...mudou, unidade: { ...mudou.unidade, status: undefined } });
+  await tique();
+  checar("fechado (fora da pagina): desinscreve e nao repinta", saidas === 1 && !ouvinte && linhaUn() === "Erro: o SEI recusou", [
+    saidas,
+    linhaUn(),
+  ]);
+
+  secao("app: Sincronizacao, apagar que falha repinta (o controle ja desligou)");
+  telaDoApp();
+  const b = deps({}, { eu: { vis: "eu", nome: "[_SEIPRO_PRJ_ana]", consentimento: "ligado" } });
+  b.d.pessoal.apagar = async () => {
+    b.definir({ eu: { ...b.situacao().eu, consentimento: "desligado" } });
+    throw new Error("O SEI não respondeu.");
+  };
+  const el2 = await montarSincronizacao(b.d);
+  botao(el2, "Desligar e apagar do SEI")?.click();
+  await tique();
+  checar("o erro aparece como texto", texto(aviso(el2, "eu")) === "O SEI não respondeu.", texto(aviso(el2, "eu")));
+  checar(
+    "e a secao mostra o desligado de verdade",
+    !!botao(el2, "Ligar…") && !!botao(el2, "Apagar o texto do SEI") && !botao(el2, "Desligar"),
+  );
+  b.d.pessoal.apagar = async () => false;
+  botao(el2, "Apagar o texto do SEI")?.click();
+  await tique();
+  checar(
+    "sem texto no SEI: diz que nao havia",
+    texto(aviso(el2, "eu")) === "Não havia o texto “[_SEIPRO_PRJ_ana]” no SEI.",
+    texto(aviso(el2, "eu")),
+  );
+
+  secao("app: Sincronizacao, o aviso do texto substituido some depois de 30 dias");
+  telaDoApp();
+  const subst = (dias: number) =>
+    deps(
+      {},
+      { unidade: { ...deps().situacao().unidade, substituido: { quando: AGORA - dias * DIA, motivo: "x", html: "y", cortado: false } } },
+    );
+  checar("com 29 dias ainda aparece", !!(await montarSincronizacao(subst(29).d)).querySelector(".prj-sync-substituido"));
+  checar("com 31 dias some", !(await montarSincronizacao(subst(31).d)).querySelector(".prj-sync-substituido"));
+
+  secao("app: Sincronizacao abre mesmo com a situacao que nao le");
+  telaDoApp();
+  let falhar = true;
+  const c = deps();
+  const situacaoBoa = c.d.situacao;
+  c.d.situacao = async () => {
+    if (falhar) throw new Error("storage fora do ar");
+    return situacaoBoa();
+  };
+  const el3 = await montarSincronizacao(c.d).catch(() => null);
+  checar("o dialogo abre (as secoes todas)", [...(el3?.querySelectorAll("section") ?? [])].length === 3);
+  const lnUn = () => texto(el3?.querySelector("[data-texto='unidade']"));
+  checar(
+    "a linha diz que nao leu, como texto e em destaque",
+    lnUn() === "Não foi possível ler a situação da sincronia: storage fora do ar" &&
+      !!el3?.querySelector("[data-texto='eu'].prj-sync-erro"),
+    lnUn(),
+  );
+  checar("sem saber o consentimento, sem botoes do pessoal", !botao(el3!, "Ligar…") && !botao(el3!, "Desligar"));
+  falhar = false;
+  botao(el3!, "Sincronizar agora")?.click();
+  await tique();
+  checar(
+    "lida de novo: repinta a situacao, o nome do texto e os botoes",
+    /Sincronizado há 3 min/.test(lnUn()) &&
+      !el3?.querySelector("[data-texto='unidade'].prj-sync-erro") &&
+      texto(el3?.querySelector("[data-secao='unidade']")).includes("[_SEIPRO_PRJ_UNIDADE]") &&
+      !!botao(el3!, "Ligar…"),
+    lnUn(),
+  );
+
+  secao("app: Sincronizacao, caminhos do arquivo e o segundo clique");
+  telaDoApp();
+  let solta: () => void = () => undefined;
+  let chamadas = 0;
+  const e = deps({
+    sincronizar: () => {
+      chamadas++;
+      return new Promise<void>((ok) => {
+        solta = ok;
+      });
+    },
+  });
+  const el4 = await montarSincronizacao(e.d);
+  const sinc = botao(el4, "Sincronizar agora");
+  sinc?.click();
+  sinc?.click();
+  await tique();
+  checar("o segundo clique durante a acao e ignorado", chamadas === 1 && sinc?.getAttribute("aria-disabled") === "true", chamadas);
+  solta();
+  await tique();
+  sinc?.click();
+  await tique();
+  checar("terminada a acao, o botao volta a responder", chamadas === 2, chamadas);
+  solta();
+
+  const escolhas: string[] = [];
+  let configurado = false;
+  let st: StatusArquivo | null = null;
+  const f = deps({
+    arquivo: ARQUIVO_LIGADO(() => st, {
+      configurado: async () => configurado,
+      escolher: async (modo) => void escolhas.push(modo),
+      reconectar: async () => void escolhas.push("reconectar"),
+      esquecer: async () => {
+        escolhas.push("esquecer");
+        configurado = false;
+        st = null;
+      },
+    }),
+  });
+  const el5 = await montarSincronizacao(f.d);
+  const arq = () => el5.querySelector("[data-secao='arquivo']")!;
+  checar(
+    "arquivo possivel e nao escolhido: Criar, Usar e o a mao",
+    /Escolha um arquivo numa pasta/.test(texto(arq())) &&
+      ["Criar arquivo…", "Usar um arquivo existente…", "Exportar tudo", "Importar de um arquivo…"].every((r) => !!botao(arq(), r)) &&
+      botao(arq(), "Criar arquivo…")?.className === "spro-botao primario",
+  );
+  botao(arq(), "Criar arquivo…")?.click();
+  await tique();
+  botao(arq(), "Usar um arquivo existente…")?.click();
+  await tique();
+  checar("Criar e Usar chegam ao seletor certo", escolhas.join() === "novo,existente", escolhas);
+  configurado = true;
+  st = { estado: "permissao", quando: AGORA, nome: "projetos.json" };
+  botao(arq(), "Usar um arquivo existente…")?.click();
+  await tique();
+  checar(
+    "sem permissao: explica e oferece Reconectar (principal)",
+    /O navegador pede de novo a permissão de “projetos.json”/.test(texto(arq())) &&
+      botao(arq(), "Reconectar arquivo")?.className === "spro-botao primario" &&
+      !botao(arq(), "Exportar tudo"),
+    texto(arq()),
+  );
+  botao(arq(), "Reconectar arquivo")?.click();
+  await tique();
+  checar("Reconectar chega a quem faz", escolhas.at(-1) === "reconectar", escolhas);
+  botao(arq(), "Parar de usar o arquivo")?.click();
+  await tique();
+  checar(
+    "Parar de usar: esquece e diz como voltar",
+    escolhas.at(-1) === "esquecer" &&
+      texto(aviso(el5, "arquivo")) === "O arquivo continua na pasta. Para voltar a usá-lo: “Usar um arquivo existente…”." &&
+      !!botao(arq(), "Usar um arquivo existente…"),
+    texto(aviso(el5, "arquivo")),
+  );
+  const g = deps({
+    arquivo: ARQUIVO_LIGADO(() => null, {
+      status: async () => {
+        throw new Error("storage recusou");
+      },
+    }),
+  });
+  const el6 = await montarSincronizacao(g.d);
+  checar(
+    "status do arquivo que lanca: explica, sem derrubar o dialogo",
+    texto(el6.querySelector("[data-secao='arquivo']")).includes("Não foi possível ler o estado do arquivo: storage recusou"),
+  );
 }
