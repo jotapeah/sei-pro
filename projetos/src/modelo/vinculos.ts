@@ -66,11 +66,28 @@ export function protocoloNoTexto(t: string): string | null {
 const chaveDe = (v: Vinculo | undefined): string => (typeof v?.protocolo === "string" && v.protocolo ? chaveProtocolo(v.protocolo) : "");
 
 /**
- * A etapa tem processo próprio: com número, ou o vínculo vazio marcado (`VINCULO_VAZIO` de `sigilo.ts`: o
- * processo sigiloso que chegou sem número do Texto Padrão). O protocolo vazio SEM a marca é "sem processo",
- * como a tela o mostra (o balão e o diálogo caem no processo do projeto).
+ * O vínculo que não diz processo nenhum: sem dígito (vazio, ou só letras e pontuação, que `RE_PROTOCOLO` aceita) e
+ * sem a marca de sigilo. É "sem processo", como a tela o mostra (o balão e o diálogo caem no processo do projeto).
+ * O vazio MARCADO (`VINCULO_VAZIO` de `sigilo.ts`) é outra coisa: o processo sigiloso que chegou sem número.
  */
-const processoProprio = (v: Vinculo | undefined): boolean => !!v && (!!v.protocolo || v.sigiloso === true);
+export const vinculoSemProcesso = (v: Vinculo | undefined): boolean =>
+  !!v && typeof v.protocolo === "string" && !chaveProtocolo(v.protocolo) && v.sigiloso !== true;
+
+/**
+ * A entidade que chega de fora (Texto Padrão editado à mão, arquivo, cópia) com o vínculo que não diz processo
+ * nenhum (`vinculoSemProcesso`) fica SEM o campo `processo`. Sem isso, a regra do sigilo (`etapaSigilosa`) a via
+ * como "processo próprio nunca sigiloso" e a etapa de um projeto de processo sigiloso mandava o documento em claro
+ * ao texto; sem o campo, ela herda o processo do projeto, como a tela e o índice mostram. O resto volta o mesmo objeto.
+ */
+export function semVinculoVazio<T extends { processo?: Vinculo }>(x: T): T {
+  if (!vinculoSemProcesso(x.processo)) return x;
+  const y = { ...x } as Record<string, unknown>;
+  delete y.processo;
+  return y as T;
+}
+
+/** A etapa tem processo próprio: com número, ou o vínculo vazio marcado (o sigiloso que chegou sem número). */
+const processoProprio = (v: Vinculo | undefined): boolean => !!v && !vinculoSemProcesso(v);
 
 export function indiceDeProcessos(
   escopos: ReadonlyArray<{ vis: Vis; projetos: readonly Projeto[]; etapas: readonly Etapa[] }>,

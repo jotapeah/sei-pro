@@ -43,6 +43,7 @@ import { verificarSincroniaSigilo } from "./verificar-sincronia-sigilo";
 import { verificarSincroniaTexto } from "./verificar-sincronia-texto";
 import { verificarSituacao } from "./verificar-situacao";
 import { verificarVendor } from "./verificar-vendor";
+import { verificarVinculoVazioDeFora } from "./verificar-vinculo-vazio-de-fora";
 
 verificarEscopo();
 verificarCalendario();
@@ -53,6 +54,7 @@ verificarFiltro();
 await verificarRepositorio();
 await verificarEscopos();
 await verificarIntegracaoModelo();
+await verificarVinculoVazioDeFora();
 await verificarSincroniaRepo();
 await verificarSincroniaTexto();
 await verificarSincroniaCorrida();

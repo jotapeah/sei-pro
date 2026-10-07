@@ -92,7 +92,15 @@ import {
   problemasDoModelo,
   problemasDoProjeto,
 } from "./modelo/validacao";
-import { chaveProtocolo, indiceDeProcessos, RE_DOCUMENTO, RE_ID_PROCEDIMENTO, RE_PROTOCOLO, type VinculoProcesso } from "./modelo/vinculos";
+import {
+  chaveProtocolo,
+  indiceDeProcessos,
+  RE_DOCUMENTO,
+  RE_ID_PROCEDIMENTO,
+  RE_PROTOCOLO,
+  semVinculoVazio,
+  type VinculoProcesso,
+} from "./modelo/vinculos";
 import { aplicarModelo } from "./modelos/aplicar";
 import { modeloDoProjeto } from "./modelos/salvar";
 
@@ -1104,6 +1112,17 @@ export class RepositorioProjetos {
       ),
     };
     soma.atualizados += [...marcas.p, ...marcas.e].filter((x) => !jaGravados.has(x.id)).length;
+    // A versão de fora que só difere da daqui pela marca de sigilo que a daqui já tem (mesmo carimbo: a cópia sem a
+    // marca vence o desempate do `mesclar`) volta igual depois das marcas: não é regravada nem contada. Sem isso, um
+    // texto com o documento em claro numa etapa sigilosa (editado à mão; o vínculo vazio sem a marca, que agora vira
+    // "sem processo") regravaria o mesmo a cada rodada, e a sincronia ouve as gravações.
+    for (const [k, v] of Object.entries({ ...itens, ...marcadas })) {
+      if (!k.startsWith(this.projetos.prefixo) && !k.startsWith(this.etapas.prefixo)) continue;
+      if (!(k in tudo) || jsonEstavel(v) !== jsonEstavel(tudo[k])) continue;
+      delete itens[k];
+      delete (marcadas as Record<string, unknown>)[k];
+      soma.atualizados -= 1;
+    }
     // A memória ganha, como aprendida (com o teto: a mescla é dado de fora, e nada aqui foi marcado por este
     // dispositivo), o que os registros ensinaram, o que já estava marcado aqui antes da mescla, o que ficou marcado no
     // estado mesclado e o que o envelope rasparia dele (um colega que perca a base depois, antes de algum texto ser
@@ -1291,12 +1310,17 @@ function registroDaqui(vencedor: Registro, local: Registro | undefined): Registr
   return local && local.atualizadoEm === vencedor.atualizadoEm && local.dispositivo === vencedor.dispositivo ? local : vencedor;
 }
 
-/** Dependência repetida sai (a Frappe desenharia a seta duas vezes). Só copia quando há o que tirar. */
+/**
+ * O item de fora já conferido (`entidadeValida`), como fica aqui: o vínculo que não diz processo nenhum sai
+ * (`semVinculoVazio`: senão o documento de uma etapa de projeto sigiloso ia em claro ao texto) e a dependência
+ * repetida sai (a Frappe desenharia a seta duas vezes). Só copia quando há o que tirar.
+ */
 function sanear<T>(x: T, tipo: keyof Entidades): T {
+  if (tipo === "p") return semVinculoVazio(x as unknown as Projeto) as unknown as T;
   if (tipo !== "e") return x;
-  const e = x as unknown as Etapa;
+  const e = semVinculoVazio(x as unknown as Etapa);
   const deps = [...new Set(e.dependeDe)];
-  return deps.length === e.dependeDe.length ? x : ({ ...e, dependeDe: deps } as unknown as T);
+  return (deps.length === e.dependeDe.length ? e : { ...e, dependeDe: deps }) as unknown as T;
 }
 
 const compararIds = (a: { id: string }, b: { id: string }): number => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);

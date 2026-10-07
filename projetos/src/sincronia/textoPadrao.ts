@@ -39,7 +39,8 @@ import { chaveSyncTexto, diasDeLapide, FOLGA_RELOGIO_MS, LIMITES } from "../mode
 import { chaveEscopo } from "../modelo/escopo";
 import { excedentes, projetosQueFicam } from "../modelo/historico";
 import { cortarSigilo, NADA_CONHECIDO, type Numeros, type SigilosConhecidos, sigiloDoEnvelope } from "../modelo/sigilo";
-import type { Entidades, EnvelopeProjetos, Escopo, Vis } from "../modelo/tipos";
+import type { Entidades, EnvelopeProjetos, Escopo, Etapa, Projeto, Vis } from "../modelo/tipos";
+import { semVinculoVazio } from "../modelo/vinculos";
 import { entidadeValida, RepositorioProjetos } from "../repositorio";
 
 /** O CKEditor 5 baixa o conteúdo de todos os textos da unidade (como nos Favoritos). */
@@ -188,7 +189,10 @@ export function comOsDoFuturo(env: EnvelopeProjetos, remoto: EnvelopeProjetos | 
   if (!remoto) return env;
   const entidades = { ...env.entidades };
   for (const k of LISTAS) {
-    const futuros = ((remoto.entidades[k] ?? []) as unknown[]).filter((x) => entidadeValida(x, k) && !entidadeValida(x, k, agora));
+    // Como na importação (`semVinculoVazio`): o vínculo que não diz processo nenhum sai, e a etapa herda o do projeto.
+    const futuros = ((remoto.entidades[k] ?? []) as unknown[])
+      .filter((x) => entidadeValida(x, k) && !entidadeValida(x, k, agora))
+      .map((x) => (k === "p" || k === "e" ? semVinculoVazio(x as Projeto | Etapa) : x));
     if (!futuros.length) continue;
     const ids = new Set(futuros.map((x) => (x as { id: string }).id));
     (entidades as Record<string, unknown[]>)[k] = [...entidades[k].filter((x) => !ids.has(x.id)), ...futuros];
