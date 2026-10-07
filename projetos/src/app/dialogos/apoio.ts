@@ -76,14 +76,19 @@ export function abrirInformarDocumento(c: {
   const data = h("input", { type: "date", class: "spro-campo", name: "concluida", value: c.etapa.concluidaEm ?? c.hoje });
   let modal: { fechar(): void } | null = null;
   const salvar = h("button", { type: "button", class: "spro-botao primario" }, "Salvar");
+  let ocupado = false;
   salvar.addEventListener("click", async () => {
+    if (ocupado) return;
     const d = dataDeFormulario(data.value);
     if (!d) return erros.mostrar(["Informe uma data válida (entre 2000 e 2100)."]);
+    ocupado = true;
     try {
       await c.salvar(doc.numero() || undefined, d);
       modal?.fechar();
     } catch (e) {
       erros.mostrar(mensagensDoErro(e));
+    } finally {
+      ocupado = false;
     }
   });
   const conteudo = h(
@@ -104,13 +109,18 @@ export function pedirNomeDoModelo(c: { abrirModal: AbrirModal; sugestao: string;
   const nome = h("input", { type: "text", class: "spro-campo", maxlength: String(LIMITES.nome), value: c.sugestao });
   let modal: { fechar(): void } | null = null;
   const salvar = h("button", { type: "button", class: "spro-botao primario" }, "Salvar modelo");
+  let ocupado = false;
   salvar.addEventListener("click", async () => {
+    if (ocupado) return;
     if (!nome.value.trim()) return erros.mostrar(["Informe o nome do modelo."]);
+    ocupado = true;
     try {
       await c.salvar(nome.value.trim());
       modal?.fechar();
     } catch (e) {
       erros.mostrar(mensagensDoErro(e));
+    } finally {
+      ocupado = false;
     }
   });
   const conteudo = h(

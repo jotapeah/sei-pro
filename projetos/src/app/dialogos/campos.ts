@@ -85,10 +85,20 @@ const VALOR_DIGITADO = "digitado:";
 /** Só os dígitos e a pontuação do número do processo; nada além de 40 caracteres. */
 const protocoloLimpo = (t: string): string => t.replace(/[^\d./-]/g, "").slice(0, 40);
 
+/** Número de processo aceito: começa e termina em dígito, só com dígitos . / - e ao menos 8 dígitos (os formatos variam por órgão). */
+export function protocoloValido(p: string): boolean {
+  const t = p.trim();
+  return /^[0-9][0-9./-]*[0-9]$/.test(t) && t.replace(/\D/g, "").length >= 8;
+}
+
+export const ERRO_PROTOCOLO = "Número de processo inválido.";
+
 export interface CampoProcesso {
   combo: Combo;
   /** O vínculo escolhido; undefined = nenhum (no da etapa: herda o do projeto). */
   vinculo(): Vinculo | undefined;
+  /** O vínculo escolhido tem número que não passa em `protocoloValido` (só vale para o número digitado). */
+  invalido(): boolean;
 }
 
 /**
@@ -147,6 +157,10 @@ export function campoProcesso(o: {
     .catch(() => undefined);
   return {
     combo,
+    invalido() {
+      const digitado = digitados.get(combo.valor()[0] ?? "");
+      return !!digitado && !protocoloValido(digitado.protocolo);
+    },
     vinculo() {
       const v = combo.valor()[0] ?? "";
       if (!v) return undefined;

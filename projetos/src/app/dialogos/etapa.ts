@@ -21,7 +21,7 @@ import type { DocumentoConferido, ProcessoDaCaixa, UsuarioDaUnidade } from "../.
 import type { ProjetoNaTela } from "../dados";
 import { dataCurta, dataDeFormulario, resumoDoUltimoRegistro, textoDiasUteis, textoDoRegistro } from "../formato";
 import { iconeProjetos } from "../icones";
-import { caixaDeErros, campo, campoDocumento, campoProcesso, linhaDeCampos, mensagensDoErro, secao } from "./campos";
+import { caixaDeErros, campo, campoDocumento, campoProcesso, ERRO_PROTOCOLO, linhaDeCampos, mensagensDoErro, secao } from "./campos";
 
 export interface ResultadoEtapa {
   nome: string;
@@ -412,6 +412,7 @@ export function abrirDialogoEtapa(c: ContextoDialogoEtapa): { fechar(): void } {
   const validar = (): string[] => {
     const m: string[] = [];
     if (!nome.value.trim()) m.push("Informe o nome da etapa.");
+    if (proc.invalido()) m.push(ERRO_PROTOCOLO);
     const i = dataDeFormulario(inicio.value);
     const f = marco.checked ? i : dataDeFormulario(fim.value);
     if (!i) m.push("Informe uma data de início válida (entre 2000 e 2100).");

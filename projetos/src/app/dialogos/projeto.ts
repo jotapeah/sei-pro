@@ -17,7 +17,7 @@ import { previaDoModelo } from "../../modelos/aplicar";
 import type { ProcessoDaCaixa } from "../../ponte/tipos";
 import type { ModeloNaTela, ProjetoNaTela } from "../dados";
 import { dataCurta, dataDeFormulario, dataLonga, plural } from "../formato";
-import { caixaDeErros, campo, campoProcesso, linhaDeCampos, mensagensDoErro } from "./campos";
+import { caixaDeErros, campo, campoProcesso, ERRO_PROTOCOLO, linhaDeCampos, mensagensDoErro } from "./campos";
 
 export interface ResultadoProjeto {
   nome: string;
@@ -177,6 +177,7 @@ export function abrirDialogoProjeto(c: ContextoDialogoProjeto): { fechar(): void
   const validar = (): string[] => {
     const m: string[] = [];
     if (!nome.value.trim()) m.push("Informe o nome do projeto.");
+    if (proc.invalido()) m.push(ERRO_PROTOCOLO);
     if (!p && deModelo) {
       if (!modeloEscolhido()) m.push("Escolha um modelo.");
       if (!dataDeFormulario(comeca.value)) m.push("Informe uma data válida (entre 2000 e 2100).");

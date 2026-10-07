@@ -5,7 +5,7 @@ import { abrirDialogoProjeto, type ContextoDialogoProjeto, type ResultadoProjeto
 import { resumoDoProjeto } from "../src/modelo/resumo";
 import { ErroValidacao } from "../src/modelo/validacao";
 import { MODELOS_EMBUTIDOS } from "../src/modelos/embutidos";
-import { digitar, escolherCombo, itemDoMenu, itensDoMenu, marcar, opcoesDoCombo, telaDoApp, texto } from "./apoioApp";
+import { criarNoCombo, digitar, escolherCombo, itemDoMenu, itensDoMenu, marcar, opcoesDoCombo, telaDoApp, texto } from "./apoioApp";
 import { HOSTIL } from "./cenarioGantt";
 import { etapa, HOJE, projeto } from "./fabrica";
 import { botao, checar, secao, tique } from "./util";
@@ -254,4 +254,49 @@ export async function verificarAppProjeto(): Promise<void> {
   botao(docF.querySelector(".prj-form-modelo")!, "Salvar modelo")!.click();
   await tique();
   checar("nome do modelo: falha fica aberto", texto(docF.querySelector(".prj-form-modelo")).includes("Não foi possível gravar agora."));
+
+  secao("app: processo digitado e clique duplo");
+  const antes = salvos.length;
+  abrirDialogoProjeto(base);
+  await tique();
+  digitar(f().querySelector("input[name='nome']"), "Com número livre");
+  for (const ruim of ["-", "1", "12.34"]) {
+    await criarNoCombo(f(), "Processo SEI", ruim);
+    botao(f(), "Criar projeto")!.click();
+    await tique();
+    checar(
+      `numero "${ruim}" e recusado`,
+      texto(f().querySelector(".prj-erros")) === "Número de processo inválido." && salvos.length === antes,
+    );
+  }
+  await criarNoCombo(f(), "Processo SEI", " 99906.713-630.000032/2025-82 ");
+  botao(f(), "Criar projeto")!.click();
+  await tique();
+  checar("numero livre valido vai no vinculo", salvos[antes]?.processo?.protocolo === "99906.713-630.000032/2025-82", salvos[antes]);
+  const docC = telaDoApp();
+  const mc = modais(docC);
+  let chamadas = 0;
+  let solta: () => void = () => undefined;
+  const lenta = () =>
+    new Promise<void>((r) => {
+      chamadas++;
+      solta = r;
+    });
+  pedirNomeDoModelo({ abrirModal: mc.abrirModal, sugestao: "Dup", salvar: lenta });
+  const bm = botao(docC.querySelector(".prj-form-modelo")!, "Salvar modelo")!;
+  bm.click();
+  bm.click();
+  await tique();
+  solta();
+  await tique();
+  checar("salvar modelo: dois cliques, uma chamada", chamadas === 1);
+  chamadas = 0;
+  abrirInformarDocumento({ abrirModal: mc.abrirModal, etapa: etapa({ id: "z" }), hoje: HOJE, salvar: lenta });
+  const bd = botao(docC.querySelector(".prj-form-documento")!, "Salvar")!;
+  bd.click();
+  bd.click();
+  await tique();
+  solta();
+  await tique();
+  checar("informar documento: dois cliques, uma chamada", chamadas === 1);
 }
