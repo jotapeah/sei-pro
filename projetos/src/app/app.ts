@@ -139,6 +139,8 @@ export class AppProjetos {
   private abertoAtual = "todos";
   private vista: VistaProjeto | VistaTodos | null = null;
   private chaveVista = "";
+  /** Quantas abas de projeto couberam no último desenho (o redimensionar só refaz as abas se mudar). */
+  private limiteAbas = 0;
   private filtro: BotaoFiltro | null = null;
   private balao: Camada | null = null;
   /** A Frappe falhou: a Lista fica até o usuário escolher "Gantt" de novo (spec 9). */
@@ -195,9 +197,19 @@ export class AppProjetos {
     this.d.raiz.replaceChildren();
   }
 
-  /** A janela mudou de largura: as abas que cabem mudam. */
+  /**
+   * A janela mudou de tamanho. No painel embutido o iframe cresce quando um balão ou o popover do
+   * filtro abre para baixo (e dispara `resize` dentro dele): redesenhar tudo fecharia a camada que
+   * acabou de abrir. Só as abas dependem da largura; elas são refeitas quando muda quantas cabem, e
+   * nada mais (as camadas se reposicionam sozinhas, `flutuante.ts`).
+   */
   aoRedimensionar(): void {
-    this.render();
+    if (this.destruido || !this.dados.ativos.length) return;
+    const limite = this.limiteAtual();
+    if (limite === this.limiteAbas) return;
+    this.desenharAbas(limite);
+    fecharOrfaos();
+    this.d.aoRedesenhar?.();
   }
 
   // ---------- dados ----------
@@ -278,11 +290,13 @@ export class AppProjetos {
 
   // ---------- desenho ----------
 
-  private render(): void {
-    if (this.destruido) return;
-    this.balao?.fechar();
-    const sinc = (this.d.sincronia ?? SEM_SINCRONIA).estado();
-    const menu = criarMenuAjustes(() => ({
+  /** Quantas abas de projeto cabem na largura de agora. */
+  private limiteAtual(): number {
+    return limiteDeAbas(this.d.largura?.() ?? this.d.raiz.ownerDocument.documentElement.clientWidth ?? 0);
+  }
+
+  private menuAjustes(): HTMLButtonElement {
+    return criarMenuAjustes(() => ({
       mostrarLista: this.prefs.mostrarLista,
       moverDependentes: this.prefs.moverDependentes,
       ordemEtapas: this.prefs.ordemEtapas,
@@ -295,7 +309,30 @@ export class AppProjetos {
       aoImprimir: () => this.imprimir(),
       aoArquivados: () => this.abrirArquivados(),
     }));
+  }
+
+  /** A linha das abas (com o estado da sincronia e o menu): o resto da tela fica como está. */
+  private desenharAbas(limite: number): void {
+    this.limiteAbas = limite;
+    this.slotTopo.replaceChildren(
+      montarAbas({
+        ativos: this.dados.ativos,
+        aberto: this.abertoAtual,
+        limite,
+        sincronia: (this.d.sincronia ?? SEM_SINCRONIA).estado(),
+        menu: this.menuAjustes(),
+        aoEscolher: (id) => this.escolher(id),
+        aoNovo: () => this.novoProjeto(false),
+      }),
+    );
+  }
+
+  private render(): void {
+    if (this.destruido) return;
+    this.balao?.fechar();
     if (!this.dados.ativos.length) {
+      const sinc = (this.d.sincronia ?? SEM_SINCRONIA).estado();
+      const menu = this.menuAjustes();
       this.descartarVista();
       this.filtro?.fechar();
       this.slotTopo.replaceChildren(
@@ -314,18 +351,7 @@ export class AppProjetos {
     }
     this.slotVazio.replaceChildren();
     this.cartao.hidden = false;
-    const largura = this.d.largura?.() ?? this.d.raiz.ownerDocument.documentElement.clientWidth ?? 0;
-    this.slotTopo.replaceChildren(
-      montarAbas({
-        ativos: this.dados.ativos,
-        aberto: this.abertoAtual,
-        limite: limiteDeAbas(largura),
-        sincronia: sinc,
-        menu,
-        aoEscolher: (id) => this.escolher(id),
-        aoNovo: () => this.novoProjeto(false),
-      }),
-    );
+    this.desenharAbas(this.limiteAtual());
     const p = this.projetoAberto();
     this.filtro?.fechar();
     this.filtro = criarBotaoFiltro({

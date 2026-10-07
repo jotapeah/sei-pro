@@ -34,6 +34,7 @@ async function montar(
     hoje?: () => DataISO;
     conferirDiaMs?: number;
     semIniciar?: boolean;
+    largura?: () => number;
   } = {},
 ) {
   const doc = telaDoApp();
@@ -99,7 +100,7 @@ async function montar(
     imprimir: (p) => void t.impressos.push(p),
     montarGantt: g.montar,
     sincronia: o.sincronia,
-    largura: () => 1000,
+    largura: o.largura ?? (() => 1000),
     conferirDiaMs: o.conferirDiaMs,
   });
   if (!o.semIniciar) await app.iniciar();
@@ -744,6 +745,36 @@ export async function verificarApp(): Promise<void> {
     !!botao(f.raiz, "Gantt")?.matches("[aria-pressed='true']") && (await lerPreferencias(f.area)).vista === "gantt",
   );
   f.app.destruir();
+
+  secao("app: redimensionar nao fecha o balao nem o filtro");
+  let larguraDaJanela = 1000;
+  const rz = await montar({ largura: () => larguraDaJanela });
+  abrirAba(rz, rz.ids.p);
+  await tique();
+  const abaDoProjeto = () => rz.raiz.querySelector(`[role='tab'][data-aba='${rz.ids.p}']`);
+  const abaAntes = abaDoProjeto();
+  clicarLinha(rz, rz.ids.a);
+  rz.app.aoRedimensionar();
+  await tique();
+  checar("mesma largura: o balao segue aberto e as abas nao sao refeitas", !!balao(rz) && !!abaAntes && abaDoProjeto() === abaAntes);
+  botao(balao(rz) ?? rz.doc.body, "Fechar")?.click();
+  rz.raiz.querySelector<HTMLButtonElement>(".prj-filtro")?.click();
+  rz.app.aoRedimensionar();
+  await tique();
+  checar("mesma largura: o popover do filtro segue aberto", !!rz.doc.querySelector(".prj-filtro-pop"));
+  rz.raiz.querySelector<HTMLButtonElement>(".prj-filtro")?.click();
+  clicarLinha(rz, rz.ids.a);
+  const cabecalhoAntes = rz.raiz.querySelector(".prj-cab");
+  larguraDaJanela = 500;
+  rz.app.aoRedimensionar();
+  await tique();
+  checar(
+    "largura que muda quantas abas cabem: refaz so as abas, o balao fica",
+    !!rz.raiz.querySelector(".prj-aba-mais") &&
+      texto(balao(rz)?.querySelector("h3")) === "Nota técnica" &&
+      rz.raiz.querySelector(".prj-cab") === cabecalhoAntes,
+  );
+  rz.app.destruir();
 
   secao("app: fechado antes de terminar de abrir");
   const w = await montar({ semIniciar: true });
