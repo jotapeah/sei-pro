@@ -11,8 +11,18 @@
  * depois de desmontar recusa tudo (um pedido atrasado do app velho não chega à
  * aba de outra unidade, nem à da própria). A montagem não tem outro RPC.
  *
+ * A aba que some não desmonta na hora: o SEI recarrega a MESMA aba a cada
+ * navegação (a porta cai e a página nova conecta de novo), inclusive dentro da
+ * mesma unidade. O app espera uma carência (`CARENCIA_SEM_ABA_MS`): se a mesma
+ * chave volta, nada acontece (diálogos, balão e o que foi digitado continuam;
+ * o RPC passa a ir para a página nova); se chega outra chave, desmonta e monta
+ * a nova; se a carência acaba sem aba, desmonta e mostra o aviso de sem aba.
+ * Enquanto espera, o app grava no escopo dele (é a mesma unidade) e os pedidos
+ * à aba recusam (`SEM_ABA`).
+ *
  * Se a troca fechou algo que estava aberto (um formulário, o "Entendi"), um
- * aviso só, já na unidade nova, diz que foi fechado sem gravar.
+ * aviso só, já na unidade nova, diz que foi fechado sem gravar (a contagem fica
+ * guardada enquanto não há aba).
  *
  * Também atende o "Abrir no painel" que a árvore deixa no armazenamento
  * (`projetos/foco`, alvo "lateral"): abre o projeto (e o balão da etapa) assim
@@ -48,7 +58,15 @@ export interface DepsMontagem {
   agora(): number;
   /** Monta o app da unidade do contexto; `rpc` é o desta montagem (só fala com abas da chave dela). */
   criar(ctx: ContextoProjetos, rpc: Pick<Rpc, "chamar">): Promise<AppDoLateral>;
+  /** Quanto esperar a aba que sumiu voltar antes de desmontar (padrão `CARENCIA_SEM_ABA_MS`; as provas encurtam). */
+  carenciaMs?: number;
 }
+
+/**
+ * A espera pela aba que sumiu: o SEI recarrega a página a cada clique (e numa rede lenta demora alguns segundos); o
+ * que estiver aberto no lateral não pode se perder a cada navegação.
+ */
+export const CARENCIA_SEM_ABA_MS = 8000;
 
 /** Uma montagem: a chave dela e se ainda vale (o RPC dela recusa depois de desmontar). */
 interface Vez {
@@ -56,19 +74,23 @@ interface Vez {
   viva: boolean;
 }
 
-/** O que a desmontagem deixou para dizer: de que unidade e quantos diálogos fechou. */
+/** O que a desmontagem deixou para dizer: de que chave e unidade, e quantos diálogos fechou. */
 interface Fechados {
+  chave: string;
   sigla: string;
   quantos: number;
 }
 
 const MENSAGEM_SEM_ABA = "A aba do SEI destes projetos não está mais aberta nesta janela. Abra o SEI na unidade e tente de novo.";
 
-/** O aviso da troca que fechou algo aberto (mesma sigla: outro usuário ou outro SEI). */
-function avisoDaTroca(antiga: string, nova: string): string {
-  return antiga === nova
-    ? `O SEI desta janela mudou. O que estava aberto na ${antiga} foi fechado sem gravar.`
-    : `Você mudou para a ${nova}. O que estava aberto na ${antiga} foi fechado sem gravar.`;
+/**
+ * O aviso do que a troca fechou: outra unidade diz para qual mudou; mesma sigla com outra chave (outro usuário, outro
+ * SEI) diz que o SEI mudou; a mesma chave (voltou depois da carência) só diz o que foi fechado.
+ */
+function avisoDaTroca(f: Fechados, chave: string, sigla: string): string {
+  const fechou = `O que estava aberto na ${f.sigla} foi fechado sem gravar.`;
+  if (f.chave === chave) return fechou;
+  return f.sigla === sigla ? `O SEI desta janela mudou. ${fechou}` : `Você mudou para a ${sigla}. ${fechou}`;
 }
 
 function semAba(): HTMLElement {
@@ -86,6 +108,10 @@ export class MontagemLateral {
   private fila: Promise<void> = Promise.resolve();
   private paradas: Array<() => void> = [];
   private parado = false;
+  /** A aba do app montado sumiu: até quando ele espera (o timer da carência). */
+  private carencia: ReturnType<typeof setTimeout> | null = null;
+  /** O que uma desmontagem fechou e ainda não foi dito (sem aba, a unidade nova ainda não montou). */
+  private fechadosSemAviso: Fechados | null = null;
 
   constructor(private readonly d: DepsMontagem) {}
 
@@ -119,6 +145,8 @@ export class MontagemLateral {
   parar(): void {
     this.parado = true;
     for (const p of this.paradas.splice(0)) p();
+    this.cancelarCarencia();
+    this.fechadosSemAviso = null;
     this.desmontar();
   }
 
@@ -133,31 +161,58 @@ export class MontagemLateral {
     return a ? a.rpc.chamar<T>(op, args, prazo) : Promise.reject(new ErroRpc("SEM_ABA", MENSAGEM_SEM_ABA));
   }
 
-  private desmontar(): Fechados | null {
+  /** Desmonta o app; o que ele fechou fica guardado para o aviso da próxima montagem. */
+  private desmontar(): void {
     const m = this.montado;
     this.montado = null;
-    if (!m) return null;
+    if (!m) return;
     m.vez.viva = false;
+    let quantos = 0;
     try {
-      const quantos = m.app.destruir();
-      return { sigla: m.sigla, quantos: Number.isFinite(quantos) ? quantos : 0 };
+      const n = m.app.destruir();
+      quantos = Number.isFinite(n) ? n : 0;
     } catch (e) {
       console.warn("[SEI Pro] projetos: o lateral não desmontou direito:", e);
-      return { sigla: m.sigla, quantos: 0 };
     }
+    if (quantos > 0) this.fechadosSemAviso = { chave: m.vez.chave, sigla: m.sigla, quantos };
+  }
+
+  /** A aba do app montado sumiu: ele fica, e a carência começa (uma só, por mais avisos que a ponte dê). */
+  private esperarAba(): void {
+    if (this.carencia) return;
+    this.carencia = setTimeout(() => {
+      this.carencia = null;
+      void this.enfileirar(() => this.fimDaCarencia());
+    }, this.d.carenciaMs ?? CARENCIA_SEM_ABA_MS);
+  }
+
+  private cancelarCarencia(): void {
+    if (this.carencia) clearTimeout(this.carencia);
+    this.carencia = null;
+  }
+
+  /** A carência acabou: se ainda não há aba com chave, desmonta e mostra o aviso de sem aba. */
+  private async fimDaCarencia(): Promise<void> {
+    if (this.parado || this.carencia || this.d.ponte.atual()?.chave) return;
+    this.desmontar();
+    this.d.raiz.replaceChildren(semAba());
   }
 
   private async trocar(): Promise<void> {
     if (this.parado) return;
     const a = this.d.ponte.atual();
     const chave = a?.chave ?? "";
-    if (this.montado && this.montado.vez.chave === chave) return;
-    const fechados = this.desmontar();
     // Aba sem chave (sem unidade) não é aba para o lateral: a ponte real nem a oferece.
     if (!a || !chave) {
-      this.d.raiz.replaceChildren(semAba());
+      // O app montado espera a aba voltar (o SEI recarregando a página); sem app, o aviso de sem aba.
+      if (this.montado) this.esperarAba();
+      else this.d.raiz.replaceChildren(semAba());
       return;
     }
+    this.cancelarCarencia();
+    // A mesma chave (voltou da recarga, ou outra aba da mesma unidade): nada muda.
+    if (this.montado && this.montado.vez.chave === chave) return;
+    this.desmontar();
     const ctx = await a.rpc.chamar<ContextoProjetos>("contexto");
     if (this.parado) return;
     // A chave que a aba apresentou tem de ser a do contexto dela (e com unidade): senão não monta e diz o mesmo que
@@ -182,7 +237,9 @@ export class MontagemLateral {
       this.desmontar();
       return;
     }
-    if (fechados?.quantos) avisar(avisoDaTroca(fechados.sigla, sigla));
+    const fechados = this.fechadosSemAviso;
+    this.fechadosSemAviso = null;
+    if (fechados) avisar(avisoDaTroca(fechados, chave, sigla));
     await this.atenderFoco();
   }
 

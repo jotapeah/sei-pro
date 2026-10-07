@@ -28,7 +28,7 @@ import { type AppDoLateral, MontagemLateral, type PonteDoLateral } from "../src/
 import { CHAVE_CONTADOR_PAINEL, CHAVE_LATERAL, CHAVE_PREFERENCIAS, LIMITES, TETO_CONTADOR_PAINEL } from "../src/modelo/constantes";
 import { baseDoEscopo, escoposDaUnidade } from "../src/modelo/escopo";
 import { CHAVE_FOCO, type ContextoProjetos, chaveDaAba, lerPedidoDeFoco, VALIDADE_FOCO } from "../src/ponte/tipos";
-import { itensDoMenu, telaDoApp, texto } from "./apoioApp";
+import { itemDoMenu, itensDoMenu, telaDoApp, texto } from "./apoioApp";
 import { novoRepo } from "./apoioRepositorio";
 import { HOJE } from "./fabrica";
 import { botao, checar, lanca, secao, tique } from "./util";
@@ -60,6 +60,8 @@ function cenario(
     criar?: (c: ContextoProjetos, rpc: Pick<Rpc, "chamar">) => Promise<void>;
     /** Quantos diálogos o app de cada chave tinha abertos ao desmontar. */
     abertos?: Record<string, number>;
+    /** A carência quando a aba some (padrão 0: resolve no próximo tique, como as provas do brief esperam). */
+    carenciaMs?: number;
   } = {},
 ) {
   const doc = telaDoApp();
@@ -85,6 +87,7 @@ function cenario(
     ponte,
     area,
     agora: () => 10_000,
+    carenciaMs: o.carenciaMs ?? 0,
     criar: async (c, rpc): Promise<AppDoLateral> => {
       const k = chaveDaAba(c);
       rpcs.push(rpc);
@@ -119,7 +122,7 @@ const AGORA = new Date(2026, 9, 6, 15).getTime();
  * montado pelo `criarAppDoLateral` (o `ligarApp` real, com o `<dialog>` de verdade). As abas do SEI conectam como o
  * content script (`ligarLadoAba`) e anotam cada pedido que recebem.
  */
-function painelLateral() {
+function painelLateral(o: { carenciaMs?: number } = {}) {
   const doc = telaDoApp();
   definirEmissorDeAviso(null);
   const raiz = doc.getElementById("app")!;
@@ -139,6 +142,7 @@ function painelLateral() {
     ponte,
     area,
     agora: () => AGORA,
+    carenciaMs: o.carenciaMs ?? 60,
     criar: criarAppDoLateral({
       raiz,
       area,
@@ -191,6 +195,82 @@ function painelLateral() {
     );
   };
   return { doc, raiz, area, sync, ponte, montagem, pedidos, abrirAba, escopo };
+}
+
+/**
+ * A ponte real (`PonteLateral` + `ligarLadoAba`) com um app falso que anota montar e desmontar: o caminho comum do SEI,
+ * que recarrega a MESMA aba a cada navegação (a porta cai e a página nova conecta de novo).
+ */
+function ponteReal(o: { carenciaMs: number; abertos?: Record<string, number> }) {
+  const doc = telaDoApp();
+  definirEmissorDeAviso(null);
+  const raiz = doc.getElementById("app")!;
+  const area = areaMemoria();
+  const ouvintes: Array<(p: PortaRpc, r: Remetente) => void> = [];
+  const ponte = new PonteLateral({
+    area,
+    chave: CHAVE_LATERAL,
+    janela: 1,
+    novoId: () => "lat",
+    ouvirConexoes: (cb) => void ouvintes.push(cb),
+  });
+  const eventos: string[] = [];
+  const rpcs: Array<Pick<Rpc, "chamar">> = [];
+  const pedidos: string[] = [];
+  const montagem = new MontagemLateral({
+    raiz,
+    ponte,
+    area,
+    agora: () => 1,
+    carenciaMs: o.carenciaMs,
+    criar: async (c, rpc) => {
+      const k = c.unidade?.id ?? "";
+      eventos.push(`monta ${k}`);
+      rpcs.push(rpc);
+      raiz.replaceChildren(doc.createTextNode(`app ${k}`));
+      return {
+        focarProjeto: () => true,
+        destruir: () => {
+          eventos.push(`desmonta ${k}`);
+          return o.abertos?.[k] ?? 0;
+        },
+      };
+    },
+  });
+  const abrirAba = (id: number, c: ContextoProjetos) => {
+    const rotulo = `aba${id}:${c.unidade?.id}`;
+    const lado = ligarLadoAba({
+      area,
+      chave: CHAVE_LATERAL,
+      conectar: () => {
+        const [daAba, doApp] = parDePortas();
+        for (const x of ouvintes) x(doApp, { tab: { id, windowId: 1 }, frameId: 0 });
+        return daAba;
+      },
+      tratadores: {
+        contexto: () => {
+          pedidos.push(`${rotulo}:contexto`);
+          return c;
+        },
+        processosDaCaixa: () => {
+          pedidos.push(`${rotulo}:processosDaCaixa`);
+          return [];
+        },
+      },
+      estado: () => ({ visivel: true, foco: id, chave: chaveDaAba(c) }),
+    });
+    return { fechar: () => lado.parar() };
+  };
+  const avisos = () => [...doc.querySelectorAll(".spro-aviso")].map((x) => texto(x));
+  const iniciar = async () => {
+    montagem.iniciar();
+    await ponte.iniciar();
+  };
+  const encerrar = async () => {
+    montagem.parar();
+    await ponte.encerrar();
+  };
+  return { raiz, montagem, eventos, rpcs, pedidos, abrirAba, avisos, iniciar, encerrar };
 }
 
 /** As ações do cartão da agenda (o clique no cartão alterna). */
@@ -368,7 +448,13 @@ export async function verificarAppLateralPonte(): Promise<void> {
   avSem.montagem.iniciar();
   await avSem.mudar(aba(ctx("110"), []));
   await avSem.mudar(null);
-  checar("dialogo aberto e nenhuma aba depois: so o aviso de sem aba no painel, sem toast", avisoNaTela().length === 0, avisoNaTela());
+  checar(
+    "dialogo aberto e nenhuma aba depois (fim da carencia): so o aviso de sem aba no painel, sem toast",
+    avisoNaTela().length === 0 &&
+      texto(avSem.raiz).includes("Abra o SEI nesta janela") &&
+      avSem.destruidos.join() === "sei.x.gov.br|ana|u:110",
+    avisoNaTela(),
+  );
   avSem.montagem.parar();
 
   secao("lateral: troca de login (mesma unidade) remonta");
@@ -632,6 +718,132 @@ export async function verificarAppLateralPonte(): Promise<void> {
   );
   quebrado.parar();
 
+  secao("lateral: carencia quando a aba some (o SEI recarrega a mesma aba a cada navegacao) - ponte real");
+  const MUDOU = "Você mudou para a U220. O que estava aberto na U110 foi fechado sem gravar.";
+  {
+    // (a) recarga da mesma aba, mesma unidade, com diálogo aberto
+    const r = ponteReal({ carenciaMs: 300, abertos: { "110": 1 } });
+    await r.iniciar();
+    const a1 = r.abrirAba(1, ctx("110"));
+    await tique(40);
+    a1.fechar();
+    await tique(30);
+    const semAbaNoMeio = await lanca(() => r.rpcs[0]!.chamar("processosDaCaixa"));
+    checar(
+      "a porta caiu (pagina recarregando): o app fica de pe e o RPC dele recusa sem aba",
+      r.eventos.join() === "monta 110" && texto(r.raiz) === "app 110" && semAbaNoMeio?.codigo === "SEM_ABA",
+      { eventos: r.eventos, tela: texto(r.raiz), semAbaNoMeio },
+    );
+    r.abrirAba(1, ctx("110"));
+    await tique(40);
+    checar(
+      "a mesma aba volta na mesma unidade: nada acontece (o dialogo continua aberto), sem aviso",
+      r.eventos.join() === "monta 110" && texto(r.raiz) === "app 110" && r.avisos().length === 0,
+      { eventos: r.eventos, avisos: r.avisos() },
+    );
+    const voltou = await lanca(() => r.rpcs[0]!.chamar("processosDaCaixa"));
+    checar(
+      "o RPC do app passa a ir para a pagina nova da mesma chave",
+      voltou === null && r.pedidos.at(-1) === "aba1:110:processosDaCaixa",
+      { voltou, pedidos: r.pedidos },
+    );
+    await tique(350);
+    checar("e a carencia acabou sem desmontar nada (foi cancelada pela volta)", r.eventos.join() === "monta 110", r.eventos);
+    await r.encerrar();
+  }
+  {
+    // (b) recarga trocando de unidade (110 -> 220) com diálogo aberto, dentro da carência
+    const r = ponteReal({ carenciaMs: 300, abertos: { "110": 1 } });
+    await r.iniciar();
+    const a1 = r.abrirAba(1, ctx("110"));
+    await tique(40);
+    a1.fechar();
+    await tique(30);
+    r.abrirAba(1, ctx("220"));
+    await tique(60);
+    checar(
+      "a mesma aba volta na 220: desmonta a 110, monta a 220 e o aviso aparece (um so, depois de montar)",
+      r.eventos.join() === "monta 110,desmonta 110,monta 220" && JSON.stringify(r.avisos()) === JSON.stringify([MUDOU]),
+      { eventos: r.eventos, avisos: r.avisos() },
+    );
+    await r.encerrar();
+  }
+  {
+    // (b') a página nova demora mais que a carência
+    const r = ponteReal({ carenciaMs: 50, abertos: { "110": 1 } });
+    await r.iniciar();
+    const a1 = r.abrirAba(1, ctx("110"));
+    await tique(40);
+    a1.fechar();
+    await tique(120);
+    checar(
+      "a carencia acabou sem aba: desmonta e mostra o aviso de sem aba (sem toast ainda)",
+      r.eventos.join() === "monta 110,desmonta 110" && texto(r.raiz).includes("Abra o SEI nesta janela") && r.avisos().length === 0,
+      { eventos: r.eventos, tela: texto(r.raiz), avisos: r.avisos() },
+    );
+    r.abrirAba(1, ctx("220"));
+    await tique(60);
+    checar(
+      "e quando a 220 chega: monta e o aviso guardado aparece depois de montar",
+      r.eventos.join() === "monta 110,desmonta 110,monta 220" && JSON.stringify(r.avisos()) === JSON.stringify([MUDOU]),
+      { eventos: r.eventos, avisos: r.avisos() },
+    );
+    await r.encerrar();
+  }
+  {
+    // (c) aba fechada sem voltar
+    const r = ponteReal({ carenciaMs: 80 });
+    await r.iniciar();
+    const a1 = r.abrirAba(1, ctx("110"));
+    await tique(40);
+    a1.fechar();
+    await tique(30);
+    const durante = texto(r.raiz);
+    await tique(100);
+    checar(
+      "aba fechada: o app fica durante a carencia; depois, o aviso de sem aba (e desmonta), sem toast",
+      durante === "app 110" &&
+        texto(r.raiz).includes("Abra o SEI nesta janela") &&
+        r.eventos.join() === "monta 110,desmonta 110" &&
+        !r.avisos().length,
+      { durante, eventos: r.eventos },
+    );
+    await r.encerrar();
+  }
+  {
+    // (d) troca com duas abas: a da 220 conecta antes de a da 110 fechar (como antes, sem esperar)
+    const r = ponteReal({ carenciaMs: 300, abertos: { "110": 1 } });
+    await r.iniciar();
+    const a1 = r.abrirAba(1, ctx("110"));
+    await tique(40);
+    r.abrirAba(2, ctx("220"));
+    await tique(30);
+    a1.fechar();
+    await tique(60);
+    checar(
+      "duas abas: monta a 220 na hora e o aviso aparece uma vez",
+      r.eventos.join() === "monta 110,desmonta 110,monta 220" && JSON.stringify(r.avisos()) === JSON.stringify([MUDOU]),
+      { eventos: r.eventos, avisos: r.avisos() },
+    );
+    await r.encerrar();
+  }
+  {
+    // parar no meio da carência: desmonta uma vez e esquece o que guardava
+    const r = ponteReal({ carenciaMs: 50, abertos: { "110": 1 } });
+    await r.iniciar();
+    const a1 = r.abrirAba(1, ctx("110"));
+    await tique(40);
+    a1.fechar();
+    await tique(10);
+    await r.encerrar();
+    await tique(100);
+    checar(
+      "parar na carencia: desmonta uma vez, sem aviso e sem timer vivo",
+      r.eventos.join() === "monta 110,desmonta 110" && !r.avisos().length,
+      r.eventos,
+    );
+  }
+
   secao("lateral: concluir que termina depois de desmontar nao deixa aviso com acao");
   {
     const doc = telaDoApp();
@@ -795,4 +1007,47 @@ export async function verificarAppLateralPonte(): Promise<void> {
   );
   p.montagem.parar();
   await p.ponte.encerrar();
+
+  secao("lateral de ponta a ponta: o SEI recarrega a mesma aba com o Entendi aberto (carencia, app real)");
+  const q = painelLateral({ carenciaMs: 300 });
+  const { repo: un110q } = novoRepo(escoposDaUnidade("sei.x.gov.br", "ana", "110").unidade, q.area, "q");
+  const pq = await un110q.criarProjeto({ nome: "Revisão 110" });
+  const nq = await un110q.criarEtapa({ projeto: pq.id, nome: "Nota 110", inicio: "2026-09-01", fim: "2026-10-02" });
+  q.montagem.iniciar();
+  await q.ponte.iniciar();
+  const q1 = q.abrirAba(1, ctx("110"), 1);
+  await tique(80);
+  botao(acoes(q.raiz, nq.id)!, "Concluir")!.click();
+  await tique(30);
+  const entendiQ = q.doc.querySelector<HTMLElement>("dialog.spro-dialogo");
+  checar("o Entendi da 110 aberto", entendiQ?.getAttribute("aria-label") === "Projetos de toda a unidade");
+  q1.fechar();
+  await tique(30);
+  const q1b = q.abrirAba(1, ctx("110"), 2);
+  await tique(80);
+  checar(
+    "o SEI recarregou a mesma aba na mesma unidade: o Entendi continua aberto (nada remontou)",
+    !!entendiQ?.isConnected && entendiQ.hasAttribute("open") && q.pedidos.filter((x) => x.endsWith(":contexto")).length === 1,
+    q.pedidos,
+  );
+  botao(entendiQ!, "Entendi")!.click();
+  await tique(80);
+  checar("o Entendi grava na 110 (a mesma unidade)", (await un110q.obterEtapa(nq.id))?.concluidaEm === HOJE);
+  for (const x of q.doc.querySelectorAll(".spro-aviso")) x.remove();
+  itemDoMenu(q.raiz, "Ajustes dos projetos", "Histórico de alterações");
+  await tique(40);
+  const historicoQ = q.doc.querySelector<HTMLElement>("dialog.spro-dialogo");
+  checar("o Historico de alteracoes aberto (um dialogo)", !!historicoQ?.hasAttribute("open"));
+  q1b.fechar();
+  await tique(30);
+  q.abrirAba(1, ctx("220"), 3);
+  await tique(100);
+  const avisosQ = [...q.doc.querySelectorAll(".spro-aviso")].map((x) => texto(x));
+  checar(
+    "o SEI recarregou a mesma aba na 220: o dialogo da 110 fechou e o aviso da troca aparece, um so",
+    !q.doc.querySelector("dialog") && texto(q.raiz).includes("U220") && JSON.stringify(avisosQ) === JSON.stringify([MUDOU]),
+    avisosQ,
+  );
+  q.montagem.parar();
+  await q.ponte.encerrar();
 }
