@@ -13,7 +13,7 @@ import { gerarConteudoTexto, lerConteudoTexto } from "@comum/sincronia/textoPadr
 import { prefixoMemoriaSigilo } from "../../src/modelo/constantes";
 import { ErroMemoriaSigilo } from "../../src/modelo/memoriaSigilo";
 import type { EnvelopeProjetos, Vis } from "../../src/modelo/tipos";
-import { INTERVALO_PUXAR, SincroniaPagina } from "../../src/pagina/sincronia";
+import { type DepsSincroniaPagina, INTERVALO_PUXAR, SincroniaPagina } from "../../src/pagina/sincronia";
 import { RepositorioProjetos } from "../../src/repositorio";
 import { CHAVE_CONSENTIMENTO, chaveDoConsentimento } from "../../src/sincronia/consentimento";
 import { chaveStatusTexto } from "../../src/sincronia/textoPadrao";
@@ -23,7 +23,7 @@ const AGORA = Date.UTC(2026, 9, 6, 12);
 const HOST = "sei.x.gov.br";
 const SIGILO = "50300.000777/2026-10";
 
-function textoNoSei(html: string | null = null) {
+export function textoNoSei(html: string | null = null) {
   const t = {
     html,
     lidas: 0,
@@ -57,9 +57,10 @@ function montar(
   textos: Record<Vis, ReturnType<typeof textoNoSei>>,
   inicial: Record<string, unknown> = {},
   embrulhar: (a: Area) => Area = (a) => a,
+  extra: Partial<DepsSincroniaPagina> = {},
 ) {
   const area = embrulhar(areaMemoria(inicial));
-  const sync = areaMemoria();
+  const sync = extra.sync ?? areaMemoria();
   const relogio = { agora: AGORA };
   const repo = (vis: Vis) =>
     new RepositorioProjetos(area, { host: HOST, login: "ana", unidade: "110", vis }, () => ({
@@ -69,7 +70,7 @@ function montar(
       nome: "Ana Lima",
     }));
   const repos = { unidade: repo("unidade"), eu: repo("eu") };
-  const s = new SincroniaPagina({
+  const deps: DepsSincroniaPagina = {
     host: HOST,
     login: "ana",
     nomeUsuario: "Ana Lima",
@@ -79,24 +80,27 @@ function montar(
     repos,
     armazem: (vis) => textos[vis],
     travar: (_n, fn) => fn(),
+    travarEsperando: (_n, fn) => fn(),
     atrasoEnvio: 10,
-  });
+    ...extra,
+  };
+  const s = new SincroniaPagina(deps);
   const consentir = (vis: Vis, v: "ligado" | "desligado") =>
     definirConsentimento(sync, CHAVE_CONSENTIMENTO, "textoPadrao", chaveDoConsentimento(HOST, "ana", "110", vis), v);
   const status = async (vis: Vis) => {
     const k = chaveStatusTexto(repos[vis].escopo);
     return (await area.obter(k))[k] as StatusSync | undefined;
   };
-  return { s, repos, area, sync, consentir, status };
+  return { s, repos, area, sync, consentir, status, deps };
 }
 
 /** O envelope gravado no texto, decodificado (null se não há texto ou ele é inválido). */
-async function envelopeDoTexto(html: string | null): Promise<EnvelopeProjetos | null> {
+export async function envelopeDoTexto(html: string | null): Promise<EnvelopeProjetos | null> {
   const r = html ? await lerConteudoTexto(html) : null;
   return r && "bruto" in r ? (r.bruto as EnvelopeProjetos) : null;
 }
 
-const doColega = (): EnvelopeProjetos => ({
+export const doColega = (): EnvelopeProjetos => ({
   formato: "seipro-projetos",
   versao: 1,
   host: HOST,
@@ -228,5 +232,107 @@ export async function verificarSincroniaPagina(): Promise<void> {
       r4,
     );
     m2.s.parar();
+  }
+
+  secao("pagina: um texto que falha nao derruba o outro (T13, item 6)");
+  {
+    // O armazém do texto da unidade não monta (ex.: a tela sem o menu): o pessoal, ligado, segue sozinho.
+    const eu3 = textoNoSei(null);
+    const semUnidade = (vis: Vis) => {
+      if (vis === "unidade") throw new Error("O menu do SEI não oferece Textos Padrão aqui.");
+      return eu3;
+    };
+    const m3 = montar({ unidade: textoNoSei(null), eu: eu3 }, {}, (a) => a, { armazem: semUnidade });
+    await m3.consentir("eu", "ligado");
+    await m3.repos.eu.criarProjeto({ nome: "Só meu" });
+    let caiu: unknown = null;
+    try {
+      await m3.s.iniciar({ puxar: true });
+    } catch (e) {
+      caiu = e;
+    }
+    await tique(60);
+    checar("iniciar: a unidade que falha nao impede o pessoal de ler e gravar", caiu === null && eu3.gravadas === 1, {
+      caiu: String(caiu),
+      gravadas: eu3.gravadas,
+    });
+    let r5: Awaited<ReturnType<SincroniaPagina["agora"]>> | null = null;
+    let caiuAgora: unknown = null;
+    try {
+      r5 = await m3.s.agora();
+    } catch (e) {
+      caiuAgora = e;
+    }
+    checar(
+      "sincronizar agora: a unidade volta em erro com o motivo e o pessoal com o status dele",
+      caiuAgora === null &&
+        r5?.unidade.estado === "erro" &&
+        r5.unidade.mensagem === "O menu do SEI não oferece Textos Padrão aqui." &&
+        r5.eu?.estado === "ok",
+      { caiuAgora: String(caiuAgora), r5 },
+    );
+    m3.s.parar();
+
+    // O storage.sync não lê (o consentimento): iniciar não rejeita; o "agora" não perde o status da unidade.
+    const falha = { ler: false };
+    const base = areaMemoria();
+    const syncFalho: Area = {
+      ...base,
+      obter: async (k) => {
+        if (falha.ler) throw new Error("QUOTA_BYTES quota exceeded");
+        return base.obter(k);
+      },
+      aoMudar: base.aoMudar.bind(base),
+    };
+    const un4 = textoNoSei(await gerarConteudoTexto("Dados", doColega()));
+    const m4 = montar({ unidade: un4, eu: textoNoSei(null) }, {}, (a) => a, { sync: syncFalho });
+    falha.ler = true;
+    let caiuIniciar: unknown = null;
+    try {
+      await m4.s.iniciar({ puxar: true });
+    } catch (e) {
+      caiuIniciar = e;
+    }
+    checar("iniciar com o storage.sync que nao le: nao rejeita", caiuIniciar === null, String(caiuIniciar));
+    let r6: Awaited<ReturnType<SincroniaPagina["agora"]>> | null = null;
+    let caiu6: unknown = null;
+    try {
+      r6 = await m4.s.agora();
+    } catch (e) {
+      caiu6 = e;
+    }
+    checar(
+      "sincronizar agora: a unidade (lida e mesclada) fica; o pessoal, sem saber se esta ligado, volta em erro",
+      caiu6 === null &&
+        r6?.unidade.estado === "ok" &&
+        r6.eu?.estado === "erro" &&
+        (await m4.repos.unidade.dados()).projetos.some((p) => p.id === "pc1"),
+      { caiu6: String(caiu6), r6 },
+    );
+    m4.s.parar();
+  }
+
+  secao("pagina: a sincronia confere os escopos dos repositorios (T13, item 6)");
+  {
+    const m5 = montar({ unidade: textoNoSei(null), eu: textoNoSei(null) });
+    const tenta = (d: Partial<DepsSincroniaPagina>) => {
+      try {
+        new SincroniaPagina({ ...m5.deps, ...d }).parar();
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : String(e);
+      }
+    };
+    checar("os mesmos host, login e unidade: monta", tenta({}) === null && tenta({ login: " ANA " }) === null);
+    checar(
+      "outro host, outro login ou outra unidade: recusa (o consentimento de um nao grava os dados de outro)",
+      tenta({ host: "sei.outro.gov.br" }) !== null &&
+        tenta({ login: "bia" }) !== null &&
+        tenta({ unidade: { id: "999", sigla: "SEPRO" } }) !== null,
+    );
+    checar(
+      "os repositorios trocados (o da unidade no lugar do pessoal): recusa",
+      tenta({ repos: { unidade: m5.repos.eu, eu: m5.repos.unidade } }) !== null,
+    );
   }
 }

@@ -80,6 +80,8 @@ export interface DepsApp {
   extensoesMenu?: ExtensoesMenu;
   /** P4: "Importar meus projetos do servidor do Atividades" no primeiro uso. */
   importarAtividades?: () => void;
+  /** P4: faixas acima das abas (convite do texto pessoal, "Entendi" que falta). */
+  faixas?: HTMLElement;
   aoRedesenhar?: () => void;
   /** Largura útil para as abas (sem medida: 3 abas). */
   largura?: () => number;
@@ -180,7 +182,7 @@ export class AppProjetos {
     this.paradas.push((this.d.sincronia ?? SEM_SINCRONIA).aoMudar(() => this.atualizarSincronia()));
     // O painel fica aberto de um dia para o outro: hoje, atrasos e a linha do Gantt mudam à meia-noite.
     this.relogio = setInterval(() => this.conferirDia(), this.d.conferirDiaMs ?? 60_000);
-    this.d.raiz.replaceChildren(h("div", { class: "prj" }, this.slotTopo, this.cartao, this.slotVazio));
+    this.d.raiz.replaceChildren(h("div", { class: "prj" }, this.d.faixas ?? null, this.slotTopo, this.cartao, this.slotVazio));
     this.render();
   }
 
@@ -601,6 +603,19 @@ export class AppProjetos {
     this.render();
   }
 
+  /** P4 (diálogo Modelos de projeto): o "Novo projeto" já no modelo escolhido. */
+  novoProjetoDeModelo(id: string): void {
+    this.novoProjeto(true, id);
+  }
+
+  /** P4 (receber, importar): relê (a gravação acabou de acontecer) e abre o projeto, se ele está ativo. */
+  async abrirProjeto(id: string): Promise<void> {
+    await this.recarregar();
+    if (this.destruido) return;
+    if (this.dados.ativos.some((p) => p.projeto.id === id)) this.escolher(id);
+    else this.render();
+  }
+
   /** "Abrir no painel" (P5: caixa, árvore, lateral): o projeto e, se vier, o balão da etapa. */
   focarProjeto(id: string, etapa?: string): boolean {
     const p = this.dados.ativos.find((x) => x.projeto.id === id);
@@ -622,13 +637,17 @@ export class AppProjetos {
     return this.d.ctx.unidade?.sigla || "unidade";
   }
 
-  private novoProjeto(deModelo: boolean): void {
+  /** `modeloId` (P4, diálogo Modelos): já em "De um modelo", com ele escolhido (o primeiro da lista). */
+  private novoProjeto(deModelo: boolean, modeloId?: string): void {
+    const modelos = modeloId
+      ? [...this.dados.modelos].sort((a, b) => Number(b.id === modeloId) - Number(a.id === modeloId))
+      : this.dados.modelos;
     abrirDialogoProjeto({
       abrirModal: this.d.abrirModal,
       hoje: this.d.hoje(),
       sigla: this.sigla(),
-      modelos: this.dados.modelos,
-      comecarDeModelo: deModelo,
+      modelos,
+      comecarDeModelo: deModelo || modeloId !== undefined,
       processos: () => this.processos(),
       salvar: async (r) => {
         const repo = this.repoDe(r.vis);

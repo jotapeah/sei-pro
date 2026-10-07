@@ -2,7 +2,9 @@
  * Entrada de html/projetos.html. Liga o app ao navegador: <dialog>, download,
  * janela de impressão e a ponte com a aba do SEI. Modos, pelo hash da URL:
  * - embutido (padrão): iframe abaixo da lista do Controle de Processos, ligado
- *   à PRÓPRIA aba (o content script conecta a cada carga do iframe);
+ *   à PRÓPRIA aba (o content script conecta a cada carga do iframe), com a
+ *   sincronia e a colaboração do P4 (`ligarApp`: menu, faixas, "Entendi",
+ *   diálogos, cópias diárias e o arquivo ligado onde o navegador deixa);
  * - impressao: página só leitura, aberta pelo menu "Imprimir / salvar PDF"
  *   (o endereço é validado em `lerImpressao`: qualquer um pode abri-lo);
  * - lateral: aba "Projetos" do painel lateral (P5).
@@ -16,6 +18,7 @@ import { emissorDeAvisoPelaPagina } from "@comum/painel/aviso";
 import { sobreposicaoNoApp } from "@comum/painel/sobreposicao";
 import { esperarConexaoDaAba } from "@comum/ponte/conexaoDaAba";
 import type { Rpc } from "@comum/ponte/rpc";
+import { temSeletorDeArquivo } from "@comum/sincronia/arquivo";
 import { definirEmissorDeAviso } from "@comum/ui/aviso";
 import { baixar, criarAbrirModal, criarConfirmar } from "@comum/ui/dialogo";
 import { h } from "@comum/ui/dom";
@@ -23,8 +26,10 @@ import { definirJanelaQueCresce } from "@comum/ui/flutuante";
 import { escoposDaUnidade } from "../modelo/escopo";
 import { CANAL_PROJETOS, type ContextoProjetos } from "../ponte/tipos";
 import { RepositorioProjetos } from "../repositorio";
-import { AppProjetos } from "./app";
+import { controleArquivo, copiasDosProjetos } from "../sincronia/arquivo";
+import { escolherArquivoLocal } from "./colaboracao/colaboracao";
 import { hashDaImpressao, lerImpressao, montarImpressao } from "./impressao";
+import { ligarApp } from "./ligacao";
 import { pedidosDaAba } from "./pedidos";
 
 const html = document.documentElement;
@@ -70,23 +75,29 @@ async function iniciarEmbutido(conectar: Promise<Rpc>): Promise<void> {
   const area = areaChrome(chrome.storage.local, "local");
   const dispositivo = await idDispositivo(area);
   const carimbo = () => ({ agora: Date.now(), dispositivo, por: ctx.login, nome: ctx.nome });
-  const esc = escoposDaUnidade(ctx.host, ctx.login, unidade.id);
   const abrirModal = criarAbrirModal({ aoAbrir: sobrepor.abrir, aoFechar: sobrepor.fechar });
-  const app = new AppProjetos({
+  // P4: a colaboração (sincronia, "Entendi", diálogos) e o app com o repositório da unidade que pergunta.
+  const { app } = await ligarApp({
     raiz,
     ctx,
     area,
-    repos: { unidade: new RepositorioProjetos(area, esc.unidade, carimbo), eu: new RepositorioProjetos(area, esc.eu, carimbo) },
+    sync: areaChrome(chrome.storage.sync, "sync"),
     rpc,
     abrirModal,
     confirmar: criarConfirmar(abrirModal),
     baixar,
+    // O próprio arquivo (o tamanho é conferido antes de ler o texto).
+    escolherArquivo: () => escolherArquivoLocal(),
     hoje: () => hojeISO(),
     agora: () => Date.now(),
+    carimbo,
+    copias: typeof indexedDB === "undefined" ? null : copiasDosProjetos(),
+    // Dentro do iframe o Chrome pode recusar o seletor: o diálogo Sincronização explica.
+    arquivo: temSeletorDeArquivo(window) ? controleArquivo(area, { host: ctx.host, login: ctx.login }, carimbo) : null,
     imprimir: (p) => void window.open(chrome.runtime.getURL(`html/projetos.html${hashDaImpressao(p)}`), "_blank"),
     aoRedesenhar: () => altura.medir(),
+    janela: window,
   });
-  await app.iniciar();
   pedidos.pronto(app);
   let espera: ReturnType<typeof setTimeout> | undefined;
   addEventListener("resize", () => {

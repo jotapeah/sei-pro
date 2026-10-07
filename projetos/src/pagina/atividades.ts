@@ -308,3 +308,17 @@ export async function projetosDoAtividades(
     return { fonte: "cache", projetos: c.projetos, aviso: motivo, ...(c.cortados ? { cortados: c.cortados } : {}) };
   }
 }
+
+/**
+ * O pedido `importarAtividades` da aba (P4), com o login do SEI desta tela: a chave guardada (e o guardado pelo
+ * painel legado) de outro usuário é recusada. null sem servidor configurado (o executor responde
+ * `SEM_ATIVIDADES`).
+ */
+export function atividadesDaAba(
+  ctx: { login: string; atividades: boolean },
+  ls: Leitura,
+  versaoSeiPro: string,
+  buscar: typeof fetch,
+): (() => Promise<ProjetosDoAtividades>) | null {
+  return ctx.atividades ? () => projetosDoAtividades(ls, versaoSeiPro, buscar, { login: ctx.login }) : null;
+}

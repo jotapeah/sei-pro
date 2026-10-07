@@ -1,7 +1,9 @@
 /**
  * O que o app do painel pede à aba do SEI (spec 7). Só o content script tem a
- * página: o cabeçalho (contexto), a caixa já carregada, a pesquisa rápida. Nada
- * aqui escreve no SEI; abrir processo ou documento é o mesmo gesto do usuário.
+ * página: o cabeçalho (contexto), a caixa já carregada, a pesquisa rápida. Abrir
+ * processo ou documento é o mesmo gesto do usuário. O que escreve no SEI (P4) é
+ * só a sincronia dos Textos Padrão dos projetos (pagina/sincronia.ts), a pedido
+ * do app ("Sincronizar agora", "Desligar e apagar do SEI" do texto pessoal).
  */
 
 import { abrirProcesso } from "@comum/pagina/abrir";
@@ -12,6 +14,8 @@ import { ErroRpc, type Tratador } from "@comum/ponte/rpc";
 import { lerCaixaDaPagina } from "@nucleo/dominio/caixa";
 import { paginaDe } from "@nucleo/sessao/pagina";
 import type { ContextoProjetos, DocumentoConferido, ProcessoDaCaixa, UsuarioDaUnidade } from "../ponte/tipos";
+import type { ProjetosDoAtividades } from "./atividades";
+import type { ResultadoSincronizar } from "./sincronia";
 
 export interface DepsExecutor {
   doc: Document;
@@ -22,7 +26,13 @@ export interface DepsExecutor {
   avisarAcoes?: AvisarComAcoes | null;
   usuarios(): Promise<UsuarioDaUnidade[]>;
   conferir(numero: string): Promise<DocumentoConferido | null>;
+  /** P4: a sincronia por Texto Padrão desta aba (só na janela de topo, com unidade). */
+  sincronia?: { agora(): Promise<ResultadoSincronizar>; apagarPessoal(): Promise<boolean> } | null;
+  /** P4: os projetos do servidor do Atividades (só com servidor configurado). */
+  atividades?: (() => Promise<ProjetosDoAtividades>) | null;
 }
+
+const SEM_SINCRONIA = "A sincronia pelo Texto Padrão só funciona numa tela do SEI com unidade.";
 
 /** Os processos da página da caixa que está na tela (sem requisição). */
 export function processosDaCaixa(doc: Document): ProcessoDaCaixa[] {
@@ -59,5 +69,19 @@ export function tratadoresProjetos(d: DepsExecutor): Record<string, Tratador> {
     processosDaCaixa: () => processosDaCaixa(d.doc),
     usuariosDaUnidade: () => d.usuarios(),
     atividadesDisponivel: () => d.ctx.atividades,
+    // P4: os dois textos (o pessoal só se ligado); o resultado volta ao app, que conferiu a forma.
+    sincronizarAgora: () => {
+      if (!d.sincronia) throw new ErroRpc("SEM_SINCRONIA", SEM_SINCRONIA);
+      return d.sincronia.agora();
+    },
+    // Só o texto pessoal: o da unidade é de todos e não tem "apagar".
+    apagarDoSei: () => {
+      if (!d.sincronia) throw new ErroRpc("SEM_SINCRONIA", SEM_SINCRONIA);
+      return d.sincronia.apagarPessoal();
+    },
+    importarAtividades: () => {
+      if (!d.atividades) throw new ErroRpc("SEM_ATIVIDADES", "Não há servidor do Atividades configurado neste SEI.");
+      return d.atividades();
+    },
   };
 }
