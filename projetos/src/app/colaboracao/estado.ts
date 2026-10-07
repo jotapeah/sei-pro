@@ -67,9 +67,10 @@ export function linhaDoTexto(t: SituacaoTexto, agora: number): string {
   const relogio = avisoDoRelogio(t.relatorio, t.vis);
   const com = (s: string) => (relogio ? `${s} ${relogio}` : s);
   if (t.vis === "eu" && t.consentimento !== "ligado") return "Desligado: os projetos de “Só eu” ficam neste navegador.";
-  if (st?.aguardandoPermissao) return "Há alterações esperando o seu “Entendi” para ir ao SEI.";
+  // O relógio atrasado deixa o indicador em "erro" em qualquer situação: a linha sempre diz por quê.
+  if (st?.aguardandoPermissao) return com("Há alterações esperando o seu “Entendi” para ir ao SEI.");
   if (!st || st.estado === "nunca")
-    return t.vis === "unidade" ? "Ainda não lido nesta unidade." : "Ligado: falta abrir o Controle de Processos.";
+    return com(t.vis === "unidade" ? "Ainda não lido nesta unidade." : "Ligado: falta abrir o Controle de Processos.");
   // No recuo, a pendência (inclusive a que só veio de mesclar o que um colega gravou) espera: não aparece.
   if (st.estado === "indisponivel") return com(st.mensagem ?? "Indisponível nesta unidade.");
   if (st.estado === "erro") {
@@ -156,8 +157,8 @@ export class EstadoDaSincronia implements ProvedorSincronia {
     return [chaveStatusTexto(e), chaveRelatorio(e), chaveSubstituido(e)];
   }
 
+  /** Os ouvintes entram ANTES da primeira leitura: o que mudar no meio dela entra na fila e é relido depois. */
   async iniciar(): Promise<void> {
-    await this.ler();
     const locais = new Set([...this.chaves("unidade"), ...this.chaves("eu")]);
     this.paradas.push(
       this.d.area.aoMudar((m) => {
@@ -167,6 +168,7 @@ export class EstadoDaSincronia implements ProvedorSincronia {
         if (CHAVE_CONSENTIMENTO in m) this.reler();
       }),
     );
+    await this.ler();
   }
 
   parar(): void {

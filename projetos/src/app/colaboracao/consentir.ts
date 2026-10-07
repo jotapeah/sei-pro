@@ -6,7 +6,7 @@
  * mostram as mensagens do repositório). Ler nunca pergunta.
  */
 
-import type { PortaConsentimento } from "@comum/sincronia/consentimento";
+import type { EstadoConsentimento, PortaConsentimento } from "@comum/sincronia/consentimento";
 import { ErroValidacao } from "../../modelo/validacao";
 import type { RepositorioProjetos } from "../../repositorio";
 
@@ -48,6 +48,33 @@ export const METODOS_QUE_GRAVAM: ReadonlySet<string> = new Set([
 ]);
 
 export const MENSAGEM_SEM_ENTENDI = "Sem o “Entendi”, os projetos de “Toda a unidade” não mudam. Para um projeto só seu, escolha “Só eu”.";
+/**
+ * O storage.sync (onde os consentimentos moram) recusou: a mensagem é própria. A do erro cru seria a da cota do
+ * sync ("QUOTA_BYTES…"), que `mensagemDoErro` traduziria como a do storage.local cheio, e não é.
+ */
+export const MENSAGEM_CONSENTIMENTO_NAO_GRAVOU = "Não foi possível guardar a sua confirmação. Tente de novo.";
+export const MENSAGEM_ESCOLHA_NAO_GRAVOU = "Não foi possível guardar a sua escolha. Tente de novo.";
+export const MENSAGEM_CONSENTIMENTO_NAO_LEU = "Não foi possível ler a sua confirmação. Tente de novo.";
+
+/** Lê o consentimento; a falha do storage.sync vira `ErroValidacao` com a mensagem própria. */
+export async function estadoDoConsentimento(porta: PortaConsentimento): Promise<EstadoConsentimento> {
+  try {
+    return await porta.estado();
+  } catch (e) {
+    console.warn("[SEI Pro] projetos: consentimento não lido:", e instanceof Error ? e.message : String(e));
+    throw new ErroValidacao([MENSAGEM_CONSENTIMENTO_NAO_LEU]);
+  }
+}
+
+/** Grava o consentimento; a falha do storage.sync vira `ErroValidacao` ("confirmação" no ligar, "escolha" no desligar). */
+export async function gravarConsentimento(porta: PortaConsentimento, valor: "ligado" | "desligado"): Promise<void> {
+  try {
+    await porta.definir(valor);
+  } catch (e) {
+    console.warn("[SEI Pro] projetos: consentimento não gravado:", e instanceof Error ? e.message : String(e));
+    throw new ErroValidacao([valor === "ligado" ? MENSAGEM_CONSENTIMENTO_NAO_GRAVOU : MENSAGEM_ESCOLHA_NAO_GRAVOU]);
+  }
+}
 
 /** O mesmo repositório, perguntando antes de gravar. `consentir` resolve true quando pode gravar. */
 export function comConsentimento(repo: RepositorioProjetos, consentir: () => Promise<boolean>): RepositorioProjetos {
@@ -69,16 +96,17 @@ export function comConsentimento(repo: RepositorioProjetos, consentir: () => Pro
 /**
  * O "pode gravar em Toda a unidade?" do app: com o consentimento já "ligado", sim sem perguntar;
  * senão pergunta (uma pergunta só, mesmo com várias gravações esperando juntas, como o arraste de
- * várias barras) e grava o "ligado" no "Entendi".
+ * várias barras) e grava o "ligado" no "Entendi". O storage.sync que não lê ou não grava o consentimento lança
+ * `ErroValidacao` com a mensagem própria (nada é gravado no escopo).
  */
 export function consentidor(porta: PortaConsentimento, perguntar: () => Promise<boolean>): () => Promise<boolean> {
   let pergunta: Promise<boolean> | null = null;
   return async () => {
-    if ((await porta.estado()) === "ligado") return true;
+    if ((await estadoDoConsentimento(porta)) === "ligado") return true;
     pergunta ??= (async () => {
       try {
         const sim = await perguntar();
-        if (sim) await porta.definir("ligado");
+        if (sim) await gravarConsentimento(porta, "ligado");
         return sim;
       } finally {
         pergunta = null;

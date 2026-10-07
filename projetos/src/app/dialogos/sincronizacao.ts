@@ -440,8 +440,10 @@ export async function montarSincronizacao(d: DepsSincronizacao): Promise<HTMLEle
 
   const raiz = h("div", { class: "prj-form prj-sync" }, ...secoes);
   // Ao vivo: a situação que muda com o diálogo aberto repinta as linhas. Fechado (fora da página), desinscreve na
-  // primeira mudança. Quem chama põe o diálogo na página logo depois de montar (no mesmo passo).
-  const sair = d.aoMudar?.((s) => {
+  // primeira mudança. Quem chama põe o diálogo na página logo depois de montar (no mesmo passo). `sair` existe antes
+  // da inscrição: um provedor que avisa na hora (ainda fora da página) não cai na variável antes da declaração.
+  let sair: (() => void) | undefined;
+  sair = d.aoMudar?.((s) => {
     if (!raiz.isConnected) {
       sair?.();
       return;

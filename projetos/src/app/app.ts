@@ -27,7 +27,7 @@ import { planoParaRedefinir } from "../modelo/linhaDeBase";
 import { datasDaEtapaNova } from "../modelo/operacoes";
 import { documentoSemNumero } from "../modelo/sigilo";
 import type { DataISO, Etapa, MudancaDeDatas, Vinculo, Vis } from "../modelo/tipos";
-import { ErroValidacao } from "../modelo/validacao";
+import { ErroValidacao, nomeLimpo, problemasDoProjeto } from "../modelo/validacao";
 import type { ContextoProjetos, DocumentoConferido, ProcessoDaCaixa, TipoAlerta, UsuarioDaUnidade } from "../ponte/tipos";
 import { type MudancasEtapa, moverEntreEscopos, type RepositorioProjetos } from "../repositorio";
 import { indicadorDeSincronia, limiteDeAbas, montarAbas } from "./componentes/abas";
@@ -706,16 +706,25 @@ export class AppProjetos {
   }
 
   /**
-   * Salva nome e processo (ausente = tirar) e, se "Quem vê" mudou, confirma o impacto ANTES de gravar
-   * qualquer coisa e leva o projeto para o outro escopo. Desistir devolve `false`: o diálogo fica.
+   * Salva nome e processo (ausente = tirar). Se "Quem vê" mudou: valida, confirma o impacto ANTES de gravar
+   * qualquer coisa, leva o projeto para o outro escopo e só então edita, já no destino. Assim sair de "Toda a
+   * unidade" não pede o "Entendi" (nela só fica a lápide da saída, que não pergunta), e entrar nela pergunta
+   * uma vez, antes da primeira gravação: recusar não deixa nada pela metade. Desistir devolve `false`: o
+   * diálogo fica.
    */
   private async salvarProjeto(p: ProjetoNaTela, r: ResultadoProjeto): Promise<boolean> {
     const id = p.projeto.id;
-    const mudarEscopo = r.vis !== p.vis;
-    if (mudarEscopo && !(await this.d.confirmar(this.textoQuemVe(r.nome, r.vis), "Mudar"))) return false;
-    const origem = this.repoDe(p.vis);
-    await origem.editarProjeto(id, { nome: r.nome, processo: r.processo });
-    if (mudarEscopo) await moverEntreEscopos(origem, this.repoDe(r.vis), id);
+    const mudancas = { nome: r.nome, processo: r.processo };
+    if (r.vis === p.vis) {
+      await this.repoDe(p.vis).editarProjeto(id, mudancas);
+      return true;
+    }
+    const problemas = problemasDoProjeto({ nome: nomeLimpo(r.nome), etiquetas: p.projeto.etiquetas });
+    if (problemas.length) throw new ErroValidacao(problemas);
+    if (!(await this.d.confirmar(this.textoQuemVe(r.nome, r.vis), "Mudar"))) return false;
+    const destino = this.repoDe(r.vis);
+    await moverEntreEscopos(this.repoDe(p.vis), destino, id);
+    await destino.editarProjeto(id, mudancas);
     return true;
   }
 
