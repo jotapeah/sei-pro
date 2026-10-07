@@ -1,6 +1,7 @@
 import "./fuso";
 import { resumo } from "./util";
 import { verificarAppAbas } from "./verificar-app-abas";
+import { verificarAppBalao } from "./verificar-app-balao";
 import { verificarAppBase } from "./verificar-app-base";
 import { verificarAppCabecalho } from "./verificar-app-cabecalho";
 import { verificarAppTodos } from "./verificar-app-todos";
@@ -35,4 +36,5 @@ await verificarAppAbas();
 await verificarAppCabecalho();
 await verificarAppVista();
 verificarAppTodos();
+verificarAppBalao();
 resumo();
