@@ -7,11 +7,23 @@
  * - qualquer mudança local (aqui, no app ou em outra aba) é enviada
  *   `atrasoEnvio` depois;
  * - `puxar()` ao ganhar foco; `agora()` e `apagar()` a pedido do app.
+ *
+ * Texto lido por todos (o da unidade nos Projetos, `lerSemConsentimento`): o
+ * controle fica ligado desde o começo (lê e mescla o que os colegas gravaram) e
+ * só a GRAVAÇÃO espera o consentimento; quando ele chega, a rodada vem na hora.
  */
 
 import type { Area } from "../armazenamento/area";
 import type { PortaConsentimento } from "./consentimento";
-import { type AdaptadorTexto, type DestinoTexto, MotorTextoPadrao, nomeDaTrava, type StatusSync } from "./motor";
+import {
+  type AdaptadorTexto,
+  type ConferenciaTexto,
+  type DestinoTexto,
+  MotorTextoPadrao,
+  nomeDaTrava,
+  type ResultadoGravacao,
+  type StatusSync,
+} from "./motor";
 import { PREFIXO_TEXTO_INTERNO } from "./textoPadraoCodec";
 import type { Travar, TravarEsperando } from "./trava";
 
@@ -32,6 +44,7 @@ export interface ArmazemTexto extends DestinoTexto {
   excluir(): Promise<boolean>;
   /** Para conferir que o texto sumiu depois de excluir. */
   localizar?(): Promise<unknown>;
+  gravarConferindo?(html: string, c: ConferenciaTexto): Promise<ResultadoGravacao>;
 }
 
 export interface DepsControlePagina<E> {
@@ -50,28 +63,38 @@ export interface DepsControlePagina<E> {
   intervaloPuxar?: number;
   releituras?: number;
   agora?: () => number;
+  /** O texto é lido (e mesclado) mesmo sem consentimento; só a gravação espera o "ligado". */
+  lerSemConsentimento?: boolean;
+  /** Ainda pode gravar? Padrão: o consentimento deste texto está "ligado". */
+  permitido?: () => Promise<boolean>;
+  /** Durante o recuo de "indisponível", continua lendo (motor.ts). */
+  lerNoRecuo?: boolean;
 }
 
 export class ControleTextoPadrao<E> {
   private motor: MotorTextoPadrao<E> | null = null;
   private pararMudancas: (() => void) | null = null;
   private pararConsentimento: (() => void) | null = null;
+  private ultimoEstado: string | null = null;
 
   constructor(private readonly d: DepsControlePagina<E>) {}
 
   private criarMotor(): MotorTextoPadrao<E> {
     const armazem = this.d.armazem();
+    const destino: DestinoTexto = { ler: () => armazem.ler(), gravar: (h) => armazem.gravar(h) };
+    if (armazem.gravarConferindo) destino.gravarConferindo = (h, c) => armazem.gravarConferindo!(h, c);
     return new MotorTextoPadrao<E>({
       adaptador: this.d.adaptador,
-      destino: { ler: () => armazem.ler(), gravar: (h) => armazem.gravar(h) },
+      destino,
       area: this.d.area,
       travar: this.d.travar,
       agora: this.d.agora,
       atrasoEnvio: this.d.atrasoEnvio,
       intervaloPuxar: this.d.intervaloPuxar,
       releituras: this.d.releituras,
+      lerNoRecuo: this.d.lerNoRecuo,
       // Conferido logo antes de gravar: quem desligou (ou mandou apagar) no meio de uma rodada não ganha o texto de volta.
-      permitido: async () => (await this.d.consentimento.estado()) === "ligado",
+      permitido: this.d.permitido ?? (async () => (await this.d.consentimento.estado()) === "ligado"),
     });
   }
 
@@ -101,15 +124,21 @@ export class ControleTextoPadrao<E> {
   }
 
   async iniciar(o: { puxar: boolean }): Promise<void> {
-    if ((await this.d.consentimento.estado()) === "ligado") this.ligar(o.puxar || (await this.pendenteGravado()));
+    const estado = await this.d.consentimento.estado();
+    this.ultimoEstado = estado;
+    if (estado === "ligado" || this.d.lerSemConsentimento) this.ligar(o.puxar || (await this.pendenteGravado()));
     // Iniciar de novo (mesmo duas chamadas cruzadas) troca o ouvinte do consentimento em vez de somar outro.
     this.pararConsentimento?.();
     this.pararConsentimento = this.d.consentimento.aoMudar(() => {
       void this.d.consentimento.estado().then((e) => {
-        if (e === "ligado" && !this.pararMudancas) {
+        const antes = this.ultimoEstado;
+        this.ultimoEstado = e;
+        if (e === "ligado") {
+          const estavaLigado = this.pararMudancas !== null;
           this.ligar(false);
-          void this.rodar(true).catch(() => undefined);
-        } else if (e !== "ligado") {
+          // Acabou de ligar (ou de consentir, no texto lido por todos): o que estava esperando vai agora.
+          if (!estavaLigado || antes !== "ligado") void this.rodar(true).catch(() => undefined);
+        } else if (!this.d.lerSemConsentimento) {
           this.desligar();
         }
       });

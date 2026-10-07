@@ -6,7 +6,7 @@
  */
 
 import { hashCurto } from "../texto";
-import { codificar, decodificar, deParagrafos, paraParagrafos } from "./codec";
+import { codificar, decodificar, deParagrafos, ErroConteudoGrande, LIMITE_DESCOMPACTADO, paraParagrafos } from "./codec";
 
 /** Todo texto de dados do SEI Pro começa assim (e sai do seletor do SEI: controlePagina.ts). */
 export const PREFIXO_TEXTO_INTERNO = "[_SEIPRO_";
@@ -36,13 +36,17 @@ export async function gerarConteudoTexto(legivel: string, envelope: unknown): Pr
   return paraParagrafos(legivel, await codificar(envelope));
 }
 
-/** O JSON guardado no texto, ou o motivo de não haver um (texto editado, vazio ou corrompido). */
-export async function lerConteudoTexto(html: string): Promise<LeituraTexto> {
+/**
+ * O JSON guardado no texto, ou o motivo de não haver um (texto editado, vazio, corrompido ou que
+ * descompactado passaria de `limite` bytes).
+ */
+export async function lerConteudoTexto(html: string, limite = LIMITE_DESCOMPACTADO): Promise<LeituraTexto> {
   const b64 = deParagrafos(html);
   if (!b64) return { invalido: "o texto não tem os dados do SEI Pro (foi editado ou está vazio)" };
   try {
-    return { bruto: await decodificar(b64) };
-  } catch {
+    return { bruto: await decodificar(b64, limite) };
+  } catch (e) {
+    if (e instanceof ErroConteudoGrande) return { invalido: "os dados do texto descompactados passam do limite" };
     return { invalido: "os dados do texto estão corrompidos" };
   }
 }

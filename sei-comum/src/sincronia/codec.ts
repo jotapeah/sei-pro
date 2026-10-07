@@ -7,9 +7,24 @@
  * ao Latin-1 e ao escape duplo que o SEI 5 aplica na leitura (prova P1). Um
  * parágrafo com qualquer outra coisa depois do legível significa que alguém
  * editou o texto: a leitura devolve `null` e quem chamou trata como inválido.
+ *
+ * A volta tem teto no tamanho DESCOMPACTADO (`LIMITE_DESCOMPACTADO`): poucos KB
+ * de gzip podem virar centenas de MB (o Texto Padrão da unidade é de todos e
+ * pode ser editado à mão), e o `JSON.parse` disso travaria a aba.
  */
 
 const BLOCO = 2000;
+
+/** 8 MB de JSON: dezenas de vezes o que cabe num Texto Padrão de 100 KB comprimido. */
+export const LIMITE_DESCOMPACTADO = 8 * 1024 * 1024;
+
+/** O conteúdo descompactado passou do limite: quem lê trata como texto inválido. */
+export class ErroConteudoGrande extends Error {
+  constructor(limite: number) {
+    super(`O conteúdo descompactado passa de ${Math.round(limite / 1024 / 1024)} MB.`);
+    this.name = "ErroConteudoGrande";
+  }
+}
 
 async function transformar(bytes: Uint8Array, t: CompressionStream | DecompressionStream): Promise<Uint8Array> {
   const saida = new Blob([bytes as Uint8Array<ArrayBuffer>]).stream().pipeThrough(t);
@@ -39,8 +54,32 @@ export async function codificar(valor: unknown): Promise<string> {
   return paraBase64url(await transformar(json, new CompressionStream("gzip")));
 }
 
-export async function decodificar(texto: string): Promise<unknown> {
-  const bytes = await transformar(deBase64url(texto), new DecompressionStream("gzip"));
+/** Descompacta lendo aos pedaços e desiste (cancelando o fluxo) assim que passa de `limite` bytes. */
+async function descompactar(bytes: Uint8Array, limite: number): Promise<Uint8Array> {
+  const leitor = new Blob([bytes as Uint8Array<ArrayBuffer>]).stream().pipeThrough(new DecompressionStream("gzip")).getReader();
+  const partes: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await leitor.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > limite) {
+      await leitor.cancel().catch(() => undefined);
+      throw new ErroConteudoGrande(limite);
+    }
+    partes.push(value);
+  }
+  const saida = new Uint8Array(total);
+  let pos = 0;
+  for (const p of partes) {
+    saida.set(p, pos);
+    pos += p.byteLength;
+  }
+  return saida;
+}
+
+export async function decodificar(texto: string, limite = LIMITE_DESCOMPACTADO): Promise<unknown> {
+  const bytes = await descompactar(deBase64url(texto), limite);
   return JSON.parse(new TextDecoder().decode(bytes));
 }
 

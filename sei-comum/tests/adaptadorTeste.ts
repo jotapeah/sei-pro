@@ -8,7 +8,7 @@
 import type { AdaptadorArquivo } from "../src/sincronia/arquivo";
 import { assinaturaEstavel, porId } from "../src/sincronia/assinatura";
 import { purgarLapides, type Versionada, vence } from "../src/sincronia/entidade";
-import type { AdaptadorTexto } from "../src/sincronia/motor";
+import type { AdaptadorTexto, ConferenciaTexto, ResultadoGravacao } from "../src/sincronia/motor";
 import { gerarConteudoTexto, lerConteudoTexto, versaoMaisNova } from "../src/sincronia/textoPadraoCodec";
 
 export interface ItemTeste extends Versionada {
@@ -81,11 +81,14 @@ export function adaptadorTeste(
     diasLapide?: number;
     antesDeRegravarInvalido?: AdaptadorTexto<EnvTeste>["antesDeRegravarInvalido"];
     aoExportar?: (c: ChamadaExportar) => void;
+    /** Ensina ao motor o "nada a guardar" (sem itens): sem texto no SEI, não cria. */
+    vazio?: boolean;
   } = {},
 ): AdaptadorTexto<EnvTeste> {
   const dono = o.dono ?? "pedro";
   return {
     ...(o.antesDeRegravarInvalido ? { antesDeRegravarInvalido: o.antesDeRegravarInvalido } : {}),
+    ...(o.vazio ? { vazio: (env: EnvTeste) => env.itens.length === 0 } : {}),
     modulo: "teste",
     chaveStatus: o.chaveStatus ?? "teste/sync/tp/a",
     teto: o.teto ?? 100 * 1024,
@@ -148,6 +151,37 @@ export function destinoTeste(inicial: string | null = null) {
     async gravar(html: string): Promise<void> {
       d.gravadas++;
       d.html = html;
+    },
+  };
+  return d;
+}
+
+/**
+ * O Texto Padrão "no SEI" que confere na gravação (como o armazém do núcleo): `aoConferir` muda o texto
+ * logo antes da n-ésima conferência, como um colega gravando (ou apagando) no meio.
+ */
+export function destinoConferindo(inicial: string | null = null) {
+  const d = {
+    html: inicial,
+    lidas: 0,
+    gravadas: 0,
+    conferencias: 0,
+    aoConferir: undefined as ((n: number) => Promise<void> | void) | undefined,
+    async ler(): Promise<string | null> {
+      d.lidas++;
+      return d.html;
+    },
+    async gravar(html: string): Promise<void> {
+      d.gravadas++;
+      d.html = html;
+    },
+    async gravarConferindo(html: string, c: ConferenciaTexto): Promise<ResultadoGravacao> {
+      d.conferencias++;
+      await d.aoConferir?.(d.conferencias);
+      if (!c.mesmo(d.html, c.anterior)) return { gravado: false, atual: d.html };
+      d.gravadas++;
+      d.html = html;
+      return { gravado: true };
     },
   };
   return d;

@@ -31,6 +31,13 @@
  *   texto por pessoa).
  * - Uma trava por texto (Web Locks, quando a página tem) evita duas abas
  *   juntas; e o conteúdo igual ao remoto não é regravado.
+ * - Destino que confere sozinho (`gravarConferindo`, o armazém do núcleo): a
+ *   conferência do conteúdo anterior vai junto da gravação (lê o formulário de
+ *   alterar e só posta se o texto ainda é o lido), no lugar da releitura; se
+ *   mudou, devolve o atual, que entra na próxima tentativa da mesma conta.
+ * - Texto que ainda não existe e não teria nada (`vazio`): não é criado.
+ * - `lerNoRecuo`: durante o recuo de "indisponível" (quem pode ler mas não
+ *   gravar), as puxadas continuam, só sem gravar.
  */
 
 import type { Area } from "../armazenamento/area";
@@ -50,11 +57,26 @@ export interface StatusSync {
   /** Há mudança local ainda não enviada. */
   pendente: boolean;
   indisponivelAte?: number;
+  /** A última rodada tinha o que gravar, mas `permitido` disse não (o texto fica como estava). */
+  aguardandoPermissao?: boolean;
 }
+
+/** O que o motor sabe do texto lido, para o destino conferir na hora de gravar. */
+export interface ConferenciaTexto {
+  /** O conteúdo da última leitura (null: o texto não existia). */
+  anterior: string | null;
+  /** A mesma carga? (o escape a mais do SEI 5 não conta como mudança) */
+  mesmo(a: string | null, b: string | null): boolean;
+}
+
+/** `gravado: false`: o texto não era mais o `anterior`; `atual` é o que ele tem agora (null: sumiu). */
+export type ResultadoGravacao = { gravado: true } | { gravado: false; atual: string | null };
 
 export interface DestinoTexto {
   ler(): Promise<string | null>;
   gravar(html: string): Promise<void>;
+  /** Grava só se o texto ainda é o `anterior` (conferido junto da gravação); senão devolve o atual. */
+  gravarConferindo?(html: string, c: ConferenciaTexto): Promise<ResultadoGravacao>;
 }
 
 export interface MensagensMotor {
@@ -106,6 +128,8 @@ export interface AdaptadorTexto<E> {
    * e ele continuar inválido, é chamado de novo com o HTML novo; o da última chamada é o substituído.
    */
   antesDeRegravarInvalido?(motivo: string, html: string): Promise<void>;
+  /** Nada a guardar: sem texto no SEI, o motor não cria um só para isto. */
+  vazio?(envelope: E): boolean;
   mensagens?: Partial<MensagensMotor>;
 }
 
@@ -140,6 +164,8 @@ export interface DepsMotorTexto<E> {
   temporizador?: Temporizador;
   /** O sorteio do atraso da nova tentativa, em [0, 1) (Math.random). */
   aleatorio?: () => number;
+  /** No recuo de "indisponível", continua puxando (sem gravar) a cada `intervaloPuxar`. */
+  lerNoRecuo?: boolean;
 }
 
 const CINCO_MIN = 5 * 60_000;
@@ -148,7 +174,7 @@ const UM_DIA = 86_400_000;
 export const nomeDaTrava = (modulo: string, chaveStatus: string): string => `seipro-${modulo}-sync|${chaveStatus}`;
 
 /** A releitura compara a carga (os blocos do codec), que resiste ao escape a mais do SEI 5; sem carga (texto inválido), o HTML cru. */
-function mesmoConteudo(a: string | null, b: string | null): boolean {
+export function mesmoConteudo(a: string | null, b: string | null): boolean {
   if (a === b) return true;
   if (a === null || b === null) return false;
   const ca = deParagrafos(a);
@@ -194,7 +220,8 @@ export class MotorTextoPadrao<E> {
   }
 
   private async gravarStatus(m: Partial<StatusSync>): Promise<StatusSync> {
-    const novo = { ...(await this.status()), ...m };
+    // "Aguardando permissão" vale só para a rodada que o gravou.
+    const novo = { ...(await this.status()), aguardandoPermissao: undefined, ...m };
     await this.d.area.gravar({ [this.d.adaptador.chaveStatus]: novo });
     return novo;
   }
@@ -245,12 +272,46 @@ export class MotorTextoPadrao<E> {
   private async executar(forcar: boolean): Promise<StatusSync | null> {
     const agora = this.agora();
     const s = await this.status();
-    if (!forcar) {
-      if (s.estado === "indisponivel" && (s.indisponivelAte ?? 0) > agora) return s;
-      if (!s.pendente && s.ultimoPuxar && agora - s.ultimoPuxar < (this.d.intervaloPuxar ?? CINCO_MIN)) return s;
-    }
+    const intervalo = this.d.intervaloPuxar ?? CINCO_MIN;
     const a = this.d.adaptador;
-    return this.d.travar(nomeDaTrava(a.modulo, a.chaveStatus), () => this.rodada(agora));
+    const nome = nomeDaTrava(a.modulo, a.chaveStatus);
+    if (!forcar) {
+      if (s.estado === "indisponivel" && (s.indisponivelAte ?? 0) > agora) {
+        if (!this.d.lerNoRecuo || (s.ultimoPuxar && agora - s.ultimoPuxar < intervalo)) return s;
+        return this.d.travar(nome, () => this.soLer(agora));
+      }
+      if (!s.pendente && s.ultimoPuxar && agora - s.ultimoPuxar < intervalo) return s;
+    }
+    return this.d.travar(nome, () => this.rodada(agora));
+  }
+
+  /** Recuo de "indisponível" com `lerNoRecuo`: lê e mescla, sem gravar; o estado e a mensagem ficam. */
+  private async soLer(agora: number): Promise<StatusSync> {
+    try {
+      const remoto = await this.d.destino.ler();
+      if (remoto !== null) {
+        const r = await this.validar(remoto);
+        if ("ok" in r) await this.d.adaptador.importar(r.ok);
+      }
+      return this.gravarStatus({ ultimoPuxar: agora, tamanho: remoto?.length });
+    } catch {
+      // Sem insistir: a próxima puxada é depois do intervalo.
+      return this.gravarStatus({ ultimoPuxar: agora });
+    }
+  }
+
+  /** O texto mudou a cada conferência: não grava, fica pendente e tenta de novo com espera crescente. */
+  private async desistir(agora: number, m: MensagensMotor): Promise<StatusSync> {
+    this.desistencias++;
+    const s = await this.gravarStatus({
+      estado: "erro",
+      quando: agora,
+      ultimoPuxar: agora,
+      pendente: true,
+      mensagem: m.mudouDuranteGravacao,
+    });
+    this.rearmar(this.esperaDepoisDeDesistir());
+    return s;
   }
 
   /** 15 s, 30 s, 1 min, 2 min, 4 min, 5 min (teto), mais um sorteio de até metade da espera. */
@@ -309,6 +370,16 @@ export class MotorTextoPadrao<E> {
             tamanho: remoto.length,
           });
         }
+        if (remoto === null && a.vazio?.(env)) {
+          return this.concluir(geracao, {
+            estado: "ok",
+            quando: agora,
+            ultimoOk: agora,
+            ultimoPuxar: agora,
+            mensagem: undefined,
+            tamanho: 0,
+          });
+        }
         const html = await gerarConteudoTexto(a.legivel(), env);
         const kb = Math.ceil(html.length / 1024);
         if (html.length > a.teto) {
@@ -322,29 +393,35 @@ export class MotorTextoPadrao<E> {
         }
         // Antes da releitura, para que ela fique colada na gravação.
         if (this.d.permitido && !(await this.d.permitido())) {
-          return this.gravarStatus({ estado: "nunca", quando: agora, pendente: false, mensagem: undefined });
+          return this.gravarStatus({
+            estado: "nunca",
+            quando: agora,
+            ultimoPuxar: agora,
+            pendente: false,
+            mensagem: undefined,
+            aguardandoPermissao: true,
+          });
         }
         if (remoto !== null && invalido !== null) await a.antesDeRegravarInvalido?.(invalido, remoto);
-        if (releituras > 0) {
+        const conferir = releituras > 0 ? this.d.destino.gravarConferindo?.bind(this.d.destino) : undefined;
+        if (releituras > 0 && !conferir) {
           const deNovo = await this.d.destino.ler();
           if (!mesmoConteudo(deNovo, remoto)) {
-            if (tentativa + 1 >= releituras) {
-              this.desistencias++;
-              const s = await this.gravarStatus({
-                estado: "erro",
-                quando: agora,
-                ultimoPuxar: agora,
-                pendente: true,
-                mensagem: m.mudouDuranteGravacao,
-              });
-              this.rearmar(this.esperaDepoisDeDesistir());
-              return s;
-            }
+            if (tentativa + 1 >= releituras) return this.desistir(agora, m);
             remoto = deNovo;
             continue;
           }
         }
-        await this.d.destino.gravar(html);
+        if (conferir) {
+          const r = await conferir(html, { anterior: remoto, mesmo: mesmoConteudo });
+          if (!r.gravado) {
+            if (tentativa + 1 >= releituras) return this.desistir(agora, m);
+            remoto = r.atual;
+            continue;
+          }
+        } else {
+          await this.d.destino.gravar(html);
+        }
         return this.concluir(geracao, {
           estado: "ok",
           quando: agora,
