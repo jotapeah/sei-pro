@@ -6,7 +6,7 @@
 
 import { diferencaDias } from "@comum/datas/dias";
 import { normalizarTexto } from "@comum/texto";
-import { dataValida, LIMITE_DIAS_ETAPA, MAX_DIAS_UTEIS } from "./calendario";
+import { ANO_MAX, ANO_MIN, dataNaFaixa, dataValida, LIMITE_DIAS_ETAPA, MAX_DIAS_UTEIS } from "./calendario";
 import { LIMITES } from "./constantes";
 import type { Etapa, ItemChecklist, Modelo, Projeto } from "./tipos";
 
@@ -15,6 +15,17 @@ export class ErroValidacao extends Error {
     super(mensagens.join(" "));
     this.name = "ErroValidacao";
   }
+}
+
+/**
+ * Forma de todo id guardado ou referenciado (etapa, fase, projeto, dependência, alvo do histórico).
+ * A Frappe usa o id em seletor CSS e troca o que não casa (espaço vira "_", a linha fica inerte) e
+ * junta as dependências por vírgula. `novoId()` (UUID) casa.
+ */
+export const RE_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+export function idValido(x: unknown): x is string {
+  return typeof x === "string" && RE_ID.test(x);
 }
 
 /** Espaços nas pontas fora e espaços repetidos viram um. */
@@ -60,19 +71,31 @@ export function problemasDoProjeto(p: Pick<Projeto, "nome" | "etiquetas">): stri
   return [...problemasDoNome(p.nome, "Informe o nome do projeto."), ...problemasDasEtiquetas(p.etiquetas)];
 }
 
+/**
+ * Datas de uma etapa (digitação): existem, ficam entre `ANO_MIN` e `ANO_MAX`, o término não vem antes
+ * do início e a etapa não passa de `LIMITE_DIAS_ETAPA` dias corridos. Vazia = válidas.
+ */
+export function problemasDasDatas(inicio: unknown, fim: unknown): string[] {
+  if (!dataValida(inicio) || !dataValida(fim)) return ["Informe datas válidas."];
+  if (!dataNaFaixa(inicio) || !dataNaFaixa(fim)) return [`Use datas entre ${ANO_MIN} e ${ANO_MAX}.`];
+  if (fim < inicio) return ["O término não pode ser antes do início."];
+  if (diferencaDias(inicio, fim) > LIMITE_DIAS_ETAPA) return ["A etapa pode durar no máximo cerca de 10 anos."];
+  return [];
+}
+
+/** Os tetos de texto são os mesmos de `entidadeValida` (importação): o que se grava aqui sincroniza. */
 export function problemasDaEtapa(
-  e: Pick<Etapa, "nome" | "inicio" | "fim" | "progresso" | "checklist" | "etiquetas" | "observacoes">,
+  e: Pick<Etapa, "nome" | "inicio" | "fim" | "progresso" | "checklist" | "etiquetas" | "observacoes" | "responsavel">,
 ): string[] {
   const saida = problemasDoNome(e.nome, "Informe o nome da etapa.");
-  if (!dataValida(e.inicio) || !dataValida(e.fim)) saida.push("Informe datas válidas.");
-  else if (e.fim < e.inicio) saida.push("O término não pode ser antes do início.");
-  else if (diferencaDias(e.inicio, e.fim) > LIMITE_DIAS_ETAPA) saida.push("A etapa pode durar no máximo cerca de 10 anos.");
+  saida.push(...problemasDasDatas(e.inicio, e.fim));
   if (!Number.isFinite(e.progresso) || e.progresso < 0 || e.progresso > 100) saida.push("O progresso vai de 0 a 100.");
   if (e.checklist.length > LIMITES.checklistItens) saida.push(`O checklist pode ter até ${LIMITES.checklistItens} itens.`);
   if (e.checklist.some((i) => i.texto.length > LIMITES.checklistTexto))
     saida.push(`Cada item do checklist pode ter até ${LIMITES.checklistTexto} caracteres.`);
   saida.push(...problemasDasEtiquetas(e.etiquetas));
   if ((e.observacoes ?? "").length > LIMITES.observacoes) saida.push("As observações podem ter até 2.000 caracteres.");
+  if ((e.responsavel?.nome ?? "").length > LIMITES.nome) saida.push(`O nome do responsável pode ter até ${LIMITES.nome} caracteres.`);
   return saida;
 }
 
@@ -89,6 +112,7 @@ export function problemasDaEstruturaDoModelo(fases: unknown, etapas: unknown): s
   const saida: string[] = [];
   if (fases.length > LIMITES.etapasPorProjeto) saida.push(`Um modelo pode ter até ${LIMITES.etapasPorProjeto} fases.`);
   if (fases.some((f) => typeof f !== "string")) saida.push("Toda fase do modelo precisa ser um texto.");
+  else if (fases.some((f) => (f as string).length > LIMITES.nome)) saida.push(`O nome pode ter até ${LIMITES.nome} caracteres.`);
   if (etapas.length > LIMITES.etapasPorProjeto) {
     saida.push(`Um modelo pode ter até ${LIMITES.etapasPorProjeto} etapas.`);
     return saida;
@@ -100,6 +124,7 @@ export function problemasDaEstruturaDoModelo(fases: unknown, etapas: unknown): s
     }
     const x = e as Record<string, unknown>;
     if (typeof x.nome !== "string" || !nomeLimpo(x.nome)) saida.push("Toda etapa do modelo precisa de nome.");
+    else if (x.nome.length > LIMITES.nome) saida.push(`O nome pode ter até ${LIMITES.nome} caracteres.`);
     if (!inteiroNaFaixa(x.aPartirDe, MAX_DIAS_UTEIS) || !inteiroNaFaixa(x.duracao, MAX_DIAS_UTEIS))
       saida.push(`As durações do modelo são números inteiros de 0 a ${MAX_DIAS_UTEIS} dias úteis.`);
     if (x.fase !== undefined && !(typeof x.fase === "number" && Number.isInteger(x.fase) && x.fase >= 0 && x.fase < fases.length))
@@ -116,6 +141,8 @@ export function problemasDaEstruturaDoModelo(fases: unknown, etapas: unknown): s
   return saida;
 }
 
-export function problemasDoModelo(m: Pick<Modelo, "nome" | "fases" | "etapas">): string[] {
-  return [...new Set([...problemasDoNome(m.nome, "Informe o nome do modelo."), ...problemasDaEstruturaDoModelo(m.fases, m.etapas)])];
+export function problemasDoModelo(m: Pick<Modelo, "nome" | "fases" | "etapas" | "descricao">): string[] {
+  const saida = [...problemasDoNome(m.nome, "Informe o nome do modelo."), ...problemasDaEstruturaDoModelo(m.fases, m.etapas)];
+  if ((m.descricao ?? "").length > LIMITES.observacoes) saida.push("A descrição pode ter até 2.000 caracteres.");
+  return [...new Set(saida)];
 }

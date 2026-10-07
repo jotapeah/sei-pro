@@ -43,6 +43,16 @@ export function dataValida(iso: unknown): iso is DataISO {
   return hojeISO(deISO(iso)) === iso;
 }
 
+/**
+ * Data válida com o ano entre `ANO_MIN` e `ANO_MAX`: a faixa dos feriados pré-calculados e a que o
+ * Gantt desenha. É a regra das datas de etapa na digitação, no arraste e na importação.
+ */
+export function dataNaFaixa(iso: unknown): iso is DataISO {
+  if (!dataValida(iso)) return false;
+  const ano = Number(iso.slice(0, 4));
+  return ano >= ANO_MIN && ano <= ANO_MAX;
+}
+
 /** Date (qualquer hora) → dia civil LOCAL. */
 export function dataDe(d: Date): DataISO {
   return hojeISO(d);
@@ -67,11 +77,15 @@ export function proximoUtil(iso: DataISO, feriados: ReadonlySet<DataISO> = FERIA
   return d;
 }
 
-/** Dias úteis em [inicio, fim], inclusive. 0 quando fim < inicio ou não há dia útil no período. */
+/**
+ * Dias úteis em [inicio, fim], inclusive, até `MAX_DIAS_UTEIS`. 0 quando fim < inicio, quando não há
+ * dia útil no período ou quando uma data não existe (2026-13-45 passa no formato e faria
+ * `diasUteisEntre` andar dia a dia até o ano 10000 antes de lançar).
+ */
 export function duracaoUteis(inicio: DataISO, fim: DataISO, feriados: ReadonlySet<DataISO> = FERIADOS): number {
-  if (fim < inicio) return 0;
+  if (!dataValida(inicio) || !dataValida(fim) || fim < inicio) return 0;
   if (diferencaDias(inicio, fim) > MAX_DIAS_CORRIDOS) return MAX_DIAS_UTEIS;
-  return Math.min(MAX_DIAS_UTEIS, ehDiaUtil(inicio, feriados) ? 1 : 0) + diasUteisEntre(inicio, fim, feriados);
+  return Math.min(MAX_DIAS_UTEIS, (ehDiaUtil(inicio, feriados) ? 1 : 0) + diasUteisEntre(inicio, fim, feriados));
 }
 
 /**
@@ -85,8 +99,9 @@ export function fimPorDuracao(inicio: DataISO, duracao: number, feriados: Readon
   return n === 1 ? comeco : somarDiasUteis(comeco, n - 1, feriados);
 }
 
-/** Dias úteis depois de `a` até `b` (inclusive); negativo quando b < a. Limitado a ±`MAX_DIAS_UTEIS`. */
+/** Dias úteis depois de `a` até `b` (inclusive); negativo quando b < a. Limitado a ±`MAX_DIAS_UTEIS`; 0 com data que não existe. */
 export function uteisEntre(a: DataISO, b: DataISO, feriados: ReadonlySet<DataISO> = FERIADOS): number {
+  if (!dataValida(a) || !dataValida(b)) return 0;
   const corridos = diferencaDias(a, b);
   if (Math.abs(corridos) > MAX_DIAS_CORRIDOS) return corridos > 0 ? MAX_DIAS_UTEIS : -MAX_DIAS_UTEIS;
   return limitar(diasUteisEntre(a, b, feriados), -MAX_DIAS_UTEIS, MAX_DIAS_UTEIS, 0);

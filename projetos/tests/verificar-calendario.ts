@@ -1,5 +1,7 @@
+import { somarDias } from "@comum/datas/dias";
 import {
   dataDe,
+  dataNaFaixa,
   dataValida,
   duracaoUteis,
   ehUtil,
@@ -87,4 +89,24 @@ export function verificarCalendario(): void {
   checar("duracaoUteis de 75 anos termina rapido e no teto", longa.ms < 2000 && longa.r === MAX_DIAS_UTEIS);
   const entre = tempo(() => [uteisEntre("2026-01-01", "2100-12-31"), uteisEntre("2100-12-31", "2026-01-01")]);
   checar("uteisEntre de 75 anos: teto com sinal", entre.ms < 2000 && entre.r[0] === MAX_DIAS_UTEIS && entre.r[1] === -MAX_DIAS_UTEIS);
+
+  secao("projetos: calendario - teto e datas fora da faixa");
+  const semFeriados = duracaoUteis("2026-01-05", somarDias("2026-01-05", 3699), new Set());
+  checar("duracaoUteis nunca passa do teto (3.700 dias sem feriados)", semFeriados <= MAX_DIAS_UTEIS, semFeriados);
+  const semLancar = (f: () => number): number | string => {
+    try {
+      return f();
+    } catch (e) {
+      return String(e);
+    }
+  };
+  const impossivel = semLancar(() => duracaoUteis("2026-13-45", "2026-13-46"));
+  checar("duracaoUteis de data impossivel e 0 (sem andar ate o ano 10000)", impossivel === 0, impossivel);
+  const entreImpossivel = semLancar(() => uteisEntre("2026-13-45", "2026-10-06"));
+  checar("uteisEntre de data impossivel e 0", entreImpossivel === 0, entreImpossivel);
+  checar(
+    "dataNaFaixa: 2000 a 2100",
+    dataNaFaixa("2000-01-01") && dataNaFaixa("2100-12-31") && !dataNaFaixa("1999-12-31") && !dataNaFaixa("2101-01-01"),
+  );
+  checar("dataNaFaixa: data impossivel nao passa", !dataNaFaixa("2026-02-30") && !dataNaFaixa(20261006));
 }

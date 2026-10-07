@@ -1,8 +1,10 @@
 /**
  * Linha de base = plano original (spec 5.4). Nasce com as datas da etapa.
- * Enquanto a etapa não começou (início ANTES da mudança depois de hoje), mudar
- * as datas leva a base junto. Depois de começar, a base fica: o desvio é a
- * diferença em dias úteis entre o término original e o atual.
+ * Enquanto a etapa não começou (início ANTES da mudança e início da base,
+ * os dois depois de hoje), mudar as datas leva a base junto. Depois de
+ * começar, a base fica: o desvio é a diferença em dias úteis entre o término
+ * original e o atual. Uma etapa adiada para o futuro depois de começar
+ * continua com o plano original (o segundo replanejamento não o apaga).
  */
 
 import { FERIADOS, uteisEntre } from "./calendario";
@@ -19,7 +21,7 @@ export function aplicarDatas(
   fim: DataISO,
   hoje: DataISO,
 ): { inicio: DataISO; fim: DataISO; base: LinhaDeBase } {
-  const emPlanejamento = e.inicio > hoje;
+  const emPlanejamento = e.inicio > hoje && (e.base?.inicio ?? e.inicio) > hoje;
   if (emPlanejamento) return { inicio, fim, base: { inicio, fim } };
   return { inicio, fim, base: e.base ?? { inicio: e.inicio, fim: e.fim } };
 }

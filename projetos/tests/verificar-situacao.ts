@@ -89,6 +89,20 @@ export function verificarSituacao(): void {
   checar("projeto atrasado e contagem", rp.situacao === "atrasado" && rp.atrasadas === 1, rp);
   checar("projeto em andamento", resumoDoProjeto([curta, longa], HOJE).situacao === "andamento");
   checar("projeto a iniciar", resumoDoProjeto([longa], HOJE).situacao === "aIniciar");
+  {
+    const impossivel = etapa({ id: "imp", inicio: "2026-13-45", fim: "2026-13-46", medida: "tempo" });
+    let rr: ReturnType<typeof resumoDeEtapas> | undefined;
+    try {
+      rr = resumoDeEtapas([impossivel, curta], HOJE);
+    } catch {
+      rr = undefined;
+    }
+    checar(
+      "resumo com data impossivel gravada nao lanca e usa so as datas validas",
+      rr !== undefined && rr.inicio === curta.inicio && rr.fim === curta.fim && rr.total === 2,
+      rr,
+    );
+  }
 
   secao("projetos: alertas");
   const lista = [

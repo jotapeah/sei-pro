@@ -6,7 +6,7 @@
  */
 
 import { alertasDasEtapas } from "./alertas";
-import { duracaoUteis, FERIADOS } from "./calendario";
+import { dataValida, duracaoUteis, FERIADOS } from "./calendario";
 import { progressoDaEtapa } from "./progresso";
 import { situacaoEtapa } from "./situacao";
 import type { DataISO, Etapa } from "./tipos";
@@ -30,24 +30,31 @@ export interface ResumoProjeto extends ResumoFase {
 
 const ativas = (etapas: readonly Etapa[]) => etapas.filter((e) => e.removidoEm === undefined);
 
+/**
+ * Data que não existe (gravada por versão antiga ou à mão) não entra no início e no término do resumo
+ * (sem nenhuma válida, ficam ausentes e a linha ancora em hoje) e pesa 1 no progresso.
+ */
 export function resumoDeEtapas(etapas: readonly Etapa[], hoje: DataISO, feriados: ReadonlySet<DataISO> = FERIADOS): ResumoFase {
   const lista = ativas(etapas);
   if (!lista.length) return { progresso: 0, feitas: 0, total: 0 };
-  let inicio = lista[0]!.inicio;
-  let fim = lista[0]!.fim;
+  let inicio: DataISO | undefined;
+  let fim: DataISO | undefined;
   let soma = 0;
   let peso = 0;
   let feitas = 0;
   for (const e of lista) {
-    if (e.inicio < inicio) inicio = e.inicio;
-    if (e.fim > fim) fim = e.fim;
+    if (dataValida(e.inicio) && (inicio === undefined || e.inicio < inicio)) inicio = e.inicio;
+    if (dataValida(e.fim) && (fim === undefined || e.fim > fim)) fim = e.fim;
     if (e.concluidaEm) feitas += 1;
     const p = e.marco ? 0 : Math.max(1, duracaoUteis(e.inicio, e.fim, feriados));
     soma += p * progressoDaEtapa(e, hoje, feriados);
     peso += p;
   }
   const progresso = peso > 0 ? Math.round(soma / peso) : Math.round((feitas / lista.length) * 100);
-  return { inicio, fim, progresso, feitas, total: lista.length };
+  const r: ResumoFase = { progresso, feitas, total: lista.length };
+  if (inicio !== undefined) r.inicio = inicio;
+  if (fim !== undefined) r.fim = fim;
+  return r;
 }
 
 export function resumoDoProjeto(etapas: readonly Etapa[], hoje: DataISO, feriados: ReadonlySet<DataISO> = FERIADOS): ResumoProjeto {
