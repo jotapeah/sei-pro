@@ -1,14 +1,19 @@
+import { areaMemoria } from "@comum/armazenamento/area";
 import type { AbrirModal } from "@comum/ui/dialogo";
 import type { ProjetoNaTela } from "../src/app/dados";
 import { abrirArquivados, abrirInformarDocumento, pedirNomeDoModelo } from "../src/app/dialogos/apoio";
+import { protocoloValido } from "../src/app/dialogos/campos";
 import { abrirDialogoProjeto, type ContextoDialogoProjeto, type ResultadoProjeto } from "../src/app/dialogos/projeto";
 import { resumoDoProjeto } from "../src/modelo/resumo";
 import { ErroValidacao } from "../src/modelo/validacao";
 import { MODELOS_EMBUTIDOS } from "../src/modelos/embutidos";
+import type { ProcessoDaCaixa } from "../src/ponte/tipos";
+import { entidadeValida, moverEntreEscopos } from "../src/repositorio";
 import { criarNoCombo, digitar, escolherCombo, itemDoMenu, itensDoMenu, marcar, opcoesDoCombo, telaDoApp, texto } from "./apoioApp";
+import { ESCOPO_EU, ESCOPO_UN, novoRepo } from "./apoioRepositorio";
 import { HOSTIL } from "./cenarioGantt";
 import { etapa, HOJE, projeto } from "./fabrica";
-import { botao, checar, secao, tique } from "./util";
+import { botao, checar, lanca, secao, tique } from "./util";
 
 function modais(doc: Document) {
   const titulos: string[] = [];
@@ -331,4 +336,88 @@ export async function verificarAppProjeto(): Promise<void> {
   botao(docX.querySelector(".prj-arquivados")!, "Reativar")!.click();
   await tique();
   checar("arquivados: reativar recusado mantem na lista", texto(docX.querySelector(".prj-arquivados")).includes(HOSTIL));
+  secao("app: numero de processo com letras (SEI-RJ) e o vinculo vindo da caixa");
+  checar(
+    "regra do numero digitado: comeca com letra ou digito, termina em digito, ao menos 8 digitos, ate 40",
+    protocoloValido("SEI-150016/000123/2021") &&
+      protocoloValido("50300.000777/2026-10") &&
+      ["<b>12345678", "1234 5678", "SEI-1234567", "-150016/000123/2021", "SEI-150016/000123/2021-", `SEI-${"1".repeat(37)}`].every(
+        (t) => !protocoloValido(t),
+      ),
+  );
+  const docR = telaDoApp();
+  const mr = modais(docR);
+  const salvosR: ResultadoProjeto[] = [];
+  const caixaR: ProcessoDaCaixa[] = [
+    { protocolo: " 50300.000999/2026-10 ", idProcedimento: "", sigiloso: false },
+    { protocolo: "50300.000888/2026-10", idProcedimento: "12a", sigiloso: false },
+    { protocolo: "50300 000555/2026-10", idProcedimento: "55", sigiloso: false },
+  ];
+  const baseR: ContextoDialogoProjeto = {
+    ...base,
+    abrirModal: mr.abrirModal,
+    processos: async () => caixaR,
+    salvar: async (r) => {
+      salvosR.push(r);
+    },
+  };
+  const fr = () => docR.querySelector<HTMLElement>(".prj-form-projeto");
+  /** Um diálogo novo por tentativa: escolhe o processo (`escolher`), clica "Criar projeto" e devolve o erro mostrado. */
+  const tentar = async (escolher: (f: HTMLElement) => Promise<unknown>) => {
+    // Lista de um seletor que ficou aberta numa tentativa que falhou não pode receber o clique da próxima.
+    for (const pop of docR.querySelectorAll(".spro-combo-pop")) pop.remove();
+    abrirDialogoProjeto(baseR);
+    await tique();
+    const f = fr() as HTMLElement;
+    digitar(f.querySelector("input[name='nome']"), "Do Rio");
+    const falhou = await lanca(() => escolher(f));
+    botao(f, "Criar projeto")!.click();
+    await tique();
+    const erro = falhou ? `escolha: ${falhou.message}` : texto(fr()?.querySelector(".prj-erros"));
+    fr()?.remove();
+    return erro;
+  };
+  const ERRO = "Número de processo inválido.";
+  for (const ruim of ["<b>12345678", "1234 5678"]) {
+    const n = salvosR.length;
+    const erro = await tentar((f) => criarNoCombo(f, "Processo SEI", ruim));
+    checar(`digitado "${ruim}": recusado`, erro === ERRO && salvosR.length === n, { erro, salvo: salvosR.at(-1)?.processo });
+  }
+  const n0 = salvosR.length;
+  const erroRJ = await tentar((f) => criarNoCombo(f, "Processo SEI", "SEI-150016/000123/2021"));
+  checar(
+    "digitado do SEI-RJ vai no vinculo como foi escrito",
+    erroRJ === "" && salvosR.length === n0 + 1 && salvosR.at(-1)?.processo?.protocolo === "SEI-150016/000123/2021",
+    { erroRJ, salvo: salvosR.at(-1)?.processo },
+  );
+  const daCaixa = async (valor: string) => {
+    const n = salvosR.length;
+    const erro = await tentar(async (f) => escolherCombo(f, "Processo SEI", valor));
+    return { erro, vinculo: salvosR.length > n ? salvosR.at(-1)?.processo : undefined };
+  };
+  const c1 = await daCaixa("50300.000999/2026-10");
+  const vCaixa = c1.vinculo;
+  checar(
+    "da caixa: sem os espacos das pontas e sem o idProcedimento vazio",
+    c1.erro === "" && JSON.stringify(vCaixa) === '{"protocolo":"50300.000999/2026-10"}',
+    c1,
+  );
+  const c2 = await daCaixa("50300.000888/2026-10");
+  checar(
+    "da caixa: idProcedimento que nao e numero fica de fora",
+    c2.erro === "" && JSON.stringify(c2.vinculo) === '{"protocolo":"50300.000888/2026-10"}',
+    c2,
+  );
+  const c3 = await daCaixa("50300 000555/2026-10");
+  checar("da caixa: numero fora da forma (espaco no meio) e recusado em vez de gravado", c3.erro === ERRO && !c3.vinculo, c3);
+  const area = areaMemoria();
+  const { repo: un } = novoRepo(ESCOPO_UN, area, "k");
+  const { repo: eu } = novoRepo(ESCOPO_EU, area, "l");
+  const pk = vCaixa ? await un.criarProjeto({ nome: "Da caixa", processo: vCaixa }) : undefined;
+  const mov = pk ? await lanca(() => moverEntreEscopos(un, eu, pk.id)) : "sem vinculo";
+  checar(
+    "o vinculo da caixa passa em entidadeValida e em Quem ve",
+    !!pk && entidadeValida(pk, "p") && mov === null && !!(await eu.obterProjeto(pk.id)),
+    mov,
+  );
 }

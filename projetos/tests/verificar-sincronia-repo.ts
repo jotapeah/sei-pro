@@ -7,16 +7,53 @@
 
 import { areaMemoria } from "@comum/armazenamento/area";
 import { LIMITE_DIAS_ETAPA } from "../src/modelo/calendario";
-import type { Etapa, Projeto } from "../src/modelo/tipos";
+import type { Entidades, Etapa, Projeto, Registro, Vinculo } from "../src/modelo/tipos";
+import { chaveProtocolo } from "../src/modelo/vinculos";
 import { MODELOS_EMBUTIDOS } from "../src/modelos/embutidos";
-import { entidadeValida, manterDocumentoSigiloso } from "../src/repositorio";
-import { ESCOPO_UN, novoRepo } from "./apoioRepositorio";
+import { entidadeValida, manterDocumentoSigiloso, moverEntreEscopos } from "../src/repositorio";
+import { ESCOPO_EU, ESCOPO_UN, novoRepo } from "./apoioRepositorio";
 import { etapa, projeto } from "./fabrica";
 import { checar, lanca, secao } from "./util";
 
 /** O que o Texto Padrão leva de um vínculo sigiloso: nada do número. */
 const semNumero = <T extends { processo?: { protocolo: string; sigiloso?: boolean } }>(x: T): T =>
   x.processo?.sigiloso ? { ...x, processo: { protocolo: "", sigiloso: true } } : x;
+
+/**
+ * O corte que o envelope da Tarefa 4 faz (decisão 10): um número marcado sigiloso em qualquer projeto ou
+ * etapa é sigiloso em todos; o vínculo vai vazio, a etapa sigilosa vai sem documento e os registros
+ * antigos com o número vão com o texto fixo. Mesmos carimbos.
+ */
+function comoOTexto(ent: Entidades): Entidades {
+  const chaves = new Set<string>();
+  for (const x of [...ent.p, ...ent.e]) if (x.processo?.sigiloso && x.processo.protocolo) chaves.add(chaveProtocolo(x.processo.protocolo));
+  const sigiloso = (v: Vinculo | undefined): boolean => !!v && (v.sigiloso === true || chaves.has(chaveProtocolo(v.protocolo)));
+  const vazio: Vinculo = { protocolo: "", sigiloso: true };
+  const projetos = new Set(ent.p.filter((x) => sigiloso(x.processo)).map((x) => x.id));
+  const etapaSigilosa = (x: Etapa): boolean => (x.processo ? sigiloso(x.processo) : projetos.has(x.projeto));
+  const etapas = new Set(ent.e.filter(etapaSigilosa).map((x) => x.id));
+  const doProcesso = (t: string | undefined) => (t !== undefined && chaves.has(chaveProtocolo(t)) ? "processo sigiloso" : t);
+  return {
+    ...ent,
+    p: ent.p.map((x) => (sigiloso(x.processo) ? { ...x, processo: vazio } : x)),
+    e: ent.e.map((x) => {
+      const y = sigiloso(x.processo) ? { ...x, processo: vazio } : x;
+      if (!etapaSigilosa(x)) return y;
+      const { documento: _d, ...resto } = y;
+      return resto as Etapa;
+    }),
+    h: ent.h.map((r): Registro => {
+      if (r.campo === "processo") return { ...r, antes: doProcesso(r.antes), depois: doProcesso(r.depois) };
+      if (r.campo === "documento" && etapas.has(r.alvo))
+        return {
+          ...r,
+          antes: r.antes ? "documento de processo sigiloso" : undefined,
+          depois: r.depois ? "documento de processo sigiloso" : undefined,
+        };
+      return r;
+    }),
+  };
+}
 
 export async function verificarSincroniaRepo(): Promise<void> {
   secao("sincronia no repositorio: a importacao nao regrava o que ficaria igual");
@@ -142,7 +179,7 @@ export async function verificarSincroniaRepo(): Promise<void> {
     entidadeValida(comProcesso({ protocolo: "50300.000777/2026-10", idProcedimento: "77" }), "p"),
   );
   checar("vinculo sigiloso vazio (o do texto) e aceito", entidadeValida(comProcesso({ protocolo: "", sigiloso: true }), "p"));
-  checar("protocolo com letras ou marcacao e recusado", !entidadeValida(comProcesso({ protocolo: "<img src=x onerror=alert(1)>" }), "p"));
+  checar("protocolo com marcacao e recusado", !entidadeValida(comProcesso({ protocolo: "<img src=x onerror=alert(1)>" }), "p"));
   checar("protocolo de 41 caracteres e recusado", !entidadeValida(comProcesso({ protocolo: "1".repeat(41) }), "p"));
   checar("idProcedimento que nao e numero e recusado", !entidadeValida(comProcesso({ protocolo: "123", idProcedimento: "abc" }), "p"));
   checar(
@@ -165,4 +202,144 @@ export async function verificarSincroniaRepo(): Promise<void> {
   checar("nada gravado", (await r4.dados()).projetos.length === 0);
   const ok = await r4.criarProjetoDeModelo({ nome: "Dentro" }, modelo, "2026-10-06");
   checar("comeco normal: cria", !!ok.id && (await r4.dados()).etapas.length === modelo.etapas.length);
+  secao("sincronia no repositorio: sigilo pela regra do envelope (o numero marcado sigiloso noutro projeto)");
+  const X = "50300.000777/2026-10";
+  for (const caso of ["propria copia", "colega renomeia as etapas", "so as etapas do colega chegam"]) {
+    const { repo: rx } = novoRepo(ESCOPO_UN, areaMemoria(), "x");
+    const p1 = await rx.criarProjeto({ nome: "P1 (X sem marca)", processo: { protocolo: X } });
+    await rx.criarProjeto({ nome: "P2 (X sigiloso)", processo: { protocolo: X, sigiloso: true } });
+    const e1 = await rx.criarEtapa({
+      projeto: p1.id,
+      nome: "E1",
+      inicio: "2026-10-06",
+      fim: "2026-10-09",
+      documento: { numero: "1234567" },
+    });
+    const e2 = await rx.criarEtapa({
+      projeto: p1.id,
+      nome: "E2",
+      inicio: "2026-10-06",
+      fim: "2026-10-09",
+      processo: { protocolo: X },
+      documento: { numero: "7654321" },
+    });
+    const texto = comoOTexto(await rx.entidades());
+    const colega = caso !== "propria copia";
+    if (colega)
+      texto.e = texto.e.map((x) => ({ ...x, nome: `${x.nome} renomeada`, atualizadoEm: x.atualizadoEm + 50, dispositivo: "dev-b" }));
+    checar(
+      `${caso}: o texto nao leva os documentos (premissa)`,
+      texto.e.every((x) => x.documento === undefined) && texto.p.every((x) => x.processo?.protocolo === ""),
+    );
+    let av = 0;
+    const pararX = rx.aoMudar(() => av++);
+    // Sem os projetos, só a regra do envelope (X marcado em P2, aqui) diz que E1 é sigilosa.
+    const rr = await rx.importar(caso.startsWith("so as etapas") ? { e: texto.e } : texto);
+    const [d1, d2, pp] = [await rx.obterEtapa(e1.id), await rx.obterEtapa(e2.id), await rx.obterProjeto(p1.id)];
+    checar(
+      `${caso}: os documentos daqui ficam (a etapa herdada e a com o processo proprio)`,
+      d1?.documento?.numero === "1234567" && d2?.documento?.numero === "7654321" && d2?.processo?.protocolo === X,
+      { d1, d2 },
+    );
+    checar(
+      colega ? `${caso}: o nome vem, numa gravacao e um aviso` : `${caso}: nada gravado e nenhum aviso`,
+      colega
+        ? d1?.nome === "E1 renomeada" && d2?.nome === "E2 renomeada" && rr.atualizados === 2 && av === 1
+        : rr.novos === 0 && rr.atualizados === 0 && av === 0 && pp?.processo?.protocolo === X && pp.processo.sigiloso === undefined,
+      { rr, av, pp: pp?.processo },
+    );
+    pararX();
+  }
+  {
+    // Só o colega sabe do sigilo: aqui X não está marcado em lugar nenhum, mas o projeto chega marcado (vazio).
+    const { repo: ry } = novoRepo(ESCOPO_UN, areaMemoria(), "y");
+    const p1 = await ry.criarProjeto({ nome: "P1", processo: { protocolo: X } });
+    const e1 = await ry.criarEtapa({
+      projeto: p1.id,
+      nome: "E1",
+      inicio: "2026-10-06",
+      fim: "2026-10-09",
+      documento: { numero: "1234567" },
+    });
+    const ent = await ry.entidades();
+    const { documento: _d, ...semDocumento } = ent.e[0] as Etapa;
+    await ry.importar({
+      p: ent.p.map((x) => ({ ...x, processo: { protocolo: "", sigiloso: true } })),
+      e: [{ ...semDocumento, nome: "E1 renomeada", atualizadoEm: semDocumento.atualizadoEm + 50, dispositivo: "dev-b" }],
+    });
+    const d1 = await ry.obterEtapa(e1.id);
+    checar(
+      "so o colega sabe do sigilo: o projeto chega marcado e o documento daqui fica",
+      d1?.nome === "E1 renomeada" && d1.documento?.numero === "1234567",
+      d1,
+    );
+  }
+
+  secao("sincronia no repositorio: registro do historico com o mesmo carimbo fica o daqui");
+  {
+    const { repo: rh } = novoRepo(ESCOPO_UN, areaMemoria(), "h");
+    const p1 = await rh.criarProjeto({ nome: "P1" });
+    await rh.editarProjeto(p1.id, { processo: { protocolo: X } });
+    const p2 = await rh.criarProjeto({ nome: "P2", processo: { protocolo: X, sigiloso: true } });
+    const e = await rh.criarEtapa({ projeto: p2.id, nome: "Oitiva", inicio: "2026-10-06", fim: "2026-10-09" });
+    await rh.concluirEtapa(e.id, "2026-10-09", { numero: "1234567" });
+    const ent = await rh.entidades();
+    const regProc = ent.h.find((r) => r.campo === "processo" && r.depois === X);
+    const regDoc = ent.h.find((r) => r.campo === "documento" && r.depois === "1234567");
+    const texto = comoOTexto(ent);
+    checar(
+      "premissa: o texto leva os registros sem os numeros",
+      !!regProc &&
+        !!regDoc &&
+        texto.h.find((r) => r.id === regProc.id)?.depois === "processo sigiloso" &&
+        texto.h.find((r) => r.id === regDoc.id)?.depois === "documento de processo sigiloso",
+    );
+    let av = 0;
+    const pararH = rh.aoMudar(() => av++);
+    const rr = await rh.importar(texto);
+    const h = await rh.entidades();
+    checar(
+      "a propria copia volta: nada gravado, nenhum aviso, os registros daqui mantem os numeros",
+      rr.novos === 0 &&
+        rr.atualizados === 0 &&
+        av === 0 &&
+        h.h.find((r) => r.id === regProc?.id)?.depois === X &&
+        h.h.find((r) => r.id === regDoc?.id)?.depois === "1234567",
+      { rr, av },
+    );
+    const lapide: Registro = { ...(regDoc as Registro), removidoEm: 5_000, atualizadoEm: 5_000, dispositivo: "dev-b" };
+    const rl = await rh.importar({ h: [lapide] });
+    checar(
+      "registro com outro carimbo (lapide de outro computador) ainda entra",
+      rl.atualizados === 1 && av === 1 && (await rh.registros.obter(lapide.id))?.removidoEm === 5_000,
+      { rl, av },
+    );
+    pararH();
+  }
+
+  secao("sincronia no repositorio: numero de processo com letras (SEI-RJ)");
+  {
+    const RJ = "SEI-150016/000123/2021";
+    checar(
+      "a forma aceita letras; marcacao, espaco, aspas e & continuam recusados",
+      entidadeValida(comProcesso({ protocolo: RJ, idProcedimento: "123" }), "p") &&
+        entidadeValida(etapa({ id: "rj", processo: { protocolo: RJ } }), "e") &&
+        ["<b>12345678", "1234 5678", 'SEI"150016', "SEI'150016", "SEI&150016", "SEI>150016"].every(
+          (protocolo) => !entidadeValida(comProcesso({ protocolo }), "p"),
+        ),
+    );
+    const area = areaMemoria();
+    const { repo: un } = novoRepo(ESCOPO_UN, area, "r");
+    const { repo: eu } = novoRepo(ESCOPO_EU, area, "s");
+    const p = await un.criarProjeto({ nome: "RJ", processo: { protocolo: RJ, idProcedimento: "123" } });
+    const { repo: colega } = novoRepo(ESCOPO_UN, areaMemoria(), "c");
+    const rc = await colega.importar(await un.entidades());
+    checar("um colega importa o projeto do SEI-RJ", rc.novos >= 1 && rc.ignorados === 0 && !!(await colega.obterProjeto(p.id)), rc);
+    const movido = await lanca(() => moverEntreEscopos(un, eu, p.id));
+    checar(
+      "e Quem ve move o projeto do SEI-RJ",
+      movido === null && (await eu.obterProjeto(p.id))?.processo?.protocolo === RJ && !(await un.obterProjeto(p.id)),
+      movido,
+    );
+  }
 }

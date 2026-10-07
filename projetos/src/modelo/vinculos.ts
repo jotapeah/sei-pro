@@ -19,6 +19,15 @@ export function chaveProtocolo(protocolo: string): string {
   return protocolo.replace(/\D/g, "");
 }
 
+/**
+ * Forma do número de processo guardado e compartilhado: letras, dígitos, ponto, barra e hífen, até 40
+ * (há SEI que escreve com letras, como o do RJ: "SEI-150016/000123/2021"; vazio no sigiloso que veio do
+ * texto). Sem espaço nem `<>"'&`: o número vai à pesquisa rápida quando alguém clica.
+ */
+export const RE_PROTOCOLO = /^[A-Za-z0-9./-]{0,40}$/;
+/** O id interno do processo no SEI: só dígitos. */
+export const RE_ID_PROCEDIMENTO = /^\d{1,20}$/;
+
 const chaveDe = (v: Vinculo | undefined): string => (typeof v?.protocolo === "string" && v.protocolo ? chaveProtocolo(v.protocolo) : "");
 
 export function indiceDeProcessos(

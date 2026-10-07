@@ -412,6 +412,14 @@ export async function verificarPagina(): Promise<void> {
     "processos da caixa sem requisicao; sigiloso sem especificacao",
     caixa.length > 3 && caixa.some((p) => p.sigiloso) && caixa.every((p) => !p.sigiloso || !p.especificacao),
   );
+  const { doc: docT } = telaSei("sei41/caixa.html");
+  docT.querySelector("#tblProcessosRecebidos tr[id^='P'] input[type=checkbox]")?.setAttribute("title", "  50300.000999/2026-10 ");
+  const caixaT = processosDaCaixa(docT);
+  checar(
+    "processos da caixa: numero sem os espacos das pontas",
+    caixaT.some((p) => p.protocolo === "50300.000999/2026-10") && caixaT.every((p) => p.protocolo === p.protocolo.trim()),
+    caixaT.map((p) => p.protocolo),
+  );
   const CTX = { host: "h", login: "l", nome: "n", unidade: null, versao: "", temaEscuro: false, atividades: true } as ContextoProjetos;
   const trat = tratadoresProjetos({
     doc: docE,

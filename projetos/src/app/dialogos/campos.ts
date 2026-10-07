@@ -8,6 +8,7 @@ import { normalizarTexto } from "@comum/texto";
 import { type Combo, criarCombo, type OpcaoCombo } from "@comum/ui/combobox";
 import { h, icone } from "@comum/ui/dom";
 import type { Vinculo } from "../../modelo/tipos";
+import { RE_ID_PROCEDIMENTO, RE_PROTOCOLO } from "../../modelo/vinculos";
 import type { DocumentoConferido, ProcessoDaCaixa } from "../../ponte/tipos";
 import { cotaCheia, TEXTO_COTA_CHEIA } from "../erros";
 
@@ -84,13 +85,33 @@ export function mensagensDoErro(e: unknown): string[] {
 
 const VALOR_DIGITADO = "digitado:";
 
-/** Só os dígitos e a pontuação do número do processo; nada além de 40 caracteres. */
-const protocoloLimpo = (t: string): string => t.replace(/[^\d./-]/g, "").slice(0, 40);
+/**
+ * O número como foi digitado, sem os espaços das pontas. Nada é tirado do meio: com letras aceitas (SEI-RJ),
+ * limpar a marcação ou o espaço transformaria "<b>12345678" ou "1234 5678" num número que ninguém digitou;
+ * quem decide é `protocoloValido`.
+ */
+const protocoloLimpo = (t: string): string => t.trim();
 
-/** Número de processo aceito: começa e termina em dígito, só com dígitos . / - e ao menos 8 dígitos (os formatos variam por órgão). */
+/**
+ * Número de processo aceito (os formatos variam por órgão; o SEI-RJ escreve "SEI-150016/000123/2021"):
+ * começa com letra ou dígito, termina em dígito, só letras, dígitos . / -, ao menos 8 dígitos e até 40
+ * caracteres (a forma que o repositório aceita de um colega, `RE_PROTOCOLO`).
+ */
 export function protocoloValido(p: string): boolean {
   const t = p.trim();
-  return /^[0-9][0-9./-]*[0-9]$/.test(t) && t.replace(/\D/g, "").length >= 8;
+  return t.length <= 40 && /^[A-Za-z0-9][A-Za-z0-9./-]*[0-9]$/.test(t) && t.replace(/\D/g, "").length >= 8;
+}
+
+/**
+ * O vínculo de um processo da caixa: o número sem os espaços das pontas e o `idProcedimento` só quando é
+ * número (vazio ou torto fica de fora). A caixa vem da página do SEI e não passa por `protocoloValido`.
+ */
+function vinculoDaCaixa(p: ProcessoDaCaixa): Vinculo {
+  const v: Vinculo = { protocolo: p.protocolo.trim() };
+  const id = typeof p.idProcedimento === "string" ? p.idProcedimento.trim() : "";
+  if (RE_ID_PROCEDIMENTO.test(id)) v.idProcedimento = id;
+  if (p.sigiloso) v.sigiloso = true;
+  return v;
 }
 
 export const ERRO_PROTOCOLO = "Número de processo inválido.";
@@ -99,7 +120,10 @@ export interface CampoProcesso {
   combo: Combo;
   /** O vínculo escolhido; undefined = nenhum (no da etapa: herda o do projeto). */
   vinculo(): Vinculo | undefined;
-  /** O vínculo escolhido tem número que não passa em `protocoloValido` (só vale para o número digitado). */
+  /**
+   * O número escolhido não serve: o digitado não passa em `protocoloValido`; o da caixa está fora da forma
+   * que os colegas aceitam (`RE_PROTOCOLO`; senão o projeto ficaria só neste computador).
+   */
   invalido(): boolean;
 }
 
@@ -153,15 +177,18 @@ export function campoProcesso(o: {
   void o
     .processos()
     .then((lista) => {
-      caixa = lista;
+      caixa = lista.filter((p) => typeof p?.protocolo === "string").map((p) => ({ ...p, protocolo: p.protocolo.trim() }));
       combo.atualizar();
     })
     .catch(() => undefined);
   return {
     combo,
     invalido() {
-      const digitado = digitados.get(combo.valor()[0] ?? "");
-      return !!digitado && !protocoloValido(digitado.protocolo);
+      const v = combo.valor()[0] ?? "";
+      const digitado = digitados.get(v);
+      if (digitado) return !protocoloValido(digitado.protocolo);
+      const p = caixa.find((x) => x.protocolo === v);
+      return !!p && (!p.protocolo || !RE_PROTOCOLO.test(p.protocolo));
     },
     vinculo() {
       const v = combo.valor()[0] ?? "";
@@ -169,7 +196,7 @@ export function campoProcesso(o: {
       const digitado = digitados.get(v);
       if (digitado) return digitado;
       const p = caixa.find((x) => x.protocolo === v);
-      if (p) return { protocolo: p.protocolo, idProcedimento: p.idProcedimento, ...(p.sigiloso ? { sigiloso: true } : {}) };
+      if (p) return vinculoDaCaixa(p);
       return o.atual?.protocolo === v ? o.atual : { protocolo: v };
     },
   };

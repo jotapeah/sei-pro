@@ -28,7 +28,8 @@ export interface DepsExecutor {
 export function processosDaCaixa(doc: Document): ProcessoDaCaixa[] {
   try {
     return lerCaixaDaPagina(paginaDe(doc)).map((p) => {
-      const item: ProcessoDaCaixa = { protocolo: p.protocolo, idProcedimento: p.idProcedimento, sigiloso: p.sigiloso };
+      // O número como o SEI escreve, sem os espaços das pontas (o app ainda confere a forma).
+      const item: ProcessoDaCaixa = { protocolo: p.protocolo.trim(), idProcedimento: p.idProcedimento.trim(), sigiloso: p.sigiloso };
       if (p.tipo) item.tipo = p.tipo;
       // Especificação de processo sigiloso não sai da aba (o núcleo já a deixa vazia; aqui de novo).
       if (!p.sigiloso && p.especificacao) item.especificacao = p.especificacao;

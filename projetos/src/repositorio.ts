@@ -68,7 +68,7 @@ import {
   problemasDoModelo,
   problemasDoProjeto,
 } from "./modelo/validacao";
-import { indiceDeProcessos, type VinculoProcesso } from "./modelo/vinculos";
+import { chaveProtocolo, indiceDeProcessos, RE_ID_PROCEDIMENTO, RE_PROTOCOLO, type VinculoProcesso } from "./modelo/vinculos";
 import { aplicarModelo } from "./modelos/aplicar";
 import { modeloDoProjeto } from "./modelos/salvar";
 
@@ -692,7 +692,10 @@ export class RepositorioProjetos {
    * registros mais recentes; o excedente é ignorado e contado em `excedentes`.
    * Vínculo sigiloso que chega vazio (sem número) mantém o número que este
    * computador já tinha, e etapa sigilosa que chega sem documento mantém o
-   * documento daqui (o Texto Padrão não leva nenhum dos dois). O que a mescla
+   * documento daqui (o Texto Padrão não leva nenhum dos dois); sigilosa pela
+   * regra do envelope (o número marcado sigiloso em qualquer projeto ou etapa,
+   * daqui ou de fora). Registro do histórico com o mesmo carimbo do daqui é o
+   * mesmo registro, raspado pelo envelope: fica o daqui. O que a mescla
    * deixaria igual ao que já está aqui não é regravado: a sincronia ouve as
    * gravações, e regravar o mesmo a cada rodada viraria um laço de leituras.
    * Tudo vai num `area.gravar` só (um aviso em `aoMudar`);
@@ -721,6 +724,10 @@ export class RepositorioProjetos {
       return r.gravar;
     };
     const projetosAqui = await this.projetos.listar();
+    // A regra do envelope (sincronia/textoPadrao.ts): número marcado sigiloso em qualquer projeto ou etapa,
+    // daqui ou de fora, é sigiloso em todos (é ela que decide o que foi ao texto sem documento).
+    const chaves = chavesSigilosas([...projetosAqui, ...(await this.etapas.listar()), ...(ent.p ?? []), ...(ent.e ?? [])]);
+    const sigiloso = (v: Vinculo): boolean => vinculoSigiloso(v, chaves);
     const projetosNovos = await mesclarCol(
       this.projetos,
       ent.p,
@@ -728,19 +735,22 @@ export class RepositorioProjetos {
       (l, v) => alemDoTeto(l, v, (x) => (vivo(x) && x.arquivadoEm === undefined ? "" : null), LIMITES.projetosAtivos),
       manterNumeroSigiloso,
     );
-    // Projeto com processo sigiloso depois da mescla: as etapas dele sem processo próprio são sigilosas.
-    const projetosFinais = new Map(projetosAqui.map((x) => [x.id, x]));
-    for (const [id, x] of projetosNovos) projetosFinais.set(id, x);
-    const sigilosos = new Set([...projetosFinais.values()].filter((x) => x.processo?.sigiloso).map((x) => x.id));
+    // Projeto sigiloso em qualquer versão (a daqui, a de fora ou a mesclada): as etapas dele sem processo
+    // próprio são sigilosas. Na dúvida, o documento daqui fica.
+    const projetosSigilosos = new Set<string>();
+    for (const x of [...projetosAqui, ...projetosNovos.map(([, p]) => p), ...((ent.p ?? []) as unknown[])]) {
+      const v = vinculoDe(x);
+      if (v && sigiloso(v) && objeto(x) && texto(x.id)) projetosSigilosos.add(x.id);
+    }
     await mesclarCol(this.fases, ent.f, "f", () => new Set());
     await mesclarCol(
       this.etapas,
       ent.e,
       "e",
       (l, v) => alemDoTeto(l, v, (x) => (vivo(x) ? x.projeto : null), LIMITES.etapasPorProjeto),
-      (v, l) => manterDocumentoSigiloso(manterNumeroSigiloso(v, l), l, sigilosos.has(v.projeto)),
+      (v, l) => manterDocumentoSigiloso(manterNumeroSigiloso(v, l), l, projetosSigilosos.has(v.projeto), sigiloso),
     );
-    await mesclarCol(this.registros, ent.h, "h", registrosAlemDoTeto);
+    await mesclarCol(this.registros, ent.h, "h", registrosAlemDoTeto, registroDaqui);
     await mesclarCol(this.modelos, ent.m, "m", (l, v) => alemDoTeto(l, v, (x) => (vivo(x) ? "" : null), LIMITES.modelos));
     if (anotacoes) await this.salvar(itens, anotacoes.registros, anotacoes.carimbo);
     else if (Object.keys(itens).length) await this.area.gravar(itens);
@@ -856,11 +866,49 @@ export function manterNumeroSigiloso<T extends { processo?: Vinculo }>(vencedor:
  * Etapa sigilosa (processo próprio sigiloso, ou sem processo próprio num projeto sigiloso) que chegou
  * sem documento mantém o documento deste computador: o Texto Padrão não leva o número do documento de
  * um processo sigiloso (sincronia/textoPadrao.ts), e quem tinha não pode perdê-lo na mescla.
+ * `processoSigiloso` decide o processo próprio (o `importar` passa a regra do envelope: o número marcado
+ * sigiloso em qualquer lugar); sem ele, vale a marca do vínculo.
  */
-export function manterDocumentoSigiloso(vencedor: Etapa, local: Etapa | undefined, projetoSigiloso: boolean): Etapa {
+export function manterDocumentoSigiloso(
+  vencedor: Etapa,
+  local: Etapa | undefined,
+  projetoSigiloso: boolean,
+  processoSigiloso: (v: Vinculo) => boolean = (v) => v.sigiloso === true,
+): Etapa {
   if (vencedor.documento || !local?.documento) return vencedor;
-  const sigilosa = vencedor.processo ? vencedor.processo.sigiloso === true : projetoSigiloso;
+  const sigilosa = vencedor.processo ? processoSigiloso(vencedor.processo) : projetoSigiloso;
   return sigilosa ? { ...vencedor, documento: local.documento } : vencedor;
+}
+
+/**
+ * Registro do histórico não muda depois de gravado: com o mesmo carimbo (instante e dispositivo), a cópia
+ * de fora é o mesmo registro, só que raspada pelo envelope (sem o número sigiloso). Fica o daqui.
+ */
+function registroDaqui(vencedor: Registro, local: Registro | undefined): Registro {
+  return local && local.atualizadoEm === vencedor.atualizadoEm && local.dispositivo === vencedor.dispositivo ? local : vencedor;
+}
+
+/** O vínculo de um item qualquer (o de fora pode vir torto): só quando tem a forma de vínculo. */
+function vinculoDe(x: unknown): Vinculo | undefined {
+  if (!objeto(x)) return undefined;
+  const v = x.processo;
+  return objeto(v) && texto(v.protocolo) ? (v as unknown as Vinculo) : undefined;
+}
+
+/** As chaves (só os dígitos) dos números marcados sigilosos em qualquer um dos itens. */
+function chavesSigilosas(itens: readonly unknown[]): Set<string> {
+  const chaves = new Set<string>();
+  for (const x of itens) {
+    const v = vinculoDe(x);
+    const k = v?.sigiloso === true ? chaveProtocolo(v.protocolo) : "";
+    if (k) chaves.add(k);
+  }
+  return chaves;
+}
+
+/** Sigiloso pela regra do envelope: marcado, ou o mesmo número (pelos dígitos) marcado noutro lugar. */
+function vinculoSigiloso(v: Vinculo, chaves: ReadonlySet<string>): boolean {
+  return v.sigiloso === true || chaves.has(chaveProtocolo(v.protocolo));
 }
 
 /** Dependência repetida sai (a Frappe desenharia a seta duas vezes). Só copia quando há o que tirar. */
@@ -946,12 +994,8 @@ function datasValidas(inicio: unknown, fim: unknown, emOrdem: boolean): boolean 
 /** A mesma regra da etapa: término antes do início não recusa (a base acompanha as datas no planejamento). */
 const baseValida = (x: unknown): boolean => opcional(x, (b) => objeto(b) && datasValidas(b.inicio, b.fim, false));
 
-/** Número de processo como o SEI escreve (dígitos, ponto, barra e hífen; vazio no sigiloso que veio do texto). */
-const RE_PROTOCOLO = /^[0-9./-]{0,40}$/;
-const RE_ID_PROCEDIMENTO = /^\d{1,20}$/;
-
 /**
- * `processo` opcional: objeto com `protocolo` (forma de número de processo, até 40), `idProcedimento`
+ * `processo` opcional: objeto com `protocolo` (forma de número de processo, `RE_PROTOCOLO`), `idProcedimento`
  * só dígitos ou ausente, `sigiloso` booleano ou ausente. Vem do texto da unidade (de qualquer colega) e
  * vai à pesquisa rápida quando alguém clica: nada além de número.
  */
