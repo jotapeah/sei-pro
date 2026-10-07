@@ -22,18 +22,28 @@ interface Texto {
   id: string;
   conteudo: string;
   alterar: boolean;
+  /** false: a linha vem sem o link de consultar. */
+  consultar?: boolean;
+  /** A linha vem sem o id (sem a caixa de seleção e sem o `acaoExcluir`). */
+  semId?: boolean;
 }
 
 const escapar = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-/** Servidor falso: `textos` com o nosso nome (vários = duplicata); `colega` cria o dele junto do nosso cadastro. */
-function servidor(textos: Texto[], o: { colega?: "antes" | "depois" } = {}) {
+/**
+ * Servidor falso: `textos` com o nosso nome (vários = duplicata); `colega` cria o dele junto do nosso cadastro;
+ * `semExcluir` tira da lista o link assinado de excluir (o usuário cadastra, mas não exclui);
+ * `excluirCai` derruba a conexão no POST de excluir.
+ */
+function servidor(textos: Texto[], o: { colega?: "antes" | "depois"; semExcluir?: boolean; excluirCai?: boolean } = {}) {
   const estado = { textos, posts: [] as Array<{ acao: string; corpo: string }>, alterarAberto: "" };
   const listar0 = ler("texto_padrao_listar.html");
   const modelo = listar0.split("\n").find((l) => l.includes('value="901"')) ?? "";
   const linha = (t: Texto) => {
     let l = modelo.replace(/901/g, t.id).replace(/ASSINATURA 2/g, NOME);
     if (!t.alterar) l = l.replace(/<a href="controlador\.php\?acao=texto_padrao_interno_alterar[^"]*"[^>]*>[\s\S]*?<\/a>/, "");
+    if (t.consultar === false) l = l.replace(/<a href="controlador\.php\?acao=texto_padrao_interno_consultar[^"]*"[^>]*>[\s\S]*?<\/a>/, "");
+    if (t.semId) l = l.replace(/<input[^>]*type="checkbox"[^>]*\/>/, "").replace(/ onclick="acaoExcluir\([^"]*"/, "");
     return l;
   };
   const proximoId = () => String(Math.max(949, ...estado.textos.map((t) => Number(t.id))) + 1);
@@ -43,8 +53,11 @@ function servidor(textos: Texto[], o: { colega?: "antes" | "depois" } = {}) {
   };
   const comConteudo = (html: string, c: string) => html.replace(/(<textarea[^>]*name="txaConteudo"[^>]*>)[\s\S]*?(<\/textarea>)/, `$1${escapar(c)}$2`);
   const idDe = (u: string) => /id_texto_padrao_interno=(\d+)/.exec(u)?.[1] ?? "";
-  const lista = () =>
-    resp(`${RAIZ}controlador.php?acao=texto_padrao_interno_listar&infra_hash=1`, listar0.replace(modelo, estado.textos.map(linha).join("\n")));
+  const lista = () => {
+    const html = listar0.replace(modelo, estado.textos.map(linha).join("\n"));
+    const semExcluir = o.semExcluir ? html.replace(/controlador\.php\?acao=texto_padrao_interno_excluir[^'"]*/g, "") : html;
+    return resp(`${RAIZ}controlador.php?acao=texto_padrao_interno_listar&infra_hash=1`, semExcluir);
+  };
   const fetch = (async (u: string, init?: RequestInit) => {
     const acao = /[?&]acao=(\w+)/.exec(u)?.[1] ?? "";
     const corpo = String(init?.body ?? "");
@@ -65,6 +78,7 @@ function servidor(textos: Texto[], o: { colega?: "antes" | "depois" } = {}) {
       return lista();
     }
     if (acao === "texto_padrao_interno_excluir") {
+      if (o.excluirCai) throw new TypeError("Failed to fetch");
       estado.textos = estado.textos.filter((t) => t.id !== campo("hdnInfraItemId"));
       return lista();
     }
@@ -113,6 +127,37 @@ export async function verificarTextoPadraoConferencia(): Promise<void> {
     { e2, posts: s1.estado.posts.map((p) => p.acao) },
   );
 
+  secao("texto padrao: linha com o nosso nome, mas sem o link de consultar ou sem o id");
+  // O texto existe: tratá-lo como ausente cadastraria um segundo com o mesmo nome.
+  const s13 = servidor([{ id: "901", conteudo: "<p>C</p>", alterar: true, consultar: false }]);
+  const e13 = await lanca(() => s13.armazem.gravar("<p>N</p>"));
+  checar(
+    "sem consultar: gravar recusa com SEI_ACAO_INDISPONIVEL e nao cadastra outro",
+    e13?.codigo === "SEI_ACAO_INDISPONIVEL" && posts(s13, "texto_padrao_interno_cadastrar") === 0 && s13.estado.textos.length === 1,
+    { e13, posts: s13.estado.posts.map((p) => p.acao) },
+  );
+  const e13b = await lanca(() => s13.armazem.gravarConferindo("<p>N</p>", conferencia(null)));
+  checar(
+    "sem consultar: gravarConferindo (anterior null) idem, sem POST nenhum",
+    e13b?.codigo === "SEI_ACAO_INDISPONIVEL" && s13.estado.posts.length === 0 && s13.estado.textos.length === 1,
+    { e13b, posts: s13.estado.posts.map((p) => p.acao) },
+  );
+  const e13c = await lanca(() => s13.armazem.ler());
+  const e13d = await lanca(() => s13.armazem.localizar());
+  checar(
+    "sem consultar: ler e localizar tambem recusam (o texto existe; nao e 'ausente')",
+    e13c?.codigo === "SEI_ACAO_INDISPONIVEL" && e13d?.codigo === "SEI_ACAO_INDISPONIVEL",
+    { e13c, e13d },
+  );
+  const s16 = servidor([{ id: "901", conteudo: "<p>C</p>", alterar: true, semId: true }]);
+  const e16 = await lanca(() => s16.armazem.gravarConferindo("<p>N</p>", conferencia(null)));
+  const e16b = await lanca(() => s16.armazem.gravar("<p>N</p>"));
+  checar(
+    "sem id: gravar e gravarConferindo recusam sem cadastrar outro",
+    e16?.codigo === "SEI_ACAO_INDISPONIVEL" && e16b?.codigo === "SEI_ACAO_INDISPONIVEL" && s16.estado.posts.length === 0 && s16.estado.textos.length === 1,
+    { e16, e16b, posts: s16.estado.posts.map((p) => p.acao) },
+  );
+
   secao("texto padrao: conferencia do anterior no formulario de alterar");
   const s2 = servidor([{ id: "901", conteudo: "<p>C</p>", alterar: true }]);
   const r2 = await s2.armazem.gravarConferindo("<p>N</p>", conferencia(await s2.armazem.ler()));
@@ -141,6 +186,19 @@ export async function verificarTextoPadraoConferencia(): Promise<void> {
     "nao existia e continua nao existindo: cria, e sem duplicata fica",
     r5.gravado && s5.estado.textos.length === 1 && s5.estado.textos[0]?.conteudo === "<p>N</p>",
     s5.estado.textos,
+  );
+
+  const s14 = servidor([{ id: "901", conteudo: "<p>K</p>", alterar: true }]);
+  const r14 = await s14.armazem.gravarConferindo("<p>N</p>", conferencia(null));
+  checar(
+    "nao existia na leitura, mas um colega criou antes da gravacao: nao posta e devolve o dele",
+    !r14.gravado &&
+      desfazer(r14.atual) === "<p>K</p>" &&
+      posts(s14, "texto_padrao_interno_alterar") === 0 &&
+      posts(s14, "texto_padrao_interno_cadastrar") === 0 &&
+      s14.estado.textos.length === 1 &&
+      s14.estado.textos[0]?.conteudo === "<p>K</p>",
+    { r14, posts: s14.estado.posts.map((p) => p.acao) },
   );
 
   secao("texto padrao: texto invalido (sem carga) e regravado pela conferencia");
@@ -178,6 +236,34 @@ export async function verificarTextoPadraoConferencia(): Promise<void> {
     r7.gravado && s7.estado.textos.length === 2 && posts(s7, "texto_padrao_interno_excluir") === 0,
     s7.estado.textos,
   );
+  // Quem perde a corrida e não tem o excluir: a exclusão do nosso id é faxina, não pré-condição.
+  const s15 = servidor([], { colega: "antes", semExcluir: true });
+  const r15 = await (async () => {
+    try {
+      return await s15.armazem.gravarConferindo("<p>N</p>", conferencia(null));
+    } catch (e) {
+      return { erro: e as { codigo?: string; message?: string } };
+    }
+  })();
+  checar(
+    "sem o link de excluir: nada lanca, o do colega volta para a mescla e o nosso fica",
+    "gravado" in r15 &&
+      !r15.gravado &&
+      desfazer(r15.atual) === "<p>K</p>" &&
+      s15.estado.textos.length === 2 &&
+      posts(s15, "texto_padrao_interno_excluir") === 0,
+    { r15, textos: s15.estado.textos },
+  );
+  const r15b = "gravado" in r15 && !r15.gravado ? await s15.armazem.gravarConferindo("<p>NK</p>", conferencia(r15.atual)) : null;
+  checar(
+    "e a gravacao seguinte vai no texto do colega (o de menor id, 950)",
+    r15b?.gravado === true &&
+      s15.estado.textos.find((t) => t.id === "950")?.conteudo === "<p>NK</p>" &&
+      s15.estado.textos.find((t) => t.id === "951")?.conteudo === "<p>N</p>",
+    { r15b, textos: s15.estado.textos },
+  );
+  const e17 = await lanca(() => servidor([], { colega: "antes", excluirCai: true }).armazem.gravarConferindo("<p>N</p>", conferencia(null)));
+  checar("so a falta do link de excluir e engolida: a queda da rede na exclusao propaga", e17?.codigo === "SEI_REDE", e17);
   const s9 = servidor([
     { id: "960", conteudo: "<p>X</p>", alterar: true },
     { id: "955", conteudo: "<p>Y</p>", alterar: true },

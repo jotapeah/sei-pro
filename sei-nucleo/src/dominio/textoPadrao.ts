@@ -28,7 +28,7 @@
 
 import { Formulario, urlContem } from "../formulario/formulario";
 import type { Sei } from "../sei";
-import { ErroSei } from "../sessao/erros";
+import { ErroSei, ehErroSei } from "../sessao/erros";
 import type { OpcoesHttp, Pagina } from "../sessao/http";
 
 export interface TextoLocalizado {
@@ -99,7 +99,8 @@ export function criarArmazemTextoPadrao(sei: SeiDoTexto, o: { nome: string; desc
   /**
    * Percorre a lista (todas as páginas) até achar o texto. Devolve a página em que achou (ou a
    * última lida), a primeira (o botão "Novo") e todas as linhas com o nome nessa página (menor id
-   * primeiro): o achado é sempre o de menor id.
+   * primeiro): o achado é sempre o de menor id. Linha com o nome mas sem id ou sem o link de
+   * consultar: o texto existe e não serve a este usuário; tratá-lo como ausente cadastraria outro.
    */
   const percorrer = async (
     op?: OpcoesHttp,
@@ -108,11 +109,13 @@ export function criarArmazemTextoPadrao(sei: SeiDoTexto, o: { nome: string; desc
     const primeira = await sei.http.obter(sei.linkMenu("texto_padrao_interno_listar"), op);
     let pagina = primeira;
     for (let n = 0; n < MAX_PAGINAS; n++) {
-      const todos = linhasNa(pagina)
+      const linhas = linhasNa(pagina);
+      const todos = linhas
         .map(daLinha)
         .filter((t): t is TextoLocalizado => t !== null)
         .sort(porId);
       if (todos.length) return { pagina, primeira, achado: todos[0] ?? null, todos };
+      if (linhas.length) throw new ErroSei("SEI_ACAO_INDISPONIVEL", `O texto padrão "${o.nome}" está na lista, mas o SEI não oferece a você consultá-lo nesta unidade.`);
       // Há próxima página? O infra só desenha o "+" quando há.
       if (!/infraAcaoPaginar\(\s*['"]\+['"]/.test(pagina.html)) break;
       pagina = await Formulario.de(pagina, FORM_LISTA, sei.http)
@@ -154,7 +157,8 @@ export function criarArmazemTextoPadrao(sei: SeiDoTexto, o: { nome: string; desc
   /**
    * Depois de criar: dois usuários criando juntos deixam duas linhas com o nome. O de menor id é o
    * texto. Se o nosso não é ele, o nosso sai (só o que tem o nosso conteúdo) e o conteúdo do outro
-   * volta para a próxima mescla.
+   * volta para a próxima mescla. A exclusão é faxina, não pré-condição (todos leem e gravam o de
+   * menor id): sem o link de excluir, o nosso fica na lista e a mescla segue.
    */
   const conferirDuplicata = async (html: string, c: ConferenciaGravacao, op?: OpcoesHttp): Promise<ResultadoGravacao> => {
     const { todos, pagina } = await percorrer(op);
@@ -162,7 +166,14 @@ export function criarArmazemTextoPadrao(sei: SeiDoTexto, o: { nome: string; desc
     if (!principal || !outros.length) return { gravado: true };
     const doPrincipal = await conteudoDe(principal, op);
     if (c.mesmo(doPrincipal, html)) return { gravado: true };
-    for (const t of outros) if (c.mesmo(await conteudoDe(t, op), html)) await excluirNa(pagina, t.id, op);
+    for (const t of outros) {
+      if (!c.mesmo(await conteudoDe(t, op), html)) continue;
+      try {
+        await excluirNa(pagina, t.id, op);
+      } catch (e) {
+        if (!(ehErroSei(e) && e.codigo === "SEI_ACAO_INDISPONIVEL")) throw e;
+      }
+    }
     return { gravado: false, atual: doPrincipal };
   };
 
