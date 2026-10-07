@@ -1,5 +1,14 @@
 import { SEM_FASE } from "../src/modelo/constantes";
-import { chaveResponsavel, contarChips, criteriosAtivos, ehMinha, FILTRO_VAZIO, filtrarEtapas, filtroVazio } from "../src/modelo/filtro";
+import {
+  chaveResponsavel,
+  contarChips,
+  criteriosAtivos,
+  ehMinha,
+  FILTRO_VAZIO,
+  filtrarEtapas,
+  filtroNoContexto,
+  filtroVazio,
+} from "../src/modelo/filtro";
 import { etapa, HOJE } from "./fabrica";
 import { checar, secao } from "./util";
 
@@ -57,4 +66,12 @@ export function verificarFiltro(): void {
     "filtroVazio devolve um novo a cada chamada",
     filtroVazio().situacoes.length === 0 && f1 !== filtroVazio() && FILTRO_VAZIO.situacoes.length === 0,
   );
+  const comFases = { ...filtroVazio(), fases: ["f1", "outra", SEM_FASE] };
+  checar(
+    "filtro no contexto: so as fases do projeto e Sem fase; no Todos so Sem fase",
+    filtroNoContexto(comFases, [{ id: "f1" }, { id: "f2" }]).fases.join() === `f1,${SEM_FASE}` &&
+      filtroNoContexto(comFases).fases.join() === SEM_FASE &&
+      criteriosAtivos(filtroNoContexto({ ...filtroVazio(), fases: ["outra"] }, [{ id: "f1" }])) === 0,
+  );
+  checar("sem fase de fora, o mesmo filtro (sem copia)", filtroNoContexto(FILTRO_VAZIO) === FILTRO_VAZIO);
 }

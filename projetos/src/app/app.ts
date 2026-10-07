@@ -22,7 +22,7 @@ import { linhasDoProjeto } from "../gantt/linhas";
 import type { montarGantt } from "../gantt/montar";
 import { completarComDependentes, problemasDasMudancas } from "../modelo/dependencias";
 import { rotuloDaVis } from "../modelo/escopo";
-import { criteriosAtivos, type Eu, FILTRO_VAZIO, type FiltroEtapas, filtrarEtapas } from "../modelo/filtro";
+import { criteriosAtivos, type Eu, FILTRO_VAZIO, type FiltroEtapas, filtrarEtapas, filtroNoContexto } from "../modelo/filtro";
 import { datasDaEtapaNova } from "../modelo/operacoes";
 import type { DataISO, Etapa, MudancaDeDatas, Vinculo, Vis } from "../modelo/tipos";
 import { ErroValidacao } from "../modelo/validacao";
@@ -409,10 +409,16 @@ export class AppProjetos {
     );
   }
 
+  /** O filtro que vale no projeto (ou no Todos, sem `p`): as fases de outro projeto não contam. */
+  private filtroDe(p?: Pick<ProjetoNaTela, "fases">): FiltroEtapas {
+    return filtroNoContexto(this.prefs.filtro, p?.fases);
+  }
+
   /** Ids das etapas que passam no filtro (undefined = sem filtro). */
   private visiveis(p: ProjetoNaTela): Set<string> | undefined {
-    if (!criteriosAtivos(this.prefs.filtro)) return undefined;
-    return new Set(filtrarEtapas(p.etapas, this.prefs.filtro, this.d.hoje(), this.eu).map((e) => e.id));
+    const f = this.filtroDe(p);
+    if (!criteriosAtivos(f)) return undefined;
+    return new Set(filtrarEtapas(p.etapas, f, this.d.hoje(), this.eu).map((e) => e.id));
   }
 
   private pintarCorpo(): void {
@@ -472,7 +478,8 @@ export class AppProjetos {
       }
       return;
     }
-    const itens = this.dados.ativos.filter((x) => projetoNoFiltro(x, this.prefs.filtro, hoje, this.eu));
+    const filtroTodos = this.filtroDe();
+    const itens = this.dados.ativos.filter((x) => projetoNoFiltro(x, filtroTodos, hoje, this.eu));
     if (!itens.length) {
       this.semResultado("Nenhum projeto com etapas nesse filtro.");
       return;
@@ -893,9 +900,10 @@ export class AppProjetos {
   private itensNaTela(): ProjetoNaTela[] {
     const hoje = this.d.hoje();
     const p = this.projetoAberto();
-    const base = p ? [p] : this.dados.ativos.filter((x) => projetoNoFiltro(x, this.prefs.filtro, hoje, this.eu));
-    if (!criteriosAtivos(this.prefs.filtro)) return base;
-    return base.map((x) => ({ ...x, etapas: filtrarEtapas(x.etapas, this.prefs.filtro, hoje, this.eu) }));
+    const f = this.filtroDe(p);
+    const base = p ? [p] : this.dados.ativos.filter((x) => projetoNoFiltro(x, f, hoje, this.eu));
+    if (!criteriosAtivos(f)) return base;
+    return base.map((x) => ({ ...x, etapas: filtrarEtapas(x.etapas, f, hoje, this.eu) }));
   }
 
   private exportar(): void {

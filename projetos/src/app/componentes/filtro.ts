@@ -18,6 +18,7 @@ import {
   FILTRO_VAZIO,
   type FiltroEtapas,
   filtrarEtapas,
+  filtroNoContexto,
 } from "../../modelo/filtro";
 import type { DataISO, Etapa, Fase } from "../../modelo/tipos";
 import type { ProjetoNaTela } from "../dados";
@@ -27,7 +28,7 @@ export interface OpcoesFiltro {
   filtro: FiltroEtapas;
   /** Base das contagens e das opções: as etapas do projeto (ou de todos os ativos, no Todos). */
   etapas: readonly Etapa[];
-  /** Fases do projeto; sem elas (Todos), o campo Fase não aparece. */
+  /** Fases do projeto; sem elas (Todos), o campo Fase não aparece (e só "Sem fase" vale do filtro de fase). */
   fases?: readonly Fase[];
   hoje: DataISO;
   aoMudar(f: FiltroEtapas): void;
@@ -82,8 +83,10 @@ export function criarBotaoFiltro(o: OpcoesFiltro): BotaoFiltro {
   let filtro = o.filtro;
   let camada: Camada | null = null;
   const el = h("button", { type: "button", class: "spro-botao prj-filtro", "aria-haspopup": "dialog", "aria-expanded": "false" });
+  // O que vale aqui: fases de outro projeto não contam nem aparecem marcadas (`filtroNoContexto`).
+  const efetivo = () => filtroNoContexto(filtro, o.fases);
   const pintarBotao = () => {
-    const n = criteriosAtivos(filtro);
+    const n = criteriosAtivos(efetivo());
     el.replaceChildren(icone("filtro", 15), n ? `Filtro · ${n}` : "Filtro");
     el.classList.toggle("prj-filtro-ativo", n > 0);
   };
@@ -108,7 +111,7 @@ export function criarBotaoFiltro(o: OpcoesFiltro): BotaoFiltro {
       chip("Só as minhas", "var(--spro-novidade)", filtro.soMinhas, () => mudar({ ...filtro, soMinhas: !filtro.soMinhas })),
     );
     caixaLimpar.replaceChildren(
-      ...(criteriosAtivos(filtro)
+      ...(criteriosAtivos(efetivo())
         ? [
             h(
               "button",
@@ -152,7 +155,7 @@ export function criarBotaoFiltro(o: OpcoesFiltro): BotaoFiltro {
           ? campo(
               "Fase",
               fases,
-              () => filtro.fases,
+              () => efetivo().fases,
               (v) => mudar({ ...filtro, fases: v }),
             )
           : null,

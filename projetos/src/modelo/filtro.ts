@@ -59,6 +59,19 @@ export function ehMinha(e: Pick<Etapa, "responsavel">, eu: Eu): boolean {
   return !!eu.nome && normalizarTexto(r.nome) === normalizarTexto(eu.nome);
 }
 
+/**
+ * O filtro que vale onde ele está sendo usado. O filtro é um só (preferência), mas os ids de fase
+ * são de um projeto: no outro projeto (e no Todos) eles não valem, nem para filtrar nem para contar.
+ * `SEM_FASE` vale em qualquer lugar. `fases` = as do projeto aberto; sem elas (Todos), só `SEM_FASE`.
+ * As fases de outro projeto continuam gravadas: voltam a valer quando ele é aberto de novo.
+ */
+export function filtroNoContexto(f: FiltroEtapas, fases?: ReadonlyArray<{ id: string }>): FiltroEtapas {
+  if (!f.fases.length) return f;
+  const validas = new Set([SEM_FASE, ...(fases ?? []).map((x) => x.id)]);
+  const ficam = f.fases.filter((id) => validas.has(id));
+  return ficam.length === f.fases.length ? f : { ...f, fases: ficam };
+}
+
 /** Quantos critérios estão ligados (o botão "Filtro" mostra o número). */
 export function criteriosAtivos(f: FiltroEtapas): number {
   return (
