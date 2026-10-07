@@ -61,6 +61,10 @@ export interface ContextoDialogoEtapa {
   /** Abre com uma seção aberta ("Histórico" pelo menu do balão). */
   secaoAberta?: "historico";
   salvar(r: ResultadoEtapa): Promise<void>;
+  /**
+   * Exclui a etapa. A confirmação (ou o aviso "Desfazer") é de quem chama (o app); o diálogo só
+   * fecha se a promessa resolver. Se rejeitar, a mensagem aparece no diálogo, que continua aberto.
+   */
   excluir?: () => Promise<void>;
 }
 
@@ -457,6 +461,18 @@ export function abrirDialogoEtapa(c: ContextoDialogoEtapa): { fechar(): void } {
       salvar.disabled = false;
     }
   });
+  const excluirEtapa = async (botaoExcluir: HTMLButtonElement) => {
+    if (!c.excluir) return;
+    botaoExcluir.disabled = true;
+    try {
+      await c.excluir();
+      modal?.fechar();
+    } catch (erro) {
+      erros.mostrar(mensagensDoErro(erro));
+    } finally {
+      botaoExcluir.disabled = false;
+    }
+  };
   const conteudo = h(
     "div",
     { class: "prj-form prj-form-etapa" },
@@ -476,10 +492,7 @@ export function abrirDialogoEtapa(c: ContextoDialogoEtapa): { fechar(): void } {
             {
               type: "button",
               class: "spro-botao fantasma perigo spro-esquerda",
-              onclick: () => {
-                modal?.fechar();
-                void c.excluir?.();
-              },
+              onclick: (ev: Event) => void excluirEtapa(ev.currentTarget as HTMLButtonElement),
             },
             icone("lixeira", 15),
             "Excluir",

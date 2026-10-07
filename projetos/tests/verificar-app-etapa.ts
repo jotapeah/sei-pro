@@ -279,4 +279,34 @@ export async function verificarAppEtapa(): Promise<void> {
   botao(ce(), "Excluir")!.click();
   await tique();
   checar("excluir fecha e chama", excluiu === 1 && !ce());
+
+  secao("app: dialogo da etapa (excluir que falha)");
+  const soltas: unknown[] = [];
+  const ouvir = (r: unknown) => soltas.push(r);
+  process.on("unhandledRejection", ouvir);
+  let falha: Error = new ErroValidacao(["A etapa tem dependentes."]);
+  let tentativas = 0;
+  const x = cena({
+    etapa: air,
+    excluir: async () => {
+      tentativas += 1;
+      throw falha;
+    },
+  });
+  const cx = () => x.doc.querySelector(".prj-form-etapa") as HTMLElement;
+  botao(cx(), "Excluir")!.click();
+  await tique(20);
+  checar(
+    "excluir recusado (ErroValidacao): dialogo fica com a mensagem",
+    tentativas === 1 && !!cx() && texto(cx().querySelector(".prj-erros")) === "A etapa tem dependentes." && x.fechados() === 0,
+  );
+  falha = new Error("sem rede");
+  botao(cx(), "Excluir")!.click();
+  await tique(20);
+  checar(
+    "excluir com erro generico: dialogo fica com a mensagem",
+    tentativas === 2 && !!cx() && texto(cx().querySelector(".prj-erros")) === "Não foi possível salvar: sem rede",
+  );
+  checar("sem rejeicao solta", soltas.length === 0, soltas);
+  process.off("unhandledRejection", ouvir);
 }
