@@ -37,3 +37,8 @@ export const chaveSyncTexto = (chaveDoEscopo: string): string => `projetos/sync/
 export const chaveSyncArquivo = (host: string, login: string): string => `projetos/sync/arquivo/${host}|${login.trim().toLowerCase()}`;
 export const chaveUsuarios = (host: string, idUnidade: string): string => `projetos/usuarios/${host}|u:${idUnidade}`;
 export const chaveImportacao = (host: string, login: string): string => `projetos/importacao/${host}|${login.trim().toLowerCase()}`;
+/**
+ * Memória local do sigilo do usuário (modelo/memoriaSigilo.ts), para todos os escopos dele: fora de todo
+ * escopo (`baseDoEscopo`), então nem a exportação, nem o arquivo, nem a sincronia a leem como dado.
+ */
+export const chaveMemoriaSigilo = (host: string, login: string): string => `projetos/sigilo/${host}|${login.trim().toLowerCase()}`;

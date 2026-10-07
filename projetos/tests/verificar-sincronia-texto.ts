@@ -5,9 +5,12 @@
  * perto ou acima do teto (Review Focus 1 do plano-mestre).
  */
 
-import { areaMemoria } from "@comum/armazenamento/area";
+import { type Area, areaMemoria } from "@comum/armazenamento/area";
 import { type DestinoTexto, MotorTextoPadrao, type StatusSync } from "@comum/sincronia/motor";
 import { gerarConteudoTexto, lerConteudoTexto } from "@comum/sincronia/textoPadraoCodec";
+import { chaveMemoriaSigilo } from "../src/modelo/constantes";
+import { baseDoEscopo } from "../src/modelo/escopo";
+import { lerMemoria, somarMemoria, TETO_MEMORIA_SIGILO } from "../src/modelo/memoriaSigilo";
 import type { EnvelopeProjetos, Registro } from "../src/modelo/tipos";
 import {
   adaptadorProjetos,
@@ -341,6 +344,155 @@ export async function verificarSincroniaTexto(): Promise<void> {
 
   await verificarSigiloGruda();
   await verificarMenoresRodada1();
+  await verificarMemoriaDoSigilo();
+}
+
+/** A chave documentada da memória do sigilo do usuário (host|login), fora de todo escopo. */
+const CHAVE_MEMORIA = "projetos/sigilo/sei.x.gov.br|ana";
+
+/** Rodada 2 da Tarefa 4: a memória local e monótona do sigilo, por usuário, que nunca é enviada. */
+async function verificarMemoriaDoSigilo(): Promise<void> {
+  const OUTRO = "50300.000002/2026-11";
+
+  secao("memoria do sigilo: trocar o ultimo processo marcado nao solta o numero dos registros");
+  {
+    const areaW = areaMemoria();
+    const { repo: rw } = novoRepo(ESCOPO_UN, areaW, "w", { agora: AGORA });
+    const p1 = await rw.criarProjeto({ nome: "Fiscalização" });
+    await rw.editarProjeto(p1.id, { processo: { protocolo: SIGILO } }); // digitado, sem marca: o registro leva o número
+    await rw.editarProjeto(p1.id, { processo: { protocolo: SIGILO, sigiloso: true } }); // a caixa marcou
+    await rw.editarProjeto(p1.id, { processo: { protocolo: OUTRO } }); // e o processo do projeto mudou
+    const seiW = noSei(null);
+    await motorDe(rw, areaW, seiW).sincronizar({ forcar: true });
+    const jw = await jsonDoTexto(seiW.html);
+    checar("o numero nao volta ao texto (o registro antigo vai raspado)", !!jw && !jw.includes("000777") && jw.includes("000002"), jw);
+    checar(
+      "e o historico daqui continua com o numero",
+      (await rw.historico(p1.id)).some((r) => r.campo === "processo" && r.depois === SIGILO),
+    );
+  }
+
+  secao("memoria do sigilo: o numero marcado em So eu nao vai ao texto da unidade");
+  {
+    const areaU = areaMemoria();
+    const { repo: eu } = novoRepo(ESCOPO_EU, areaU, "u", { agora: AGORA });
+    const { repo: un } = novoRepo(ESCOPO_UN, areaU, "v", { agora: AGORA + 100 });
+    const pu = await un.criarProjeto({ nome: "Da unidade", processo: { protocolo: SIGILO } });
+    const seiU = noSei(null);
+    const motorU = motorDe(un, areaU, seiU);
+    await motorU.sincronizar({ forcar: true });
+    checar("premissa: sem saber do sigilo, o texto da unidade leva o numero", (await jsonDoTexto(seiU.html)).includes("000777"));
+    await eu.criarProjeto({ nome: "Meu", processo: { protocolo: SIGILO, sigiloso: true } });
+    await motorU.sincronizar({ forcar: true });
+    checar("marcado em So eu, a rodada seguinte da unidade tira o numero do texto", !(await jsonDoTexto(seiU.html)).includes("000777"));
+    const puDepois = await un.obterProjeto(pu.id);
+    checar(
+      "e o vinculo da unidade fica marcado aqui, com o numero e o mesmo carimbo",
+      puDepois?.processo?.sigiloso === true && puDepois.processo.protocolo === SIGILO && puDepois.atualizadoEm === pu.atualizadoEm,
+      puDepois,
+    );
+    const pu2 = await un.criarProjeto({ nome: "Outro da unidade", processo: { protocolo: "50300000777202610" } });
+    checar(
+      "digitado sem marca (e sem pontuacao) num projeto novo da unidade: ja nasce marcado",
+      pu2.processo?.sigiloso !== true && (await un.obterProjeto(pu2.id))?.processo?.sigiloso === true,
+    );
+    await motorU.sincronizar({ forcar: true });
+    const ju = await jsonDoTexto(seiU.html);
+    checar("e o texto da unidade nao o leva", !!ju && !ju.includes("000777") && !ju.includes("777202610"), ju);
+  }
+
+  secao("memoria do sigilo: fica so neste computador (nada que vai a outra pessoa a leva)");
+  {
+    const areaM = areaMemoria();
+    const { repo: rm } = novoRepo(ESCOPO_UN, areaM, "m", { agora: AGORA });
+    await rm.criarProjeto({ nome: "Apuração", processo: { protocolo: SIGILO, sigiloso: true } });
+    const seiM = noSei(null);
+    await motorDe(rm, areaM, seiM).sincronizar({ forcar: true });
+    const tudo = await areaM.obter(null);
+    checar(
+      "a memoria fica numa chave propria do usuario, fora de todo escopo (o arquivo e a exportacao leem o escopo)",
+      CHAVE_MEMORIA in tudo && !CHAVE_MEMORIA.startsWith(baseDoEscopo(ESCOPO_UN)) && !CHAVE_MEMORIA.startsWith(baseDoEscopo(ESCOPO_EU)),
+      Object.keys(tudo),
+    );
+    const env = await rm.exportar(AGORA);
+    const doTexto = paraOTexto(env, AGORA);
+    const gravado = JSON.parse((await jsonDoTexto(seiM.html)) || "{}") as EnvelopeProjetos;
+    const formas = [env, doTexto, gravado].map(
+      (x) =>
+        `${Object.keys(x).sort().join()}|${Object.keys(x.entidades ?? {})
+          .sort()
+          .join()}`,
+    );
+    checar(
+      "o envelope do arquivo, o do texto e o texto gravado tem so os campos do envelope",
+      formas.every((f) => f === "entidades,formato,gerado,host,unidade,versao,vis|e,f,h,m,p") &&
+        !JSON.stringify([env, doTexto, gravado]).includes("projetos/sigilo"),
+      formas,
+    );
+    const daSincronia = Object.entries(tudo).filter(([k]) => k.startsWith("projetos/sync/"));
+    checar(
+      "e o que a sincronia anota na area (status, relatorio) nao leva o numero",
+      daSincronia.length > 0 && daSincronia.every(([, v]) => !JSON.stringify(v).match(/000777|50300000777202610/)),
+      daSincronia.map(([k]) => k),
+    );
+  }
+
+  secao("memoria do sigilo: a forma guardada e o teto");
+  {
+    checar(
+      "a chave documentada: projetos/sigilo/<host>|<login em minusculas>",
+      chaveMemoriaSigilo("sei.x.gov.br", " Ana ") === CHAVE_MEMORIA,
+    );
+    const torta = lerMemoria({ processos: ["1", 2, null, "1"], documentos: "x" });
+    checar(
+      "a leitura tolera o que veio torto (so textos, sem repetir)",
+      torta.processos.join() === "1" && torta.documentos.length === 0,
+      torta,
+    );
+    checar(
+      "somar o que ja esta: nada muda",
+      somarMemoria(lerMemoria({ processos: ["1"], documentos: [] }), { processos: ["1"], documentos: [] }) === null,
+    );
+    const muitos = Array.from({ length: TETO_MEMORIA_SIGILO + 1 }, (_, i) => String(i));
+    const cheia = somarMemoria(lerMemoria(undefined), { processos: muitos, documentos: ["d"] });
+    checar(
+      "teto de 5000 por conjunto: acima, saem os mais antigos",
+      TETO_MEMORIA_SIGILO === 5000 &&
+        cheia?.processos.length === 5000 &&
+        cheia.processos[0] === "1" &&
+        cheia.processos[4999] === "5000" &&
+        cheia.documentos.join() === "d",
+      cheia?.processos.length,
+    );
+  }
+
+  secao("memoria do sigilo: a propria copia que volta nao regrava (nem a memoria)");
+  {
+    const base = areaMemoria();
+    const escritas: string[] = [];
+    const espiao: Area = {
+      ...base,
+      gravar: async (i: Record<string, unknown>) => {
+        escritas.push(...Object.keys(i));
+        return base.gravar(i);
+      },
+      aoMudar: base.aoMudar.bind(base),
+    };
+    const { repo: ri } = novoRepo(ESCOPO_UN, espiao, "i", { agora: AGORA });
+    const pi = await ri.criarProjeto({ nome: "Apuração", processo: { protocolo: SIGILO, sigiloso: true } });
+    const ei = await ri.criarEtapa({ projeto: pi.id, nome: "Oitiva", inicio: "2026-10-06", fim: "2026-10-09" });
+    await ri.concluirEtapa(ei.id, "2026-10-09", { numero: "1234567" });
+    const seiI = noSei(null);
+    await motorDe(ri, espiao, seiI).sincronizar({ forcar: true });
+    checar("premissa: a memoria foi gravada", escritas.includes(CHAVE_MEMORIA), escritas);
+    escritas.length = 0;
+    await motorDe(ri, espiao, seiI).sincronizar({ forcar: true });
+    checar(
+      "na rodada seguinte: nada do escopo nem a memoria regravados, e o texto tambem nao",
+      seiI.gravadas === 1 && escritas.every((k) => k.startsWith("projetos/sync/")),
+      { gravadas: seiI.gravadas, escritas },
+    );
+  }
 }
 
 /** Os Minors da rodada 1 da Tarefa 4: relógio atrasado, marcação no parágrafo legível e o teto na mensagem. */
@@ -523,9 +675,11 @@ async function verificarSigiloGruda(): Promise<void> {
     const local = await rp.entidades();
     checar("a poda local apagou as lapides", !local.p.some((x) => x.id === pz.id) && !local.e.some((x) => x.id === ez.id));
     const regs = local.h.filter((r) => r.projeto === pz.id && (r.campo === "processo" || r.campo === "documento"));
+    // Rodada 2: a memória do sigilo guarda o número e o documento marcados, então a poda não precisa reescrever
+    // estes registros (o histórico daqui fica com os números) e o texto continua sem eles (abaixo).
     checar(
-      "os registros que perderiam a base ficam raspados aqui (mesmo id e carimbo)",
-      regs.length >= 2 && regs.every((r) => !`${r.antes ?? ""}${r.depois ?? ""}`.match(/000777|1234567/)),
+      "a memoria do sigilo cobre: o historico daqui continua com os numeros",
+      regs.length >= 2 && regs.some((r) => r.depois === SIGILO) && regs.some((r) => r.depois === "1234567"),
       regs,
     );
     await motorP.sincronizar({ forcar: true });
@@ -535,5 +689,32 @@ async function verificarSigiloGruda(): Promise<void> {
       !j2.includes("000777") && !j2.includes("1234567") && seiP.gravadas === g1,
       { gravadas: seiP.gravadas, g1 },
     );
+  }
+
+  secao("o sigilo gruda: a poda raspa o numero antigo de documento que nem a memoria conhece");
+  {
+    const areaQ = areaMemoria();
+    const rel = { agora: AGORA };
+    const { repo: rq } = novoRepo(ESCOPO_UN, areaQ, "q", rel);
+    const pq = await rq.criarProjeto({ nome: "Antigo" });
+    const eq = await rq.criarEtapa({ projeto: pq.id, nome: "Ofício", inicio: "2026-10-06", fim: "2026-10-09" });
+    // Os documentos da etapa antes de se saber do sigilo: o 7777001 só fica nos registros.
+    await rq.editarEtapa(eq.id, { documento: { numero: "7777001" } }, "2026-10-06");
+    await rq.editarEtapa(eq.id, { documento: { numero: "7777002" } }, "2026-10-06");
+    await rq.editarProjeto(pq.id, { processo: { protocolo: SIGILO, sigiloso: true } });
+    await rq.criarProjeto({ nome: "Vivo" });
+    await rq.removerProjeto(pq.id);
+    rel.agora += 181 * DIA;
+    await rq.limpar(rel.agora);
+    const hq = (await rq.entidades()).h.filter((r) => r.alvo === eq.id && r.campo === "documento");
+    checar(
+      "o numero antigo sai do historico daqui (so ele); o marcado, que a memoria cobre, fica",
+      hq.length === 2 && hq.every((r) => r.antes !== "7777001" && r.depois !== "7777001") && hq.some((r) => r.depois === "7777002"),
+      hq,
+    );
+    const seiQ = noSei(null);
+    await motorDe(rq, areaQ, seiQ, {}, () => rel.agora).sincronizar({ forcar: true });
+    const jq = await jsonDoTexto(seiQ.html);
+    checar("e o texto nao leva nenhum dos dois", !!jq && !jq.includes("7777001") && !jq.includes("7777002"), jq);
   }
 }

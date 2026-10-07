@@ -14,6 +14,12 @@
  * computador que conhece o número chega à mesma marca), e ela não sai mais. Assim
  * trocar o processo do projeto, perder a lápide na poda ou receber só o vínculo
  * vazio de um colega não solta o número de novo.
+ *
+ * E o que este computador já soube sigiloso (rodada 2: `memoriaSigilo.ts`, por
+ * usuário e para todos os escopos, nunca enviada) soma-se à regra: `conhecidos`.
+ * Um número que saiu de todo vínculo (o último processo marcado foi trocado), que
+ * foi marcado no outro escopo ou que um colega devolveu raspado num registro de
+ * mesmo carimbo (`aprendidoDosRegistros`) continua raspado.
  */
 
 import type { DocumentoSei, Etapa, Projeto, Registro, Vinculo } from "./tipos";
@@ -24,14 +30,25 @@ export const SIGILOSO_PROCESSO = "processo sigiloso";
 /** O que vai no texto no lugar do número de um documento de processo sigiloso. */
 export const SIGILOSO_DOCUMENTO = "documento de processo sigiloso";
 
+/** O que este computador já sabe sigiloso (a memória do sigilo): chaves de processo e números de documento. */
+export interface SigilosConhecidos {
+  processos: ReadonlySet<string>;
+  documentos: ReadonlySet<string>;
+}
+
+export const NADA_CONHECIDO: SigilosConhecidos = { processos: new Set(), documentos: new Set() };
+
 export interface SigiloDoEnvelope {
-  /** Os dígitos (`chaveProtocolo`) de cada número marcado sigiloso; o vínculo vazio do texto não entra. */
+  /**
+   * Os dígitos (`chaveProtocolo`) de cada número marcado sigiloso, mais os já conhecidos; o vínculo vazio do
+   * texto não entra.
+   */
   chaves: ReadonlySet<string>;
   /** Ids dos projetos com vínculo sigiloso por esta regra. */
   projetos: ReadonlySet<string>;
   /** Ids das etapas sigilosas por esta regra. */
   etapas: ReadonlySet<string>;
-  /** Números dos documentos marcados sigilosos (em qualquer etapa, viva ou lápide). */
+  /** Números dos documentos marcados sigilosos (em qualquer etapa, viva ou lápide), mais os já conhecidos. */
   documentos: ReadonlySet<string>;
   /** O vínculo é sigiloso: marcado, ou o mesmo número (pelos dígitos) marcado noutro lugar. */
   vinculo(v: Vinculo | undefined): boolean;
@@ -56,10 +73,14 @@ function documentoDe(x: unknown): DocumentoSei | undefined {
 /**
  * A regra aplicada a `projetos` e `etapas` (com lápides; item torto é ignorado, sem lançar). Todos os
  * itens entram nas chaves; um id que aparece mais de uma vez (a versão daqui e a de fora, na mescla)
- * é sigiloso se qualquer versão for.
+ * é sigiloso se qualquer versão for. `conhecidos` (a memória do sigilo) soma-se às chaves e aos documentos.
  */
-export function sigiloDoEnvelope(projetos: readonly unknown[], etapas: readonly unknown[]): SigiloDoEnvelope {
-  const chaves = new Set<string>();
+export function sigiloDoEnvelope(
+  projetos: readonly unknown[],
+  etapas: readonly unknown[],
+  conhecidos: SigilosConhecidos = NADA_CONHECIDO,
+): SigiloDoEnvelope {
+  const chaves = new Set<string>(conhecidos.processos);
   for (const x of [...projetos, ...etapas]) {
     const v = vinculoDe(x);
     const k = v?.sigiloso === true ? chaveProtocolo(v.protocolo) : "";
@@ -71,7 +92,7 @@ export function sigiloDoEnvelope(projetos: readonly unknown[], etapas: readonly 
   const idsProjetos = new Set<string>();
   for (const x of projetos) if (objeto(x) && typeof x.id === "string" && vinculo(vinculoDe(x))) idsProjetos.add(x.id);
   const idsEtapas = new Set<string>();
-  const documentos = new Set<string>();
+  const documentos = new Set<string>(conhecidos.documentos);
   for (const x of etapas) {
     const d = documentoDe(x);
     if (d?.sigiloso === true && d.numero) documentos.add(d.numero);
@@ -125,11 +146,12 @@ function documentoDaMesmaVersao(x: Etapa, outras: readonly unknown[]): Etapa {
  * itens (as daqui antes de gravar, as que chegaram de fora): os números marcados nelas contam, e a
  * marca de uma versão igual (mesmo carimbo) vale aqui. Marca o vínculo cujo número é sigiloso, o
  * documento de etapa sigilosa e o documento cujo número foi marcado em qualquer lugar. Devolve só os
- * itens que mudaram; nunca tira marca.
+ * itens que mudaram; nunca tira marca. `conhecidos` (a memória do sigilo) conta como número marcado.
  */
 export function marcasDeSigilo(
   final: { p: readonly Projeto[]; e: readonly Etapa[] },
   outras: { p?: readonly unknown[]; e?: readonly unknown[] } = {},
+  conhecidos: SigilosConhecidos = NADA_CONHECIDO,
 ): { p: Projeto[]; e: Etapa[] } {
   const porId = (lista: readonly unknown[] | undefined) => {
     const m = new Map<string, unknown[]>();
@@ -140,7 +162,7 @@ export function marcasDeSigilo(
   const outrasE = porId(outras.e);
   const p1 = final.p.map((x) => vinculoDaMesmaVersao(x, outrasP.get(x.id) ?? []));
   const e1 = final.e.map((x) => documentoDaMesmaVersao(vinculoDaMesmaVersao(x, outrasE.get(x.id) ?? []), outrasE.get(x.id) ?? []));
-  const s = sigiloDoEnvelope([...p1, ...(outras.p ?? [])], [...e1, ...(outras.e ?? [])]);
+  const s = sigiloDoEnvelope([...p1, ...(outras.p ?? [])], [...e1, ...(outras.e ?? [])], conhecidos);
   const p2 = p1.map((x) =>
     x.processo && !x.processo.sigiloso && s.vinculo(x.processo) ? { ...x, processo: marcarVinculo(x.processo) } : x,
   );
@@ -157,6 +179,44 @@ export function marcasDeSigilo(
     x.documento && !x.documento.sigiloso && documentos.has(x.documento.numero) ? { ...x, documento: marcarDocumento(x.documento) } : x,
   );
   return { p: p2.filter((x, i) => x !== final.p[i]), e: e3.filter((x, i) => x !== final.e[i]) };
+}
+
+/** O que o estado marca (vínculos e documentos `sigiloso: true`, vivos ou lápides): vai para a memória do sigilo. */
+export function marcadosNoEstado(projetos: readonly Projeto[], etapas: readonly Etapa[]): { processos: string[]; documentos: string[] } {
+  const processos: string[] = [];
+  const documentos: string[] = [];
+  for (const x of [...projetos, ...etapas]) {
+    const k = x.processo?.sigiloso === true && typeof x.processo.protocolo === "string" ? chaveProtocolo(x.processo.protocolo) : "";
+    if (k) processos.push(k);
+  }
+  for (const x of etapas) if (x.documento?.sigiloso === true && x.documento.numero) documentos.push(x.documento.numero);
+  return { processos, documentos };
+}
+
+/**
+ * O que um registro de fora com o mesmo id e o mesmo carimbo do daqui ensina: o lado que chegou raspado
+ * ("processo sigiloso" / "documento de processo sigiloso") onde o daqui tem um número diz que o número é
+ * sigiloso (quem gravou sabia). O registro daqui fica como está (o usuário mantém o próprio histórico).
+ */
+export function aprendidoDosRegistros(
+  locais: readonly Registro[],
+  deFora: readonly unknown[],
+): { processos: string[]; documentos: string[] } {
+  const porId = new Map(locais.map((r) => [r.id, r]));
+  const processos: string[] = [];
+  const documentos: string[] = [];
+  for (const o of deFora) {
+    if (!objeto(o) || typeof o.id !== "string") continue;
+    const l = porId.get(o.id);
+    if (!l || l.atualizadoEm !== o.atualizadoEm || l.dispositivo !== o.dispositivo || l.campo !== o.campo) continue;
+    for (const lado of ["antes", "depois"] as const) {
+      const aqui = l[lado];
+      if (typeof aqui !== "string" || !aqui) continue;
+      if (l.campo === "processo" && o[lado] === SIGILOSO_PROCESSO && chaveProtocolo(aqui)) processos.push(chaveProtocolo(aqui));
+      if (l.campo === "documento" && o[lado] === SIGILOSO_DOCUMENTO && aqui !== SIGILOSO_DOCUMENTO) documentos.push(aqui);
+    }
+  }
+  return { processos, documentos };
 }
 
 /** Cópia sem `antes`/`depois` indefinidos (a forma do registro gravado). */

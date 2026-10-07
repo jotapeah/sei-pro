@@ -29,7 +29,7 @@ import { nomeDeTextoInterno, type ValidacaoTexto, versaoMaisNova } from "@comum/
 import { chaveSyncTexto, DIAS_LAPIDE_EU, DIAS_LAPIDE_UNIDADE, FOLGA_RELOGIO_MS, LIMITES } from "../modelo/constantes";
 import { chaveEscopo } from "../modelo/escopo";
 import { excedentes } from "../modelo/historico";
-import { rasparRegistro, sigiloDoEnvelope } from "../modelo/sigilo";
+import { NADA_CONHECIDO, rasparRegistro, type SigilosConhecidos, sigiloDoEnvelope } from "../modelo/sigilo";
 import type { Entidades, EnvelopeProjetos, Escopo, Etapa, Projeto, Vinculo, Vis } from "../modelo/tipos";
 import { entidadeValida, type RepositorioProjetos } from "../repositorio";
 
@@ -121,12 +121,15 @@ export function validarEnvelope(bruto: unknown, escopo: Escopo): ValidacaoTexto<
 /** O vínculo sigiloso no texto: sem o número e sem o `idProcedimento`. */
 const VAZIO: Vinculo = { protocolo: "", sigiloso: true };
 
-/** O envelope que vai ao Texto Padrão: sem números sigilosos e podado (lápides e histórico). */
-export function paraOTexto(env: EnvelopeProjetos, agora: number): EnvelopeProjetos {
+/**
+ * O envelope que vai ao Texto Padrão: sem números sigilosos e podado (lápides e histórico). `conhecidos`
+ * (a memória do sigilo do usuário, `repo.sigilosConhecidos()`) soma-se à regra deduzida do envelope.
+ */
+export function paraOTexto(env: EnvelopeProjetos, agora: number, conhecidos: SigilosConhecidos = NADA_CONHECIDO): EnvelopeProjetos {
   const dias = env.vis === "unidade" ? DIAS_LAPIDE_UNIDADE : DIAS_LAPIDE_EU;
   const ent = env.entidades;
   // A regra sobre tudo, antes da poda: a marca de uma lápide que sai ainda vale para os outros.
-  const sigilo = sigiloDoEnvelope(ent.p, ent.e);
+  const sigilo = sigiloDoEnvelope(ent.p, ent.e, conhecidos);
   const vivosH = purgarLapides(ent.h, agora, dias);
   const fora = new Set(excedentes(vivosH, LIMITES.historico));
   const projetos = purgarLapides(ent.p, agora, dias).map((x): Projeto => (sigilo.projetos.has(x.id) ? { ...x, processo: VAZIO } : x));
@@ -222,7 +225,8 @@ export function adaptadorProjetos(d: DepsAdaptador): AdaptadorTexto<EnvelopeProj
       if (sem(anterior) !== sem(novo) && (anterior || r.ignorados || futuros)) await d.area.gravar({ [k]: novo });
     },
     // Os itens do futuro passam pelo mesmo corte (o que já veio cortado sai igual).
-    exportar: async ({ remoto, agora }) => paraOTexto(comOsDoFuturo(await d.repo.exportar(agora), remoto, agora), agora),
+    exportar: async ({ remoto, agora }) =>
+      paraOTexto(comOsDoFuturo(await d.repo.exportar(agora), remoto, agora), agora, await d.repo.sigilosConhecidos()),
     assinatura: assinaturaProjetos,
     vazio: (env) => LISTAS.every((k) => env.entidades[k].length === 0),
     async antesDeRegravarInvalido(motivo, html) {

@@ -159,6 +159,46 @@ export async function verificarSincroniaCorrida(): Promise<void> {
     );
   }
 
+  secao("corrida na unidade: o registro antigo do numero que so a colega sabe sigiloso (memoria do sigilo)");
+  {
+    const SIGILO = "50300.000777/2026-10";
+    const tr = textoDaUnidade();
+    const ana3 = computador("ana", "pc-ana", tr, AGORA);
+    const bia3 = computador("bia", "pc-bia", tr, AGORA + 5);
+    const pr = await ana3.repo.criarProjeto({ nome: "Fiscalização" });
+    await ana3.repo.editarProjeto(pr.id, { processo: { protocolo: SIGILO } }); // ninguém sabia do sigilo: o registro leva o número
+    await ana3.rodada();
+    await bia3.rodada();
+    // A ana marca (a caixa) e troca o processo antes de a bia sincronizar: a bia nunca vê o vínculo marcado.
+    await ana3.repo.editarProjeto(pr.id, { processo: { protocolo: SIGILO, sigiloso: true } });
+    await ana3.repo.editarProjeto(pr.id, { processo: { protocolo: "50300.000002/2026-11" } });
+    await ana3.rodada();
+    checar(
+      "premissa: a bia tem o registro antigo com o numero",
+      (await bia3.repo.historico(pr.id)).some((r) => r.depois === SIGILO),
+    );
+    const gravadas: number[] = [];
+    for (let i = 0; i < 2; i++) {
+      for (const c of [bia3, ana3]) {
+        const g = tr.t.gravacoes;
+        await c.rodada();
+        gravadas.push(tr.t.gravacoes - g);
+      }
+    }
+    checar(
+      "a bia aprende pelo registro raspado de mesmo carimbo: nenhuma das duas regrava",
+      gravadas.every((g) => g === 0),
+      gravadas,
+    );
+    checar("o numero nao esta no texto", !JSON.stringify(await noTexto(tr.t.html)).includes("000777"));
+    const hb = await bia3.repo.historico(pr.id);
+    checar(
+      "a bia mantem o registro dela com o numero (e ja nao tem vinculo com ele)",
+      hb.some((r) => r.campo === "processo" && r.depois === SIGILO) &&
+        (await bia3.repo.obterProjeto(pr.id))?.processo?.protocolo !== SIGILO,
+    );
+  }
+
   secao("corrida na unidade: o numero sigiloso da colega, ligado aqui sem a marca (o sigilo gruda)");
   {
     const SIGILO = "50300.000777/2026-10";
