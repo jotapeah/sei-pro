@@ -31,7 +31,7 @@ import { chaveEscopo } from "../modelo/escopo";
 import { excedentes } from "../modelo/historico";
 import { rasparRegistro, sigiloDoEnvelope } from "../modelo/sigilo";
 import type { Entidades, EnvelopeProjetos, Escopo, Etapa, Projeto, Vinculo, Vis } from "../modelo/tipos";
-import type { RepositorioProjetos } from "../repositorio";
+import { entidadeValida, type RepositorioProjetos } from "../repositorio";
 
 /** O CKEditor 5 baixa o conteúdo de todos os textos da unidade (como nos Favoritos). */
 export const TETO_TEXTO = 100 * 1024;
@@ -59,9 +59,14 @@ export function descricaoDoTexto(vis: Vis): string {
     : "Projetos pessoais (SEI Pro). Gerado automaticamente; não edite.";
 }
 
-/** O parágrafo legível que abre o texto. */
+/**
+ * O parágrafo legível que abre o texto. Sigla e nome vêm do SEI e vão sem `<` e `>`: o SEI 5 devolve o
+ * conteúdo escapado mais uma vez e a leitura desfaz o escape, então um `</p>` ali partiria o parágrafo e
+ * o texto ficaria inválido (e seria regravado a cada rodada).
+ */
 export function legivelProjetos(vis: Vis, sigla: string, nomeUsuario: string): string {
-  const de = vis === "unidade" ? `da unidade ${sigla}` : `de ${nomeUsuario}`;
+  const limpo = (t: string) => t.replace(/[<>]/g, "");
+  const de = vis === "unidade" ? `da unidade ${limpo(sigla)}` : `de ${limpo(nomeUsuario)}`;
   return `Dados internos do SEI Pro — projetos ${de}. Não use em documentos nem edite: o SEI Pro regrava este texto sozinho.`;
 }
 
@@ -150,6 +155,24 @@ export function paraOTexto(env: EnvelopeProjetos, agora: number): EnvelopeProjet
   };
 }
 
+/**
+ * O envelope daqui com os itens do texto que o `importar` recusou só por virem do futuro (carimbo além de
+ * `agora` + 1 dia: o relógio daqui está atrasado), na versão do texto e no lugar da daqui de mesmo id.
+ * Sem isso, a gravação apagaria do texto o trabalho dos colegas até o relógio daqui alcançá-lo, e eles o
+ * regravariam a cada rodada. Item torto (que nem sem o relógio passaria) não é levado.
+ */
+export function comOsDoFuturo(env: EnvelopeProjetos, remoto: EnvelopeProjetos | null, agora: number): EnvelopeProjetos {
+  if (!remoto) return env;
+  const entidades = { ...env.entidades };
+  for (const k of LISTAS) {
+    const futuros = ((remoto.entidades[k] ?? []) as unknown[]).filter((x) => entidadeValida(x, k) && !entidadeValida(x, k, agora));
+    if (!futuros.length) continue;
+    const ids = new Set(futuros.map((x) => (x as { id: string }).id));
+    (entidades as Record<string, unknown[]>)[k] = [...entidades[k].filter((x) => !ids.has(x.id)), ...futuros];
+  }
+  return { ...env, entidades };
+}
+
 /** Igual para o mesmo conteúdo em qualquer computador: sem `gerado`, listas pelo id. */
 export function assinaturaProjetos(env: EnvelopeProjetos): string {
   const e = env.entidades;
@@ -198,7 +221,8 @@ export function adaptadorProjetos(d: DepsAdaptador): AdaptadorTexto<EnvelopeProj
       const sem = (x?: RelatorioImportacao) => (x ? jsonEstavel({ ...x, quando: 0 }) : "");
       if (sem(anterior) !== sem(novo) && (anterior || r.ignorados || futuros)) await d.area.gravar({ [k]: novo });
     },
-    exportar: async ({ agora }) => paraOTexto(await d.repo.exportar(agora), agora),
+    // Os itens do futuro passam pelo mesmo corte (o que já veio cortado sai igual).
+    exportar: async ({ remoto, agora }) => paraOTexto(comOsDoFuturo(await d.repo.exportar(agora), remoto, agora), agora),
     assinatura: assinaturaProjetos,
     vazio: (env) => LISTAS.every((k) => env.entidades[k].length === 0),
     async antesDeRegravarInvalido(motivo, html) {
@@ -217,7 +241,7 @@ export function adaptadorProjetos(d: DepsAdaptador): AdaptadorTexto<EnvelopeProj
         unidade
           ? `Os projetos da unidade passaram do limite do Texto Padrão (${kb} KB de ${tetoKb} KB) e não foram gravados. Exclua projetos que não usa mais (os arquivados também ocupam espaço) ou leve alguns para “Só eu”.`
           : `Seus projetos passaram do limite do Texto Padrão (${kb} KB de ${tetoKb} KB) e não foram gravados. Exclua projetos que não usa mais (os arquivados também ocupam espaço).`,
-      pertoDoTeto: (kb) => `Os projetos estão perto do limite do Texto Padrão (${kb} KB de 100 KB).`,
+      pertoDoTeto: (kb) => `Os projetos estão perto do limite do Texto Padrão (${kb} KB de ${Math.round(TETO_TEXTO / 1024)} KB).`,
       invalidoRegravado: (motivo) =>
         `O texto no SEI estava inválido (${motivo}) e foi regravado a partir deste computador; o texto antigo ficou guardado neste navegador.`,
       mudouDuranteGravacao: MENSAGEM_MUDOU,

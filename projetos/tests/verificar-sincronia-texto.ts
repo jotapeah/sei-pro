@@ -16,6 +16,7 @@ import {
   chaveSubstituido,
   contarFuturos,
   descricaoDoTexto,
+  legivelProjetos,
   nomeDoTexto,
   paraOTexto,
   type RelatorioImportacao,
@@ -339,6 +340,81 @@ export async function verificarSincroniaTexto(): Promise<void> {
   );
 
   await verificarSigiloGruda();
+  await verificarMenoresRodada1();
+}
+
+/** Os Minors da rodada 1 da Tarefa 4: relógio atrasado, marcação no parágrafo legível e o teto na mensagem. */
+async function verificarMenoresRodada1(): Promise<void> {
+  secao("relogio atrasado: os itens do colega, no futuro daqui, ficam no texto");
+  {
+    const areaF = areaMemoria();
+    const relF = { agora: AGORA - 2 * DIA };
+    const { repo: rf } = novoRepo(ESCOPO_UN, areaF, "f", relF);
+    const doColegaF = envelope({
+      entidades: {
+        p: [projeto({ id: "colega", nome: "Do colega", atualizadoEm: AGORA, dispositivo: "dev-b" })],
+        f: [],
+        e: [etapa({ id: "colega-e", projeto: "colega", atualizadoEm: AGORA, dispositivo: "dev-b" })],
+        h: [registro({ id: "colega-h", alvo: "colega", projeto: "colega", campo: "criacao", depois: "Do colega", dispositivo: "dev-b" })],
+        m: [],
+      },
+    });
+    const seiF = noSei(await gerarConteudoTexto("Dados", doColegaF));
+    const motorF = motorDe(rf, areaF, seiF, {}, () => relF.agora);
+    const sF1 = await motorF.sincronizar({ forcar: true });
+    checar(
+      "nada daqui a gravar: o texto do colega fica como estava (nao e regravado sem os itens dele)",
+      seiF.gravadas === 0 && sF1.estado === "ok",
+      { gravadas: seiF.gravadas, sF1 },
+    );
+    const pf = await rf.criarProjeto({ nome: "Daqui" });
+    await motorF.sincronizar({ forcar: true });
+    const tF = JSON.parse((await jsonDoTexto(seiF.html)) || "null") as EnvelopeProjetos | null;
+    checar(
+      "com algo daqui a gravar: o texto leva os itens do colega como estavam, mais o daqui",
+      seiF.gravadas === 1 &&
+        !!tF &&
+        tF.entidades.p.some((x) => x.id === "colega" && x.atualizadoEm === AGORA && x.nome === "Do colega") &&
+        tF.entidades.e.some((x) => x.id === "colega-e") &&
+        tF.entidades.h.some((r) => r.id === "colega-h") &&
+        tF.entidades.p.some((x) => x.id === pf.id),
+      tF?.entidades.p.map((x) => x.id),
+    );
+    await motorF.sincronizar({ forcar: true });
+    checar("e a rodada seguinte nao regrava", seiF.gravadas === 1, seiF.gravadas);
+    const relF2 = (await areaF.obter(chaveRelatorio(ESCOPO_UN)))[chaveRelatorio(ESCOPO_UN)] as RelatorioImportacao | undefined;
+    checar("o aviso do relogio continua (os itens contados no relatorio)", relF2?.futuros === 3, relF2);
+    checar("e eles nao entraram aqui", !(await rf.obterProjeto("colega")));
+  }
+
+  secao("paragrafo legivel: marcacao na sigla ou no nome nao quebra o texto");
+  {
+    checar(
+      "sem < nem > no paragrafo",
+      !/[<>]/.test(legivelProjetos("unidade", "SE</p><p>PRO", "Ana")) && !/[<>]/.test(legivelProjetos("eu", "SEPRO", "<b>Ana</b>")),
+    );
+    const areaL = areaMemoria();
+    const { repo: rl } = novoRepo(ESCOPO_UN, areaL, "l", { agora: AGORA });
+    await rl.criarProjeto({ nome: "Plano" });
+    const legivel = adaptadorProjetos({ repo: rl, area: areaL, sigla: "SE</p><p>PRO", nomeUsuario: "Ana" }).legivel;
+    const seiL = noSei(null);
+    await motorDe(rl, areaL, seiL, { legivel }).sincronizar({ forcar: true });
+    const lidoL = await lerConteudoTexto(seiL.html ?? "");
+    checar('o texto gravado com a sigla "SE</p><p>PRO" continua valido', "bruto" in lidoL, lidoL);
+    const sL = await motorDe(rl, areaL, seiL, { legivel }).sincronizar({ forcar: true });
+    checar(
+      "e a segunda rodada nao regrava (nem guarda o texto como invalido)",
+      seiL.gravadas === 1 && !sL.mensagem && !(await areaL.obter(chaveSubstituido(ESCOPO_UN)))[chaveSubstituido(ESCOPO_UN)],
+      { gravadas: seiL.gravadas, sL },
+    );
+  }
+
+  secao("mensagem de perto do teto: o teto vem de TETO_TEXTO");
+  {
+    const { repo: rm } = novoRepo(ESCOPO_UN, areaMemoria(), "k", { agora: AGORA });
+    const perto = adaptadorProjetos({ repo: rm, area: areaMemoria(), sigla: "SEPRO", nomeUsuario: "Ana" }).mensagens?.pertoDoTeto?.(81);
+    checar("perto do teto: (81 KB de <teto> KB)", perto?.includes(`(81 KB de ${TETO_TEXTO / 1024} KB)`) === true, perto);
+  }
 }
 
 /** Decisão da rodada 1 da Tarefa 4: a marca de sigilo do vínculo e do documento fica gravada aqui, sem mudar o carimbo. */

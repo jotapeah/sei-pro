@@ -133,6 +133,32 @@ export async function verificarSincroniaCorrida(): Promise<void> {
   await terceira.rodada();
   checar("um terceiro, que chega depois, recebe tudo e sem a etapa excluida", (await terceira.repo.dados()).etapas.length === 2);
 
+  secao("corrida na unidade: dois colegas criando o texto ao mesmo tempo");
+  {
+    const tc = textoDaUnidade();
+    const caio = computador("caio", "pc-caio", tc, AGORA);
+    const dani = computador("dani", "pc-dani", tc, AGORA + 3);
+    const doCaio = await caio.repo.criarProjeto({ nome: "Do caio" });
+    const daDani = await dani.repo.criarProjeto({ nome: "Da dani" });
+    // Nenhum texto ainda: o caio lê "não existe"; antes da conferência dele, a dani cria o texto.
+    tc.t.antesDaConferencia = () => dani.rodada();
+    const sc = await caio.rodada();
+    const tcx = await noTexto(tc.t.html);
+    checar(
+      "o texto fica com os dois projetos (a conferencia do caio achou o texto criado pela dani e mesclou)",
+      tcx.p.some((x) => x.id === doCaio.id) && tcx.p.some((x) => x.id === daDani.id) && sc.estado === "ok" && !sc.pendente,
+      { p: tcx.p.map((x) => x.nome), sc },
+    );
+    checar("o caio ja tem o projeto da dani", !!(await caio.repo.obterProjeto(daDani.id)));
+    const g = tc.t.gravacoes;
+    await dani.rodada();
+    checar(
+      "a dani, na rodada seguinte, tem o do caio e nao regrava",
+      !!(await dani.repo.obterProjeto(doCaio.id)) && tc.t.gravacoes === g,
+      tc.t.gravacoes - g,
+    );
+  }
+
   secao("corrida na unidade: o numero sigiloso da colega, ligado aqui sem a marca (o sigilo gruda)");
   {
     const SIGILO = "50300.000777/2026-10";
