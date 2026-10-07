@@ -24,8 +24,12 @@ export interface DefAba {
   icone: NomeIcone;
   caminho: string;
   titulo: string;
-  /** Selo de pendências: chave no storage.local com um número; `dica(n)` vira o title do botão. */
-  contador?: { chave: string; dica(n: number): string };
+  /**
+   * Selo de pendências: chave no storage.local com um número; `dica(n)` vira o title do botão. O valor vem de
+   * fora (o storage): só um inteiro de 1 até `teto` (padrão: sem teto além do inteiro seguro) vira selo; o resto
+   * (fração, negativo, texto, NaN, infinito, acima do teto) não mostra nada.
+   */
+  contador?: { chave: string; dica(n: number): string; teto?: number };
 }
 
 export interface DepsAbas {
@@ -94,8 +98,9 @@ export async function montarAbas(raiz: HTMLElement, d: DepsAbas): Promise<{ most
       const c = def.contador;
       const b = botoes.get(def.id);
       if (!c || !b) continue;
+      const teto = c.teto ?? Number.MAX_SAFE_INTEGER;
       const pintar = (v: unknown) => {
-        const n = typeof v === "number" && v > 0 ? v : 0;
+        const n = typeof v === "number" && Number.isInteger(v) && v > 0 && v <= teto ? v : 0;
         const conta = b.querySelector<HTMLElement>(".painel-conta");
         if (conta) {
           conta.textContent = String(n);

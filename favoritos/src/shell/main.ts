@@ -1,21 +1,13 @@
 /** Entrada de html/painel.html (o painel lateral da extensão). */
 
 import { areaChrome } from "@comum/armazenamento/area";
-import { type AbaPainel, montarShell } from "./painel";
-
-const manifesto = chrome.runtime.getManifest();
-const temAgente = (manifesto.content_scripts ?? []).some((c) => c.js?.includes("js/init_agente.js"));
-const temFavoritos = (manifesto.content_scripts ?? []).some((c) => c.js?.includes("js/init_favoritos.js"));
-const temHistorico = (manifesto.content_scripts ?? []).some((c) => c.js?.includes("js/init_historico.js"));
-const doEndereco = new URLSearchParams(location.hash.slice(1)).get("aba");
+import { abaPedidaNoEndereco, ferramentasDoPacote, montarShell } from "./painel";
 
 void montarShell(document.getElementById("painel")!, {
   // Sem `storage.session` (navegador antigo), a aba pedida só vale pelo endereço.
   sessao: areaChrome(chrome.storage.session ?? chrome.storage.local, chrome.storage.session ? "session" : "local"),
-  temAgente,
-  temFavoritos,
-  temHistorico,
+  ...ferramentasDoPacote(chrome.runtime.getManifest()),
   local: areaChrome(chrome.storage.local, "local"),
   url: (c) => chrome.runtime.getURL(c),
-  abaDoEndereco: doEndereco === "agente" || doEndereco === "favoritos" || doEndereco === "historico" ? (doEndereco as AbaPainel) : null,
+  abaDoEndereco: abaPedidaNoEndereco(location.hash),
 });

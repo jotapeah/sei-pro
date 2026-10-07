@@ -156,12 +156,18 @@ export async function verificarBackground(): Promise<void> {
     amb.ouvintes.mensagem[0]({ tipo: "abrirAgente" }, tab);
     await new Promise((r) => setTimeout(r, 10));
     checar("abrirAgente (botoes antigos) abre na aba do agente", amb.sessao.at(-1)?.painelAba === "agente" && amb.paineisAbertos.length === 2);
+    amb.ouvintes.mensagem[0]({ tipo: "abrirPainel", aba: "projetos" }, tab);
+    await new Promise((r) => setTimeout(r, 10));
+    checar("abrirPainel na aba Projetos (caixa, arvore)", amb.sessao.at(-1)?.painelAba === "projetos" && amb.paineisAbertos.length === 3);
+    amb.ouvintes.mensagem[0]({ tipo: "abrirPainel", aba: "historico" }, tab);
+    await new Promise((r) => setTimeout(r, 10));
+    checar("e na aba Historico", amb.sessao.at(-1)?.painelAba === "historico");
     amb.ouvintes.mensagem[0]({ tipo: "abrirPainel", aba: "qualquer" }, tab);
     await new Promise((r) => setTimeout(r, 10));
     checar("aba desconhecida vira favoritos", amb.sessao.at(-1)?.painelAba === "favoritos");
     amb.ouvintes.mensagem[0]({ tipo: "abrirPainel", aba: "favoritos" }, {});
     await new Promise((r) => setTimeout(r, 10));
-    checar("pedido sem aba de origem e ignorado", amb.paineisAbertos.length === 3);
+    checar("pedido sem aba de origem e ignorado", amb.paineisAbertos.length === 5);
   }
 
   secao("background: atualizacao abre o historico, com convite de avaliacao so em versao de novidades");
