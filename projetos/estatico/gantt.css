@@ -382,6 +382,10 @@ html[data-theme=dark] {
   color: var(--spro-suave);
   font-size: 11.5px;
 }
+/* O dia de hoje no cabecalho: a regra acima venceria a da Frappe e deixaria o texto cinza sobre o azul. */
+.spro-gantt .gantt-container .lower-text.current-date-highlight {
+  color: var(--spro-destaque-texto);
+}
 
 /* Situacao da etapa: em andamento = destaque, atrasada = perigo, concluida = ok, a iniciar = fundo-3 */
 .spro-gantt .gantt .bar-wrapper.st-andamento .bar {
