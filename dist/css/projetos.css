@@ -2808,6 +2808,17 @@ html[data-modo="impressao"] .prj-gantt {
   color: var(--spro-fraco);
 }
 
+/* ---------- P4: enviar e receber projeto por arquivo ---------- */
+.prj-form-enviar,
+.prj-form-receber {
+  min-width: min(440px, 86vw);
+}
+/* O nome do projeto recebido: em destaque na previa (o resto fica suave). */
+.prj-form-receber .prj-previa b {
+  overflow-wrap: anywhere;
+  color: var(--spro-texto);
+}
+
 /*
  * Frappe Gantt 1.2.2 (MIT, https://github.com/frappe/gantt): dist/frappe-gantt.css do pacote npm,
  * formatado pelo esbuild. Ajustes do SEI Pro (tokens --spro-*, situacoes, marco, base) no fim.
