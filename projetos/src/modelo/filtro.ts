@@ -1,6 +1,7 @@
 /**
  * Filtro das etapas (spec 3.1, como nos Favoritos): os chips de situação valem
- * qualquer um (Atrasadas ou Em andamento ou Próximos 30 dias); "Só as minhas"
+ * qualquer um (Atrasadas ou Em andamento ou Vence nesta semana ou Próximos 30
+ * dias; "semana" é o filtro da pílula do título do painel); "Só as minhas"
  * e "Concluídas" (mostrar/ocultar) restringem; nos campos (responsável, fase,
  * etiqueta) vale qualquer valor dentro do campo, e os campos se somam (E).
  */
@@ -11,7 +12,7 @@ import { SEM_FASE } from "./constantes";
 import { situacaoEtapa } from "./situacao";
 import type { DataISO, Etapa, Responsavel } from "./tipos";
 
-export type ChipSituacao = "atrasadas" | "andamento" | "proximos30";
+export type ChipSituacao = "atrasadas" | "andamento" | "semana" | "proximos30";
 
 /** As listas são só leitura: um filtro novo é uma cópia com a lista trocada (o `FILTRO_VAZIO` é compartilhado). */
 export interface FiltroEtapas {
@@ -76,6 +77,7 @@ export function filtrarEtapas<T extends Etapa>(etapas: readonly T[], f: FiltroEt
   const porChip: Record<ChipSituacao, Set<string>> = {
     atrasadas: new Set(alertas.atrasadas.map((e) => e.id)),
     andamento: new Set(vivas.filter((e) => situacaoEtapa(e, hoje) === "andamento").map((e) => e.id)),
+    semana: new Set(alertas.semana.map((e) => e.id)),
     proximos30: new Set(alertas.proximos30.map((e) => e.id)),
   };
   const etiquetas = new Set(f.etiquetas.map(normalizarTexto));
@@ -97,6 +99,7 @@ export function contarChips(etapas: readonly Etapa[], hoje: DataISO): Record<Chi
   return {
     atrasadas: alertas.atrasadas.length,
     andamento: vivas.filter((e) => situacaoEtapa(e, hoje) === "andamento").length,
+    semana: alertas.semana.length,
     proximos30: alertas.proximos30.length,
   };
 }

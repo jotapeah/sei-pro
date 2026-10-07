@@ -1,5 +1,6 @@
 import "./fuso";
 import { resumo } from "./util";
+import { verificarAppBase } from "./verificar-app-base";
 import { verificarCalendario } from "./verificar-calendario";
 import { verificarDependencias } from "./verificar-dependencias";
 import { verificarEscopo } from "./verificar-escopo";
@@ -25,4 +26,5 @@ await verificarModelos();
 await verificarVendor();
 verificarLinhas();
 await verificarGantt();
+await verificarAppBase();
 resumo();
