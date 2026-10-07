@@ -83,12 +83,18 @@ export function adaptadorTeste(
     aoExportar?: (c: ChamadaExportar) => void;
     /** Ensina ao motor o "nada a guardar" (sem itens): sem texto no SEI, não cria. */
     vazio?: boolean;
+    /** Ensina ao motor o texto lido como este adaptador o gravaria (a mesma poda de lápides do `exportar`). */
+    normalizar?: boolean;
+    mensagens?: AdaptadorTexto<EnvTeste>["mensagens"];
   } = {},
 ): AdaptadorTexto<EnvTeste> {
   const dono = o.dono ?? "pedro";
+  const podar = (itens: ItemTeste[], agora: number) => (o.diasLapide === undefined ? itens : purgarLapides(itens, agora, o.diasLapide));
   return {
     ...(o.antesDeRegravarInvalido ? { antesDeRegravarInvalido: o.antesDeRegravarInvalido } : {}),
     ...(o.vazio ? { vazio: (env: EnvTeste) => env.itens.length === 0 } : {}),
+    ...(o.normalizar ? { normalizar: async (lido: EnvTeste, agora: number) => ({ ...lido, itens: podar(lido.itens, agora) }) } : {}),
+    ...(o.mensagens ? { mensagens: o.mensagens } : {}),
     modulo: "teste",
     chaveStatus: o.chaveStatus ?? "teste/sync/tp/a",
     teto: o.teto ?? 100 * 1024,
@@ -106,9 +112,7 @@ export function adaptadorTeste(
     },
     async exportar(c) {
       o.aoExportar?.(c);
-      const { agora } = c;
-      const itens = [...repo.itens.values()];
-      return { formato: "teste", versao: 1, dono, itens: o.diasLapide === undefined ? itens : purgarLapides(itens, agora, o.diasLapide) };
+      return { formato: "teste", versao: 1, dono, itens: podar([...repo.itens.values()], c.agora) };
     },
     assinatura: (env) => assinaturaEstavel({ dono: env.dono, itens: porId(env.itens) }),
   };

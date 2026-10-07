@@ -8,7 +8,7 @@ import { areaMemoria } from "../src/armazenamento/area";
 import { codificar, decodificar, ErroConteudoGrande, LIMITE_DESCOMPACTADO, paraParagrafos } from "../src/sincronia/codec";
 import { consentimentoNaArea, definirConsentimento } from "../src/sincronia/consentimento";
 import { ControleTextoPadrao } from "../src/sincronia/controlePagina";
-import { type DestinoTexto, MotorTextoPadrao, type StatusSync } from "../src/sincronia/motor";
+import { type DestinoTexto, MENSAGENS_MOTOR, MotorTextoPadrao, type StatusSync, textoDoErro } from "../src/sincronia/motor";
 import { lerConteudoTexto } from "../src/sincronia/textoPadraoCodec";
 import {
   adaptadorTeste,
@@ -33,12 +33,13 @@ function montar(o: {
   vazio?: boolean;
   lerNoRecuo?: boolean;
   permitido?: () => Promise<boolean>;
+  adaptador?: Parameters<typeof adaptadorTeste>[1];
 }) {
   const area = o.area ?? areaMemoria();
   const repo = repoTeste();
   let agora = 10_000_000;
   const motor = new MotorTextoPadrao<EnvTeste>({
-    adaptador: adaptadorTeste(repo, { vazio: o.vazio }),
+    adaptador: adaptadorTeste(repo, { vazio: o.vazio, ...o.adaptador }),
     destino: o.destino,
     area,
     travar: (_n, fn) => fn(),
@@ -325,6 +326,82 @@ export async function verificarMotorUnidade(): Promise<void> {
     }
     r.c.parar();
   }
+
+  await verificarRevisaoFinalMotor();
+}
+
+/**
+ * Revisão final da P4: a faixa do "Entendi" só quando há o que é DAQUI a gravar (item 4), e o "indisponível" de
+ * quem lê mas não pode gravar com um texto que serve a ele (item 13).
+ */
+async function verificarRevisaoFinalMotor(): Promise<void> {
+  secao("motor: aguardando permissao so com o que e daqui (o texto lido normalizado pelo adaptador)");
+  const velha = item("b1", 50, "B", true);
+  for (const caso of [
+    { nome: "lapide que passou do prazo (a exportacao poda)", itens: [velha, item("b2", 60)] },
+    { nome: "texto sem nada a podar", itens: [item("b2", 60)] },
+  ]) {
+    const n1 = destinoConferindo(await textoDeOutro(caso.itens));
+    let pode = false;
+    const mn1 = montar({ destino: n1, permitido: async () => pode, adaptador: { diasLapide: 1, normalizar: true } });
+    mn1.avancar(2 * DIA);
+    const sn1 = await mn1.motor.sincronizar();
+    checar(
+      `${caso.nome}, sem mudanca local: sem 'aguardando', nada gravado`,
+      !sn1.aguardandoPermissao && n1.gravadas === 0 && sn1.estado === "ok",
+      sn1,
+    );
+    mn1.repo.por("a1", "meu", 10_000_000 + 2 * DIA);
+    const sn2 = await mn1.motor.sincronizar({ forcar: true });
+    checar(`${caso.nome}, com mudanca local: 'aguardando'`, sn2.aguardandoPermissao === true && n1.gravadas === 0, sn2);
+    pode = true;
+    const sn3 = await mn1.motor.sincronizar({ forcar: true });
+    checar(`${caso.nome}, com a permissao: grava (e a poda vai junto)`, n1.gravadas === 1 && sn3.estado === "ok", sn3);
+  }
+  // Sem o gancho (os Favoritos): a diferença de poda ainda conta como algo a gravar, como antes.
+  const n4 = destinoConferindo(await textoDeOutro([velha, item("b2", 60)]));
+  const mn4 = montar({ destino: n4, permitido: async () => false, adaptador: { diasLapide: 1 } });
+  mn4.avancar(2 * DIA);
+  const sn4 = await mn4.motor.sincronizar();
+  checar("sem o gancho normalizar: o comportamento de antes", sn4.aguardandoPermissao === true && n4.gravadas === 0, sn4);
+
+  secao("motor: indisponivel na gravacao de quem le (so o link de consultar)");
+  const recusar = async (): Promise<never> => {
+    throw Object.assign(new Error("sem o link de alterar"), { codigo: "SEI_ACAO_INDISPONIVEL" });
+  };
+  const soConsulta = (inicial: string | null) => ({
+    html: inicial,
+    lidas: 0,
+    async ler() {
+      this.lidas++;
+      return this.html;
+    },
+    gravar: recusar,
+    gravarConferindo: recusar,
+  });
+  const q1 = soConsulta(await textoDeOutro([item("b1", 50)]));
+  const mq1 = montar({ destino: q1 });
+  mq1.repo.por("a1", "meu", 100);
+  const sq1 = await mq1.motor.sincronizar({ forcar: true });
+  checar(
+    "leu e nao pode gravar: indisponivel, com o texto de quem so consulta (padrao)",
+    sq1.estado === "indisponivel" && sq1.mensagem === MENSAGENS_MOTOR.soLeitura && /não deixa gravar/.test(sq1.mensagem ?? ""),
+    sq1,
+  );
+  const q2 = soConsulta(await textoDeOutro([item("b1", 50)]));
+  const mq2 = montar({ destino: q2, adaptador: { mensagens: { soLeitura: "Do modulo: so consulta." } } });
+  mq2.repo.por("a1", "meu", 100);
+  const sq2 = await mq2.motor.sincronizar({ forcar: true });
+  checar("o modulo troca o texto de quem so consulta", sq2.estado === "indisponivel" && sq2.mensagem === "Do modulo: so consulta.", sq2);
+  const q3 = destinoTeste(null);
+  q3.erro = { codigo: "SEI_ACAO_INDISPONIVEL", message: "sem Textos Padrao" };
+  const mq3 = montar({ destino: q3, adaptador: { mensagens: { soLeitura: "Do modulo: so consulta." } } });
+  const sq3 = await mq3.motor.sincronizar({ forcar: true });
+  checar(
+    "nem le (sem Textos Padrao): o texto de sempre",
+    sq3.estado === "indisponivel" && sq3.mensagem === textoDoErro({ codigo: "SEI_ACAO_INDISPONIVEL" }).mensagem,
+    sq3,
+  );
 }
 
 /** O texto da unidade de quem só lê: em recuo de "indisponível", e gravar é recusado pelo SEI. */

@@ -17,7 +17,11 @@
  *   (a hora da cópia do módulo; se ele falhar, não grava). De versão mais
  *   nova: não é tocado.
  * - Acima do teto não grava (e explica); acima do aviso grava e avisa.
- * - Sem permissão de Texto Padrão: "indisponível", e não insiste por um dia.
+ * - Sem permissão de Texto Padrão: "indisponível", e não insiste por um dia. Quem lê
+ *   mas não pode gravar (só o link de consultar) fica com a mensagem `soLeitura`.
+ * - Sem o consentimento (`permitido`): não grava e marca `aguardandoPermissao`, mas só
+ *   quando o envelope daqui difere do texto lido como o adaptador o gravaria
+ *   (`normalizar`): a poda e o que a importação recusa não são alterações daqui.
  * - Releitura: logo antes de gravar (já conferida a permissão), lê de novo e
  *   compara a carga (o escape a mais do SEI 5 não conta como mudança). Se
  *   outra pessoa (o texto da unidade é de todos) ou outro computador gravou no
@@ -87,6 +91,8 @@ export interface MensagensMotor {
   pertoDoTeto(kb: number): string;
   invalidoRegravado(motivo: string): string;
   mudouDuranteGravacao: string;
+  /** O texto foi lido nesta rodada, mas o SEI recusou a gravação (quem só tem o link de consultar). */
+  soLeitura: string;
 }
 
 export const MENSAGENS_MOTOR: MensagensMotor = {
@@ -96,6 +102,7 @@ export const MENSAGENS_MOTOR: MensagensMotor = {
   pertoDoTeto: (kb) => `Os dados estão perto do limite do Texto Padrão (${kb} KB).`,
   invalidoRegravado: (motivo) => `O texto no SEI estava inválido (${motivo}) e foi regravado a partir deste computador.`,
   mudouDuranteGravacao: "O texto no SEI mudou enquanto era gravado (outra pessoa sincronizando). Nova tentativa na próxima rodada.",
+  soLeitura: "Indisponível nesta unidade: o SEI não deixa gravar este Texto Padrão com o seu perfil.",
 };
 
 /** O que o módulo ensina ao motor. Um adaptador por texto (escopo). */
@@ -132,6 +139,13 @@ export interface AdaptadorTexto<E> {
   antesDeRegravarInvalido?(motivo: string, html: string): Promise<void>;
   /** Nada a guardar: sem texto no SEI, o motor não cria um só para isto. */
   vazio?(envelope: E): boolean;
+  /**
+   * O texto lido como ESTE adaptador o gravaria se só tivesse ele (o que a importação recusa fica de fora; a poda
+   * e os cortes da exportação valem). Sem permissão de gravar, o motor só marca `aguardandoPermissao` quando o
+   * envelope daqui difere disto: a diferença que é só a poda (a lápide que passou do prazo) ou o que a importação
+   * recusou (o texto editado à mão) não é alteração daqui esperando o consentimento.
+   */
+  normalizar?(lido: E, agora: number): Promise<E>;
   mensagens?: Partial<MensagensMotor>;
 }
 
@@ -365,8 +379,11 @@ export class MotorTextoPadrao<E> {
     const a = this.d.adaptador;
     const m = { ...MENSAGENS_MOTOR, ...a.mensagens };
     const releituras = this.d.releituras ?? 3;
+    // O texto foi lido nesta rodada: a recusa do SEI depois disso é da gravação (quem só consulta).
+    let leu = false;
     try {
       let remoto = await this.d.destino.ler();
+      leu = true;
       for (let tentativa = 0; ; tentativa++) {
         let lido: E | null = null;
         let invalido: string | null = null;
@@ -416,6 +433,17 @@ export class MotorTextoPadrao<E> {
         }
         // Antes da releitura, para que ela fique colada na gravação.
         if (this.d.permitido && !(await this.d.permitido())) {
+          // A diferença é só a do próprio texto (poda, item recusado na importação): nada daqui espera o consentimento.
+          if (lido !== null && a.normalizar && a.assinatura(env) === a.assinatura(await a.normalizar(lido, agora))) {
+            return this.concluir(geracao, {
+              estado: "ok",
+              quando: agora,
+              ultimoOk: agora,
+              ultimoPuxar: agora,
+              mensagem: undefined,
+              tamanho: remoto?.length ?? 0,
+            });
+          }
           return this.gravarStatus({
             estado: "nunca",
             quando: agora,
@@ -456,6 +484,7 @@ export class MotorTextoPadrao<E> {
       }
     } catch (e) {
       const t = textoDoErro(e);
+      if (t.estado === "indisponivel" && leu) t.mensagem = m.soLeitura;
       return this.gravarStatus({
         estado: t.estado,
         mensagem: t.mensagem,
