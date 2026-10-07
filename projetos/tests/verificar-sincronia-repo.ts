@@ -7,6 +7,7 @@
 
 import { areaMemoria } from "@comum/armazenamento/area";
 import { LIMITE_DIAS_ETAPA } from "../src/modelo/calendario";
+import { sigiloDoEnvelope } from "../src/modelo/sigilo";
 import type { Entidades, Etapa, Projeto, Registro, Vinculo } from "../src/modelo/tipos";
 import { chaveProtocolo } from "../src/modelo/vinculos";
 import { MODELOS_EMBUTIDOS } from "../src/modelos/embutidos";
@@ -340,6 +341,56 @@ export async function verificarSincroniaRepo(): Promise<void> {
       "e Quem ve move o projeto do SEI-RJ",
       movido === null && (await eu.obterProjeto(p.id))?.processo?.protocolo === RJ && !(await un.obterProjeto(p.id)),
       movido,
+    );
+  }
+  secao("sincronia: a regra de sigilo do envelope (sigiloDoEnvelope, a mesma do paraOTexto)");
+  {
+    const Y = "50300.000002/2026-11";
+    const Z = "50300.000003/2026-12";
+    const s = sigiloDoEnvelope(
+      [
+        projeto({ id: "p1", processo: { protocolo: X } }),
+        projeto({ id: "p2", processo: { protocolo: X, sigiloso: true } }),
+        projeto({ id: "p3", processo: { protocolo: Y } }),
+        projeto({ id: "p4" }),
+        projeto({ id: "p5", processo: { protocolo: "", sigiloso: true } }),
+        projeto({ id: "p6", processo: { protocolo: Z, sigiloso: true }, removidoEm: 9, atualizadoEm: 9 }),
+        null,
+        { id: 5, processo: { protocolo: X, sigiloso: true } },
+        { id: "torto", processo: "x" },
+      ],
+      [
+        etapa({ id: "e1", projeto: "p1" }),
+        etapa({ id: "e2", projeto: "p3", processo: { protocolo: "50300000777202610" } }),
+        etapa({ id: "e3", projeto: "p3" }),
+        etapa({ id: "e4", projeto: "p4", processo: { protocolo: Z } }),
+        etapa({ id: "e5", projeto: "p5" }),
+        etapa({ id: "e6", projeto: "p2", processo: { protocolo: Y } }),
+        "lixo",
+        { id: "e7" },
+      ],
+    );
+    const lista = (c: ReadonlySet<string>) => [...c].sort().join();
+    checar(
+      "chaves: os digitos dos numeros marcados em projeto ou etapa (lapide inclusive); o vazio do texto nao conta",
+      lista(s.chaves) === lista(new Set([chaveProtocolo(X), chaveProtocolo(Z)])),
+      [...s.chaves],
+    );
+    checar("projetos sigilosos: marcados, o mesmo numero sem marca e o vazio marcado do texto", lista(s.projetos) === "p1,p2,p5,p6", [
+      ...s.projetos,
+    ]);
+    checar(
+      "etapas sigilosas: processo proprio sigiloso (mesmo sem pontuacao e sem marca) ou herdada do projeto; processo proprio comum nao",
+      lista(s.etapas) === "e1,e2,e4,e5",
+      [...s.etapas],
+    );
+    checar(
+      "vinculo(): marcado ou pela chave; comum, ausente e sem digitos nao",
+      s.vinculo({ protocolo: "50300.000777/2026-10" }) &&
+        s.vinculo({ protocolo: "", sigiloso: true }) &&
+        !s.vinculo({ protocolo: Y }) &&
+        !s.vinculo(undefined) &&
+        !s.vinculo({ protocolo: "SEI-" }),
     );
   }
 }

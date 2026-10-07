@@ -378,10 +378,23 @@ export async function verificarAppProjeto(): Promise<void> {
     return erro;
   };
   const ERRO = "Número de processo inválido.";
-  for (const ruim of ["<b>12345678", "1234 5678"]) {
+  for (const ruim of ["<b>12345678", "1234 5678", "50300.000001/2026-11 e 50300.000002/2026-11"]) {
     const n = salvosR.length;
     const erro = await tentar((f) => criarNoCombo(f, "Processo SEI", ruim));
     checar(`digitado "${ruim}": recusado`, erro === ERRO && salvosR.length === n, { erro, salvo: salvosR.at(-1)?.processo });
+  }
+  // Colado com rótulo: o único pedaço (separado por espaço) que passa na regra é o número.
+  for (const [colado, numero] of [
+    ["Processo nº 50300.000001/2026-11", "50300.000001/2026-11"],
+    ["SEI nº SEI-150016/000123/2021", "SEI-150016/000123/2021"],
+  ] as const) {
+    const n = salvosR.length;
+    const erro = await tentar((f) => criarNoCombo(f, "Processo SEI", colado));
+    checar(
+      `colado "${colado}": vai so o numero`,
+      erro === "" && salvosR.length === n + 1 && salvosR.at(-1)?.processo?.protocolo === numero,
+      { erro, salvo: salvosR.at(-1)?.processo },
+    );
   }
   const n0 = salvosR.length;
   const erroRJ = await tentar((f) => criarNoCombo(f, "Processo SEI", "SEI-150016/000123/2021"));

@@ -86,11 +86,18 @@ export function mensagensDoErro(e: unknown): string[] {
 const VALOR_DIGITADO = "digitado:";
 
 /**
- * O número como foi digitado, sem os espaços das pontas. Nada é tirado do meio: com letras aceitas (SEI-RJ),
- * limpar a marcação ou o espaço transformaria "<b>12345678" ou "1234 5678" num número que ninguém digitou;
- * quem decide é `protocoloValido`.
+ * O número digitado ou colado. O texto inteiro (sem os espaços das pontas) quando ele passa em
+ * `protocoloValido`; senão, colado com rótulo ("Processo nº 50300.000001/2026-11"), o ÚNICO pedaço separado
+ * por espaço que passa. Nenhum ou mais de um: fica o texto inteiro, que `protocoloValido` recusa. Nada é
+ * tirado do meio de um pedaço: com letras aceitas (SEI-RJ), limpar a marcação de "<b>12345678" fabricaria
+ * um número que ninguém digitou.
  */
-const protocoloLimpo = (t: string): string => t.trim();
+function protocoloLimpo(t: string): string {
+  const inteiro = t.trim();
+  if (protocoloValido(inteiro)) return inteiro;
+  const pedacos = inteiro.split(/\s+/).filter(protocoloValido);
+  return pedacos.length === 1 ? (pedacos[0] as string) : inteiro;
+}
 
 /**
  * Número de processo aceito (os formatos variam por órgão; o SEI-RJ escreve "SEI-150016/000123/2021"):
