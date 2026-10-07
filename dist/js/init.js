@@ -486,7 +486,11 @@ function loadScriptPro() {
             // Favoritos novos (js/init_favoritos.js, pacote Lab) marcam o <html> no document_start: o legado fica de fora.
             if (typeof loadFavoritosPro === 'undefined' && !document.documentElement.hasAttribute('data-seipro-favoritos')) $.getScript(getUrlExtension("js/sei-pro-favoritos.js"));
             if (typeof loadAtividadesPro === 'undefined') $.getScript(getUrlExtension("js/sei-pro-atividades.js"));
-            if (typeof loadProjetosPro === 'undefined') $.getScript(getUrlExtension("js/sei-pro-projetos.js"));
+            // Projetos novos (js/init_projetos.js, pacote Lab) marcam o <html>: o legado so carrega sem eles ou
+            // com servidor do Atividades configurado (os dois convivem; o legado vira "Projetos (Atividades)").
+            if (typeof loadProjetosPro === 'undefined' && (!document.documentElement.hasAttribute('data-seipro-projetos') || (function () {
+                try { var c = JSON.parse(localStorage.getItem('configBasePro_atividades')); return !!(c && c.URL_API && c.KEY_USER); } catch (e) { return false; }
+            })())) $.getScript(getUrlExtension("js/sei-pro-projetos.js"));
             if (typeof loadPrescricoesPro === 'undefined') $.getScript(getUrlExtension("js/sei-pro-prescricoes.js"));
             // Ferramentas de PDF: so o lado que atende os pedidos da pagina.
             // A ferramenta em si (pdf.js, Tesseract, os motores) vive na pagina

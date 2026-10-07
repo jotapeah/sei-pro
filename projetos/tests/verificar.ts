@@ -19,6 +19,7 @@ import { verificarEstatico } from "./verificar-estatico";
 import { verificarFiltro } from "./verificar-filtro";
 import { verificarGantt } from "./verificar-gantt";
 import { verificarLinhas } from "./verificar-linhas";
+import { verificarManifest } from "./verificar-manifest";
 import { verificarModelos } from "./verificar-modelos";
 import { verificarOperacoes } from "./verificar-operacoes";
 import { verificarRepositorio } from "./verificar-repositorio";
@@ -49,6 +50,7 @@ await verificarAppCsv();
 await verificarApp();
 await verificarAppEntrada();
 await verificarEstatico();
+await verificarManifest();
 // O content script importa o núcleo do SEI (tsconfig.pagina.json): caminho numa variável, para o tsc
 // do pacote (com noUncheckedIndexedAccess) não seguir o import.
 const suitePagina = "./pagina/verificar-pagina";
