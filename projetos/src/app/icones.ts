@@ -1,6 +1,6 @@
 /**
  * Ícones próprios do gestor de projetos (os comuns, inclusive o "gantt", vêm de
- * `@comum/ui/dom`): o modelo, o checklist e o progresso, e os ícones de
+ * `@comum/ui/dom`): o modelo, o checklist, o progresso, voltar e abrir, e os ícones de
  * situação da etapa (tela 1). Tudo por `createElementNS`; as cores
  * de situação ficam no CSS (`.prj-st-*`), para valerem nos dois temas.
  */
@@ -19,6 +19,12 @@ const FORMAS = {
   progresso: [
     ["path", { d: "M4 12a8 8 0 1 0 8-8" }],
     ["path", { d: "M12 4v8l5 3" }],
+  ],
+  // Lateral (P5): voltar aos projetos e "Abrir no painel"/"Ver no projeto".
+  voltar: [["path", { d: "m15 6-6 6 6 6" }]],
+  abrir: [
+    ["path", { d: "M14 4h6v6M20 4l-9 9" }],
+    ["path", { d: "M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" }],
   ],
 } satisfies Record<string, Forma[]>;
 

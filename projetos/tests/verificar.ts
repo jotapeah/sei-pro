@@ -10,6 +10,7 @@ import { verificarAppColaboracaoFluxos } from "./verificar-app-colaboracao-fluxo
 import { verificarAppCsv } from "./verificar-app-csv";
 import { verificarAppEntrada } from "./verificar-app-entrada";
 import { verificarAppEtapa } from "./verificar-app-etapa";
+import { verificarAppLateral } from "./verificar-app-lateral";
 import { verificarAppModelosHistorico } from "./verificar-app-modelos-historico";
 import { verificarAppP4 } from "./verificar-app-p4";
 import { verificarAppProjeto } from "./verificar-app-projeto";
@@ -77,6 +78,7 @@ await verificarAppEtapa();
 await verificarAppProjeto();
 await verificarAppCsv();
 await verificarApp();
+await verificarAppLateral();
 await verificarAppColaboracao();
 await verificarAppSincronizacao();
 await verificarAppModelosHistorico();

@@ -5,7 +5,9 @@
  * gravar), o estado da sincronia, os itens do menu ajustes, as faixas e a
  * importação do Atividades. Fica fora do main.ts para as provas montarem
  * exatamente o mesmo (o main.ts só põe o navegador: chrome.storage, diálogos,
- * download, seletor de arquivo e a porta da aba).
+ * download, seletor de arquivo e a porta da aba). O painel lateral (P5) monta
+ * por aqui também, com `modo: "lateral"`: a mesma colaboração, o mesmo
+ * "Entendi" antes de gravar em "Toda a unidade" e o mesmo arquivo ligado.
  *
  * Nada da colaboração impede o app de abrir: a memória do sigilo ilegível vira
  * um aviso curto (na colaboração) e uma falha ao iniciar só vai ao console.
@@ -22,6 +24,9 @@ export interface DepsLigacao extends Omit<DepsColaboracao, "repos" | "app"> {
   montarGantt?: DepsApp["montarGantt"];
   largura?: DepsApp["largura"];
   conferirDiaMs?: number;
+  /** P5: o painel lateral (Agenda, cartões e mini-Gantt) e o contador da aba. */
+  modo?: DepsApp["modo"];
+  aoContar?: DepsApp["aoContar"];
   /** A janela do app: ao ganhar foco, o arquivo ligado confere se outro computador o mudou. */
   janela?: Pick<EventTarget, "addEventListener" | "removeEventListener">;
 }
@@ -58,6 +63,8 @@ export async function ligarApp(d: DepsLigacao): Promise<AppLigado> {
     montarGantt: d.montarGantt,
     largura: d.largura,
     conferirDiaMs: d.conferirDiaMs,
+    modo: d.modo,
+    aoContar: d.aoContar,
     aoRedesenhar: d.aoRedesenhar,
     sincronia: colab.provedor,
     extensoesMenu: colab.extensoesMenu,

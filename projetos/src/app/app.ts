@@ -16,6 +16,7 @@ import { avisar } from "@comum/ui/aviso";
 import type { AbrirModal } from "@comum/ui/dialogo";
 import { h } from "@comum/ui/dom";
 import { fecharOrfaos } from "@comum/ui/flutuante";
+import { criarMenu } from "@comum/ui/menu";
 import { csvDosProjetos, nomeDoCsv } from "../arquivo/csv";
 import { escalaEditavel } from "../gantt/escalas";
 import { linhasDoProjeto } from "../gantt/linhas";
@@ -36,6 +37,15 @@ import { abrirBalaoEtapa, type OpcoesBalao } from "./componentes/balaoEtapa";
 import { montarCabecalho } from "./componentes/cabecalho";
 import { type Camada, controlesDe } from "./componentes/camada";
 import { type BotaoFiltro, criarBotaoFiltro, projetoNoFiltro } from "./componentes/filtro";
+import {
+  FOCO_TITULO,
+  focoDoProjeto,
+  type ModoLateral,
+  montarAgenda,
+  montarMiniGantt,
+  montarProjetosLateral,
+  topoDoLateral,
+} from "./componentes/lateral";
 import { criarMenuAjustes, type ExtensoesMenu } from "./componentes/menuAjustes";
 import { montarTabelaEtapas } from "./componentes/tabelaEtapas";
 import { montarVazio } from "./componentes/vazio";
@@ -48,6 +58,7 @@ import { abrirDialogoProjeto, type ResultadoProjeto } from "./dialogos/projeto";
 import { mensagemDoErro as mensagem } from "./erros";
 import { dataCurta, plural } from "./formato";
 import type { ParametrosImpressao } from "./impressao";
+import { agendaDaUnidade } from "./lateral/agenda";
 import {
   chaveAberto,
   escalaDoProjeto,
@@ -92,6 +103,10 @@ export interface DepsApp {
   largura?: () => number;
   /** De quanto em quanto o app confere a virada do dia (padrão: 1 minuto). */
   conferirDiaMs?: number;
+  /** P5: "lateral" é a aba "Projetos" do painel lateral (Agenda, cartões e mini-Gantt); sem ele, o painel embutido. */
+  modo?: "embutido" | "lateral";
+  /** P5: as etapas atrasadas da unidade a cada leitura (o contador da aba no painel lateral). */
+  aoContar?: (atrasadas: number) => void;
 }
 
 /** Mudança de preferências: o pedaço novo, ou uma função do que está gravado (reaplicada na fila). */
@@ -152,6 +167,11 @@ export class AppProjetos {
   /** A Frappe falhou: a Lista fica até o usuário escolher "Gantt" de novo (spec 9). */
   private semGantt = false;
   private focarNova = false;
+  /** Lateral (P5): o projeto do mini-Gantt e o cartão da agenda com as ações abertas. */
+  private projetoLateral: string | null = null;
+  private cartaoAberto: string | null = null;
+  /** Lateral: onde pôr o foco depois do próximo desenho (a navegação pede; senão, o mesmo controle de antes). */
+  private focoLateral: string | null = null;
   private destruido = false;
   private agendado: ReturnType<typeof setTimeout> | null = null;
   private relogio: ReturnType<typeof setInterval> | null = null;
@@ -172,9 +192,9 @@ export class AppProjetos {
     this.chaveAba = chaveAberto(d.ctx.host, d.ctx.login, d.ctx.unidade?.id ?? "");
   }
 
-  /** "todos" ou o id do projeto aberto. */
+  /** "todos" ou o id do projeto aberto (no lateral, o do mini-Gantt). */
   get aberto(): string {
-    return this.abertoAtual;
+    return this.d.modo === "lateral" ? (this.projetoLateral ?? "todos") : this.abertoAtual;
   }
 
   async iniciar(): Promise<void> {
@@ -210,7 +230,8 @@ export class AppProjetos {
    * nada mais (as camadas se reposicionam sozinhas, `flutuante.ts`).
    */
   aoRedimensionar(): void {
-    if (this.destruido || !this.dados.ativos.length) return;
+    // O lateral não tem abas: nada nele depende da largura.
+    if (this.destruido || this.d.modo === "lateral" || !this.dados.ativos.length) return;
     const limite = this.limiteAtual();
     if (limite === this.limiteAbas) return;
     this.desenharAbas(limite);
@@ -235,6 +256,9 @@ export class AppProjetos {
     const hoje = this.d.hoje();
     this.dados = await carregarUnidade(this.d.repos, hoje);
     this.hojeDosDados = hoje;
+    // Desmontado no meio da leitura (o lateral trocou de unidade): a contagem velha não vai para a aba.
+    if (!this.destruido) this.d.aoContar?.(alertasDaUnidade(this.dados.ativos, hoje).atrasadas);
+    if (this.projetoLateral && !this.dados.ativos.some((p) => p.projeto.id === this.projetoLateral)) this.projetoLateral = null;
     if (this.abertoAtual !== "todos" && !this.dados.ativos.some((p) => p.projeto.id === this.abertoAtual)) this.abertoAtual = "todos";
   }
 
@@ -345,6 +369,10 @@ export class AppProjetos {
 
   private render(): void {
     if (this.destruido) return;
+    if (this.d.modo === "lateral") {
+      this.renderLateral();
+      return;
+    }
     const reabrir = this.balaoParaReabrir();
     this.balao?.fechar();
     if (!this.dados.ativos.length) {
@@ -561,6 +589,11 @@ export class AppProjetos {
   // ---------- navegação e preferências ----------
 
   private escolher(id: string): void {
+    // No lateral, abrir um projeto (criado, duplicado, recebido, importado) é o mini-Gantt dele.
+    if (this.d.modo === "lateral") {
+      this.focarNoLateral(id);
+      return;
+    }
     this.abertoAtual = id;
     this.mudarPrefs(this.lembrarAberto(id));
     this.render();
@@ -623,6 +656,7 @@ export class AppProjetos {
 
   /** "Abrir no painel" (P5: caixa, árvore, lateral): o projeto e, se vier, o balão da etapa. */
   focarProjeto(id: string, etapa?: string): boolean {
+    if (this.d.modo === "lateral") return this.focarNoLateral(id, etapa);
     const p = this.dados.ativos.find((x) => x.projeto.id === id);
     if (!p) return false;
     const e = etapa ? p.etapas.find((x) => x.id === etapa) : undefined;
@@ -634,6 +668,179 @@ export class AppProjetos {
     // A linha da lista (ou da tabela); sem a lista, a barra; sem nada medido, o próprio corpo.
     if (e) this.abrirBalao(id, e.id, this.alvoDaEtapa(e.id) ?? this.corpo);
     return true;
+  }
+
+  // ---------- painel lateral (P5) ----------
+
+  /**
+   * O lateral: o topo (Agenda | Projetos, a unidade, a sincronia, "+" e o menu) e a Agenda, os cartões
+   * dos projetos ou o mini-Gantt do aberto. Um balão aberto volta depois do redesenho (a régua do
+   * progresso, uma gravação de outro computador), já com os dados novos e na linha nova. O foco que
+   * estava num controle do lateral volta ao mesmo controle (`data-foco`), ou vai aonde a navegação pediu.
+   */
+  private renderLateral(): void {
+    // Antes de fechar o balão: fechar devolve o foco à linha de onde ele abriu.
+    const ativo = this.d.raiz.ownerDocument.activeElement;
+    const manter = ativo && this.d.raiz.contains(ativo) ? ativo.getAttribute("data-foco") : null;
+    const reabrir = this.balaoParaReabrir();
+    this.balao?.fechar();
+    this.cartao.hidden = true;
+    const modo: ModoLateral = this.prefs.modoLateral;
+    this.slotTopo.replaceChildren(
+      topoDoLateral({
+        modo,
+        sigla: this.sigla(),
+        sincronia: (this.d.sincronia ?? SEM_SINCRONIA).estado(),
+        menu: this.menuLateral(),
+        aoModo: (m) => {
+          this.projetoLateral = null;
+          this.ajustar({ modoLateral: m });
+        },
+        aoNovo: () => this.novoProjeto(false),
+      }),
+    );
+    const hoje = this.d.hoje();
+    const p = this.projetoLateral ? this.dados.ativos.find((x) => x.projeto.id === this.projetoLateral) : undefined;
+    if (!this.dados.ativos.length)
+      this.slotVazio.replaceChildren(
+        montarVazio({
+          aoCriar: () => this.novoProjeto(false),
+          aoModelo: () => this.novoProjeto(true),
+          aoImportar: this.d.ctx.atividades ? this.d.importarAtividades : undefined,
+        }),
+      );
+    else if (modo === "agenda")
+      this.slotVazio.replaceChildren(
+        montarAgenda({
+          grupos: agendaDaUnidade(this.dados.ativos, hoje, { soMinhas: this.prefs.soMinhas, eu: this.eu }),
+          soMinhas: this.prefs.soMinhas,
+          aberta: this.cartaoAberto,
+          aoSoMinhas: (v) => this.ajustar({ soMinhas: v }),
+          aoAlternar: (id) => {
+            this.cartaoAberto = this.cartaoAberto === id ? null : id;
+            this.render();
+          },
+          // O mesmo concluir do painel: relê antes (não conclui de novo) e grava pelo repositório que pede o "Entendi".
+          aoConcluir: (i) => void this.concluir(i.projeto, i.etapa).catch((e) => avisar(mensagem(e))),
+          aoEditar: (i) => this.dialogoEtapa(i.projeto, i.etapa),
+          aoVer: (i) => this.focarNoLateral(i.projeto.projeto.id, i.etapa.id),
+        }),
+      );
+    else if (p)
+      this.slotVazio.replaceChildren(
+        montarMiniGantt({
+          projeto: p,
+          hoje,
+          ordem: this.prefs.ordemEtapas,
+          aoVoltar: () => {
+            this.focoLateral = focoDoProjeto(p.projeto.id);
+            this.projetoLateral = null;
+            this.render();
+          },
+          aoAbrirNoPainel: () => this.abrirNoPainel(p.projeto.id),
+          aoEtapa: (id, ancora) => this.abrirBalao(p.projeto.id, id, ancora),
+        }),
+      );
+    else
+      this.slotVazio.replaceChildren(
+        montarProjetosLateral({
+          ativos: this.dados.ativos,
+          hoje,
+          aoAbrir: (id) => {
+            this.projetoLateral = id;
+            this.focoLateral = FOCO_TITULO;
+            this.render();
+          },
+        }),
+      );
+    // Como no painel (reabrirBalao): a etapa ainda na tela, o balão volta nela, com o foco no mesmo controle.
+    const alvo = reabrir ? this.linhaDoLateral(reabrir.etapa) : null;
+    if (reabrir && alvo)
+      this.abrirBalao(reabrir.projeto, reabrir.etapa, alvo, (el) => (reabrir.foco >= 0 ? (controlesDe(el)[reabrir.foco] ?? null) : null));
+    const pedido = this.focoLateral;
+    this.focoLateral = null;
+    // O controle que saiu da tela (o cartão da etapa concluída): o foco vai ao modo de agora, não se perde.
+    if (pedido || manter)
+      (this.controleDoLateral(pedido ?? manter ?? "") ?? this.controleDoLateral(`modo:${modo}`))?.focus?.({ preventScroll: true });
+    this.depoisDeDesenhar();
+  }
+
+  /** O controle do lateral com esta chave de foco (sem montar seletor com o id). */
+  private controleDoLateral(chave: string): HTMLElement | undefined {
+    return [...this.d.raiz.querySelectorAll<HTMLElement>("[data-foco]")].find((el) => el.getAttribute("data-foco") === chave);
+  }
+
+  /**
+   * O menu do lateral (decisão 17), curto: Sincronização e Modelos (P4), os arquivados, a planilha de todos os
+   * projetos, Enviar/Receber/Importar (P4) e o Histórico. Sem imprimir nem os marcáveis do Gantt (ficam no painel).
+   */
+  private menuLateral(): HTMLButtonElement {
+    const menu = criarMenu({
+      rotulo: "Ajustes dos projetos",
+      icone: "ajustes",
+      largura: 260,
+      itens: () => {
+        const ext = this.d.extensoesMenu ?? {};
+        const semProjetos = !this.dados.ativos.length;
+        return [
+          ...(ext.sincronia?.() ?? []),
+          this.dados.arquivados.length
+            ? {
+                rotulo: "Projetos arquivados",
+                icone: "pasta",
+                dica: String(this.dados.arquivados.length),
+                fazer: () => this.abrirArquivados(),
+              }
+            : null,
+          "-",
+          semProjetos
+            ? null
+            : {
+                rotulo: "Exportar planilha (CSV)",
+                icone: "planilha",
+                fazer: () => void this.exportar().catch((e: unknown) => avisar(mensagem(e))),
+              },
+          ...(ext.arquivo?.({ semProjetos }) ?? []),
+          "-",
+          ...(ext.fim?.() ?? []),
+        ];
+      },
+    });
+    menu.setAttribute("data-foco", "menu");
+    return menu;
+  }
+
+  /** A linha do mini-Gantt de uma etapa (âncora do balão). */
+  private linhaDoLateral(etapa: string): Element | null {
+    return [...this.slotVazio.querySelectorAll(".prj-mg-linha")].find((el) => el.getAttribute("data-id") === etapa) ?? null;
+  }
+
+  /**
+   * "Ver no projeto", o projeto criado ou recebido e o "Abrir no painel" que vem da caixa ou da árvore: o
+   * mini-Gantt do projeto e o balão da etapa (sem etapa, o foco vai ao nome do projeto).
+   */
+  private focarNoLateral(id: string, etapa?: string): boolean {
+    const p = this.dados.ativos.find((x) => x.projeto.id === id);
+    if (!p) return false;
+    this.projetoLateral = id;
+    this.cartaoAberto = null;
+    const e = etapa ? p.etapas.find((x) => x.id === etapa) : undefined;
+    if (!e) this.focoLateral = FOCO_TITULO;
+    if (this.prefs.modoLateral !== "projetos") this.mudarPrefs({ modoLateral: "projetos" });
+    this.render();
+    const alvo = e ? this.linhaDoLateral(e.id) : null;
+    if (e && alvo) this.abrirBalao(id, e.id, alvo);
+    return true;
+  }
+
+  /** "Abrir no painel" do lateral: a aba do SEI rola até o painel no Controle de Processos (ou vai até ele) e abre o projeto. */
+  private abrirNoPainel(id: string): void {
+    void this.d.rpc
+      .chamar<string>("focarNoPainel", { id }, 15_000)
+      .then((r) => {
+        if (r === "navegou") avisar("Abrindo o Controle de Processos no projeto…");
+      })
+      .catch((e) => avisar(mensagem(e)));
   }
 
   // ---------- projetos ----------
@@ -1001,8 +1208,10 @@ export class AppProjetos {
    */
   private async exportar(): Promise<void> {
     const hoje = this.d.hoje();
-    const p = this.projetoAberto();
-    const itens = this.itensNaTela();
+    // No lateral a planilha é a de todos os projetos (decisão 17): o projeto aberto e o filtro são os do painel.
+    const lateral = this.d.modo === "lateral";
+    const p = lateral ? undefined : this.projetoAberto();
+    const itens = lateral ? this.dados.ativos : this.itensNaTela();
     let conhecidos: SigilosConhecidos;
     try {
       conhecidos = await this.d.repos.unidade.sigilosConhecidos();

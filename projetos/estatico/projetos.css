@@ -1181,3 +1181,317 @@ html[data-modo="impressao"] .prj-gantt {
 .prj-importar-cortados {
   margin: 0;
 }
+
+/* ---------- Painel lateral (P5, tela 3): Agenda, Projetos e mini-Gantt ---------- */
+html[data-modo="lateral"] body {
+  background: var(--spro-pagina);
+}
+html[data-modo="lateral"] #app {
+  padding: 10px 12px 16px;
+}
+/* No lateral mais estreito a sincronia e os botoes descem para a linha de baixo (nada fica cortado). */
+.prj-lat-topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-bottom: 10px;
+  min-width: 0;
+}
+.prj-lat-sigla {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--spro-suave);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prj-lat-dir {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+.prj-lat-dir .prj-sinc {
+  margin-right: 2px;
+}
+/* No estreito o estado calmo (neste navegador, sincronizado) fica so no icone, com a dica e o texto para o
+   leitor de tela; pendente e erro mostram a palavra (pedem atencao). */
+.prj-lat-dir .prj-sinc-local,
+.prj-lat-dir .prj-sinc-ok {
+  gap: 0;
+  font-size: 0;
+}
+.prj-lat-agenda,
+.prj-lat-projetos,
+.prj-lat-mini {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+.prj-lat-filtro {
+  justify-self: start;
+}
+.prj-lat-grupo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 2px 0;
+  color: var(--spro-suave);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.prj-lat-grupo-atrasadas {
+  color: var(--spro-perigo);
+}
+.prj-lat-grupo-semana {
+  color: var(--spro-aviso);
+}
+.prj-lat-conta {
+  padding: 0 6px;
+  font-weight: 600;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  border-radius: 999px;
+}
+.prj-lat-cartao {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 0;
+  color: var(--spro-texto);
+  font: inherit;
+  text-align: left;
+  background: var(--spro-fundo);
+  border: 1px solid var(--spro-borda);
+  border-radius: 10px;
+}
+.prj-lat-cartao:hover {
+  border-color: var(--spro-borda-forte);
+}
+.prj-lat-aberto {
+  border-color: var(--spro-destaque);
+}
+.prj-lat-alternar {
+  all: unset;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 9px 11px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.prj-lat-alternar:focus-visible,
+.prj-lat-cartao-projeto:focus-visible {
+  outline: none;
+  box-shadow: var(--spro-anel);
+}
+.prj-lat-cartao-projeto {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 9px 11px;
+  cursor: pointer;
+}
+.prj-lat-l1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.prj-lat-nome {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prj-lat-l2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding-left: 24px;
+  color: var(--spro-suave);
+  font-size: 12px;
+}
+.prj-lat-projeto {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prj-lat-data {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.prj-lat-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 11px 9px 35px;
+}
+.prj-lat-escopo {
+  display: inline-flex;
+  color: var(--spro-suave);
+}
+.prj-lat-pct {
+  font-size: 12px;
+}
+.prj-lat-cartao-projeto .prj-barra {
+  width: 100%;
+  margin: 0;
+}
+.prj-lat-l3 {
+  color: var(--spro-suave);
+  font-size: 12px;
+}
+/* Depois de .prj-lat-l3: a mesma especificidade, e o vermelho do atraso tem de valer na linha do resumo. */
+.prj-lat-perigo {
+  color: var(--spro-perigo);
+}
+.prj-lat-nada {
+  margin: 12px 4px;
+  color: var(--spro-suave);
+  text-align: center;
+}
+.prj-lat-dica {
+  margin: 4px 8px;
+  color: var(--spro-fraco);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+}
+.prj-mg-cab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.prj-mg-cab h3 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* O titulo recebe o foco ao abrir o projeto (para o leitor de tela), mas nao e um controle. */
+.prj-mg-cab h3:focus {
+  outline: none;
+}
+.prj-mg {
+  overflow: hidden;
+  background: var(--spro-fundo);
+  border: 1px solid var(--spro-borda);
+  border-radius: 10px;
+}
+.prj-mg-meses {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  color: var(--spro-fraco);
+  font-size: 10.5px;
+  border-bottom: 1px solid var(--spro-borda);
+}
+.prj-mg-meses > span {
+  padding: 5px 8px;
+}
+.prj-mg-eixo {
+  position: relative;
+  height: 24px;
+}
+.prj-mg-mes {
+  position: absolute;
+  top: 5px;
+  padding-left: 3px;
+  border-left: 1px solid var(--spro-borda);
+  white-space: nowrap;
+}
+.prj-mg-fase {
+  padding: 6px 10px 3px;
+  color: var(--spro-suave);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  background: var(--spro-fundo-2);
+}
+.prj-mg-linha {
+  all: unset;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  align-items: center;
+  width: 100%;
+  height: 30px;
+  border-bottom: 1px solid color-mix(in srgb, var(--spro-borda) 55%, transparent);
+  cursor: pointer;
+}
+.prj-mg-linha:hover {
+  background: var(--spro-destaque-suave);
+}
+.prj-mg-linha:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--spro-destaque);
+}
+.prj-mg-nome {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding-left: 8px;
+  font-size: 12px;
+}
+.prj-mg-nome > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prj-mg-trilho {
+  position: relative;
+  height: 100%;
+}
+.prj-mg-barra {
+  position: absolute;
+  top: 10px;
+  min-width: 2px;
+  height: 10px;
+  background: color-mix(in srgb, var(--spro-borda-forte) 70%, var(--spro-fundo));
+  border-radius: 4px;
+}
+.prj-mg-marco {
+  position: absolute;
+  top: 9px;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  background: var(--spro-novidade);
+  border-radius: 2px;
+  transform: rotate(45deg);
+}
+.prj-mg-barra.prj-mg-concluida {
+  background: color-mix(in srgb, var(--spro-ok) 55%, var(--spro-fundo));
+}
+.prj-mg-barra.prj-mg-atrasada {
+  background: color-mix(in srgb, var(--spro-perigo) 55%, var(--spro-fundo));
+}
+.prj-mg-barra.prj-mg-andamento {
+  background: color-mix(in srgb, var(--spro-destaque) 55%, var(--spro-fundo));
+}
+.prj-mg-marco.prj-mg-concluida {
+  background: var(--spro-ok);
+}
+.prj-mg-marco.prj-mg-atrasada {
+  background: var(--spro-perigo);
+}
+.prj-mg-hoje {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--spro-destaque);
+}
