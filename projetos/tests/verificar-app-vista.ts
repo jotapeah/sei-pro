@@ -93,6 +93,32 @@ export async function verificarAppVista(): Promise<void> {
   vista.destruir();
   checar("destruir", g.a.destruidos === 2);
 
+  secao("app: realce sobrevive ao redesenho");
+  const gr = ganttFalso();
+  const vr = new VistaProjeto(dados(), {
+    montarGantt: gr.montar,
+    aoClicarEtapa: () => undefined,
+    aoAlternarFase: () => undefined,
+    aoAdicionar: () => undefined,
+    validar: () => null,
+    aoMudarDatas: () => undefined,
+    aoRecusar: () => undefined,
+    aoFalharGantt: () => undefined,
+  });
+  telaDoApp().getElementById("app")!.append(vr.el);
+  disparar(vr.el.querySelector('.prj-lin[data-id="e1"]')!, "mouseenter");
+  gr.a.realces.length = 0;
+  vr.atualizar(dados({ escala: "Mês" }));
+  checar(
+    "redesenho reaplica realce na barra e na linha nova",
+    gr.a.realces.at(-1) === "e1:true" && vr.el.querySelector('.prj-lin[data-id="e1"]')?.classList.contains("prj-realce") === true,
+    gr.a.realces,
+  );
+  gr.a.realces.length = 0;
+  vr.atualizar(dados({ linhas: linhas().filter((l) => l.id !== "e1") }));
+  checar("etapa removida: nada realcado e sem erro", !gr.a.realces.includes("e1:true") && !vr.el.querySelector(".prj-realce"));
+  vr.destruir();
+
   secao("app: falha da Frappe cai para a lista");
   const quebrado = ganttFalso({ falhar: true });
   const falhas: string[] = [];

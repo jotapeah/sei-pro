@@ -53,6 +53,8 @@ export class VistaProjeto {
   private readonly area: HTMLElement;
   private coluna: HTMLElement | null = null;
   private controle: ControleGantt | null = null;
+  /** Etapa sob o mouse: o redesenho (Frappe e coluna) apaga o realce e o mouse nao se mexe. */
+  private realcado: string | null = null;
 
   constructor(
     private d: DadosVistaProjeto,
@@ -61,10 +63,14 @@ export class VistaProjeto {
     this.el = h("div", { class: "prj-vista" });
     this.area = h("div", { class: "prj-gantt" });
     // Realce cruzado: a barra (no SVG da Frappe) acende a linha da lista.
-    this.area.addEventListener("mouseover", (ev) =>
-      this.realcarLinha((ev.target as Element | null)?.closest?.(".bar-wrapper")?.getAttribute("data-id") ?? null),
-    );
-    this.area.addEventListener("mouseout", () => this.realcarLinha(null));
+    this.area.addEventListener("mouseover", (ev) => {
+      this.realcado = (ev.target as Element | null)?.closest?.(".bar-wrapper")?.getAttribute("data-id") ?? null;
+      this.realcarLinha(this.realcado);
+    });
+    this.area.addEventListener("mouseout", () => {
+      this.realcado = null;
+      this.realcarLinha(null);
+    });
     this.montar();
   }
 
@@ -101,8 +107,14 @@ export class VistaProjeto {
       h("span", { class: "prj-lin-nome", title: e.nome }, e.nome),
       e.responsavel ? avatar(e.responsavel.nome, { tamanho: 22 }) : h("span", { class: "prj-av-vazio" }),
     );
-    el.addEventListener("mouseenter", () => this.controle?.realcar(l.id, true));
-    el.addEventListener("mouseleave", () => this.controle?.realcar(l.id, false));
+    el.addEventListener("mouseenter", () => {
+      this.realcado = l.id;
+      this.controle?.realcar(l.id, true);
+    });
+    el.addEventListener("mouseleave", () => {
+      this.realcado = null;
+      this.controle?.realcar(l.id, false);
+    });
     return ativar(el, () => this.acoes.aoClicarEtapa(l.id, el));
   }
 
@@ -127,6 +139,18 @@ export class VistaProjeto {
     );
   }
 
+  /** Reaplica o realce da etapa sob o mouse, se ela ainda existe. */
+  private reaplicarRealce(): void {
+    const id = this.realcado;
+    if (!id) return;
+    if (!this.d.linhas.some((l) => l.tipo === "etapa" && l.id === id)) {
+      this.realcado = null;
+      return;
+    }
+    this.controle?.realcar(id, true);
+    this.realcarLinha(id);
+  }
+
   private montar(): void {
     this.controle?.destruir();
     this.coluna = this.d.mostrarLista ? this.desenharColuna() : null;
@@ -145,6 +169,7 @@ export class VistaProjeto {
       aoRecusar: (msg) => this.acoes.aoRecusar(msg),
       aoFalhar: (erro) => this.acoes.aoFalharGantt(erro),
     });
+    this.reaplicarRealce();
   }
 
   atualizar(d: DadosVistaProjeto): void {
@@ -162,6 +187,7 @@ export class VistaProjeto {
       this.coluna?.replaceWith(nova);
       this.coluna = nova;
     }
+    this.reaplicarRealce();
   }
 
   rolarParaHoje(): void {
