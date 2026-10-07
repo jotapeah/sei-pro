@@ -69,6 +69,11 @@ export interface DocumentoSei {
   /** Número SEI. */
   numero: string;
   titulo?: string;
+  /**
+   * Documento de processo sigiloso: nunca vai ao Texto Padrão. Marca gravada aqui quando a etapa é
+   * sigilosa (modelo/sigilo.ts) e que fica, mesmo que a etapa deixe de ser (troca de processo).
+   */
+  sigiloso?: boolean;
 }
 
 export interface LinhaDeBase {

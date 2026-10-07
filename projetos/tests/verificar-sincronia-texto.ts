@@ -71,15 +71,23 @@ function motorDe(
   area: ReturnType<typeof areaMemoria>,
   destino: DestinoTexto,
   ajuste: Partial<ReturnType<typeof adaptadorProjetos>> = {},
+  agora?: () => number,
 ) {
   return new MotorTextoPadrao<EnvelopeProjetos>({
     adaptador: { ...adaptadorProjetos({ repo, area, sigla: "SEPRO", nomeUsuario: "Ana Lima" }), ...ajuste },
     destino,
     area,
     travar: (_n, fn) => fn(),
+    agora,
     releituras: 3,
     temporizador: { definir: () => 0, cancelar: () => undefined },
   });
+}
+
+/** O envelope gravado no texto, em JSON ("" se não há texto ou ele é inválido). */
+async function jsonDoTexto(html: string | null): Promise<string> {
+  const r = html ? await lerConteudoTexto(html) : null;
+  return r && "bruto" in r ? JSON.stringify(r.bruto) : "";
 }
 
 export async function verificarSincroniaTexto(): Promise<void> {
@@ -329,4 +337,127 @@ export async function verificarSincroniaTexto(): Promise<void> {
       hS.some((r) => r.campo === "documento" && r.depois === "1234567") &&
       hS.some((r) => r.campo === "processo" && r.depois === SIGILO),
   );
+
+  await verificarSigiloGruda();
+}
+
+/** Decisão da rodada 1 da Tarefa 4: a marca de sigilo do vínculo e do documento fica gravada aqui, sem mudar o carimbo. */
+async function verificarSigiloGruda(): Promise<void> {
+  const OUTRO = "50300.000002/2026-11";
+
+  secao("o sigilo gruda: a marca vai para o vinculo e o documento daqui, sem mudar o carimbo");
+  {
+    const areaN = areaMemoria();
+    const { repo: rn } = novoRepo(ESCOPO_UN, areaN, "n", { agora: AGORA });
+    const pa = await rn.criarProjeto({ nome: "Acompanhamento", processo: { protocolo: SIGILO } });
+    const ea = await rn.criarEtapa({
+      projeto: pa.id,
+      nome: "Termo",
+      inicio: "2026-10-06",
+      fim: "2026-10-09",
+      documento: { numero: "222" },
+    });
+    const antesP = await rn.obterProjeto(pa.id);
+    const antesE = await rn.obterEtapa(ea.id);
+    // A caixa marcou o mesmo número como sigiloso noutro projeto.
+    await rn.criarProjeto({ nome: "Apuração", processo: { protocolo: SIGILO, sigiloso: true } });
+    const depoisP = await rn.obterProjeto(pa.id);
+    const depoisE = await rn.obterEtapa(ea.id);
+    checar(
+      "o vinculo do outro projeto com o mesmo numero fica marcado aqui, com o numero e o mesmo carimbo",
+      depoisP?.processo?.sigiloso === true &&
+        depoisP.processo.protocolo === SIGILO &&
+        depoisP.atualizadoEm === antesP?.atualizadoEm &&
+        depoisP.dispositivo === antesP.dispositivo &&
+        depoisP.alteradoPor === antesP.alteradoPor,
+      { antesP, depoisP },
+    );
+    checar(
+      "o documento da etapa (agora sigilosa pelo projeto) fica marcado, com o mesmo carimbo",
+      depoisE?.documento?.sigiloso === true && depoisE.documento.numero === "222" && depoisE.atualizadoEm === antesE?.atualizadoEm,
+      { antesE, depoisE },
+    );
+    let av = 0;
+    const parar = rn.aoMudar(() => av++);
+    const r1 = await rn.importar(paraOTexto(await rn.exportar(AGORA), AGORA).entidades);
+    const r2 = await rn.importar(await rn.entidades());
+    checar(
+      "idempotente: a propria copia que volta do texto e o proprio estado nao regravam (nenhum aviso)",
+      r1.novos + r1.atualizados + r2.novos + r2.atualizados === 0 && av === 0,
+      { r1, r2, av },
+    );
+    parar();
+    await rn.editarEtapa(ea.id, { nome: "Termo de oitiva" }, "2026-10-06");
+    checar("editar a etapa nao tira a marca do documento", (await rn.obterEtapa(ea.id))?.documento?.sigiloso === true);
+  }
+
+  secao("o sigilo gruda: trocar o processo do projeto sigiloso nao solta o numero nem o documento");
+  {
+    const areaT = areaMemoria();
+    const { repo: rt } = novoRepo(ESCOPO_UN, areaT, "t", { agora: AGORA });
+    const p1 = await rt.criarProjeto({ nome: "Apuração", processo: { protocolo: SIGILO, sigiloso: true } });
+    const e1 = await rt.criarEtapa({ projeto: p1.id, nome: "Oitiva", inicio: "2026-10-06", fim: "2026-10-09" });
+    await rt.concluirEtapa(e1.id, "2026-10-09", { numero: "1234567" });
+    const p2 = await rt.criarProjeto({ nome: "Acompanhamento" });
+    const e2 = await rt.criarEtapa({ projeto: p2.id, nome: "Ofício", inicio: "2026-10-06", fim: "2026-10-09" });
+    await rt.editarEtapa(e2.id, { processo: { protocolo: SIGILO } }, "2026-10-06");
+    const seiT = noSei(null);
+    const motorT = motorDe(rt, areaT, seiT);
+    await motorT.sincronizar({ forcar: true });
+    await rt.editarProjeto(p1.id, { processo: { protocolo: OUTRO } });
+    await motorT.sincronizar({ forcar: true });
+    const jsonT = await jsonDoTexto(seiT.html);
+    checar(
+      "depois da troca, nem o numero (vinculo da outra etapa, registros) nem o documento vao ao texto",
+      !!jsonT && !jsonT.includes("000777") && !jsonT.includes("1234567") && jsonT.includes("000002"),
+      jsonT,
+    );
+    checar(
+      "e aqui o numero e o documento continuam",
+      (await rt.obterEtapa(e2.id))?.processo?.protocolo === SIGILO && (await rt.obterEtapa(e1.id))?.documento?.numero === "1234567",
+    );
+  }
+
+  secao("o sigilo gruda: a poda local nao solta o numero dos registros");
+  {
+    const areaP = areaMemoria();
+    const rel = { agora: AGORA };
+    const { repo: rp } = novoRepo(ESCOPO_UN, areaP, "z", rel);
+    const pz = await rp.criarProjeto({ nome: "Antigo" });
+    // Ligado antes de se saber do sigilo (o registro leva o número); depois a caixa marcou.
+    await rp.editarProjeto(pz.id, { processo: { protocolo: SIGILO } });
+    await rp.editarProjeto(pz.id, { processo: { protocolo: SIGILO, sigiloso: true } });
+    const ez = await rp.criarEtapa({ projeto: pz.id, nome: "Oitiva", inicio: "2026-10-06", fim: "2026-10-09" });
+    await rp.concluirEtapa(ez.id, "2026-10-09", { numero: "1234567" });
+    await rp.criarProjeto({ nome: "Vivo" });
+    await rp.removerProjeto(pz.id);
+    rel.agora += 181 * DIA;
+    const seiP = noSei(null);
+    const motorP = motorDe(rp, areaP, seiP, {}, () => rel.agora);
+    await motorP.sincronizar({ forcar: true });
+    const j1 = await jsonDoTexto(seiP.html);
+    const p1Texto = j1 ? (JSON.parse(j1) as EnvelopeProjetos).entidades.p : [];
+    checar(
+      "premissa: com a lapide ainda aqui, o texto sai sem ela e sem os numeros",
+      p1Texto.length === 1 && !p1Texto.some((x) => x.id === pz.id) && !j1.includes("000777") && !j1.includes("1234567"),
+      j1,
+    );
+    const g1 = seiP.gravadas;
+    await rp.limpar(rel.agora);
+    const local = await rp.entidades();
+    checar("a poda local apagou as lapides", !local.p.some((x) => x.id === pz.id) && !local.e.some((x) => x.id === ez.id));
+    const regs = local.h.filter((r) => r.projeto === pz.id && (r.campo === "processo" || r.campo === "documento"));
+    checar(
+      "os registros que perderiam a base ficam raspados aqui (mesmo id e carimbo)",
+      regs.length >= 2 && regs.every((r) => !`${r.antes ?? ""}${r.depois ?? ""}`.match(/000777|1234567/)),
+      regs,
+    );
+    await motorP.sincronizar({ forcar: true });
+    const j2 = await jsonDoTexto(seiP.html);
+    checar(
+      "sem a lapide, os registros continuam sem o numero no texto e a rodada seguinte nao regrava",
+      !j2.includes("000777") && !j2.includes("1234567") && seiP.gravadas === g1,
+      { gravadas: seiP.gravadas, g1 },
+    );
+  }
 }

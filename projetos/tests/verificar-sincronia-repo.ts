@@ -246,7 +246,8 @@ export async function verificarSincroniaRepo(): Promise<void> {
       colega ? `${caso}: o nome vem, numa gravacao e um aviso` : `${caso}: nada gravado e nenhum aviso`,
       colega
         ? d1?.nome === "E1 renomeada" && d2?.nome === "E2 renomeada" && rr.atualizados === 2 && av === 1
-        : rr.novos === 0 && rr.atualizados === 0 && av === 0 && pp?.processo?.protocolo === X && pp.processo.sigiloso === undefined,
+        : // O sigilo gruda (rodada 1 da Tarefa 4): o P1 ficou marcado aqui quando o P2 marcou o mesmo número.
+          rr.novos === 0 && rr.atualizados === 0 && av === 0 && pp?.processo?.protocolo === X && pp.processo.sigiloso === true,
       { rr, av, pp: pp?.processo },
     );
     pararX();

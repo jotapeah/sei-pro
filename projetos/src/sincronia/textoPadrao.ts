@@ -13,7 +13,9 @@
  * "processo sigiloso". O que é sigiloso vem de `sigiloDoEnvelope`, a mesma
  * regra que a mescla de volta usa (`importar`): quem tem os números os mantém
  * (`manterNumeroSigiloso`, `manterDocumentoSigiloso`) e a própria cópia que
- * volta do texto não é regravada.
+ * volta do texto não é regravada. A marca gravada (o sigilo gruda,
+ * `marcasDeSigilo`) vale também: documento marcado não vai, nem o número dele
+ * nos registros, mesmo que a etapa tenha deixado de ser sigilosa.
  *
  * Poda na exportação: lápides de mais de 180 dias (unidade) ou 90 (pessoal) e
  * o histórico além dos 300 registros mais recentes ficam de fora.
@@ -27,9 +29,8 @@ import { nomeDeTextoInterno, type ValidacaoTexto, versaoMaisNova } from "@comum/
 import { chaveSyncTexto, DIAS_LAPIDE_EU, DIAS_LAPIDE_UNIDADE, FOLGA_RELOGIO_MS, LIMITES } from "../modelo/constantes";
 import { chaveEscopo } from "../modelo/escopo";
 import { excedentes } from "../modelo/historico";
-import { sigiloDoEnvelope } from "../modelo/sigilo";
-import type { Entidades, EnvelopeProjetos, Escopo, Etapa, Projeto, Registro, Vinculo, Vis } from "../modelo/tipos";
-import { chaveProtocolo } from "../modelo/vinculos";
+import { rasparRegistro, sigiloDoEnvelope } from "../modelo/sigilo";
+import type { Entidades, EnvelopeProjetos, Escopo, Etapa, Projeto, Vinculo, Vis } from "../modelo/tipos";
 import type { RepositorioProjetos } from "../repositorio";
 
 /** O CKEditor 5 baixa o conteúdo de todos os textos da unidade (como nos Favoritos). */
@@ -41,8 +42,7 @@ export const VERSAO = 1;
 /** Quantidades que nenhum texto legítimo de 100 KB alcança: acima, o texto é tratado como inválido. */
 export const TETOS_ENVELOPE: Readonly<Record<keyof Entidades, number>> = { p: 2000, f: 20_000, e: 60_000, h: 5000, m: 500 };
 
-export const SIGILOSO_PROCESSO = "processo sigiloso";
-export const SIGILOSO_DOCUMENTO = "documento de processo sigiloso";
+export { SIGILOSO_DOCUMENTO, SIGILOSO_PROCESSO } from "../modelo/sigilo";
 
 /** A desistência depois das releituras: o motor tenta de novo sozinho (o app mostra como "pendente"). */
 export const MENSAGEM_MUDOU =
@@ -124,33 +124,20 @@ export function paraOTexto(env: EnvelopeProjetos, agora: number): EnvelopeProjet
   const sigilo = sigiloDoEnvelope(ent.p, ent.e);
   const vivosH = purgarLapides(ent.h, agora, dias);
   const fora = new Set(excedentes(vivosH, LIMITES.historico));
-  const textoDoProcesso = (t: string | undefined): string | undefined =>
-    t !== undefined && sigilo.chaves.has(chaveProtocolo(t)) ? SIGILOSO_PROCESSO : t;
   const projetos = purgarLapides(ent.p, agora, dias).map((x): Projeto => (sigilo.projetos.has(x.id) ? { ...x, processo: VAZIO } : x));
   const etapas = purgarLapides(ent.e, agora, dias).map((x): Etapa => {
-    if (!sigilo.etapas.has(x.id)) return x;
-    // Etapa sigilosa: o processo próprio vai vazio e o documento não vai (o herdado do projeto já vai vazio nele).
-    const { documento: _fora, ...resto } = x;
-    return x.processo ? { ...resto, processo: VAZIO } : resto;
+    const sigilosa = sigilo.etapas.has(x.id);
+    // Etapa sigilosa: o processo próprio vai vazio e o documento não vai (o herdado do projeto já vai vazio nele);
+    // documento marcado sigiloso não vai nunca.
+    let y = x;
+    if (y.documento && (sigilosa || y.documento.sigiloso)) {
+      const { documento: _fora, ...resto } = y;
+      y = resto;
+    }
+    return sigilosa && y.processo ? { ...y, processo: VAZIO } : y;
   });
-  const registros = vivosH
-    .filter((r) => !fora.has(r.id))
-    .map((r): Registro => {
-      // O raspado mantém id e carimbo: na volta, o `importar` reconhece o mesmo registro e fica com o daqui.
-      if (r.campo === "processo") {
-        const antes = textoDoProcesso(r.antes);
-        const depois = textoDoProcesso(r.depois);
-        return antes === r.antes && depois === r.depois ? r : semIndefinidos({ ...r, antes, depois });
-      }
-      if (r.campo === "documento" && sigilo.etapas.has(r.alvo) && (r.antes || r.depois)) {
-        return semIndefinidos({
-          ...r,
-          antes: r.antes ? SIGILOSO_DOCUMENTO : undefined,
-          depois: r.depois ? SIGILOSO_DOCUMENTO : undefined,
-        });
-      }
-      return r;
-    });
+  // O raspado mantém id e carimbo: na volta, o `importar` reconhece o mesmo registro e fica com o daqui.
+  const registros = vivosH.filter((r) => !fora.has(r.id)).map((r) => rasparRegistro(r, sigilo));
   return {
     ...env,
     entidades: {
@@ -161,12 +148,6 @@ export function paraOTexto(env: EnvelopeProjetos, agora: number): EnvelopeProjet
       m: purgarLapides(ent.m, agora, dias),
     },
   };
-}
-
-function semIndefinidos(r: Registro): Registro {
-  const x = { ...r } as Record<string, unknown>;
-  for (const k of ["antes", "depois"]) if (x[k] === undefined) delete x[k];
-  return x as unknown as Registro;
 }
 
 /** Igual para o mesmo conteúdo em qualquer computador: sem `gerado`, listas pelo id. */

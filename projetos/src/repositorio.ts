@@ -41,7 +41,7 @@ import {
   restaurar,
   semVazios,
 } from "./modelo/operacoes";
-import { sigiloDoEnvelope } from "./modelo/sigilo";
+import { marcasDeSigilo, rasparRegistro, sigiloDoEnvelope } from "./modelo/sigilo";
 import type {
   Carimbo,
   DataISO,
@@ -200,12 +200,43 @@ export class RepositorioProjetos {
     const regs = carimbarRegistros(novos, c, this.gerarId);
     await this.area.gravar({
       ...itens,
+      ...(await this.marcasAoGravar(itens)),
       ...this.entradas(
         this.registros,
         regs.map((r) => [r.id, r]),
       ),
     });
     if (regs.length) await this.podarHistorico();
+  }
+
+  /**
+   * O sigilo gruda (modelo/sigilo.ts): as marcas que a gravação faz faltar (o número marcado agora
+   * noutro projeto ou etapa, o documento da etapa que ficou sigilosa) vão na mesma gravação, sem mudar
+   * o carimbo dos itens marcados. Só lê o escopo quando a gravação mexe em vínculo ou documento.
+   */
+  private async marcasAoGravar(itens: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const doTipo = (prefixo: string) => Object.entries(itens).filter(([k]) => k.startsWith(prefixo));
+    const ps = doTipo(this.projetos.prefixo);
+    const es = doTipo(this.etapas.prefixo);
+    if (!ps.length && !es.length) return {};
+    const antes = await this.area.obter([...ps, ...es].map(([k]) => k));
+    const doSigilo = (x: unknown) => {
+      const o = x as { processo?: unknown; documento?: unknown } | undefined;
+      return jsonEstavel([o?.processo ?? null, o?.documento ?? null]);
+    };
+    if (!ps.concat(es).some(([k, v]) => doSigilo(antes[k]) !== doSigilo(v))) return {};
+    const [projetos, etapas] = await Promise.all([this.projetos.listar(), this.etapas.listar()]);
+    const m = marcasDeSigilo({ p: sobrepor(projetos, ps), e: sobrepor(etapas, es) }, { p: projetos, e: etapas });
+    return {
+      ...this.entradas(
+        this.projetos,
+        m.p.map((x) => [x.id, x]),
+      ),
+      ...this.entradas(
+        this.etapas,
+        m.e.map((x) => [x.id, x]),
+      ),
+    };
   }
 
   /** Os 300 registros mais recentes ficam (spec 5.4). `Area` não grava e remove juntos: é outra chamada. */
@@ -739,7 +770,7 @@ export class RepositorioProjetos {
       [...etapasAqui, ...((ent.e ?? []) as unknown[])],
     );
     await mesclarCol(this.fases, ent.f, "f", () => new Set());
-    await mesclarCol(
+    const etapasNovas = await mesclarCol(
       this.etapas,
       ent.e,
       "e",
@@ -748,6 +779,25 @@ export class RepositorioProjetos {
     );
     await mesclarCol(this.registros, ent.h, "h", registrosAlemDoTeto, registroDaqui);
     await mesclarCol(this.modelos, ent.m, "m", (l, v) => alemDoTeto(l, v, (x) => (vivo(x) ? "" : null), LIMITES.modelos));
+    // O sigilo gruda: as marcas que o estado mesclado pede (o número marcado do lado de fora, a marca que a cópia
+    // igual de um colega traz) entram na mesma gravação, sem mudar o carimbo.
+    const marcas = marcasDeSigilo(
+      { p: sobrepor(projetosAqui, projetosNovos), e: sobrepor(etapasAqui, etapasNovas) },
+      { p: [...projetosAqui, ...((ent.p ?? []) as unknown[])], e: [...etapasAqui, ...((ent.e ?? []) as unknown[])] },
+    );
+    const jaGravados = new Set([...projetosNovos, ...etapasNovas].map(([id]) => id));
+    const marcadas = {
+      ...this.entradas(
+        this.projetos,
+        marcas.p.map((x) => [x.id, x]),
+      ),
+      ...this.entradas(
+        this.etapas,
+        marcas.e.map((x) => [x.id, x]),
+      ),
+    };
+    soma.atualizados += [...marcas.p, ...marcas.e].filter((x) => !jaGravados.has(x.id)).length;
+    itens = { ...itens, ...marcadas };
     if (anotacoes) await this.salvar(itens, anotacoes.registros, anotacoes.carimbo);
     else if (Object.keys(itens).length) await this.area.gravar(itens);
     if (importouRegistros && !anotacoes?.registros.length) await this.podarHistorico();
@@ -816,17 +866,43 @@ export class RepositorioProjetos {
   async limpar(agora: number = Date.now()): Promise<number> {
     const dias = this.escopo.vis === "unidade" ? DIAS_LAPIDE_UNIDADE : DIAS_LAPIDE_EU;
     const chaves: string[] = [];
-    const cols = [this.projetos, this.fases, this.etapas, this.modelos] as Array<Colecao<Versionada>>;
-    for (const col of cols) {
-      const todos = await col.listar();
-      const manter = new Set(purgarLapides(todos, agora, dias).map((i) => i.id));
-      for (const i of todos) if (!manter.has(i.id)) chaves.push(col.chave(i.id));
-    }
-    const regs = await this.registros.listar();
-    const mantidos = purgarLapides(regs, agora, dias);
-    const ficam = new Set(mantidos.map((i) => i.id));
-    for (const r of regs) if (!ficam.has(r.id)) chaves.push(this.registros.chave(r.id));
-    for (const id of excedentes(mantidos, LIMITES.historico)) chaves.push(this.registros.chave(id));
+    const ficam = <T extends Versionada>(col: Colecao<T>, todos: T[]): T[] => {
+      const manter = purgarLapides(todos, agora, dias);
+      const ids = new Set(manter.map((i) => i.id));
+      for (const i of todos) if (!ids.has(i.id)) chaves.push(col.chave(i.id));
+      return manter;
+    };
+    const [projetos, fases, etapas, modelos, regs] = await Promise.all([
+      this.projetos.listar(),
+      this.fases.listar(),
+      this.etapas.listar(),
+      this.modelos.listar(),
+      this.registros.listar(),
+    ]);
+    const projetosDepois = ficam(this.projetos, projetos);
+    ficam(this.fases, fases);
+    const etapasDepois = ficam(this.etapas, etapas);
+    ficam(this.modelos, modelos);
+    const mantidos = ficam(this.registros, regs);
+    const podados = new Set(excedentes(mantidos, LIMITES.historico));
+    for (const id of podados) chaves.push(this.registros.chave(id));
+    // O sigilo gruda: o registro que a regra raspa só por causa de uma lápide que sai agora (o projeto ou a etapa
+    // sigilosa, o documento marcado) fica raspado aqui antes, com o mesmo id e carimbo; sem a lápide, já está.
+    const antes = sigiloDoEnvelope(projetos, etapas);
+    const depois = sigiloDoEnvelope(projetosDepois, etapasDepois);
+    const raspados = mantidos
+      .filter((r) => !podados.has(r.id))
+      .flatMap((r) => {
+        const r1 = rasparRegistro(r, antes);
+        return jsonEstavel(r1) !== jsonEstavel(rasparRegistro(r, depois)) ? [r1] : [];
+      });
+    if (raspados.length)
+      await this.area.gravar(
+        this.entradas(
+          this.registros,
+          raspados.map((r) => [r.id, r]),
+        ),
+      );
     if (chaves.length) await this.area.remover(chaves);
     return chaves.length;
   }
@@ -872,6 +948,8 @@ export function manterDocumentoSigiloso(
   processoSigiloso: (v: Vinculo) => boolean = (v) => v.sigiloso === true,
 ): Etapa {
   if (vencedor.documento || !local?.documento) return vencedor;
+  // Documento marcado sigiloso fica marcado (o sigilo gruda), mesmo que a etapa tenha deixado de ser sigilosa.
+  if (local.documento.sigiloso) return { ...vencedor, documento: local.documento };
   const sigilosa = vencedor.processo ? processoSigiloso(vencedor.processo) : projetoSigiloso;
   return sigilosa ? { ...vencedor, documento: local.documento } : vencedor;
 }
@@ -937,6 +1015,13 @@ function registrosAlemDoTeto(locais: ReadonlyMap<string, Registro>, vencedoras: 
   return new Set(excedentes([...final.values()], LIMITES.historico).filter((id) => chegando.has(id)));
 }
 
+/** A lista com as versões que vão ser gravadas por cima (pelo id). */
+function sobrepor<T extends { id: string }>(lista: readonly T[], novas: ReadonlyArray<readonly [string, unknown]>): T[] {
+  const m = new Map(lista.map((x) => [x.id, x]));
+  for (const [, v] of novas) m.set((v as T).id, v as T);
+  return [...m.values()];
+}
+
 const texto = (x: unknown): x is string => typeof x === "string";
 const textoAte =
   (max: number) =>
@@ -987,7 +1072,7 @@ function vinculoValido(v: unknown): boolean {
 function documentoValido(d: unknown): boolean {
   if (d === undefined) return true;
   if (!objeto(d)) return false;
-  return textoAte(40)(d.numero) && opcional(d.titulo, textoAte(LIMITES.nome));
+  return textoAte(40)(d.numero) && opcional(d.titulo, textoAte(LIMITES.nome)) && opcional(d.sigiloso, (b) => typeof b === "boolean");
 }
 
 /**

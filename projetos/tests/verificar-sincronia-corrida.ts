@@ -132,4 +132,38 @@ export async function verificarSincroniaCorrida(): Promise<void> {
   const terceira = computador("caio", "pc-caio", texto, AGORA + 9);
   await terceira.rodada();
   checar("um terceiro, que chega depois, recebe tudo e sem a etapa excluida", (await terceira.repo.dados()).etapas.length === 2);
+
+  secao("corrida na unidade: o numero sigiloso da colega, ligado aqui sem a marca (o sigilo gruda)");
+  {
+    const SIGILO = "50300.000777/2026-10";
+    const tx = textoDaUnidade();
+    const ana2 = computador("ana", "pc-ana", tx, AGORA);
+    const bia2 = computador("bia", "pc-bia", tx, AGORA + 5);
+    await ana2.repo.criarProjeto({ nome: "Apuração", processo: { protocolo: SIGILO, sigiloso: true } });
+    await ana2.rodada();
+    await bia2.rodada();
+    // A bia só recebeu o vínculo vazio: não sabe que o número é sigiloso e o liga a um projeto dela.
+    const daBia = await bia2.repo.criarProjeto({ nome: "Acompanhamento", processo: { protocolo: SIGILO } });
+    const gravadas: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      for (const c of [bia2, ana2]) {
+        const g = tx.t.gravacoes;
+        await c.rodada();
+        gravadas.push(tx.t.gravacoes - g);
+      }
+    }
+    checar("converge: na terceira rodada de cada uma, ninguem grava", gravadas[4] === 0 && gravadas[5] === 0, gravadas);
+    const t3 = await noTexto(tx.t.html);
+    checar(
+      "o numero nao esta no texto",
+      !JSON.stringify(t3).includes("000777") && t3.p.some((x) => x.id === daBia.id && x.processo?.protocolo === ""),
+      t3.p.map((x) => x.processo),
+    );
+    const pb = await bia2.repo.obterProjeto(daBia.id);
+    checar(
+      "a bia ficou com a marca e com o numero dela (sem mudar o carimbo)",
+      pb?.processo?.protocolo === SIGILO && pb.processo.sigiloso === true && pb.atualizadoEm === daBia.atualizadoEm,
+      pb,
+    );
+  }
 }
