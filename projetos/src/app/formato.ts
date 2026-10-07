@@ -46,6 +46,13 @@ const COM_ARTIGO: Partial<Record<CampoHistorico, string>> = {
   visibilidade: "quem vê",
 };
 
+/**
+ * O rótulo do campo, só das chaves da própria tabela: o campo vem do texto da unidade (versão mais nova ou
+ * editado à mão) e "constructor" ou "toString" achariam a função do objeto ("function Object() …").
+ */
+const rotuloDe = (tabela: Partial<Record<CampoHistorico, string>>, campo: CampoHistorico): string =>
+  (Object.hasOwn(tabela, campo) ? tabela[campo] : undefined) ?? campo;
+
 const ehData = (s: string | undefined): boolean => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
 
 function valor(campo: CampoHistorico, v: string | undefined): string {
@@ -75,7 +82,7 @@ export function textoDoRegistro(r: Pick<Registro, "campo" | "antes" | "depois">,
     case "visibilidade":
       return `quem vê: ${valor(r.campo, r.antes)} → ${valor(r.campo, r.depois)}`;
     default:
-      return `${ROTULO[r.campo] ?? r.campo} ${valor(r.campo, r.antes)} → ${valor(r.campo, r.depois)}`;
+      return `${rotuloDe(ROTULO, r.campo)} ${valor(r.campo, r.antes)} → ${valor(r.campo, r.depois)}`;
   }
 }
 
@@ -96,7 +103,7 @@ export function resumoDoUltimoRegistro(r: Registro, agora: number): string {
   else if (r.campo === "conclusao") feito = r.depois ? "concluiu" : "reabriu";
   else if (r.campo === "exclusao") feito = "excluiu";
   else if (r.campo === "restauracao") feito = "restaurou";
-  else feito = `alterou ${COM_ARTIGO[r.campo] ?? r.campo}`;
+  else feito = `alterou ${rotuloDe(COM_ARTIGO, r.campo)}`;
   return `${quem} ${feito} ${quandoRelativo(r.quando, agora)}`;
 }
 
