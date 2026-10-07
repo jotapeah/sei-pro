@@ -299,4 +299,36 @@ export async function verificarAppProjeto(): Promise<void> {
   solta();
   await tique();
   checar("informar documento: dois cliques, uma chamada", chamadas === 1);
+
+  secao("app: confirmacao cancelada mantem o dialogo (sem erro)");
+  const docX = telaDoApp();
+  const mx = modais(docX);
+  const fx = () => docX.querySelector(".prj-form-projeto") as HTMLElement | null;
+  abrirDialogoProjeto({ ...base, abrirModal: mx.abrirModal, projeto: p1, salvar: async () => false, excluir: async () => false });
+  botao(fx()!, "Salvar")!.click();
+  await tique();
+  checar("salvar devolve false: dialogo aberto e sem erro", !!fx() && !!fx()!.querySelector(".prj-erros[hidden]"));
+  itemDoMenu(fx()!, "Mais ações do projeto", "Excluir");
+  await tique();
+  checar("excluir devolve false: dialogo aberto e sem erro", !!fx() && !!fx()!.querySelector(".prj-erros[hidden]"));
+  botao(fx()!, "Cancelar")!.click();
+  const acoesX: string[] = [];
+  abrirArquivados({
+    abrirModal: mx.abrirModal,
+    arquivados: [arq],
+    reativar: async () => false,
+    excluir: async (id) => {
+      acoesX.push(id);
+      return false;
+    },
+  });
+  botao(docX.querySelector(".prj-arquivados")!, "Excluir")!.click();
+  await tique();
+  checar(
+    "arquivados: excluir cancelado mantem o projeto na lista, sem erro",
+    acoesX.join() === "p1" && texto(docX.querySelector(".prj-arquivados")).includes(HOSTIL) && !!docX.querySelector(".prj-erros[hidden]"),
+  );
+  botao(docX.querySelector(".prj-arquivados")!, "Reativar")!.click();
+  await tique();
+  checar("arquivados: reativar recusado mantem na lista", texto(docX.querySelector(".prj-arquivados")).includes(HOSTIL));
 }

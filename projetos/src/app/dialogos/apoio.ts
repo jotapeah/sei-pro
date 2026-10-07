@@ -14,11 +14,16 @@ import type { ProjetoNaTela } from "../dados";
 import { dataDeFormulario, dataLonga } from "../formato";
 import { caixaDeErros, campo, campoDocumento, linhaDeCampos, mensagensDoErro } from "./campos";
 
+/**
+ * Reativar e Excluir tiram o projeto da lista quando a promessa resolve. A confirmação (ou o
+ * "Desfazer") é de quem chama: resolver `false` (o usuário desistiu) deixa o projeto na lista, sem
+ * mensagem; rejeitar mostra o erro e também deixa.
+ */
 export function abrirArquivados(c: {
   abrirModal: AbrirModal;
   arquivados: readonly ProjetoNaTela[];
-  reativar(id: string): Promise<void>;
-  excluir(id: string): Promise<void>;
+  reativar(id: string): Promise<unknown>;
+  excluir(id: string): Promise<unknown>;
 }): { fechar(): void } {
   const erros = caixaDeErros();
   const lista = h("div", { class: "prj-arquivados" });
@@ -29,12 +34,13 @@ export function abrirArquivados(c: {
     lista.replaceChildren(
       ...(restantes.length
         ? restantes.map((p) => {
-            const tirar = (fazer: (id: string) => Promise<void>) => async () => {
+            const tirar = (fazer: (id: string) => Promise<unknown>) => async () => {
               if (ocupado) return;
               ocupado = true;
               try {
-                await fazer(p.projeto.id);
+                const feito = await fazer(p.projeto.id);
                 erros.mostrar([]);
+                if (feito === false) return;
                 restantes = restantes.filter((x) => x !== p);
                 pintar();
               } catch (e) {

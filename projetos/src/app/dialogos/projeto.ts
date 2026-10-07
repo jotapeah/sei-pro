@@ -38,12 +38,17 @@ export interface ContextoDialogoProjeto {
   /** O "Começar de um modelo" do primeiro uso já abre no modelo. */
   comecarDeModelo?: boolean;
   processos(): Promise<ProcessoDaCaixa[]>;
-  salvar(r: ResultadoProjeto): Promise<void>;
-  arquivar?: () => Promise<void>;
-  reativar?: () => Promise<void>;
-  duplicar?: () => Promise<void>;
+  /**
+   * Grava. O diálogo fecha quando a promessa resolve; com `false` (quem chama pediu confirmação e o
+   * usuário desistiu) fica aberto, sem mensagem. Rejeitar mostra o erro e também deixa aberto.
+   */
+  salvar(r: ResultadoProjeto): Promise<unknown>;
+  /** As ações do menu seguem a mesma regra do `salvar` (`false` = desistiu: fica aberto). */
+  arquivar?: () => Promise<unknown>;
+  reativar?: () => Promise<unknown>;
+  duplicar?: () => Promise<unknown>;
   salvarComoModelo?: () => void;
-  excluir?: () => Promise<void>;
+  excluir?: () => Promise<unknown>;
 }
 
 function cartao(valor: Vis, marcado: boolean, titulo: string, explica: string): HTMLElement {
@@ -160,14 +165,13 @@ export function abrirDialogoProjeto(c: ContextoDialogoProjeto): { fechar(): void
   pintarPrevia();
 
   let modal: { fechar(): void } | null = null;
-  // Arquivar/Reativar/Duplicar/Excluir: fecha só se deu certo; a falha fica no diálogo.
+  // Arquivar/Reativar/Duplicar/Excluir: fecha só se deu certo; a falha fica no diálogo; desistir (false) não fecha.
   let ocupado = false;
-  const executar = (f?: () => Promise<void>) => async () => {
+  const executar = (f?: () => Promise<unknown>) => async () => {
     if (!f || ocupado) return;
     ocupado = true;
     try {
-      await f();
-      modal?.fechar();
+      if ((await f()) !== false) modal?.fechar();
     } catch (e) {
       erros.mostrar(mensagensDoErro(e));
     } finally {
@@ -196,8 +200,7 @@ export function abrirDialogoProjeto(c: ContextoDialogoProjeto): { fechar(): void
     if (!p && deModelo && md) r.modelo = { modelo: md, inicio: dataDeFormulario(comeca.value)! };
     salvar.disabled = true;
     try {
-      await c.salvar(r);
-      modal?.fechar();
+      if ((await c.salvar(r)) !== false) modal?.fechar();
     } catch (e) {
       erros.mostrar(mensagensDoErro(e));
     } finally {
