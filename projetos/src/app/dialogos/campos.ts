@@ -7,6 +7,7 @@
 import { normalizarTexto } from "@comum/texto";
 import { type Combo, criarCombo, type OpcaoCombo } from "@comum/ui/combobox";
 import { h, icone } from "@comum/ui/dom";
+import { vinculoSemNumero } from "../../modelo/sigilo";
 import type { Vinculo } from "../../modelo/tipos";
 import { RE_ID_PROCEDIMENTO, RE_PROTOCOLO } from "../../modelo/vinculos";
 import type { DocumentoConferido, ProcessoDaCaixa } from "../../ponte/tipos";
@@ -84,6 +85,8 @@ export function mensagensDoErro(e: unknown): string[] {
 }
 
 const VALOR_DIGITADO = "digitado:";
+/** A opção do vínculo vazio do texto (nenhum número de processo tem ":"). */
+const VALOR_SIGILOSO = "sigiloso:";
 
 /**
  * O número digitado ou colado. O texto inteiro (sem os espaços das pontas) quando ele passa em
@@ -137,7 +140,10 @@ export interface CampoProcesso {
 /**
  * Seletor de processo: os da caixa (carregados quando chegam) e qualquer
  * número digitado ("Criar"). Processo sigiloso da caixa vem marcado; número
- * digitado que é de um processo da caixa herda os dados dele.
+ * digitado que é de um processo da caixa herda os dados dele. O vínculo vazio
+ * do texto (processo sigiloso cujo número este computador não tem) vem como a
+ * opção "Processo sigiloso", já escolhida: salvar o mantém; só o vazio
+ * escolhido pelo usuário o tira, e um número escolhido o substitui.
  */
 export function campoProcesso(o: {
   rotulo: string;
@@ -148,8 +154,11 @@ export function campoProcesso(o: {
 }): CampoProcesso {
   let caixa: ProcessoDaCaixa[] = [];
   const digitados = new Map<string, Vinculo>();
+  const semNumero = vinculoSemNumero(o.atual);
   const opcoes = (): OpcaoCombo[] => {
     const lista: OpcaoCombo[] = [{ valor: "", rotulo: o.vazio }];
+    if (semNumero)
+      lista.push({ valor: VALOR_SIGILOSO, rotulo: "Processo sigiloso", descricao: "O número não está neste computador", icone: "cadeado" });
     if (o.atual?.protocolo && !caixa.some((p) => p.protocolo === o.atual?.protocolo))
       lista.push({ valor: o.atual.protocolo, rotulo: o.atual.protocolo, icone: o.atual.sigiloso ? "cadeado" : "pasta" });
     for (const p of caixa)
@@ -165,7 +174,7 @@ export function campoProcesso(o: {
   const combo = criarCombo({
     rotulo: o.rotulo,
     opcoes,
-    valor: [o.atual?.protocolo ?? ""],
+    valor: [semNumero ? VALOR_SIGILOSO : (o.atual?.protocolo ?? "")],
     vazio: o.vazio,
     icone: "pasta",
     busca: true,
@@ -200,6 +209,7 @@ export function campoProcesso(o: {
     vinculo() {
       const v = combo.valor()[0] ?? "";
       if (!v) return undefined;
+      if (v === VALOR_SIGILOSO) return o.atual;
       const digitado = digitados.get(v);
       if (digitado) return digitado;
       const p = caixa.find((x) => x.protocolo === v);

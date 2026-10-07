@@ -16,7 +16,7 @@ import { h, icone } from "@comum/ui/dom";
 import { duracaoUteis, LIMITE_DIAS_ETAPA } from "../../modelo/calendario";
 import { LIMITES } from "../../modelo/constantes";
 import { chaveResponsavel } from "../../modelo/filtro";
-import { documentoSemNumero } from "../../modelo/sigilo";
+import { documentoSemNumero, vinculoSemNumero } from "../../modelo/sigilo";
 import type { DataISO, DocumentoSei, Etapa, ItemChecklist, Medida, Registro, Responsavel, Vinculo } from "../../modelo/tipos";
 import type { DocumentoConferido, ProcessoDaCaixa, UsuarioDaUnidade } from "../../ponte/tipos";
 import type { ProjetoNaTela } from "../dados";
@@ -287,7 +287,7 @@ export function abrirDialogoEtapa(c: ContextoDialogoEtapa): { fechar(): void } {
   const proc = campoProcesso({
     rotulo: "Processo da etapa",
     atual: e?.processo,
-    vazio: doProjetoProc?.protocolo ? "O processo do projeto" : "Sem processo",
+    vazio: doProjetoProc?.protocolo || vinculoSemNumero(doProjetoProc) ? "O processo do projeto" : "Sem processo",
     processos: c.processos,
     aoMudar: () => secProc.resumir(),
   });
@@ -302,7 +302,8 @@ export function abrirDialogoEtapa(c: ContextoDialogoEtapa): { fechar(): void } {
     () => {
       const v = proc.vinculo() ?? doProjetoProc;
       const n = numeroDoc();
-      return `${v?.protocolo || "sem processo"} · ${n ? `SEI ${n}` : semNumero ? "documento de processo sigiloso" : "sem documento"}`;
+      const processo = v?.protocolo || (vinculoSemNumero(v) ? "processo sigiloso" : "sem processo");
+      return `${processo} · ${n ? `SEI ${n}` : semNumero ? "documento de processo sigiloso" : "sem documento"}`;
     },
     h(
       "div",

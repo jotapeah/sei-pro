@@ -1,6 +1,6 @@
 /**
  * Cabeçalho do cartão (tela 1): à esquerda o que identifica o projeto
- * (processo, quem vê, "X de Y etapas concluídas", término, lápis); à direita os
+ * (processo, ou "Processo sigiloso" sem o número, quem vê, "X de Y etapas concluídas", término, lápis); à direita os
  * 5 controles: Gantt|Lista, escala e Hoje (só no Gantt), Filtro e o primário
  * ("+ Etapa" no projeto, "+ Novo projeto" no Todos).
  */
@@ -8,6 +8,7 @@
 import { h, icone } from "@comum/ui/dom";
 import { ESCALAS, type Escala } from "../../gantt/escalas";
 import { rotuloDaVis } from "../../modelo/escopo";
+import { vinculoSemNumero } from "../../modelo/sigilo";
 import type { ProjetoNaTela } from "../dados";
 import { dataLonga, plural } from "../formato";
 import type { Vista } from "../preferencias";
@@ -47,6 +48,17 @@ function metaDoProjeto(o: OpcoesCabecalho, p: ProjetoNaTela): HTMLElement {
           },
         },
         proc.protocolo,
+      ),
+      sep(),
+    );
+  // O vínculo vazio do texto (processo sigiloso cujo número este computador não tem): só texto, sem link.
+  else if (vinculoSemNumero(proc))
+    partes.push(
+      h(
+        "span",
+        { class: "prj-vis", title: "O número deste processo não está neste computador: o SEI Pro não o envia aos colegas." },
+        icone("cadeado", 14),
+        "Processo sigiloso",
       ),
       sep(),
     );

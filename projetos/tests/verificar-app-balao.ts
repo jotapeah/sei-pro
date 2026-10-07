@@ -169,4 +169,29 @@ export function verificarAppBalao(): void {
     [...bv.el.querySelectorAll(".prj-balao-li")].map((l) => texto(l)),
   );
   bv.fechar();
+
+  secao("app: balao do processo sigiloso sem o numero (o vinculo vazio do texto)");
+  const VV = { protocolo: "", sigiloso: true };
+  const proprio = etapa({ id: "pv", processo: VV });
+  const cp = cena(proprio);
+  const bp = abrirBalaoEtapa(ancora, { etapa: proprio, projeto: cp.p, hoje: HOJE }, cp.acoes);
+  const linhasP = [...bp.el.querySelectorAll(".prj-balao-li")].map((l) => texto(l));
+  const linksP = [...bp.el.querySelectorAll(".prj-balao-li a")].map((a) => texto(a));
+  checar(
+    "processo proprio marcador: 'Processo sigiloso', sem link (nada do processo do projeto no lugar)",
+    linhasP.includes("Processo sigiloso") && !linhasP.some((t) => t.includes("50300.001234")) && linksP.length === 0,
+    { linhasP, linksP },
+  );
+  bp.fechar();
+  const herda = etapa({ id: "hv" });
+  const ch = cena(herda);
+  const pMarcador: ProjetoNaTela = { ...ch.p, projeto: projeto({ id: "p1", processo: VV }) };
+  const bh = abrirBalaoEtapa(ancora, { etapa: herda, projeto: pMarcador, hoje: HOJE }, ch.acoes);
+  const linhasH = [...bh.el.querySelectorAll(".prj-balao-li")].map((l) => texto(l));
+  checar(
+    "sem processo proprio num projeto marcador: 'Processo sigiloso', sem link",
+    linhasH.includes("Processo sigiloso") && bh.el.querySelectorAll(".prj-balao-li a").length === 0,
+    linhasH,
+  );
+  bh.fechar();
 }

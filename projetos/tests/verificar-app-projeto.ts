@@ -433,4 +433,54 @@ export async function verificarAppProjeto(): Promise<void> {
     !!pk && entidadeValida(pk, "p") && mov === null && !!(await eu.obterProjeto(pk.id)),
     mov,
   );
+
+  secao("app: editar projeto com o processo sigiloso sem o numero (o vinculo vazio do texto)");
+  const VV = { protocolo: "", sigiloso: true };
+  const docV = telaDoApp();
+  const mv = modais(docV);
+  const salvosV: ResultadoProjeto[] = [];
+  const pVV: ProjetoNaTela = { ...p1, projeto: projeto({ id: "p1", nome: "Apuração", processo: VV }) };
+  const fv = () => docV.querySelector<HTMLElement>(".prj-form-projeto") as HTMLElement;
+  const abrirVV = async () => {
+    for (const pop of docV.querySelectorAll(".spro-combo-pop")) pop.remove();
+    abrirDialogoProjeto({ ...base, abrirModal: mv.abrirModal, projeto: pVV, salvar: async (r) => void salvosV.push(r) });
+    await tique();
+  };
+  await abrirVV();
+  checar(
+    "o campo vem com 'Processo sigiloso' escolhido (nao 'Nenhum')",
+    texto(docV.querySelector("button[role='combobox'][aria-label='Processo SEI']")) === "Processo sigiloso",
+    texto(docV.querySelector("button[role='combobox'][aria-label='Processo SEI']")),
+  );
+  digitar(fv().querySelector("input[name='nome']"), "Apuração renomeada");
+  botao(fv(), "Salvar")!.click();
+  await tique();
+  checar(
+    "renomear mantem o vinculo vazio marcado (nao apaga o processo de quem tem o numero)",
+    salvosV.at(-1)?.nome === "Apuração renomeada" && JSON.stringify(salvosV.at(-1)?.processo) === JSON.stringify(VV),
+    salvosV.at(-1),
+  );
+  await abrirVV();
+  marcar(fv().querySelector("input[value='eu']"));
+  botao(fv(), "Salvar")!.click();
+  await tique();
+  checar(
+    "mudar Quem ve mantem o vinculo vazio marcado",
+    salvosV.at(-1)?.vis === "eu" && JSON.stringify(salvosV.at(-1)?.processo) === JSON.stringify(VV),
+    salvosV.at(-1),
+  );
+  await abrirVV();
+  escolherCombo(fv(), "Processo SEI", "");
+  botao(fv(), "Salvar")!.click();
+  await tique();
+  checar("escolher 'Nenhum' tira o vinculo", salvosV.length === 3 && salvosV.at(-1)?.processo === undefined, salvosV.at(-1));
+  await abrirVV();
+  await criarNoCombo(fv(), "Processo SEI", "50300.000002/2026-11");
+  botao(fv(), "Salvar")!.click();
+  await tique();
+  checar(
+    "um numero digitado substitui o vinculo vazio",
+    JSON.stringify(salvosV.at(-1)?.processo) === JSON.stringify({ protocolo: "50300.000002/2026-11" }),
+    salvosV.at(-1)?.processo,
+  );
 }

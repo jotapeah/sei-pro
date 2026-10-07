@@ -26,7 +26,7 @@ const MARCADOR = jsonEstavel({ numero: "", sigiloso: true });
 const ETAPA = { inicio: "2026-10-06", fim: "2026-10-09" } as const;
 
 /** O Texto Padrão "no SEI" (ler e gravar, sem conferência). */
-function noSei(html: string | null = null) {
+export function noSei(html: string | null = null) {
   const t = {
     html,
     gravadas: 0,
@@ -42,7 +42,7 @@ function noSei(html: string | null = null) {
 }
 
 /** Um computador: os dois escopos da unidade 110 numa área, relógio próprio e o motor de verdade. */
-function computador(login: string, dispositivo: string, inicio = AGORA, area: Area = areaMemoria()) {
+export function computador(login: string, dispositivo: string, inicio = AGORA, area: Area = areaMemoria()) {
   const rel = { agora: inicio };
   let n = 0;
   const repo = (vis: Vis) =>
@@ -67,12 +67,12 @@ function computador(login: string, dispositivo: string, inicio = AGORA, area: Ar
   return { area, un, eu, rodada };
 }
 
-async function noTexto(html: string | null): Promise<Entidades> {
+export async function noTexto(html: string | null): Promise<Entidades> {
   const r = html ? await lerConteudoTexto(html) : null;
   return r && "bruto" in r ? (r.bruto as EnvelopeProjetos).entidades : { p: [], f: [], e: [], h: [], m: [] };
 }
 
-const jsonDe = async (html: string | null) => JSON.stringify(await noTexto(html));
+export const jsonDe = async (html: string | null) => JSON.stringify(await noTexto(html));
 
 /** A Ana conhece o DOC como documento de processo sigiloso (de três jeitos); a Bia o digita numa etapa comum. */
 async function anaSabeBiaDigita(variante: string) {

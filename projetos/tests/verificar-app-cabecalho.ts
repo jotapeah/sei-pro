@@ -72,6 +72,25 @@ export async function verificarAppCabecalho(): Promise<void> {
     aoPrimario: () => undefined,
   });
   checar("na vista Lista: sem escala e sem Hoje", !botao(lista, "Hoje") && !botao(lista, "Semana") && !!botao(lista, "Etapa"));
+  const marcador = montarCabecalho({
+    modo: "projeto",
+    projeto: { ...p, projeto: projeto({ id: "p1", processo: { protocolo: "", sigiloso: true } }) },
+    vista: "lista",
+    escala: "Semana",
+    filtro: filtroFalso,
+    aoVista: () => undefined,
+    aoEscala: () => undefined,
+    aoHoje: () => undefined,
+    aoPrimario: () => undefined,
+    aoAbrirProcesso: () => feitos.push("processo-marcador"),
+  });
+  checar(
+    "projeto com o vinculo vazio do texto: 'Processo sigiloso', sem link",
+    texto(marcador.querySelector(".prj-meta")).startsWith("Processo sigiloso · Toda a unidade") &&
+      !marcador.querySelector(".prj-meta a") &&
+      !marcador.querySelector(".prj-processo"),
+    texto(marcador.querySelector(".prj-meta")),
+  );
   const todos = montarCabecalho({
     modo: "todos",
     totais: { ativos: 3, arquivados: 1 },

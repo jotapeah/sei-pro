@@ -133,6 +133,13 @@ export function sigiloDoEnvelope(
 /** O vínculo sigiloso no texto: sem o número e sem o `idProcedimento`. */
 export const VINCULO_VAZIO: Vinculo = { protocolo: "", sigiloso: true };
 
+/**
+ * É o vínculo vazio do texto: um processo sigiloso cujo número este computador não tem. A tela o mostra como
+ * "Processo sigiloso", sem número e sem link, e o diálogo o mantém ao salvar (tirá-lo é remoção, e a remoção
+ * chega a quem tem o número). O protocolo vazio sem a marca é "sem processo".
+ */
+export const vinculoSemNumero = (v: Vinculo | undefined): boolean => !!v && v.protocolo === "" && v.sigiloso === true;
+
 /** O documento de processo sigiloso no texto (o marcador): sem o número e sem o título. */
 export const DOCUMENTO_VAZIO: DocumentoSei = { numero: "", sigiloso: true };
 

@@ -342,4 +342,56 @@ export async function verificarAppEtapa(): Promise<void> {
     JSON.stringify(sg2.salvos[0]?.documento) === JSON.stringify({ numero: "1240001" }),
     sg2.salvos[0]?.documento,
   );
+
+  secao("app: dialogo da etapa com o processo sigiloso sem o numero (o vinculo vazio do texto)");
+  const VV = { protocolo: "", sigiloso: true };
+  const comVV = { ...air, processo: VV, documento: { numero: "", sigiloso: true } };
+  const abrirVV = (m: Partial<ContextoDialogoEtapa> = {}) => {
+    const x = cena({ etapa: comVV, ...m });
+    const f = () => x.doc.querySelector(".prj-form-etapa") as HTMLElement;
+    const resumo = () => texto(f().querySelector(".prj-sec[data-secao='processo'] .prj-sec-res"));
+    return { ...x, f, resumo };
+  };
+  const v1 = abrirVV();
+  checar(
+    "o campo vem com 'Processo sigiloso' escolhido e o resumo diz 'processo sigiloso'",
+    texto(combo(v1.f(), "Processo da etapa")) === "Processo sigiloso" &&
+      v1.resumo() === "processo sigiloso · documento de processo sigiloso",
+    { combo: texto(combo(v1.f(), "Processo da etapa")), resumo: v1.resumo() },
+  );
+  digitar(v1.f().querySelector("input[name='nome']"), "Relatório de AIR revisado");
+  botao(v1.f(), "Salvar")!.click();
+  await tique();
+  checar(
+    "renomear e salvar sem mexer no processo mantem o vinculo vazio marcado (nao apaga o processo de quem tem o numero)",
+    JSON.stringify(v1.salvos[0]?.processo) === JSON.stringify(VV) && v1.salvos[0]?.nome === "Relatório de AIR revisado",
+    v1.salvos[0]?.processo,
+  );
+  const v2 = abrirVV();
+  escolherCombo(v2.f(), "Processo da etapa", "");
+  botao(v2.f(), "Salvar")!.click();
+  await tique();
+  checar(
+    "escolher 'O processo do projeto' (o vazio) tira o vinculo: a etapa volta a herdar",
+    !!v2.salvos[0] && v2.salvos[0].processo === undefined,
+    v2.salvos[0]?.processo,
+  );
+  const v3 = abrirVV();
+  await criarNoCombo(v3.f(), "Processo da etapa", "50300.000002/2026-11");
+  botao(v3.f(), "Salvar")!.click();
+  await tique();
+  checar(
+    "um numero digitado substitui o vinculo vazio",
+    JSON.stringify(v3.salvos[0]?.processo) === JSON.stringify({ protocolo: "50300.000002/2026-11" }),
+    v3.salvos[0]?.processo,
+  );
+  const v4 = abrirVV({ etapa: air, projeto: { ...p, projeto: projeto({ id: "p1", processo: VV }) } });
+  checar(
+    "etapa sem processo proprio num projeto de processo sigiloso: 'O processo do projeto' e o resumo 'processo sigiloso'",
+    texto(combo(v4.f(), "Processo da etapa")) === "O processo do projeto" && v4.resumo() === "processo sigiloso · sem documento",
+    { combo: texto(combo(v4.f(), "Processo da etapa")), resumo: v4.resumo() },
+  );
+  botao(v4.f(), "Salvar")!.click();
+  await tique();
+  checar("e salvar segue herdando (sem processo proprio)", !!v4.salvos[0] && v4.salvos[0].processo === undefined, v4.salvos[0]?.processo);
 }

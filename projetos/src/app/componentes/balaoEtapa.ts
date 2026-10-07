@@ -2,8 +2,8 @@
  * Balão da etapa (tela 1): o dia a dia sem abrir formulário. Situação (com os
  * dias úteis de atraso), nome, "Fase · Responsável", datas e duração em dias
  * úteis, aviso de replanejamento, checklist, documento e processo (links que
- * abrem no SEI; o documento de processo sigiloso cujo número este computador
- * não tem aparece só como texto, sem link), régua de progresso (só com medida
+ * abrem no SEI; o documento e o processo sigilosos cujo número este computador
+ * não tem aparecem só como texto, sem link), régua de progresso (só com medida
  * manual) e as ações: Concluir / Marcar como cumprido / Reabrir, Editar e o
  * menu (duplicar, mover de fase, histórico, excluir). Esc ou clique fora fecha. A régua grava só
  * quando o usuário para de mexer (cada seta do teclado é um `change`) ou
@@ -16,7 +16,7 @@ import { diasUteisDeAtraso } from "../../modelo/alertas";
 import { duracaoUteis } from "../../modelo/calendario";
 import { desvioUteis, replanejada } from "../../modelo/linhaDeBase";
 import { progressoDaEtapa } from "../../modelo/progresso";
-import { documentoSemNumero } from "../../modelo/sigilo";
+import { documentoSemNumero, vinculoSemNumero } from "../../modelo/sigilo";
 import { situacaoEtapa } from "../../modelo/situacao";
 import type { DataISO, Etapa, Vinculo } from "../../modelo/tipos";
 import type { ProjetoNaTela } from "../dados";
@@ -86,6 +86,26 @@ function linhaDoDocumento(e: Etapa, a: AcoesBalao): HTMLElement | null {
   );
 }
 
+/**
+ * O processo da etapa (o próprio ou, sem ele, o do projeto): o número como link; o vínculo vazio do texto
+ * (processo sigiloso sem o número) só como texto, sem link. A etapa com o próprio vínculo vazio não mostra o
+ * processo do projeto no lugar: ela é de outro processo, que este computador não conhece.
+ */
+function linhaDoProcesso(e: Etapa, d: DadosBalao, a: AcoesBalao): HTMLElement | null {
+  const v = e.processo?.protocolo || vinculoSemNumero(e.processo) ? e.processo : d.projeto.projeto.processo;
+  if (vinculoSemNumero(v))
+    return linha(
+      icone("cadeado", 15),
+      h("span", { title: "O número deste processo não está neste computador: o SEI Pro não o envia aos colegas." }, "Processo sigiloso"),
+    );
+  if (!v?.protocolo) return null;
+  const processo = v;
+  return linha(
+    icone(processo.sigiloso ? "cadeado" : "pasta", 15),
+    link(processo.protocolo, "Abrir o processo", (ev) => a.aoAbrirProcesso(processo, ev)),
+  );
+}
+
 function datas(e: Etapa): HTMLElement {
   if (e.marco) return linha(icone("calendario", 15), dataLonga(e.inicio));
   const desvio = replanejada(e) ? desvioUteis(e) : 0;
@@ -140,7 +160,6 @@ export function conteudoDoBalao(d: DadosBalao, a: AcoesBalao, fechar: () => void
   const situacao = situacaoEtapa(e, d.hoje);
   const atraso = situacao === "atrasada" ? diasUteisDeAtraso(e, d.hoje) : 0;
   const fase = d.projeto.fases.find((f) => f.id === e.fase)?.nome ?? "Sem fase";
-  const processo = e.processo?.protocolo ? e.processo : d.projeto.projeto.processo;
   const feitos = e.checklist.filter((i) => i.feito).length;
   const aberta = !e.concluidaEm;
   const nota =
@@ -178,12 +197,7 @@ export function conteudoDoBalao(d: DadosBalao, a: AcoesBalao, fechar: () => void
     e.concluidaEm ? linha(icone("check", 15), `Concluída em ${dataLonga(e.concluidaEm)}`) : null,
     e.checklist.length ? linha(iconeProjetos("checklist", 15), `Checklist: ${feitos} de ${e.checklist.length} itens`) : null,
     linhaDoDocumento(e, a),
-    processo?.protocolo
-      ? linha(
-          icone(processo.sigiloso ? "cadeado" : "pasta", 15),
-          link(processo.protocolo, "Abrir o processo", (ev) => a.aoAbrirProcesso(processo, ev)),
-        )
-      : null,
+    linhaDoProcesso(e, d, a),
     aberta && !e.marco && e.medida === "manual" ? regua({ ...e, progresso: progressoDaEtapa(e, d.hoje) }, a.aoProgresso) : null,
     nota ? h("div", { class: "prj-balao-nota" }, nota) : null,
     h(
