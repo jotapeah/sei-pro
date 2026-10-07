@@ -93,11 +93,14 @@ export function faixaConvite(c: { aoLigar(): void; aoRecusar(): void }): HTMLEle
   );
 }
 
-/** Há alterações em "Toda a unidade" esperando o "Entendi" (vieram de um caminho sem a pergunta). */
+/**
+ * Há alterações em "Toda a unidade" esperando o "Entendi" (vieram de um caminho sem a pergunta). Aparece sozinha,
+ * depois de uma rodada da sincronia: `role="status"` faz o leitor de tela anunciá-la.
+ */
 export function faixaAguardando(c: { sigla: string; aoEntendi(): void }): HTMLElement {
   return h(
     "div",
-    { class: "prj-faixa", role: "note", "data-faixa": "aguardando" },
+    { class: "prj-faixa", role: "status", "data-faixa": "aguardando" },
     h(
       "span",
       {},

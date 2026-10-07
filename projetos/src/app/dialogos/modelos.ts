@@ -8,7 +8,9 @@
  * Renomear e excluir chegam prontos de quem abre (`ContextoModelos`): no
  * escopo "Toda a unidade" eles passam pelo "Entendi" (o repositório com o
  * consentimento); a recusa aparece aqui, como os outros erros. O nome do
- * modelo vem do texto da unidade e entra sempre como texto.
+ * modelo vem do texto da unidade e entra sempre como texto. Os botões se
+ * repetem em cada linha: `aria-describedby` aponta para o nome da linha (o
+ * leitor de tela diz "Excluir, Pregão").
  */
 
 import type { AbrirModal } from "@comum/ui/dialogo";
@@ -46,6 +48,9 @@ function nomeGravado(r: unknown, digitado: string): string {
   return typeof nome === "string" && nome ? nome : digitado;
 }
 
+/** Ids dos nomes das linhas (para o `aria-describedby` dos botões): únicos na página. */
+let seqNome = 0;
+
 export function abrirModelos(c: ContextoModelos): { fechar(): void } {
   const erros = caixaDeErros();
   const lista = h("div", { class: "prj-modelos" });
@@ -75,7 +80,9 @@ export function abrirModelos(c: ContextoModelos): { fechar(): void } {
     (botoes.find((b) => b.textContent === foco.rotulo) ?? botoes[0])?.focus();
   };
   const linhaDoModelo = (m: ModeloNaTela): HTMLElement => {
-    const nome = h("b", { class: "prj-modelo-nome" }, m.nome);
+    const idNome = `modelo-nome-${++seqNome}`;
+    const nome = h("b", { class: "prj-modelo-nome", id: idNome }, m.nome);
+    const daLinha = { "aria-describedby": idNome };
     const linha = h(
       "div",
       { class: "prj-modelo", "data-id": m.id },
@@ -87,6 +94,7 @@ export function abrirModelos(c: ContextoModelos): { fechar(): void } {
       {
         type: "button",
         class: "spro-botao pequeno",
+        ...daLinha,
         onclick: () => {
           modal?.fechar();
           c.criarProjeto(m);
@@ -98,7 +106,7 @@ export function abrirModelos(c: ContextoModelos): { fechar(): void } {
       linha.append(criar);
       return linha;
     }
-    const renomear = h("button", { type: "button", class: "spro-botao pequeno" }, "Renomear");
+    const renomear = h("button", { type: "button", class: "spro-botao pequeno", ...daLinha }, "Renomear");
     renomear.addEventListener("click", () => {
       const campo = h("input", {
         type: "text",
@@ -145,6 +153,7 @@ export function abrirModelos(c: ContextoModelos): { fechar(): void } {
       {
         type: "button",
         class: "spro-botao fantasma perigo pequeno",
+        ...daLinha,
         onclick: () =>
           tentar(async () => {
             const onde = m.vis === "unidade" ? " para toda a unidade" : "";

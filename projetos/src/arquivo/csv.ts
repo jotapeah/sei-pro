@@ -3,8 +3,12 @@
  * aba aberta, com o filtro aplicado. Processo sigiloso sai em branco (spec 9),
  * inclusive quando a etapa herdaria o do projeto; o número do documento de
  * etapa sigilosa (processo próprio sigiloso, ou nenhum num projeto sigiloso) ou
- * marcado sigiloso também. `gerarCsv` (sei-comum) põe
- * o BOM, o separador ";" e neutraliza fórmulas (= + - @).
+ * marcado sigiloso também. "Sigiloso" é a regra do envelope (modelo/sigilo.ts:
+ * a marca, o mesmo número marcado noutro item da planilha) somada à memória do
+ * sigilo deste computador (`conhecidos`, que quem chama lê pelo repositório):
+ * um projeto "Só eu" com o número sem a marca, que a memória conhece, sai em
+ * branco. `gerarCsv` (sei-comum) põe o BOM, o separador ";" e neutraliza
+ * fórmulas (= + - @).
  */
 
 import { gerarCsv } from "@comum/csv";
@@ -14,8 +18,10 @@ import type { ProjetoNaTela } from "../app/dados";
 import { duracaoUteis } from "../modelo/calendario";
 import { rotuloDaVis } from "../modelo/escopo";
 import { progressoDaEtapa } from "../modelo/progresso";
+import { etapaSigilosa, NADA_CONHECIDO, type SigiloDoEnvelope, type SigilosConhecidos, sigiloDoEnvelope } from "../modelo/sigilo";
 import { ROTULO_MARCO, ROTULO_SITUACAO, situacaoEtapa, situacaoMarco } from "../modelo/situacao";
 import type { DataISO, Etapa, Vinculo } from "../modelo/tipos";
+import { chaveDocumento } from "../modelo/vinculos";
 
 const CABECALHO = [
   "Projeto",
@@ -36,23 +42,23 @@ const CABECALHO = [
   "Observações",
 ];
 
-/** O número do processo, ou vazio se é sigiloso. */
-const numero = (v: Vinculo | undefined): string => (v && !v.sigiloso ? v.protocolo : "");
+/** O número do processo, ou vazio se é sigiloso pela regra `s`. */
+const numero = (v: Vinculo | undefined, s: SigiloDoEnvelope): string => (v && !s.vinculo(v) ? v.protocolo : "");
 
-/** O número do documento, ou vazio se ele está marcado sigiloso ou a etapa é sigilosa. */
-function numeroDoDocumento(p: ProjetoNaTela, e: Etapa): string {
+/** O número do documento, ou vazio se ele está marcado ou é conhecido como sigiloso, ou se a etapa é sigilosa. */
+function numeroDoDocumento(p: ProjetoNaTela, e: Etapa, s: SigiloDoEnvelope): string {
   const d = e.documento;
-  const sigilosa = e.processo ? e.processo.sigiloso === true : p.projeto.processo?.sigiloso === true;
-  return d && !d.sigiloso && !sigilosa ? d.numero : "";
+  if (!d || d.sigiloso || etapaSigilosa(e, p.projeto, s) || s.documentos.has(chaveDocumento(d.numero))) return "";
+  return d.numero;
 }
 
-function linhaDaEtapa(p: ProjetoNaTela, e: Etapa, hoje: DataISO): string[] {
+function linhaDaEtapa(p: ProjetoNaTela, e: Etapa, hoje: DataISO, s: SigiloDoEnvelope): string[] {
   const fase = p.fases.find((f) => f.id === e.fase)?.nome ?? "";
   const situacao = e.marco ? ROTULO_MARCO[situacaoMarco(e, hoje)] : ROTULO_SITUACAO[situacaoEtapa(e, hoje)];
   return [
     p.projeto.nome,
     rotuloDaVis(p.vis),
-    numero(e.processo ?? p.projeto.processo),
+    numero(e.processo ?? p.projeto.processo, s),
     fase,
     e.nome,
     e.marco ? "sim" : "",
@@ -63,21 +69,29 @@ function linhaDaEtapa(p: ProjetoNaTela, e: Etapa, hoje: DataISO): string[] {
     situacao,
     String(progressoDaEtapa(e, hoje)),
     e.concluidaEm ? formatarData(e.concluidaEm) : "",
-    numeroDoDocumento(p, e),
+    numeroDoDocumento(p, e, s),
     e.etiquetas.join(", "),
     e.observacoes ?? "",
   ];
 }
 
-/** `itens` já vêm com as etapas que passam no filtro. Projeto sem etapas sai numa linha só. */
-export function csvDosProjetos(itens: readonly ProjetoNaTela[], hoje: DataISO): string {
+/**
+ * `itens` já vêm com as etapas que passam no filtro. Projeto sem etapas sai numa linha só. `conhecidos`: a memória do
+ * sigilo deste computador (`RepositorioProjetos.sigilosConhecidos`).
+ */
+export function csvDosProjetos(itens: readonly ProjetoNaTela[], hoje: DataISO, conhecidos: SigilosConhecidos = NADA_CONHECIDO): string {
+  const s = sigiloDoEnvelope(
+    itens.map((p) => p.projeto),
+    itens.flatMap((p) => p.etapas),
+    conhecidos,
+  );
   const linhas: string[][] = [CABECALHO];
   for (const p of itens) {
     if (!p.etapas.length) {
-      linhas.push([p.projeto.nome, rotuloDaVis(p.vis), numero(p.projeto.processo), ...CABECALHO.slice(3).map(() => "")]);
+      linhas.push([p.projeto.nome, rotuloDaVis(p.vis), numero(p.projeto.processo, s), ...CABECALHO.slice(3).map(() => "")]);
       continue;
     }
-    for (const e of p.etapas) linhas.push(linhaDaEtapa(p, e, hoje));
+    for (const e of p.etapas) linhas.push(linhaDaEtapa(p, e, hoje, s));
   }
   return gerarCsv(linhas);
 }

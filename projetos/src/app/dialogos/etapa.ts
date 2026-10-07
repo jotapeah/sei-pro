@@ -7,7 +7,7 @@
  * (ciclo de dependência, limites) volta do repositório como `ErroValidacao`.
  */
 
-import { diferencaDias, hojeISO } from "@comum/datas/dias";
+import { diferencaDias } from "@comum/datas/dias";
 import { novoId } from "@comum/id";
 import { normalizarTexto } from "@comum/texto";
 import { criarCombo, type OpcaoCombo } from "@comum/ui/combobox";
@@ -20,7 +20,7 @@ import { documentoSemNumero, vinculoSemNumero } from "../../modelo/sigilo";
 import type { DataISO, DocumentoSei, Etapa, ItemChecklist, Medida, Registro, Responsavel, Vinculo } from "../../modelo/tipos";
 import type { DocumentoConferido, ProcessoDaCaixa, UsuarioDaUnidade } from "../../ponte/tipos";
 import type { ProjetoNaTela } from "../dados";
-import { dataCurta, dataDeFormulario, quemDoRegistro, resumoDoUltimoRegistro, textoDiasUteis, textoDoRegistro } from "../formato";
+import { dataCurtaDoCarimbo, dataDeFormulario, quemDoRegistro, resumoDoUltimoRegistro, textoDiasUteis, textoDoRegistro } from "../formato";
 import { iconeProjetos } from "../icones";
 import {
   caixaDeErros,
@@ -410,12 +410,7 @@ export function abrirDialogoEtapa(c: ContextoDialogoEtapa): { fechar(): void } {
         listaHist.replaceChildren(
           ...(registros.length
             ? registros.map((r) =>
-                h(
-                  "div",
-                  {},
-                  h("b", {}, quemDoRegistro(r)),
-                  ` · ${dataCurta(hojeISO(new Date(r.quando)))} · ${textoDoRegistro(r, "etapa")}`,
-                ),
+                h("div", {}, h("b", {}, quemDoRegistro(r)), ` · ${dataCurtaDoCarimbo(r.quando)} · ${textoDoRegistro(r, "etapa")}`),
               )
             : [h("div", { class: "prj-dica" }, "Nenhuma alteração registrada.")]),
         );

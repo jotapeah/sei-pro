@@ -25,7 +25,7 @@ import { rotuloDaVis } from "../modelo/escopo";
 import { criteriosAtivos, type Eu, FILTRO_VAZIO, type FiltroEtapas, filtrarEtapas, filtroNoContexto } from "../modelo/filtro";
 import { planoParaRedefinir } from "../modelo/linhaDeBase";
 import { datasDaEtapaNova } from "../modelo/operacoes";
-import { documentoSemNumero } from "../modelo/sigilo";
+import { documentoSemNumero, type SigilosConhecidos } from "../modelo/sigilo";
 import type { DataISO, Etapa, MudancaDeDatas, Vinculo, Vis } from "../modelo/tipos";
 import { ErroValidacao, nomeLimpo, problemasDoProjeto } from "../modelo/validacao";
 import type { ContextoProjetos, DocumentoConferido, ProcessoDaCaixa, TipoAlerta, UsuarioDaUnidade } from "../ponte/tipos";
@@ -57,6 +57,10 @@ import {
   type Preferencias,
 } from "./preferencias";
 import { type ProvedorSincronia, SEM_SINCRONIA } from "./sincronia";
+
+/** A memória do sigilo não pôde ser lida: o número de um processo sigiloso poderia sair na planilha. */
+export const MENSAGEM_PLANILHA_SEM_MEMORIA =
+  "Não foi possível ler a lista de processos sigilosos deste computador; a planilha não foi gerada. Tente de novo.";
 
 export interface DepsApp {
   raiz: HTMLElement;
@@ -307,7 +311,7 @@ export class AppProjetos {
       aoMostrarLista: (v) => this.ajustar({ mostrarLista: v }),
       aoMoverDependentes: (v) => this.ajustar({ moverDependentes: v }),
       aoOrdenar: (o) => this.ajustar({ ordemEtapas: o }),
-      aoExportar: () => this.exportar(),
+      aoExportar: () => void this.exportar(),
       aoImprimir: () => this.imprimir(),
       aoArquivados: () => this.abrirArquivados(),
     }));
@@ -989,10 +993,23 @@ export class AppProjetos {
     return base.map((x) => ({ ...x, etapas: filtrarEtapas(x.etapas, f, hoje, this.eu) }));
   }
 
-  private exportar(): void {
+  /**
+   * A planilha da tela, com o sigilo pela regra e pela memória deste computador. Sem conseguir ler a memória, nada é
+   * baixado (falha fechada: o número de um processo sigiloso iria na planilha).
+   */
+  private async exportar(): Promise<void> {
     const hoje = this.d.hoje();
     const p = this.projetoAberto();
-    this.d.baixar(nomeDoCsv(p?.projeto.nome ?? null, hoje), csvDosProjetos(this.itensNaTela(), hoje), "text/csv;charset=utf-8");
+    const itens = this.itensNaTela();
+    let conhecidos: SigilosConhecidos;
+    try {
+      conhecidos = await this.d.repos.unidade.sigilosConhecidos();
+    } catch (e) {
+      console.warn("[SEI Pro] projetos: planilha sem a memória do sigilo:", mensagem(e));
+      avisar(MENSAGEM_PLANILHA_SEM_MEMORIA);
+      return;
+    }
+    this.d.baixar(nomeDoCsv(p?.projeto.nome ?? null, hoje), csvDosProjetos(itens, hoje, conhecidos), "text/csv;charset=utf-8");
   }
 
   private imprimir(): void {

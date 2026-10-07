@@ -448,4 +448,21 @@ export async function verificarAppEtapa(): Promise<void> {
     [linhasG[0]?.length, texto(hg.querySelector(".prj-sec-res")).length],
   );
   checar("o texto de sigilo do historico vale na etapa tambem", linhasG[1] === "Ana · 04/10 · trocou o processo sigiloso", linhasG[1]);
+
+  // Revisão final da P4, item 12: o carimbo que não vira data (forjado, ou de uma versão de antes do teto) não
+  // vira "NaN/NaN" na linha nem no resumo: a mesma guarda do diálogo Histórico.
+  const df = cena({
+    etapa: air,
+    secaoAberta: "historico",
+    historico: async () => [regGrande("f1", 1e300, { nome: "Bia", campo: "fim", antes: "2026-10-01", depois: "2026-10-02" })],
+  });
+  await tique();
+  const hf = df.doc.querySelector(".prj-form-etapa .prj-sec[data-secao='historico']")!;
+  const linhaF = texto(hf.querySelector(".prj-hist > div"));
+  const resumoF = texto(hf.querySelector(".prj-sec-res"));
+  checar(
+    "carimbo forjado: sem NaN na linha nem no resumo",
+    !/NaN/.test(linhaF) && !/NaN/.test(resumoF) && linhaF.startsWith("Bia · --/-- ·"),
+    [linhaF, resumoF],
+  );
 }

@@ -12,13 +12,17 @@ import { documentoSemNumero } from "../../modelo/sigilo";
 import type { DataISO, Etapa } from "../../modelo/tipos";
 import type { DocumentoConferido } from "../../ponte/tipos";
 import type { ProjetoNaTela } from "../dados";
-import { dataDeFormulario, dataLonga } from "../formato";
+import { dataDeFormulario, dataLonga, dataValida } from "../formato";
 import { caixaDeErros, campo, campoDocumento, DICA_DOCUMENTO_SEM_NUMERO, ERRO_DOCUMENTO, linhaDeCampos, mensagensDoErro } from "./campos";
+
+/** Ids dos nomes das linhas (para o `aria-describedby` dos botões): únicos na página. */
+let seqNome = 0;
 
 /**
  * Reativar e Excluir tiram o projeto da lista quando a promessa resolve. A confirmação (ou o
  * "Desfazer") é de quem chama: resolver `false` (o usuário desistiu) deixa o projeto na lista, sem
- * mensagem; rejeitar mostra o erro e também deixa.
+ * mensagem; rejeitar mostra o erro e também deixa. Os dois botões se repetem em cada linha:
+ * `aria-describedby` aponta para o nome do projeto da linha.
  */
 export function abrirArquivados(c: {
   abrirModal: AbrirModal;
@@ -50,6 +54,8 @@ export function abrirArquivados(c: {
                 ocupado = false;
               }
             };
+            const idNome = `arquivado-nome-${++seqNome}`;
+            const quando = p.projeto.arquivadoEm ?? 0;
             return h(
               "div",
               { class: "prj-arquivado" },
@@ -57,11 +63,19 @@ export function abrirArquivados(c: {
               h(
                 "div",
                 { class: "prj-arquivado-nome" },
-                h("b", {}, p.projeto.nome),
-                h("span", {}, ` arquivado em ${dataLonga(hojeISO(new Date(p.projeto.arquivadoEm ?? 0)))}`),
+                h("b", { id: idNome }, p.projeto.nome),
+                h("span", {}, dataValida(quando) ? ` arquivado em ${dataLonga(hojeISO(new Date(quando)))}` : " arquivado"),
               ),
-              h("button", { type: "button", class: "spro-botao pequeno", onclick: tirar(c.reativar) }, "Reativar"),
-              h("button", { type: "button", class: "spro-botao fantasma perigo pequeno", onclick: tirar(c.excluir) }, "Excluir"),
+              h(
+                "button",
+                { type: "button", class: "spro-botao pequeno", "aria-describedby": idNome, onclick: tirar(c.reativar) },
+                "Reativar",
+              ),
+              h(
+                "button",
+                { type: "button", class: "spro-botao fantasma perigo pequeno", "aria-describedby": idNome, onclick: tirar(c.excluir) },
+                "Excluir",
+              ),
             );
           })
         : [h("p", { class: "prj-dica" }, "Nenhum projeto arquivado.")]),

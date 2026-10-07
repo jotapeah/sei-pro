@@ -203,10 +203,13 @@ export async function verificarAppSincronizacao(): Promise<void> {
     /Ligado a “projetos.json”/.test(texto(el2.querySelector("[data-secao='arquivo']"))),
   );
   checar("com o arquivo ligado, sem o exportar e importar a mao (um botao a menos)", !botao(el2, "Exportar tudo"));
-  const doArquivo = botao(el2.querySelector("[data-secao='arquivo']")!, "Sincronizar agora");
+  // Revisão final da P4, item 6: dois "Sincronizar agora" no mesmo diálogo confundiam; o do arquivo diz o que faz.
+  const visiveis = (raiz: ParentNode, t: string) => [...raiz.querySelectorAll("button")].filter((b) => texto(b) === t);
   checar(
-    "o Sincronizar agora do arquivo se distingue para o leitor de tela",
-    doArquivo?.getAttribute("aria-label") === "Sincronizar agora o arquivo",
+    "o do arquivo e 'Sincronizar o arquivo': um 'Sincronizar agora' so no dialogo (o dos textos)",
+    visiveis(el2.querySelector("[data-secao='arquivo']")!, "Sincronizar o arquivo").length === 1 &&
+      visiveis(el2, "Sincronizar agora").length === 1 &&
+      visiveis(el2.querySelector("[data-secao='unidade']")!, "Sincronizar agora").length === 1,
   );
   const subst = el2.querySelector(".prj-sync-substituido");
   checar("o texto pessoal que estava invalido: avisa e oferece baixar o antigo", /estava inválido/.test(texto(subst)));

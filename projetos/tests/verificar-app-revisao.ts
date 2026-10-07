@@ -115,6 +115,8 @@ export async function verificarAppRevisao(): Promise<void> {
   checar("de volta em A, o filtro dele continua", botaoFiltro() === "Filtro · 1" && nomesNoGantt().length === 2);
   await abrir(obra.id);
   itemDoMenu(fl.raiz, "Ajustes dos projetos", "Exportar planilha (CSV)");
+  // A planilha espera a leitura da memória do sigilo (revisão final da P4, item 5).
+  await tique();
   checar(
     "o CSV de B tambem ignora a fase de A",
     fl.t.baixados.at(-1)?.conteudo.includes("Edital") === true && fl.t.baixados.at(-1)?.conteudo.includes("Contrato") === true,

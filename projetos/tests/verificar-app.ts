@@ -304,6 +304,8 @@ export async function verificarApp(): Promise<void> {
   await tique();
   checar("esconder a lista", !a.raiz.querySelector(".prj-lista") && (await lerPreferencias(a.area)).mostrarLista === false);
   itemDoMenu(a.raiz, "Ajustes dos projetos", "Exportar planilha (CSV)");
+  // A planilha espera a leitura da memória do sigilo (revisão final da P4, item 5).
+  await tique();
   checar(
     "baixa o CSV da aba aberta com o filtro",
     a.t.baixados[0]?.nome.startsWith("projeto-img-src-x-onerror") === true &&

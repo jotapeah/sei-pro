@@ -1,9 +1,10 @@
 /**
  * Textos curtos do painel: datas, plurais e as linhas do histórico de alterações.
  *
- * O registro do histórico não tem teto de tamanho no texto da unidade (repositorio.ts, `entidadeValida`):
- * o campo, os valores e o nome de quem mudou são cortados aqui, num lugar só, para o diálogo "Histórico de
- * alterações" e para a seção Histórico do diálogo da etapa.
+ * O registro do histórico tem teto na importação (repositorio.ts, `entidadeValida`), mas a tela corta mais
+ * curto, e o que já estava guardado antes do teto pode ser maior: o campo, os valores e o nome de quem mudou são
+ * cortados aqui, num lugar só, para o diálogo "Histórico de alterações" e para a seção Histórico do diálogo da
+ * etapa. O carimbo que não vira data (`dataValida`) aparece sem data, nunca "NaN".
  */
 
 import { type DataISO, deISO, diferencaDias, formatarData, hojeISO } from "@comum/datas/dias";
@@ -119,8 +120,15 @@ export function textoDoRegistro(r: Pick<Registro, "campo" | "antes" | "depois">,
   }
 }
 
-/** "hoje", "ontem", "há 3 dias" (até 30) ou "em 01/07/2026". */
+/** O carimbo vira uma data de verdade (um registro forjado ou antigo pode trazer qualquer número). */
+export const dataValida = (ms: number): boolean => !Number.isNaN(new Date(ms).getTime());
+
+/** "06/10" do carimbo, ou "--/--" se ele não vira data. */
+export const dataCurtaDoCarimbo = (ms: number): string => (dataValida(ms) ? dataCurta(hojeISO(new Date(ms))) : "--/--");
+
+/** "hoje", "ontem", "há 3 dias" (até 30) ou "em 01/07/2026"; "em data desconhecida" se o carimbo não vira data. */
 export function quandoRelativo(ms: number, agora: number): string {
+  if (!dataValida(ms) || !dataValida(agora)) return "em data desconhecida";
   const dias = diferencaDias(hojeISO(new Date(ms)), hojeISO(new Date(agora)));
   if (dias <= 0) return "hoje";
   if (dias === 1) return "ontem";

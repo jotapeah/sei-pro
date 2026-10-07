@@ -5,7 +5,8 @@
  * Importar, o caminho de quem não tem o arquivo ligado) e as cópias diárias
  * deste navegador. Poucos botões: "Sincronizar agora" (os dois textos) fica
  * no da unidade; o pessoal só liga, desliga e apaga; o da unidade não tem
- * "apagar" (é de todos).
+ * "apagar" (é de todos). O arquivo tem o seu, "Sincronizar o arquivo" (um só
+ * "Sincronizar agora" no diálogo).
  *
  * Restaurar uma cópia RECUPERA (sincronia/arquivo.ts): só volta o que foi
  * excluído ou sumiu depois dela, e o que existe hoje não muda. O aviso diz o
@@ -344,7 +345,7 @@ export async function montarSincronizacao(d: DepsSincronizacao): Promise<HTMLEle
             ? [
                 st?.estado === "permissao"
                   ? botao("Reconectar arquivo", acao(a.reconectar), avisoArq.avisar, "spro-botao primario")
-                  : botao("Sincronizar agora", acao(a.agora), avisoArq.avisar, "spro-botao", "Sincronizar agora o arquivo"),
+                  : botao("Sincronizar o arquivo", acao(a.agora), avisoArq.avisar),
                 botao(
                   "Trocar arquivo…",
                   acao(() => a.escolher("existente")),

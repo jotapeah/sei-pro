@@ -212,17 +212,47 @@ export const DICA_DOCUMENTO_SEM_NUMERO =
 
 export const ERRO_DOCUMENTO = "Número de documento inválido.";
 
+/** A pontuação que cola nas pontas de um número copiado de um texto ("(1234567)", "1234567,", "nº 1234567."). */
+const PONTUACAO_DAS_PONTAS = /^[()[\],.;:]+|[()[\],.;:]+$/g;
+
 /**
  * O número de documento digitado ou colado, sem os espaços das pontas (a regra que o repositório aceita de um
- * colega: vazio, ou só dígitos de 1 a 20, `RE_DOCUMENTO`). Colado com rótulo ("SEI nº 1240001"), vale o ÚNICO
- * pedaço separado por espaço que passa. Nenhum ou mais de um: `null` (inválido). Nada é tirado do meio de um
- * pedaço: "1.234.567" e "12a" não viram outro número.
+ * colega: vazio, ou só dígitos de 1 a 20, `RE_DOCUMENTO`). Colado de um texto ("Despacho 12 (1234567)", "SEI nº
+ * 1234567."), cada pedaço separado por espaço perde a pontuação das pontas (`()[],.;:`) e vale o ÚNICO pedaço que
+ * passa entre parênteses ou colchetes (o número SEI vem assim depois do nome do documento); sem nenhum entre eles,
+ * o único que passa no texto todo. Nenhum, ou mais de um no mesmo nível: `null` (inválido: ambíguo). Nada é tirado
+ * do meio de um pedaço: "1.234.567" e "12a" não viram outro número.
  */
 function documentoLimpo(t: string): string | null {
   const inteiro = t.trim();
   if (!inteiro || RE_DOCUMENTO.test(inteiro)) return inteiro;
-  const pedacos = inteiro.split(/\s+/).filter((p) => RE_DOCUMENTO.test(p));
-  return pedacos.length === 1 ? (pedacos[0] as string) : null;
+  const dentro: string[] = [];
+  const todos: string[] = [];
+  let nivel = 0;
+  let pedaco = "";
+  let entre = false;
+  const fechar = () => {
+    const limpo = pedaco.replace(PONTUACAO_DAS_PONTAS, "");
+    if (RE_DOCUMENTO.test(limpo)) {
+      todos.push(limpo);
+      if (entre) dentro.push(limpo);
+    }
+    pedaco = "";
+    entre = false;
+  };
+  for (const c of inteiro) {
+    if (/\s/.test(c)) {
+      fechar();
+      continue;
+    }
+    if (c === "(" || c === "[") nivel++;
+    else if (c === ")" || c === "]") nivel = Math.max(0, nivel - 1);
+    else if (nivel > 0) entre = true;
+    pedaco += c;
+  }
+  fechar();
+  const escolhidos = dentro.length ? dentro : todos;
+  return escolhidos.length === 1 ? (escolhidos[0] as string) : null;
 }
 
 /**

@@ -18,7 +18,7 @@ import { h, icone } from "@comum/ui/dom";
 import { rotuloDaVis } from "../../modelo/escopo";
 import type { Registro, Vis } from "../../modelo/tipos";
 import { mensagemDoErro } from "../erros";
-import { quemDoRegistro, textoDoRegistro } from "../formato";
+import { dataValida, quemDoRegistro, textoDoRegistro } from "../formato";
 import { caixaDeErros } from "./campos";
 
 export interface RegistroNaTela extends Registro {
@@ -42,8 +42,6 @@ export interface ContextoHistorico {
 const TODOS = "";
 /** O grupo dos registros com carimbo que não vira data. */
 const SEM_DATA = "";
-
-const dataValida = (ms: number): boolean => !Number.isNaN(new Date(ms).getTime());
 
 const hora = (ms: number) => {
   if (!dataValida(ms)) return "--:--";
