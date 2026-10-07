@@ -13,7 +13,9 @@
  *
  * Puxa ao iniciar (o Controle de Processos), ao ganhar foco (no máximo a cada
  * 2 min) e com pendência; mudança local vai 15 s depois. As duas gravações
- * conferem o conteúdo lido no formulário de alterar (armazém do núcleo).
+ * conferem o conteúdo lido no formulário de alterar (armazém do núcleo). Uma
+ * puxada por vez: o foco e a volta da visibilidade chegam juntos, e no SEI por
+ * HTTP (sem Web Locks) cada um faria a sua leitura.
  *
  * A mescla e a montagem do texto leem a memória do sigilo e lançam se ela
  * estiver ilegível (falha fechada): isso acontece dentro da rodada do motor,
@@ -22,9 +24,9 @@
  * por causa dela.
  *
  * Os dois textos são independentes: um que não inicia (o storage.sync que não
- * lê o consentimento, o armazém que não monta) não impede o outro, e o
- * "Sincronizar agora" devolve o status de cada um (o que falhou, em erro com o
- * motivo). O construtor confere que os repositórios são desta unidade e deste
+ * lê o consentimento, o armazém que não monta) não impede o outro, tenta de
+ * novo a cada foco (a leitura respeita os 2 min) e o "Sincronizar agora"
+ * devolve o status de cada um (o que falhou, em erro com o motivo). O construtor confere que os repositórios são desta unidade e deste
  * usuário: o consentimento de um texto nunca libera a gravação dos dados de
  * outro escopo.
  */
@@ -85,6 +87,12 @@ async function semLancar<T extends StatusSync | null>(f: () => Promise<T>): Prom
 
 export class SincroniaPagina {
   private readonly controles: Record<Vis, ControleTextoPadrao<EnvelopeProjetos>>;
+  /** Os textos cujo `iniciar` falhou: o foco seguinte tenta de novo. */
+  private readonly naoIniciados = new Set<Vis>();
+  /** A puxada em curso (uma por vez). */
+  private puxando: Promise<void> | null = null;
+  /** `parar()` foi chamado: o foco não religa o que não iniciou. */
+  private parado = false;
 
   constructor(private readonly d: DepsSincroniaPagina) {
     const esperado = escoposDaUnidade(d.host, d.login, d.unidade.id);
@@ -119,20 +127,43 @@ export class SincroniaPagina {
    * texto que não inicia fica parado até a próxima carga (o "Sincronizar agora" ainda roda) e o outro segue.
    */
   async iniciar(o: { puxar: boolean }): Promise<void> {
-    await Promise.all(
-      VISES.map(async (vis) => {
-        try {
-          await this.controles[vis].iniciar(o);
-        } catch (e) {
-          console.warn(`[SEI Pro] projetos: a sincronia do texto "${vis}" não iniciou:`, e);
-        }
-      }),
-    );
+    this.parado = false;
+    await Promise.all(VISES.map((vis) => this.iniciarTexto(vis, o)));
   }
 
-  /** A aba ganhou foco: puxa os ligados, respeitando os 2 min (um que falha não segura o outro). */
-  async puxar(): Promise<void> {
-    await Promise.all(VISES.map((vis) => semLancar(() => this.controles[vis].puxar())));
+  /** Inicia um texto; o que falha fica em `naoIniciados` (o foco tenta de novo). Nunca rejeita. */
+  private async iniciarTexto(vis: Vis, o: { puxar: boolean }): Promise<void> {
+    try {
+      await this.controles[vis].iniciar(o);
+      this.naoIniciados.delete(vis);
+    } catch (e) {
+      this.naoIniciados.add(vis);
+      console.warn(`[SEI Pro] projetos: a sincronia do texto "${vis}" não iniciou:`, e);
+    }
+  }
+
+  /**
+   * A aba ganhou foco: puxa os ligados, respeitando os 2 min (um que falha não segura o outro); o texto que não
+   * iniciou tenta iniciar de novo, já puxando (a rodada não é forçada: os 2 min valem). Uma puxada por vez: a
+   * chamada que chega com outra em curso espera a mesma.
+   */
+  puxar(): Promise<void> {
+    this.puxando ??= this.puxarUmaVez().finally(() => {
+      this.puxando = null;
+    });
+    return this.puxando;
+  }
+
+  private async puxarUmaVez(): Promise<void> {
+    await Promise.all(
+      VISES.map(async (vis) => {
+        if (this.naoIniciados.has(vis)) {
+          if (!this.parado) await this.iniciarTexto(vis, { puxar: true });
+          return;
+        }
+        await semLancar(() => this.controles[vis].puxar());
+      }),
+    );
   }
 
   /**
@@ -153,6 +184,7 @@ export class SincroniaPagina {
   }
 
   parar(): void {
+    this.parado = true;
     this.controles.unidade.parar();
     this.controles.eu.parar();
   }

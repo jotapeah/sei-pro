@@ -13,10 +13,10 @@ import { gerarConteudoTexto, lerConteudoTexto } from "@comum/sincronia/textoPadr
 import { prefixoMemoriaSigilo } from "../../src/modelo/constantes";
 import { ErroMemoriaSigilo } from "../../src/modelo/memoriaSigilo";
 import type { EnvelopeProjetos, Vis } from "../../src/modelo/tipos";
-import { type DepsSincroniaPagina, INTERVALO_PUXAR, SincroniaPagina } from "../../src/pagina/sincronia";
+import { type DepsSincroniaPagina, INTERVALO_PUXAR, ligarSincronia, SincroniaPagina } from "../../src/pagina/sincronia";
 import { RepositorioProjetos } from "../../src/repositorio";
 import { CHAVE_CONSENTIMENTO, chaveDoConsentimento } from "../../src/sincronia/consentimento";
-import { chaveStatusTexto } from "../../src/sincronia/textoPadrao";
+import { chaveStatusTexto, MENSAGEM_MUDOU } from "../../src/sincronia/textoPadrao";
 import { checar, secao, tique } from "./util";
 
 const AGORA = Date.UTC(2026, 9, 6, 12);
@@ -334,5 +334,211 @@ export async function verificarSincroniaPagina(): Promise<void> {
       "os repositorios trocados (o da unidade no lugar do pessoal): recusa",
       tenta({ repos: { unidade: m5.repos.eu, eu: m5.repos.unidade } }) !== null,
     );
+  }
+
+  await verificarRevisaoFinalPagina();
+}
+
+/** O projeto que um colega acabou de gravar no texto da unidade. */
+const comNovoDoColega = (id: string): EnvelopeProjetos => {
+  const e = doColega();
+  e.entidades.p.push({
+    id,
+    nome: `Novo ${id}`,
+    etiquetas: [],
+    ordem: "a1",
+    criadoEm: AGORA,
+    atualizadoEm: AGORA + 1,
+    dispositivo: "pc-bia",
+  });
+  return e;
+};
+
+/** O último puxar deste texto foi há `min` minutos (o intervalo da aba é 2 min; o padrão do motor, 5). */
+async function envelhecer(m: ReturnType<typeof montar>, vis: Vis, min: number, extra: Partial<StatusSync> = {}): Promise<void> {
+  const k = chaveStatusTexto(m.repos[vis].escopo);
+  const st = (await m.area.obter(k))[k] as StatusSync;
+  await m.area.gravar({ [k]: { ...st, ultimoPuxar: Date.now() - min * 60_000, ...extra } });
+}
+
+/**
+ * Revisão final da P4: as provas que derrubam os ajustes da ligação (item 10: `intervaloPuxar`, `releituras`,
+ * `lerNoRecuo`; o `idProcedimento` do sigiloso; o sigilo no texto pessoal) e a rodada única e a nova tentativa
+ * de iniciar ao focar (item 11).
+ */
+async function verificarRevisaoFinalPagina(): Promise<void> {
+  secao("pagina: o intervalo da aba e de 2 min, nao os 5 do motor (revisao final, item 10)");
+  {
+    const un = textoNoSei(await gerarConteudoTexto("Dados", doColega()));
+    const m = montar({ unidade: un, eu: textoNoSei(null) });
+    await m.s.iniciar({ puxar: true });
+    await tique(60);
+    await envelhecer(m, "unidade", 3);
+    const lidas = un.lidas;
+    await m.s.puxar();
+    checar("passados 3 min (menos que os 5 do motor), o foco le", un.lidas === lidas + 1, un.lidas - lidas);
+    m.s.parar();
+  }
+
+  secao("pagina: a conferencia na gravacao, ate 3 tentativas (revisao final, item 10)");
+  {
+    const un = textoNoSei(await gerarConteudoTexto("Dados", doColega()));
+    let conferencias = 0;
+    un.gravarConferindo = async () => {
+      conferencias++;
+      // Um colega grava entre a leitura e a gravação, todas as vezes.
+      un.html = await gerarConteudoTexto("Dados", comNovoDoColega(`pc${conferencias + 10}`));
+      return { gravado: false, atual: un.html };
+    };
+    const m = montar({ unidade: un, eu: textoNoSei(null) });
+    await m.consentir("unidade", "ligado");
+    await m.repos.unidade.criarProjeto({ nome: "Meu" });
+    const r = await m.s.agora();
+    checar(
+      "o texto mudando a cada conferencia: 3 tentativas pela conferencia (nunca a gravacao cega) e desiste em 'pendente'",
+      conferencias === 3 && un.gravadas === 0 && r.unidade.mensagem === MENSAGEM_MUDOU && r.unidade.pendente === true,
+      { conferencias, gravadas: un.gravadas, r: r.unidade },
+    );
+    m.s.parar();
+  }
+
+  secao("pagina: no recuo de 'indisponivel', o texto da unidade continua lido (revisao final, item 10)");
+  {
+    const un = textoNoSei(await gerarConteudoTexto("Dados", doColega()));
+    const recusar = async (): Promise<never> => {
+      throw Object.assign(new Error("sem o link de alterar"), { codigo: "SEI_ACAO_INDISPONIVEL" });
+    };
+    un.gravar = recusar;
+    un.gravarConferindo = recusar;
+    const m = montar({ unidade: un, eu: textoNoSei(null) });
+    await m.s.iniciar({ puxar: true });
+    await tique(40);
+    await m.consentir("unidade", "ligado");
+    await m.repos.unidade.criarProjeto({ nome: "Meu" });
+    const r = await m.s.agora();
+    await tique(40);
+    checar("premissa: quem so consulta fica em 'indisponivel', com o recuo de um dia", r.unidade.estado === "indisponivel", r.unidade);
+    un.html = await gerarConteudoTexto("Dados", comNovoDoColega("pc9"));
+    await envelhecer(m, "unidade", 3);
+    await m.s.puxar();
+    checar(
+      "passados os 2 min, o foco le e mescla o que o colega gravou, sem sair do recuo",
+      (await m.repos.unidade.dados()).projetos.some((p) => p.id === "pc9") && (await m.status("unidade"))?.estado === "indisponivel",
+    );
+    m.s.parar();
+  }
+
+  secao("pagina: o idProcedimento do sigiloso nao vai ao texto; o pessoal tambem raspa (revisao final, item 10)");
+  {
+    const un = textoNoSei(null);
+    const eu = textoNoSei(null);
+    const m = montar({ unidade: un, eu });
+    await m.consentir("unidade", "ligado");
+    await m.consentir("eu", "ligado");
+    await m.repos.unidade.criarProjeto({ nome: "Apuração", processo: { protocolo: SIGILO, idProcedimento: "987654321", sigiloso: true } });
+    const pe = await m.repos.eu.criarProjeto({
+      nome: "Só meu",
+      processo: { protocolo: SIGILO, idProcedimento: "987654321", sigiloso: true },
+    });
+    const ee = await m.repos.eu.criarEtapa({ projeto: pe.id, nome: "Oitiva", inicio: "2026-10-06", fim: "2026-10-09" });
+    await m.repos.eu.editarEtapa(ee.id, { documento: { numero: "4455667" } }, "2026-10-06");
+    const r = await m.s.agora();
+    const tu = JSON.stringify(await envelopeDoTexto(un.html));
+    const te = JSON.stringify(await envelopeDoTexto(eu.html));
+    checar(
+      "texto da unidade: o vinculo que TEM idProcedimento vai sem ele (e sem o numero)",
+      r.unidade.estado === "ok" && !!un.html && !tu.includes("987654321") && !/000777|50300000777202610/.test(tu),
+      tu,
+    );
+    checar(
+      "texto pessoal: o numero sigiloso, o idProcedimento e o documento da etapa sigilosa nao vao",
+      r.eu?.estado === "ok" && !!eu.html && !te.includes("987654321") && !/000777|50300000777202610/.test(te) && !te.includes("4455667"),
+      te,
+    );
+    m.s.parar();
+  }
+
+  secao("pagina: uma rodada por vez ao focar (revisao final, item 11)");
+  {
+    const un = textoNoSei(await gerarConteudoTexto("Dados", doColega()));
+    const m = montar({ unidade: un, eu: textoNoSei(null) });
+    await m.s.iniciar({ puxar: true });
+    await tique(60);
+    await envelhecer(m, "unidade", 3);
+    const lidas = un.lidas;
+    await Promise.all([m.s.puxar(), m.s.puxar()]);
+    checar("dois focos juntos (SEI por HTTP, sem Web Locks): uma leitura so", un.lidas === lidas + 1, un.lidas - lidas);
+    m.s.parar();
+
+    // A mesma coisa pelos eventos de verdade: o foco e a volta da visibilidade chegam juntos.
+    const area = areaMemoria();
+    const relogio = { agora: AGORA };
+    const repo = (vis: Vis) =>
+      new RepositorioProjetos(area, { host: HOST, login: "ana", unidade: "110", vis }, () => ({
+        agora: ++relogio.agora,
+        dispositivo: "pc-ana",
+        por: "ana",
+        nome: "Ana Lima",
+      }));
+    const un2 = textoNoSei(await gerarConteudoTexto("Dados", doColega()));
+    const janela = new EventTarget();
+    const pagina = Object.assign(new EventTarget(), { visibilityState: "visible" as DocumentVisibilityState });
+    const repos = { unidade: repo("unidade"), eu: repo("eu") };
+    const s = ligarSincronia({
+      ctx: { host: HOST, login: "ana", nome: "Ana Lima" },
+      unidade: { id: "110", sigla: "SEPRO" },
+      area,
+      sync: areaMemoria(),
+      repos,
+      armazem: (vis) => (vis === "unidade" ? un2 : textoNoSei(null)),
+      janela,
+      doc: pagina,
+      atrasoEnvio: 10,
+    });
+    await tique(60);
+    const k = chaveStatusTexto(repos.unidade.escopo);
+    const st = (await area.obter(k))[k] as StatusSync;
+    await area.gravar({ [k]: { ...st, ultimoPuxar: Date.now() - 3 * 60_000 } });
+    const lidas2 = un2.lidas;
+    janela.dispatchEvent(new Event("focus"));
+    pagina.dispatchEvent(new Event("visibilitychange"));
+    await tique(60);
+    checar("focus e visibilitychange juntos: uma leitura so", un2.lidas === lidas2 + 1, un2.lidas - lidas2);
+    s?.parar();
+  }
+
+  secao("pagina: o texto que nao iniciou tenta de novo ao focar (revisao final, item 11)");
+  {
+    const falha = { ler: true };
+    const base = areaMemoria();
+    const sync: Area = {
+      ...base,
+      obter: async (k) => {
+        if (falha.ler) throw new Error("QUOTA_BYTES quota exceeded");
+        return base.obter(k);
+      },
+      aoMudar: base.aoMudar.bind(base),
+    };
+    const un = textoNoSei(await gerarConteudoTexto("Dados", doColega()));
+    const m = montar({ unidade: un, eu: textoNoSei(null) }, {}, (a) => a, { sync });
+    await m.s.iniciar({ puxar: true });
+    await tique(40);
+    checar("premissa: o storage.sync nao leu e a unidade nao iniciou (nada lido)", un.lidas === 0);
+    await m.s.puxar();
+    await tique(40);
+    checar("ainda sem o storage.sync: o foco tenta e nao quebra", un.lidas === 0);
+    falha.ler = false;
+    await m.s.puxar();
+    await tique(60);
+    const lidas = un.lidas;
+    checar(
+      "o storage.sync voltou: o foco seguinte inicia o texto, que le e mescla o do colega",
+      lidas >= 1 && (await m.repos.unidade.dados()).projetos.some((p) => p.id === "pc1"),
+      lidas,
+    );
+    await m.s.puxar();
+    await tique(40);
+    checar("e, iniciado, o foco seguinte respeita os 2 min", un.lidas === lidas, un.lidas - lidas);
+    m.s.parar();
   }
 }
