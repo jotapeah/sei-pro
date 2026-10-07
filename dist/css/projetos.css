@@ -2819,6 +2819,44 @@ html[data-modo="impressao"] .prj-gantt {
   color: var(--spro-texto);
 }
 
+/* ---------- P4: importar do servidor do Atividades ---------- */
+.prj-form-importar {
+  min-width: min(520px, 86vw);
+}
+.prj-importar-lista {
+  display: grid;
+  gap: 2px;
+  max-height: 40vh;
+  overflow: auto;
+}
+.prj-importar-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--spro-borda);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.prj-importar-item input {
+  flex: none;
+}
+/* O projeto que nao cabe (mais etapas que o limite): a caixa desligada, a linha mais apagada. */
+.prj-importar-item:has(input:disabled) {
+  cursor: default;
+  color: var(--spro-fraco);
+}
+.prj-importar-resumo {
+  margin: 0;
+  color: var(--spro-texto);
+}
+.prj-importar-cache {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--spro-fundo-2);
+  border-radius: var(--spro-raio);
+}
+
 /*
  * Frappe Gantt 1.2.2 (MIT, https://github.com/frappe/gantt): dist/frappe-gantt.css do pacote npm,
  * formatado pelo esbuild. Ajustes do SEI Pro (tokens --spro-*, situacoes, marco, base) no fim.

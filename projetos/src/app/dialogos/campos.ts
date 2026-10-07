@@ -9,7 +9,7 @@ import { type Combo, criarCombo, type OpcaoCombo } from "@comum/ui/combobox";
 import { h, icone } from "@comum/ui/dom";
 import { vinculoSemNumero } from "../../modelo/sigilo";
 import type { Vinculo } from "../../modelo/tipos";
-import { RE_DOCUMENTO, RE_ID_PROCEDIMENTO, RE_PROTOCOLO } from "../../modelo/vinculos";
+import { protocoloNoTexto, protocoloValido, RE_DOCUMENTO, RE_ID_PROCEDIMENTO, RE_PROTOCOLO } from "../../modelo/vinculos";
 import type { DocumentoConferido, ProcessoDaCaixa } from "../../ponte/tipos";
 import { cotaCheia, TEXTO_COTA_CHEIA } from "../erros";
 
@@ -89,28 +89,15 @@ const VALOR_DIGITADO = "digitado:";
 const VALOR_SIGILOSO = "sigiloso:";
 
 /**
- * O número digitado ou colado. O texto inteiro (sem os espaços das pontas) quando ele passa em
- * `protocoloValido`; senão, colado com rótulo ("Processo nº 50300.000001/2026-11"), o ÚNICO pedaço separado
- * por espaço que passa. Nenhum ou mais de um: fica o texto inteiro, que `protocoloValido` recusa. Nada é
- * tirado do meio de um pedaço: com letras aceitas (SEI-RJ), limpar a marcação de "<b>12345678" fabricaria
- * um número que ninguém digitou.
+ * O número digitado ou colado (`protocoloNoTexto`, a mesma regra da importação do Atividades). Nenhum pedaço
+ * que passe, ou mais de um: fica o texto inteiro, que `protocoloValido` recusa.
  */
 function protocoloLimpo(t: string): string {
-  const inteiro = t.trim();
-  if (protocoloValido(inteiro)) return inteiro;
-  const pedacos = inteiro.split(/\s+/).filter(protocoloValido);
-  return pedacos.length === 1 ? (pedacos[0] as string) : inteiro;
+  return protocoloNoTexto(t) ?? t.trim();
 }
 
-/**
- * Número de processo aceito (os formatos variam por órgão; o SEI-RJ escreve "SEI-150016/000123/2021"):
- * começa com letra ou dígito, termina em dígito, só letras, dígitos . / -, ao menos 8 dígitos e até 40
- * caracteres (a forma que o repositório aceita de um colega, `RE_PROTOCOLO`).
- */
-export function protocoloValido(p: string): boolean {
-  const t = p.trim();
-  return t.length <= 40 && /^[A-Za-z0-9][A-Za-z0-9./-]*[0-9]$/.test(t) && t.replace(/\D/g, "").length >= 8;
-}
+/** A regra mora em modelo/vinculos.ts (a importação do Atividades usa a mesma); fica exportada daqui também. */
+export { protocoloValido };
 
 /**
  * O vínculo de um processo da caixa: o número sem os espaços das pontas e o `idProcedimento` só quando é

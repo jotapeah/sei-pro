@@ -23,6 +23,12 @@ export const FOLGA_RELOGIO_MS = 86_400_000;
 export const DIAS_LAPIDE_UNIDADE = 180;
 export const DIAS_LAPIDE_EU = 90;
 
+/**
+ * Projetos lidos do servidor do Atividades (ou do guardado pelo painel antigo) numa importação: dado de fora,
+ * com teto antes de qualquer outra conta (nenhuma unidade do legado chega perto).
+ */
+export const MAXIMO_PROJETOS_ATIVIDADES = 1000;
+
 /** Etapa nova pela última linha da lista: duração em dias úteis (spec 3.1). */
 export const DIAS_ETAPA_NOVA = 5;
 
