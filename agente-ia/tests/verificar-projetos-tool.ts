@@ -307,6 +307,97 @@ export async function verificarProjetosTool(): Promise<void> {
   // Só o conhecido sai, o resto fica; o número comum fica intacto.
   for (const [k, [, esperado]] of Object.entries(colados)) checar(`colado a outro numero (${k})`, obs7.get(k) === esperado, obs7.get(k));
 
+  secao("agente: projetos_listar - digitos Unicode, separadores tipograficos, SEI-RJ e campo a campo");
+  // Todos os números só na memória. O curto (12 dígitos) e o do RJ antigo (13) ficam abaixo da forma de processo (15):
+  // só saem se cada dígito for lido pelo valor certo e cada separador juntar os blocos.
+  const area8 = areaMemoria();
+  const un8 = new RepositorioProjetos(area8, esc.unidade, carimbo);
+  const p8 = await un8.criarProjeto({ nome: "Variantes", etiquetas: ["etiqueta 50300.000001/2026-01"] });
+  /** O texto com os dígitos ASCII trocados pelos do bloco que começa em `zero`. */
+  const noBloco = (t: string, zero: number) => t.replace(/[0-9]/g, (c) => String.fromCodePoint(zero + Number(c)));
+  const SOBRESCRITOS = [0x2070, 0xb9, 0xb2, 0xb3, 0x2074, 0x2075, 0x2076, 0x2077, 0x2078, 0x2079];
+  const sobrescrito = (t: string) => t.replace(/[0-9]/g, (c) => String.fromCodePoint(SOBRESCRITOS[Number(c)] as number));
+  const largo = (t: string) => t.replace(/[0-9./-]/g, (c) => String.fromCodePoint((c.codePointAt(0) as number) + 0xfee0));
+  const variantes8: Record<string, [string, string]> = {};
+  const BLOCOS: Record<string, number> = { arabeIndico: 0x660, persa: 0x6f0, devanagari: 0x966, negritoMatematico: 0x1d7ce, myanmarExtC2: 0x116da };
+  for (const [nome, numero] of [
+    ["nup", "50300.000001/2026-01"],
+    ["curto", "120031234202"],
+    ["rjAntigo", "E-12/003/1234/2021"],
+  ] as const) {
+    const esperado = numero.startsWith("E-") ? "x E-[nº de processo] fim" : "x [nº de processo] fim";
+    variantes8[`a.largura-total.${nome}`] = [`x ${largo(numero)} fim`, nome === "rjAntigo" ? `x E${String.fromCodePoint(0xff0d)}[nº de processo] fim` : esperado];
+    variantes8[`a.sobrescrito.${nome}`] = [`x ${sobrescrito(numero)} fim`, esperado];
+    for (const [b, zero] of Object.entries(BLOCOS)) variantes8[`a.${b}.${nome}`] = [`x ${noBloco(numero, zero)} fim`, esperado];
+  }
+  variantes8["a.misturado"] = [`x 50300.${noBloco("000001", 0xff10)}/2026-${noBloco("01", 0x660)} fim`, "x [nº de processo] fim"];
+  const SEPARADORES: Record<string, string> = {
+    "U+2010": String.fromCharCode(0x2010),
+    "U+2011": String.fromCharCode(0x2011),
+    "U+2012": String.fromCharCode(0x2012),
+    "U+2013": String.fromCharCode(0x2013),
+    "U+2014": String.fromCharCode(0x2014),
+    "U+2015": String.fromCharCode(0x2015),
+    "U+2212": String.fromCharCode(0x2212),
+    ponto_medio: String.fromCharCode(0xb7),
+    sublinhado: "_",
+    "U+2215": String.fromCharCode(0x2215),
+    "U+FF0F": String.fromCharCode(0xff0f),
+  };
+  for (const [nome, sep] of Object.entries(SEPARADORES)) {
+    variantes8[`b.${nome}.nup`] = [`x 50300${sep}000001${sep}2026${sep}01 fim`, "x [nº de processo] fim"];
+    variantes8[`b.${nome}.curto`] = [`x 12003${sep}1234${sep}202 fim`, "x [nº de processo] fim"];
+  }
+  variantes8["c.sei-rj"] = ["x SEI-150016/000123/2021 fim", "x SEI-[nº de processo] fim"];
+  variantes8["c.sei-rj.espacos"] = ["x SEI 150016 / 000123 / 2021 fim", "x SEI [nº de processo] fim"];
+  variantes8["c.sei-rj.largura-total"] = [`x SEI-${largo("150016/000123/2021")} fim`, "x SEI-[nº de processo] fim"];
+  variantes8["c.rj-antigo"] = ["x E-12/003/1234/2021 fim", "x E-[nº de processo] fim"];
+  variantes8["controle.largura-total"] = [`x prazo ${largo("01/10/2026")} e 5 dias fim`, `x prazo ${largo("01/10/2026")} e 5 dias fim`];
+  variantes8["controle.arabe"] = [`x ${noBloco("2026 / 7", 0x660)} fim`, `x ${noBloco("2026 / 7", 0x660)} fim`];
+  for (const [nome, [observacoes]] of Object.entries(variantes8)) await un8.criarEtapa({ projeto: p8.id, nome, inicio: d(1), fim: d(2), observacoes });
+  // (d) Um número quebrado entre campos: cada campo é redigido sozinho, nenhum junta texto de outro; e etiqueta não vai.
+  await un8.criarEtapa({
+    projeto: p8.id,
+    nome: "d.quebrado 2026",
+    inicio: d(1),
+    fim: d(2),
+    observacoes: "Ver o processo 50300.000001/",
+    checklist: [
+      { id: "c1", texto: "2026-01 e o resto", feito: false },
+      { id: "c2", texto: "inteiro 50300.000001/2026-01 aqui", feito: true },
+    ],
+    etiquetas: ["50300.000001/2026-01", "etiqueta-reservada"],
+  });
+  await area8.gravar({
+    [`${memoria}p/50300000001202601`]: "aprendida",
+    [`${memoria}p/120031234202`]: "aprendida",
+    [`${memoria}p/1500160001232021`]: "aprendida",
+    [`${memoria}p/1200312342021`]: "aprendida",
+  });
+  definirAreaProjetos(() => area8);
+  const r8 = await rodar({}, contexto());
+  const etapas8 = new Map((r8.projetos[0]?.etapas ?? []).map((e) => [e.nome, e]));
+  const errados8 = Object.entries(variantes8).filter(([k, [, esperado]]) => etapas8.get(k)?.observacoes !== esperado);
+  for (const grupo of ["a", "b", "c", "controle"]) {
+    const doGrupo = Object.keys(variantes8).filter((k) => k.startsWith(`${grupo}.`));
+    const ruins = errados8.filter(([k]) => k.startsWith(`${grupo}.`));
+    checar(
+      `(${grupo}) ${doGrupo.length} variantes: ${grupo === "controle" ? "numero comum intacto" : "o numero da memoria nunca sai"}`,
+      doGrupo.length > 0 && ruins.length === 0,
+      ruins.map(([k]) => [k, etapas8.get(k)?.observacoes]),
+    );
+  }
+  const q = etapas8.get("d.quebrado 2026");
+  checar(
+    "(d) cada campo redigido sozinho: nenhum junta texto de outro (nome, observacoes e cada item do checklist)",
+    q?.observacoes === "Ver o processo 50300.000001/" &&
+      q.checklist?.[0] === "[ ] 2026-01 e o resto" &&
+      q.checklist?.[1] === "[x] inteiro [nº de processo] aqui",
+    q,
+  );
+  const t8 = JSON.stringify(r8);
+  checar("(d) etiquetas do projeto e da etapa nunca vao (nem o numero de dentro delas)", !t8.includes("etiqueta") && !t8.includes('"etiquetas"'), t8.slice(0, 200));
+
   secao("agente: projetos_listar - memoria do sigilo ilegivel: falha fechada");
   const quebrada: Area = {
     ...area3,

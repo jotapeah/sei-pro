@@ -106,18 +106,73 @@ export function definirOrcamentoProjetos(n: number = ORCAMENTO_PADRAO): void {
 export const SEM_NUMERO_PROCESSO = "[nº de processo]";
 export const SEM_NUMERO_DOCUMENTO = "[nº de documento]";
 
-/** Os traços que o Word põe no lugar do hífen (U+2010 a U+2014) e o sinal de menos (U+2212), montados aqui: o fonte do regex fica em ASCII. */
-const TRACOS = String.fromCharCode(0x2010, 0x2011, 0x2012, 0x2013, 0x2014, 0x2212);
-/** Invisível (zero-width, marca de direção, BOM, Unicode tags): o mesmo do `varrer`, que só os tira DEPOIS. */
-const INVISIVEL = `(?:${INVISIVEIS.source})`;
-/** Espaço (inclusive o NBSP) ou invisível, sem ambiguidade (o BOM é os dois: sem o `(?!)`, o retrocesso explode). */
-const BRANCO = `(?:(?!${INVISIVEL})\\s|${INVISIVEL})`;
-/**
- * Uma sequência de dígitos com pontuação ou invisível no meio: "50300.000001/2026-01", "50300000001202601", "0123456",
- * e também com invisível, espaço colado à pontuação ou travessão ("50300.000001 / 2026-01"). Dígitos separados SÓ por
- * espaço não se juntam ("1234 5678" são dois).
+/*
+ * Os caracteres fora do ASCII destas classes são montados por `String.fromCharCode`/`fromCodePoint`: o fonte dos regex
+ * fica em ASCII (o esbuild não escapa literal de regex, e o pacote não pode ganhar byte acima de 0x7f).
  */
-const RE_NUMERO = new RegExp(`\\d(?:${INVISIVEL}*\\d|${BRANCO}*[./${TRACOS}-]${BRANCO}*\\d)*`, "gu");
+/**
+ * Um dígito de qualquer escrita: os decimais (\p{Nd}: ASCII, largura total, arábico-índicos, devanágari, negrito
+ * matemático...) e os outros números (\p{No}: sobrescritos, subscritos, circulados). O valor sai de `digitosDe`.
+ */
+const DIGITO = "[\\p{Nd}\\p{No}]";
+/**
+ * O que fica no meio de um número sem aparecer: formatação (\p{Cf}: zero-width, BOM, marcas de direção, hífen suave),
+ * marcas combinantes (\p{M}), os preenchimentos do hangul e as Unicode tags (U+E0000 a U+E007F). Contém os INVISIVEIS do
+ * `varrer` (que só os tira DEPOIS). Uma classe só, sem nada em comum com DIGITO e SEPARADOR: sem ambiguidade no retrocesso.
+ */
+const OCULTO = `[\\p{Cf}\\p{M}${String.fromCharCode(0x115f, 0x1160, 0x3164, 0xffa0)}${String.fromCodePoint(0xe0000)}-${String.fromCodePoint(0xe007f)}]`;
+/** Espaço (inclusive o NBSP) ou oculto, sem ambiguidade (o BOM é os dois: sem o `(?!)`, o retrocesso explode). */
+const BRANCO = `(?:(?!${OCULTO})\\s|${OCULTO})`;
+/**
+ * A pontuação entre os blocos: ponto, barra, sublinhado, os traços (\p{Pd}: o hífen, U+2010 a U+2015, os de largura
+ * total), o menos (U+2212), o ponto médio, as barras de divisão (U+2215), de fração e de largura total, o ponto de
+ * largura total, os pontos de líder e de hifenização, o ponto pequeno, a barra grande, o ponto médio do katakana e os
+ * separadores decimal e de milhar do árabe.
+ */
+const SEPARADOR = `[./_\\p{Pd}${String.fromCharCode(0x2212, 0xb7, 0x2215, 0x2044, 0xff0f, 0xff0e, 0x2024, 0x2027, 0xfe52, 0x29f8, 0x30fb, 0x66b, 0x66c)}]`;
+/**
+ * Uma sequência de dígitos com pontuação ou oculto no meio: "50300.000001/2026-01", "50300000001202601", "0123456",
+ * e também com oculto, espaço colado à pontuação, travessão ou dígito de outra escrita ("50300.000001 / 2026–01").
+ * Dígitos separados SÓ por espaço não se juntam ("1234 5678" são dois).
+ */
+const RE_NUMERO = new RegExp(`${DIGITO}(?:${OCULTO}*${DIGITO}|${BRANCO}*${SEPARADOR}${BRANCO}*${DIGITO})*`, "gu");
+const RE_DECIMAL = /\p{Nd}/u;
+
+/**
+ * Os dígitos ASCII de um caractere da sequência ("" se não é dígito): o NFKC resolve largura total, sobrescrito,
+ * circulado e o negrito matemático ("⑳" dá "20"); os outros decimais do Unicode vêm em blocos seguidos de 0 a 9 (às
+ * vezes dois blocos juntos), e o valor é a distância até o começo da sequência, módulo 10.
+ */
+function digitosDe(ch: string): string {
+  if (ch.length === 1 && ch >= "0" && ch <= "9") return ch;
+  const k = ch.normalize("NFKC");
+  if (/^[0-9]+$/.test(k)) return k;
+  const cp = ch.codePointAt(0) ?? 0;
+  if (!RE_DECIMAL.test(ch)) return "";
+  let v = 0;
+  while (v < 100 && cp - v - 1 >= 0 && RE_DECIMAL.test(String.fromCodePoint(cp - v - 1))) v++;
+  return String(v % 10);
+}
+
+/** Os grupos de dígitos seguidos da sequência `m`, com a posição em `m` e os dígitos em ASCII. */
+function gruposDe(m: string): Array<{ ini: number; fim: number; d: string }> {
+  const grupos: Array<{ ini: number; fim: number; d: string }> = [];
+  let atual: { ini: number; fim: number; d: string } | null = null;
+  let i = 0;
+  for (const ch of m) {
+    const d = digitosDe(ch);
+    if (!d) atual = null;
+    else if (atual) {
+      atual.d += d;
+      atual.fim = i + ch.length;
+    } else {
+      atual = { ini: i, fim: i + ch.length, d };
+      grupos.push(atual);
+    }
+    i += ch.length;
+  }
+  return grupos;
+}
 /** Com menos dígitos é dia, quantidade, item: nunca sai do texto. */
 const MIN_DIGITOS = 4;
 /** Com tantos dígitos tem a forma de número de processo (o NUP tem 17; o do SEI-RJ, 16), mesmo desconhecido daqui. */
@@ -170,13 +225,13 @@ const invisiveisDe = (t: string): string => (t.match(INVISIVEIS) ?? []).join("")
 /** O texto livre sem número de processo nem de documento (o que `n` conhece e o que tem a forma de processo). */
 function semNumeros(t: string, n: NumerosConhecidos): string {
   return t.replace(RE_NUMERO, (m) => {
-    const digitos = m.replace(/\D/g, "");
+    const grupos = gruposDe(m);
+    const digitos = grupos.map((g) => g.d).join("");
     if (digitos.length < MIN_DIGITOS) return m;
     if (digitos.length >= DIGITOS_DE_PROCESSO) return `${SEM_NUMERO_PROCESSO}${invisiveisDe(m)}`;
     // O número conhecido pode estar colado a outro ("120031234202 - 5", "5 / 12003/1234-202", "0123 - 12345678"): cada
-    // trecho de grupos de dígitos seguidos é conferido, do mais longo ao mais curto a partir de cada grupo, e só o trecho
+    // trecho de grupos de dígitos seguidos (comparados em ASCII) é conferido, do mais longo ao mais curto a partir de cada grupo, e só o trecho
     // que bate sai (o resto fica). A sequência inteira é um desses trechos.
-    const grupos = [...m.matchAll(/\d+/g)].map((g) => ({ ini: g.index ?? 0, fim: (g.index ?? 0) + g[0].length, d: g[0] }));
     let saida = "";
     let desde = 0;
     for (let i = 0; i < grupos.length; ) {
