@@ -28,7 +28,7 @@ import { ErroValidacao } from "../../src/modelo/validacao";
 import { chaveProtocolo } from "../../src/modelo/vinculos";
 import { concluirComDocumento } from "../../src/pagina/adicionar";
 import { documentosDaArvore, instalarNaArvore, processoDaArvore } from "../../src/pagina/arvore";
-import { balaoAberto } from "../../src/pagina/balao";
+import { balaoAberto } from "../../src/pagina/balaoAtual";
 import { abrirBalaoProcesso, type DepsBalaoProcesso } from "../../src/pagina/balaoProcesso";
 import { type DocumentoDaArvore, MENSAGEM_AGORA_NAO, type ProcessoNaTela } from "../../src/pagina/conteudo";
 import { RepositorioProjetos } from "../../src/repositorio";
@@ -779,13 +779,16 @@ async function verificarRevisaoT7(): Promise<void> {
 }
 
 function verificarLigacao(): void {
-  secao("arvore: a ligacao no content script (main.ts)");
-  const codigo = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "src", "pagina", "main.ts"), "utf8");
+  secao("arvore: a ligacao no content script (carregador e principal.ts)");
+  const pasta = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "src", "pagina");
+  const codigo = readFileSync(join(pasta, "principal.ts"), "utf8");
+  // T11: quem decide é o carregador (main.ts + carregador.ts, provados em verificar-carregador.ts): nos frames, só o
+  // da árvore importa o pacote, e ele chama a principalArvore.
+  const carregador = readFileSync(join(pasta, "carregador.ts"), "utf8");
   checar(
-    "nos frames, so o da arvore segue (os outros saem na primeira linha do principal)",
-    /async function principal\(\): Promise<void> \{\s*\/\/[^\n]*\n\s*if \(window !== window\.top\) \{\s*if \(qualTela\(document\) === "arvore"\) await principalArvore\(\);\s*return;\s*\}/.test(
-      codigo,
-    ),
+    "nos frames, so o da arvore segue: o carregador chama a principalArvore",
+    /if \(!o\.topo\) return qualTela\(o\.doc\) === "arvore" \? "arvore" : null;/.test(carregador) &&
+      /carga === "arvore" \? pacote\.principalArvore\(\) : pacote\.principalTopo\(\)/.test(carregador),
   );
   checar(
     "o contexto da arvore vem do cabecalho da janela de topo",

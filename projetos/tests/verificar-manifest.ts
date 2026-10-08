@@ -37,6 +37,19 @@ export async function verificarManifest(): Promise<void> {
     "pagina, app e CSS acessiveis ao iframe",
     ["html/projetos.html", "js/projetos/app.js", "css/projetos.css"].every((r) => war.includes(r)),
   );
+  // T11: o content script e um carregador que importa (import()) o pacote da pagina e, ao abrir o balao, o do balao.
+  // Os modulos importados por um content script precisam estar no WAR, nas paginas onde o content script roda.
+  const PACOTE_PAGINA = ["js/projetos/pagina.js", "js/projetos/balao.js", "js/projetos/pagina-comum.js"];
+  const bloco = m.web_accessible_resources.find((w) => w.resources.includes("js/projetos/app.js")) as
+    | { resources: string[]; matches?: string[] }
+    | undefined;
+  checar(
+    "pacote da pagina e do balao no WAR, no mesmo bloco do app (as paginas do SEI)",
+    !!bloco &&
+      PACOTE_PAGINA.every((r) => bloco.resources.includes(r)) &&
+      ["*://*.br/*", "*://*.org/*"].every((p) => bloco.matches?.includes(p)),
+    PACOTE_PAGINA.filter((r) => !war.includes(r)),
+  );
   const init = await readFile(join(DIST, "js", "init.js"));
   const texto = init.toString("utf8");
   checar(

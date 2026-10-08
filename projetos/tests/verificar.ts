@@ -111,4 +111,6 @@ const suiteCaixa = "./pagina/verificar-caixa";
 await ((await import(suiteCaixa)) as { verificarCaixa(): Promise<void> }).verificarCaixa();
 const suiteArvore = "./pagina/verificar-arvore";
 await ((await import(suiteArvore)) as { verificarArvore(): Promise<void> }).verificarArvore();
+const suiteCarregador = "./pagina/verificar-carregador";
+await ((await import(suiteCarregador)) as { verificarCarregador(): Promise<void> }).verificarCarregador();
 resumo();

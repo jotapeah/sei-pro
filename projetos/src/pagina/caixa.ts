@@ -31,7 +31,7 @@ import { dataNaFaixa } from "../modelo/calendario";
 import type { DataISO, Vis } from "../modelo/tipos";
 import { chaveProtocolo, RE_ID_PROCEDIMENTO, type VinculoProcesso } from "../modelo/vinculos";
 import { indiceDosEscopos, type RepositorioProjetos } from "../repositorio";
-import { balaoAberto } from "./balao";
+import { balaoAberto } from "./balaoAtual";
 import type { ProcessoNaTela } from "./conteudo";
 import { instalarEstiloNaPagina } from "./estilo";
 

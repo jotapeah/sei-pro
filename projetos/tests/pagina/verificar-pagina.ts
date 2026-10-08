@@ -361,7 +361,7 @@ export async function verificarPagina(): Promise<void> {
       !/\babrirArvore\b|\bacaoNaArvore\b/.test(daArvore[0]?.codigo ?? ""),
     daArvore.map((x) => x.f),
   );
-  const principal = fontes.find((x) => x.f === "main.ts")?.codigo ?? "";
+  const principal = fontes.find((x) => x.f === "principal.ts")?.codigo ?? "";
   checar("main liga os usuarios sem fonte completa", /buscarCompleta:\s*null/.test(principal));
 
   secao("pagina: conferir numero SEI pela pesquisa rapida");

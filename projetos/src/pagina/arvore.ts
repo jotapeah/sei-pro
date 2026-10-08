@@ -32,7 +32,7 @@ import { textoDaUrgencia, type Urgencia, urgenciaDaEtapa } from "../modelo/prazo
 import type { DataISO, Etapa, Vis } from "../modelo/tipos";
 import { chaveProtocolo, RE_DOCUMENTO, RE_ID_PROCEDIMENTO, type VinculoProcesso } from "../modelo/vinculos";
 import { indiceDosEscopos, type RepositorioProjetos } from "../repositorio";
-import { balaoAberto } from "./balao";
+import { balaoAberto } from "./balaoAtual";
 import type { DocumentoDaArvore, ProcessoNaTela } from "./conteudo";
 import { instalarEstiloNaPagina } from "./estilo";
 

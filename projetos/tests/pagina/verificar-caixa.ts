@@ -20,7 +20,7 @@ import type { Vis } from "../../src/modelo/tipos";
 import { ErroValidacao } from "../../src/modelo/validacao";
 import { chaveProtocolo } from "../../src/modelo/vinculos";
 import { adicionarAoProjeto, concluirComDocumento } from "../../src/pagina/adicionar";
-import { balaoAberto } from "../../src/pagina/balao";
+import { balaoAberto } from "../../src/pagina/balaoAtual";
 import { abrirBalaoProcesso, type DepsBalaoProcesso } from "../../src/pagina/balaoProcesso";
 import { instalarIconesCaixa } from "../../src/pagina/caixa";
 import { MENSAGEM_AGORA_NAO, type ProcessoNaTela } from "../../src/pagina/conteudo";

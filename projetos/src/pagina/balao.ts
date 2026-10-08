@@ -6,8 +6,11 @@
  * fecha (Tab no último controle, Shift+Tab no primeiro, ou o foco que vai a
  * outro elemento da página); ao abrir, o foco vai para o primeiro controle e,
  * ao fechar, volta à âncora (o ícone que abriu), que mostra `aria-expanded`
- * enquanto o balão está aberto.
+ * enquanto o balão está aberto. O "aberto agora" mora em `pagina/balaoAtual.ts`
+ * (os ícones, no pacote da página, consultam; este módulo vem sob demanda).
  */
+
+import { balaoAberto, esquecerBalao, guardarBalaoAberto } from "./balaoAtual";
 
 const ESTILO_BALAO = `:host{all:initial}
 .pb{box-sizing:border-box;width:340px;max-width:var(--pb-max,340px);display:grid;gap:8px;padding:12px 14px;font:13px/1.4 var(--spro-fonte);color:var(--spro-texto);background:var(--spro-fundo);border:1px solid var(--spro-borda);border-radius:12px;box-shadow:var(--spro-sombra-3)}
@@ -56,7 +59,7 @@ const ESTILO_BALAO = `:host{all:initial}
 .prj-st-marco.prj-st-atrasada .prj-st-cor{fill:none;stroke:var(--spro-perigo)}`;
 
 export interface OpcoesBalaoPagina {
-  /** O texto de `sei-comum/src/ui/base.css` (só o `pagina/main.ts` importa `.css`, com o loader "text"). */
+  /** O texto de `sei-comum/src/ui/base.css` (só o `pagina/pacoteBalao.ts` importa `.css`, com o loader "text"). */
   cssBase: string;
   temaEscuro: boolean;
   rotulo: string;
@@ -74,12 +77,10 @@ export interface BalaoPagina {
   fechar(): void;
 }
 
-let aberto: BalaoPagina | null = null;
-
 const FOCAVEIS = "button:not([disabled]), select, input, textarea, a[href]";
 
 export function abrirBalaoNaPagina(ancora: HTMLElement, conteudo: HTMLElement, o: OpcoesBalaoPagina): BalaoPagina {
-  aberto?.fechar();
+  balaoAberto()?.fechar();
   const doc = ancora.ownerDocument;
   const v = doc.defaultView;
   const host = doc.createElement("div");
@@ -140,7 +141,7 @@ export function abrirBalaoNaPagina(ancora: HTMLElement, conteudo: HTMLElement, o
       host.remove();
       doc.removeEventListener("pointerdown", fora, true);
       doc.removeEventListener("keydown", tecla, true);
-      if (aberto === b) aberto = null;
+      esquecerBalao(b);
       ancora.setAttribute("aria-expanded", "false");
       if (ancora.isConnected) ancora.focus?.({ preventScroll: true });
       o.aoFechar?.();
@@ -165,12 +166,7 @@ export function abrirBalaoNaPagina(ancora: HTMLElement, conteudo: HTMLElement, o
   doc.addEventListener("pointerdown", fora, true);
   doc.addEventListener("keydown", tecla, true);
   ancora.setAttribute("aria-expanded", "true");
-  aberto = b;
+  guardarBalaoAberto(b);
   focarPrimeiro();
   return b;
-}
-
-/** O balão aberto agora (um por documento de cada vez). */
-export function balaoAberto(): BalaoPagina | null {
-  return aberto;
 }
