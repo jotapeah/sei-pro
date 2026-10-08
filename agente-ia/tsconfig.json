@@ -17,6 +17,7 @@
       "@comum/*": ["../sei-comum/src/*"],
       "@favoritos/*": ["../favoritos/src/*"],
       "@historico/*": ["../historico/src/*"],
+      "@projetos/*": ["../projetos/src/*"],
       "@tarjar/*": ["../ferramentas-pdf/src/lib/*"],
       "@/*": ["../ferramentas-pdf/src/*"]
     }

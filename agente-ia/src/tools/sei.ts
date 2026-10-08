@@ -19,6 +19,7 @@ import { envelopar } from "../seguranca/envelope";
 import { resumoDosAchados, varrer, varrerCamposLivres } from "../seguranca/injecao";
 import { TOOL_FAVORITOS } from "./favoritos";
 import { historicoInstalado, TOOL_HISTORICO } from "./historico";
+import { projetosInstalado, TOOL_PROJETOS } from "./projetos";
 
 type Args = Record<string, unknown>;
 
@@ -100,6 +101,8 @@ async function editorAlvo(a: Args, ctx: ContextoTool): Promise<{ numero: string;
 export const TOOLS_SEI: DefTool[] = [
   TOOL_FAVORITOS,
   ...(historicoInstalado() ? [TOOL_HISTORICO] : []),
+  // Só no pacote com o gestor de projetos novo (o Lab): no oficial, o legado do Atividades não tem estes dados.
+  ...(projetosInstalado() ? [TOOL_PROJETOS] : []),
 
   definirTool({
     nome: "contexto_tela",

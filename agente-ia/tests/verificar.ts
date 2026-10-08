@@ -33,11 +33,13 @@ import { verificarEditarConteudo } from "./verificar-editar-conteudo";
 import { verificarFaixaDeFluxo } from "./verificar-faixa";
 import { verificarFavoritosTool } from "./verificar-favoritos-tool";
 import { verificarHistoricoTool } from "./verificar-historico-tool";
+import { verificarProjetosTool } from "./verificar-projetos-tool";
 import { resumo } from "./util";
 
 await verificarMotor();
 await verificarFavoritosTool();
 await verificarHistoricoTool();
+await verificarProjetosTool();
 await verificarProvedor();
 await verificarErro429();
 await verificarRaciocinioComFerramentas();
