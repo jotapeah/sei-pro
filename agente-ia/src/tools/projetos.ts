@@ -114,33 +114,54 @@ export const SEM_NUMERO_DOCUMENTO = "[nº de documento]";
  * volta como era, só com o marcador no lugar do trecho do número (o modelo não precisa da forma normalizada, e os
  * invisíveis de dentro do trecho vão logo depois do marcador, para o `varrer` ainda os acusar no relatório).
  *
- * Os grupos de dígitos seguidos se ligam numa cadeia por QUALQUER trecho entre eles de 1 a 3 caracteres que não seja
- * letra (os espaços em volta não contam: " - - " liga) ou só por ocultos; o espaço entre palavras sozinho não liga
- * ("1234 5678" são dois). Na cadeia, 15 dígitos ou mais é a forma de processo e ela sai toda; abaixo disso, todo trecho
- * de grupos seguidos é conferido contra os números conhecidos (pela chave), também nas duas ordens que um controle de
- * direção mostra à pessoa (o RLO inverte os dígitos; o RLM antes de cada grupo inverte a ordem dos grupos), e sai a
- * união dos que batem. Uma passada pelo texto e, por cadeia de menos de 15 dígitos, no máximo 14 grupos: linear.
+ * Os grupos de dígitos seguidos (da mesma escrita) se ligam numa cadeia por QUALQUER trecho entre eles de 1 a 3
+ * caracteres que não sejam letra (os espaços em volta não contam: " - - " liga), só por ocultos, ou por nada quando a
+ * escrita muda ("12345678¹"); o espaço entre palavras sozinho não liga ("1234 5678" são dois), o tipográfico sozinho
+ * liga ("50 300" com o fino). Na cadeia, 15 dígitos ou mais é a forma de processo e ela sai toda; abaixo disso, todo
+ * trecho de grupos seguidos é conferido contra os números conhecidos (pela chave), também nas ordens que a direção da
+ * escrita mostra à pessoa (o RLO inverte os dígitos; o RLM antes de cada grupo inverte a ordem dos grupos; a letra da
+ * direita para a esquerda inverte a ordem das corridas), e sai a união dos que batem. Uma passada pelo texto e, por
+ * cadeia de menos de 15 dígitos, no máximo 14 grupos: linear.
  */
 
-/** Como um caractere conta na leitura: dígito (com o valor em ASCII), letra, espaço entre palavras, conector ou oculto. */
-type Peca = { readonly k: "digito"; readonly d: string } | { readonly k: "letra" | "espaco" | "conector" | "oculto" };
+/**
+ * Como um caractere conta na leitura: dígito (com o valor em ASCII e a escrita), letra, espaço entre palavras, espaço
+ * tipográfico, conector ou oculto.
+ */
+type Peca =
+  | { readonly k: "digito"; readonly d: string; readonly escrita: number }
+  | { readonly k: "letra" | "espaco" | "tipografico" | "conector" | "oculto" };
 const LETRA: Peca = { k: "letra" };
 const ESPACO: Peca = { k: "espaco" };
+const TIPOGRAFICO: Peca = { k: "tipografico" };
 const CONECTOR: Peca = { k: "conector" };
 const OCULTO: Peca = { k: "oculto" };
 
 /**
- * O espaço entre palavras: o comum, o NBSP, a tabulação e as quebras de linha. Os outros espaços (o fino, o de figura,
- * os de U+2000 a U+200A, U+202F, U+205F, U+3000) são o separador de milhar da tipografia e contam como conector, como o
- * U+1680, que aparece como traço.
+ * A escrita de um dígito: o zero do bloco, para os decimais (0x30 no ASCII; a largura total, o arábico, o negrito
+ * matemático, cada um o seu); os outros (sobrescrito, subscrito, circulado, fração, dingbat), uma só. Quando ela muda,
+ * o grupo fecha: a nota de rodapé colada ("12345678¹") não esconde o número.
  */
-const espacoEntrePalavras = (c: number): boolean => c === 0x20 || (c >= 0x09 && c <= 0x0d) || c === 0xa0 || c === 0x2028 || c === 0x2029;
+const ESCRITA_ASCII = 0x30;
+const ESCRITA_NAO_DECIMAL = -1;
 
-/** O caractere ASCII: dígito, letra, espaço entre palavras; o resto (pontuação, controle) é conector. */
+/** O espaço entre palavras: o comum, o NBSP, a tabulação, as quebras de linha e o avanço de página. */
+const espacoEntrePalavras = (c: number): boolean =>
+  c === 0x20 || c === 0x09 || c === 0x0a || c === 0x0c || c === 0x0d || c === 0xa0 || c === 0x2028 || c === 0x2029;
+
+/**
+ * Os outros espaços: a tabulação vertical, U+1680, U+2000 a U+200A (o fino, o de figura...), U+202F, U+205F e U+3000,
+ * o separador de milhar da tipografia. Contam como espaço (não gastam o limite de conectores) e, num intervalo sem outro
+ * conector, como UM conector: o "50 300" com o fino liga.
+ */
+const espacoTipografico = (c: number): boolean =>
+  c === 0x0b || c === 0x1680 || (c >= 0x2000 && c <= 0x200a) || c === 0x202f || c === 0x205f || c === 0x3000;
+
+/** O caractere ASCII: dígito, letra, espaço; o resto (pontuação, controle) é conector. */
 function pecaAscii(c: number): Peca {
-  if (c >= 0x30 && c <= 0x39) return { k: "digito", d: String.fromCharCode(c) };
+  if (c >= 0x30 && c <= 0x39) return { k: "digito", d: String.fromCharCode(c), escrita: ESCRITA_ASCII };
   if ((c >= 0x41 && c <= 0x5a) || (c >= 0x61 && c <= 0x7a)) return LETRA;
-  return espacoEntrePalavras(c) ? ESPACO : CONECTOR;
+  return espacoEntrePalavras(c) ? ESPACO : espacoTipografico(c) ? TIPOGRAFICO : CONECTOR;
 }
 const ASCII: ReadonlyArray<readonly Peca[]> = Array.from({ length: 0x80 }, (_, c) => [pecaAscii(c)]);
 
@@ -196,10 +217,10 @@ const RE_LETRA_ASCII = /^[A-Za-z]/;
  * ("ç", "ã"; o "ª" e o "º" o NFKC já levou a "a" e "o"). As letras de outras escritas e as que parecem pontuação
  * ("ᐟ", "ᐧ", "ー") contam como conector: entre dois grupos de dígitos, a pessoa as lê como separador.
  */
-function pecaNormalizada(x: string, c: number): Peca {
-  if (RE_DECIMAL.test(x)) return { k: "digito", d: valorDecimal(c) };
+function pecaNormalizada(x: string, c: number, escrita: number): Peca {
+  if (RE_DECIMAL.test(x)) return { k: "digito", d: valorDecimal(c), escrita };
   const t = valorTabelado(c);
-  if (t !== null) return { k: "digito", d: t };
+  if (t !== null) return { k: "digito", d: t, escrita };
   if (oculto(x, c)) return OCULTO;
   if (RE_LETRA.test(x) && RE_LETRA_ASCII.test(x.normalize("NFD"))) return LETRA;
   return CONECTOR;
@@ -216,13 +237,17 @@ function pecasDe(ch: string, c: number): readonly Peca[] {
   let pecas: Peca[];
   if (oculto(ch, c)) pecas = [OCULTO];
   else if (espacoEntrePalavras(c)) pecas = [ESPACO];
+  else if (espacoTipografico(c)) pecas = [TIPOGRAFICO];
   else {
+    // Os dígitos que saem do caractere ficam com a escrita DELE (o "５" da largura total vira "5", mas não é ASCII).
+    const escrita = RE_DECIMAL.test(ch) ? c - Number(valorDecimal(c)) : ESCRITA_NAO_DECIMAL;
     pecas = [];
     for (const x of ch.normalize("NFKC")) {
       const xc = x.codePointAt(0) as number;
-      const p = xc < 0x80 ? ((ASCII[xc] as readonly Peca[])[0] as Peca) : pecaNormalizada(x, xc);
-      // O espaço que sai da decomposição (os espaços tipográficos, "‗" e "´" dão espaço e marca) conta como conector.
-      pecas.push(p.k === "espaco" ? CONECTOR : p);
+      const p = xc < 0x80 ? ((ASCII[xc] as readonly Peca[])[0] as Peca) : pecaNormalizada(x, xc, escrita);
+      // O espaço que sai da decomposição de um caractere visível ("‗" e "´" dão espaço e marca) conta como conector.
+      if (p.k === "digito") pecas.push({ k: "digito", d: p.d, escrita });
+      else pecas.push(p.k === "espaco" || p.k === "tipografico" ? CONECTOR : p);
     }
   }
   if (PECAS.size >= 4096) PECAS.clear();
@@ -230,14 +255,22 @@ function pecasDe(ch: string, c: number): readonly Peca[] {
   return pecas;
 }
 
-/** Um grupo de dígitos seguidos: a posição no texto original e os dígitos, em ASCII. */
+/**
+ * Como um grupo se liga ao anterior da cadeia: `colado`, sem nada entre eles (só a escrita mudou); `corrida`, por um
+ * conector só ou só por ocultos, sem espaço (a corrida de número que a direção da escrita não parte); `separado`, o resto.
+ */
+type Ligacao = "colado" | "corrida" | "separado";
+
+/** Um grupo de dígitos seguidos da mesma escrita: a posição no texto original, os dígitos em ASCII e a ligação. */
 interface Grupo {
   ini: number;
   fim: number;
   d: string;
+  escrita: number;
+  liga: Ligacao;
 }
 
-/** Quantos conectores, no máximo, ligam dois grupos (os espaços entre eles não contam). */
+/** Quantos caracteres conectores, no máximo, ligam dois grupos (os espaços entre eles não contam). */
 const MAX_CONECTORES = 3;
 /** Com menos dígitos é dia, quantidade, item: nunca sai do texto. */
 const MIN_DIGITOS = 4;
@@ -268,36 +301,48 @@ function cadeiasDe(t: string, json: boolean): Grupo[][] {
   const cadeias: Grupo[][] = [];
   let cadeia: Grupo[] | null = null;
   let grupo: Grupo | null = null;
-  // Desde o último dígito: quantos conectores, se houve espaço, e se a ligação já se quebrou (letra ou conector demais).
+  // Desde o último dígito: quantos caracteres conectores, se houve espaço tipográfico, espaço entre palavras, e se a
+  // ligação já se quebrou (letra ou conector demais).
   let conectores = 0;
+  let tipografico = false;
   let espaco = false;
   let quebrou = false;
   for (let i = 0; i < t.length; ) {
     const [ch, fim] = caractereEm(t, i, json);
+    // O limite é por caractere do texto, não pelas peças do NFKC: "…" (três pontos) e "⁗" (quatro plicas) contam um.
+    let contou = false;
     for (const p of pecasDe(ch, ch.codePointAt(0) as number)) {
       if (p.k === "digito") {
-        if (grupo) {
+        if (grupo && grupo.escrita === p.escrita) {
           grupo.d += p.d;
           grupo.fim = fim;
         } else {
-          grupo = { ini: i, fim, d: p.d };
-          // Só ocultos desde o grupo anterior, ou de 1 a 3 conectores (com ou sem espaço): a mesma cadeia.
-          if (cadeia && !quebrou && (conectores > 0 || !espaco)) cadeia.push(grupo);
+          // Outra escrita colada ao grupo aberto: um grupo novo, ligado a ele. Senão, só ocultos desde o grupo anterior,
+          // de 1 a 3 conectores (com ou sem espaço) ou um espaço tipográfico: a mesma cadeia.
+          const liga: Ligacao = grupo ? "colado" : !espaco && !tipografico && conectores <= 1 ? "corrida" : "separado";
+          const ligado = grupo !== null || (!quebrou && (conectores > 0 || tipografico || !espaco));
+          grupo = { ini: i, fim, d: p.d, escrita: p.escrita, liga };
+          if (cadeia && ligado) cadeia.push(grupo);
           else {
             cadeia = [grupo];
             cadeias.push(cadeia);
           }
         }
         conectores = 0;
+        tipografico = false;
         espaco = false;
         quebrou = false;
+        contou = false;
         continue;
       }
       // O oculto fecha o grupo (os dois lados são conferidos também sozinhos) sem mudar a ligação.
       grupo = null;
       if (p.k === "espaco") espaco = true;
-      else if (p.k === "conector") quebrou ||= ++conectores > MAX_CONECTORES;
-      else if (p.k === "letra") quebrou = true;
+      else if (p.k === "tipografico") tipografico = true;
+      else if (p.k === "conector" && !contou) {
+        contou = true;
+        quebrou ||= ++conectores > MAX_CONECTORES;
+      } else if (p.k === "letra") quebrou = true;
     }
     i = fim;
   }
@@ -350,24 +395,47 @@ const inverso = (d: string): string => d.split("").reverse().join("");
 
 /**
  * Os trechos [primeiro grupo, último grupo, marcador] da cadeia (menos de 15 dígitos) que batem com um número conhecido:
- * cada trecho de grupos seguidos, na ordem do texto e, com `inverter`, também com os dígitos ao contrário (RLO) e com os
- * grupos ao contrário (RLM). Os que se sobrepõem saem juntos ("5 - 12003/1234-202", com "512003" documento e
- * "120031234202" processo, sai inteiro); os vizinhos, cada um com o seu marcador.
+ * cada trecho de grupos seguidos, na ordem do texto e, com `inverter`, também com os dígitos ao contrário (RLO), com os
+ * grupos ao contrário (RLM; o grupo colado anda junto do anterior, como um só) e com as corridas ao contrário (a letra
+ * da direita para a esquerda fora do número: "202 - 12003/1234" a pessoa vê "12003/1234 - 202"). Os que se sobrepõem
+ * saem juntos ("5 - 12003/1234-202", com "512003" documento e "120031234202" processo, sai inteiro); os vizinhos, cada
+ * um com o seu marcador.
  */
 function trechosConhecidos(cadeia: readonly Grupo[], n: NumerosConhecidos, inverter: boolean): Array<[number, number, string]> {
   const achados: Array<[number, number, string]> = [];
-  const invertidos = cadeia.map((g) => inverso(g.d));
+  const invertidos = inverter ? cadeia.map((g) => inverso(g.d)) : [];
   for (let i = 0; i < cadeia.length; i++) {
     let frente = "";
     let aoContrario = "";
-    let gruposAoContrario = "";
+    // A ordem invertida por blocos: o bloco em curso (`grupo`, `corrida`) e os anteriores já invertidos (`antes...`).
+    let grupo = "";
+    let antesDoGrupo = "";
+    let corrida = "";
+    let antesDaCorrida = "";
     for (let j = i; j < cadeia.length; j++) {
-      const d = (cadeia[j] as Grupo).d;
-      frente += d;
-      aoContrario = invertidos[j] + aoContrario;
-      gruposAoContrario = d + gruposAoContrario;
-      const marca =
-        marcadorDe(frente, n) ?? (inverter ? (marcadorDe(aoContrario, n) ?? (i < j ? marcadorDe(gruposAoContrario, n) : null)) : null);
+      const g = cadeia[j] as Grupo;
+      frente += g.d;
+      let marca = marcadorDe(frente, n);
+      if (inverter) {
+        aoContrario = invertidos[j] + aoContrario;
+        if (j > i && g.liga === "colado") grupo += g.d;
+        else {
+          antesDoGrupo = grupo + antesDoGrupo;
+          grupo = g.d;
+        }
+        if (j > i && g.liga !== "separado") corrida += g.d;
+        else {
+          antesDaCorrida = corrida + antesDaCorrida;
+          corrida = g.d;
+        }
+        // A ordem igual à do texto (ou à já conferida) não é procurada de novo.
+        const porGrupos = grupo + antesDoGrupo;
+        const porCorridas = corrida + antesDaCorrida;
+        marca ??=
+          marcadorDe(aoContrario, n) ??
+          (porGrupos !== frente ? marcadorDe(porGrupos, n) : null) ??
+          (porCorridas !== frente && porCorridas !== porGrupos ? marcadorDe(porCorridas, n) : null);
+      }
       if (marca) achados.push([i, j, marca]);
     }
   }
@@ -409,14 +477,15 @@ function podeInverter(t: string): boolean {
 const invisiveisDe = (t: string): string => (t.match(INVISIVEIS) ?? []).join("");
 
 /**
- * O que o JSON escreveria com dígito ("\u0001", "\ud800"): os controles (fora a tabulação, as quebras de linha e o
- * avanço de página) e as metades soltas de um par UTF-16. Trocados pelo caractere de substituição, do mesmo tamanho:
- * as posições não mudam, e a leitura também não (os dois são conector).
+ * O que o JSON escreveria com dígito ("\u0001", "\ud800"): os controles (fora a tabulação, as quebras de linha, o
+ * avanço de página e a tabulação vertical, cuja escapada termina em letra) e as metades soltas de um par UTF-16.
+ * Trocados pelo caractere de substituição, do mesmo tamanho: as posições não mudam, e a leitura também não (os dois
+ * são conector).
  */
 const RE_QUE_O_JSON_ESCAPA = /[\p{Cc}\p{Cs}]/gu;
 const SUBSTITUTO = String.fromCharCode(0xfffd);
 const semControles = (t: string): string =>
-  t.replace(RE_QUE_O_JSON_ESCAPA, (c) => (c === "\t" || c === "\n" || c === "\r" || c === "\f" ? c : SUBSTITUTO));
+  t.replace(RE_QUE_O_JSON_ESCAPA, (c) => (c === "\t" || c === "\n" || c === "\r" || c === "\f" || c === "\v" ? c : SUBSTITUTO));
 
 /**
  * O texto livre sem número de processo nem de documento (o que `n` conhece e o que tem a forma de processo). Com

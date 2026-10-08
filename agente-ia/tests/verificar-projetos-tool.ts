@@ -604,6 +604,102 @@ export async function verificarProjetosTool(): Promise<void> {
   const ruins11 = Object.entries(casos11).filter(([k, [, esperado]]) => obs11.get(k) !== esperado);
   checar(`(l) ${Object.keys(casos11).length} casos: a ordem invertida so onde ela pode aparecer`, ruins11.length === 0, ruins11.map(([k]) => [k, obs11.get(k)]));
 
+  secao("agente: projetos_listar - digito de outra escrita colado, espacos tipograficos, limite por caractere e corridas do bidi");
+  // Todos os números só na memória: o NUP, o curto 120031234202 e o documento 12345678.
+  const NP = "[nº de processo]";
+  const ND = "[nº de documento]";
+  const area12 = areaMemoria();
+  const un12 = new RepositorioProjetos(area12, esc.unidade, carimbo);
+  const p12 = await un12.criarProjeto({ nome: "Rodada 5" });
+  const casos12: Record<string, [string, string]> = {};
+  // (m) O dígito de outra escrita colado ao número (a nota de rodapé, o circulado, o arábico): a escrita muda, o grupo fecha
+  // e os dois continuam ligados. O número conhecido sai, a nota fica.
+  const SOB1 = cp(0xb9);
+  casos12["m.nota-depois"] = [`conforme Despacho SEI 12345678${SOB1} fim`, `conforme Despacho SEI ${ND}${SOB1} fim`];
+  casos12["m.nota-curto"] = [`processo 12003/1234-202${SOB1} fim`, `processo ${NP}${SOB1} fim`];
+  casos12["m.nota-antes"] = [`nota ${SOB1}12345678 fim`, `nota ${SOB1}${ND} fim`];
+  casos12["m.nota-virgula"] = [`SEI n${cp(0xba)} 12345678${cp(0xb2)}, fls. 3`, `SEI n${cp(0xba)} ${ND}${cp(0xb2)}, fls. 3`];
+  casos12["m.subscrito"] = [`SEI 12345678${cp(0x2081)} fim`, `SEI ${ND}${cp(0x2081)} fim`];
+  casos12["m.circulado"] = [`SEI 12345678${cp(0x2460)} fim`, `SEI ${ND}${cp(0x2460)} fim`];
+  casos12["m.arabe-depois"] = [`SEI 12345678${cp(0x663)} fim`, `SEI ${ND}${cp(0x663)} fim`];
+  casos12["m.largura-total-e-nota"] = [`SEI ${largo("12345678")}${SOB1} fim`, `SEI ${ND}${SOB1} fim`];
+  casos12["m.arabe-e-ascii"] = [`SEI ${noBloco("12345678", 0x660)}5 fim`, `SEI ${ND}5 fim`];
+  casos12["m.nup-e-nota"] = [`processo 50300.000001/2026-01${SOB1} fim`, `processo ${NP} fim`];
+  // (n) Os espaços tipográficos (e o \v) contam como espaço: no máximo um conector por intervalo, e nenhum quando já há
+  // outro conector. Dois e três de cada lado do separador ligam.
+  const TIPOGRAFICOS = [0x0b, 0x1680, 0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200a, 0x202f, 0x205f, 0x3000];
+  for (const c of TIPOGRAFICOS) {
+    const nome = c.toString(16).toUpperCase().padStart(4, "0");
+    for (const k of [2, 3])
+      for (const [rotulo, sep] of [
+        ["barra", "/"],
+        ["hifen", "-"],
+        ["meia-risca", cp(0x2013)],
+      ])
+        casos12[`n.U+${nome}x${k}.${rotulo}`] = [`proc 12003${cp(c).repeat(k)}${sep}${cp(c).repeat(k)}1234-202 fim`, `proc ${NP} fim`];
+    casos12[`n.U+${nome}.nup`] = [`proc 50300.000001${cp(c, c)}/${cp(c, c)}2026-01 fim`, `proc ${NP} fim`];
+  }
+  // (o) O limite de conectores é por caractere do texto, não pelas peças do NFKC ("…" são três pontos; "⁗", quatro plicas).
+  const RET = cp(0x2026);
+  const PLICA4 = cp(0x2057);
+  casos12["o.reticencias.curto"] = [`x 12003${RET}${RET}1234${RET}${RET}202 fim`, PROC];
+  casos12["o.reticencias.nup"] = [`x 50300${RET}${RET}000001${RET}${RET}2026${RET}${RET}01 fim`, PROC];
+  casos12["o.tres-reticencias"] = [`x 12003${RET.repeat(3)}1234-202 fim`, PROC];
+  casos12["o.plica4.curto"] = [`x 12003${PLICA4}1234${PLICA4}202 fim`, PROC];
+  casos12["o.plica4.nup"] = [`x 50300${PLICA4}000001${PLICA4}2026${PLICA4}01 fim`, PROC];
+  // O limite continua: quatro caracteres entre os grupos não ligam.
+  casos12["o.controle-quatro"] = [`x 12003${RET.repeat(4)}1234-202 fim`, `x 12003${RET.repeat(4)}1234-202 fim`];
+  // (p) A letra da direita para a esquerda fora do número: a pessoa vê as corridas (grupos ligados por um conector só, sem
+  // espaço) na ordem inversa, cada uma como está ("202 - 12003/1234" aparece "12003/1234 - 202").
+  casos12["p.hebraico"] = [`x ${cp(0x5d0)} 202 - 12003/1234 fim`, `x ${cp(0x5d0)} ${NP} fim`];
+  casos12["p.arabe"] = [`x ${cp(0x628)} 202 - 12003/1234 fim`, `x ${cp(0x628)} ${NP} fim`];
+  casos12["p.corrida-no-fim"] = [`x ${cp(0x5d0)} 1234-202 / 12003 fim`, `x ${cp(0x5d0)} ${NP} fim`];
+  casos12["p.letra-depois"] = [`x 202 - 12003/1234 ${cp(0x5d0)} fim`, `x ${NP} ${cp(0x5d0)} fim`];
+  // Sem letra da direita para a esquerda, a ordem do texto é a que a pessoa vê: fica.
+  casos12["p.controle"] = ["x 202 - 12003/1234 fim", "x 202 - 12003/1234 fim"];
+  for (const [nome, [observacoes]] of Object.entries(casos12)) await un12.criarEtapa({ projeto: p12.id, nome, inicio: d(1), fim: d(2), observacoes });
+  // (m) A varredura: todo dígito fora do ASCII (\p{Nd} e \p{No}) colado depois e antes do documento conhecido.
+  const DIGITO_UNICODE = /[\p{Nd}\p{No}]/u;
+  const outrosDigitos: number[] = [];
+  for (let c = 0x80; c < 0x30000; c++) if ((c < 0xd800 || c > 0xdfff) && DIGITO_UNICODE.test(cp(c))) outrosDigitos.push(c);
+  const linhas12 = outrosDigitos.flatMap((c) => [`SEI 12345678${cp(c)} fim`, `SEI ${cp(c)}12345678 fim`]);
+  const SEPARA = "\nZZ\n";
+  const blocos12: string[] = [];
+  for (let i = 0; i < linhas12.length; i += 80) blocos12.push(linhas12.slice(i, i + 80).join(SEPARA));
+  for (const [i, observacoes] of blocos12.entries()) await un12.criarEtapa({ projeto: p12.id, nome: `m.varredura.${i}`, inicio: d(1), fim: d(2), observacoes });
+  await area12.gravar({
+    [`${memoria}p/50300000001202601`]: "aprendida",
+    [`${memoria}p/120031234202`]: "aprendida",
+    [`${memoria}d/12345678`]: "aprendida",
+  });
+  definirAreaProjetos(() => area12);
+  definirOrcamentoProjetos(Number.POSITIVE_INFINITY);
+  const r12 = await rodar({}, contexto());
+  definirOrcamentoProjetos();
+  const obs12 = new Map((r12.projetos[0]?.etapas ?? []).map((e) => [e.nome, e.observacoes ?? ""]));
+  const rotulos12: Record<string, string> = {
+    m: "digito de outra escrita colado ao numero: o grupo fecha e o conhecido sai",
+    n: "espacos tipograficos (e o \\v) em volta do separador: o numero da memoria nunca sai",
+    o: "o limite de conectores e por caractere do texto",
+    p: "a letra da direita para a esquerda fora do numero: as corridas na ordem inversa",
+  };
+  for (const [grupo, rotulo] of Object.entries(rotulos12)) {
+    const doGrupo = Object.keys(casos12).filter((k) => k.startsWith(`${grupo}.`));
+    const ruins = doGrupo.filter((k) => obs12.get(k) !== (casos12[k] as [string, string])[1]);
+    checar(`(${grupo}) ${doGrupo.length} casos: ${rotulo}`, doGrupo.length > 0 && ruins.length === 0, ruins.map((k) => [k, obs12.get(k)]));
+  }
+  /** As linhas da varredura que saem com o documento: sem o marcador, ou com os dígitos dele à vista. */
+  const vazaVarredura = (ler: (nome: string) => string | undefined): string[] => {
+    const saidas = blocos12.flatMap((_, i) => (ler(`m.varredura.${i}`) ?? "").split(SEPARA));
+    return linhas12.filter((_, i) => !(saidas[i] ?? "").includes(ND) || (saidas[i] ?? "").includes("12345678"));
+  };
+  const vazou12 = vazaVarredura((nome) => obs12.get(nome));
+  checar(
+    `(m) varredura: os ${outrosDigitos.length} digitos fora do ASCII colados depois e antes do documento conhecido: ele sempre sai`,
+    outrosDigitos.length > 1000 && vazou12.length === 0,
+    vazou12.slice(0, 20),
+  );
+
   secao("agente: projetos_listar - o texto exato que o motor entrega ao modelo");
   // Depois da redação vêm o `varrer` (tira invisíveis, põe "⟦...⟧"), o JSON, a anonimização ("[PESSOA_1]") e o corte do
   // motor. A prova lê a mensagem da ferramenta que o modelo recebe, não o retorno do `executar`.
@@ -704,6 +800,14 @@ export async function verificarProjetosTool(): Promise<void> {
   const final10 = observacoesNoTexto(await oQueOModeloRecebe(area10));
   const ruins10Final = Object.entries(casos10).filter(([k, [, esperado]]) => final10.get(k) !== esperado);
   checar("(k) a chave do documento (zeros a esquerda) no texto que vai ao modelo", ruins10Final.length === 0, ruins10Final.map(([k]) => [k, final10.get(k)]));
+  const final12 = observacoesNoTexto(await oQueOModeloRecebe(area12));
+  // Os controles a anonimização pode mudar ("202 - 12003/1234" vira telefone): no texto final, só não podem ter marcador.
+  const ruins12Final = Object.entries(casos12).filter(([k, [, esperado]]) =>
+    k.includes("controle") ? !final12.has(k) || (final12.get(k) ?? "").includes("[nº de") : final12.get(k) !== esperado,
+  );
+  checar(`(k) os ${Object.keys(casos12).length} casos da rodada 5 no texto que vai ao modelo`, ruins12Final.length === 0, ruins12Final.map(([k]) => [k, final12.get(k)]));
+  const vazou12Final = vazaVarredura((nome) => final12.get(nome));
+  checar("(k) a varredura dos digitos colados no texto que vai ao modelo", vazou12Final.length === 0, vazou12Final.slice(0, 20));
 
   secao("agente: projetos_listar - memoria do sigilo ilegivel: falha fechada");
   const quebrada: Area = {
