@@ -75,8 +75,11 @@ const PADROES: Array<{ classe: Classe; re: RegExp }> = [
   { classe: "delimitador", re: /<\/\s*documento\b[^>]*>/gi },
 ];
 
-/** Zero-width, marcas de direção e as Unicode tags (U+E0000–E007F). */
-const INVISIVEIS = /[​-‏‪-‮⁠-⁤﻿]|[\u{E0000}-\u{E007F}]/gu;
+/**
+ * Zero-width, marcas de direção e as Unicode tags (U+E0000–E007F). Global: use com `replace`/`match`/`source`
+ * (o `test`/`exec` guardariam o `lastIndex` entre chamadas). O `projetos_listar` reconhece número com eles no meio.
+ */
+export const INVISIVEIS = /[​-‏‪-‮⁠-⁤﻿]|[\u{E0000}-\u{E007F}]/gu;
 
 /**
  * Onde termina a frase que começou no gatilho.

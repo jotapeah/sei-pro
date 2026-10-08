@@ -12,7 +12,7 @@
 
 import type { TelaAtual } from "../motor/motor";
 import { historicoInstalado } from "../tools/historico";
-import { projetosInstalado } from "../tools/projetos";
+import { projetosDisponiveis } from "../tools/projetos";
 
 export interface Sugestao {
   rotulo: string;
@@ -145,7 +145,8 @@ export const SUGESTOES: Sugestao[] = [
   {
     rotulo: "O que vence nos projetos",
     descricao: "etapas atrasadas e desta semana",
-    cabe: (t) => naCaixa(t) && projetosInstalado(),
+    // Só com o módulo no manifest e a opção ligada (a última lida pelo painel): desligada, a ferramenta não cumpriria.
+    cabe: (t) => naCaixa(t) && projetosDisponiveis(),
     prompt: () =>
       "Nos projetos da minha unidade, quais etapas estão atrasadas e quais vencem nesta semana? Agrupe por projeto, com o responsável e o término, e diga o que parece pedir ação primeiro.",
   },

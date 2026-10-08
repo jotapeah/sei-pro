@@ -18,6 +18,7 @@ import { RegistroTools } from "../motor/tools";
 import type { DecisaoPlano, InterfaceMotor, Mensagem, PlanoPrevisto, Tarefa, Uso } from "../motor/tipos";
 import { PontePainel } from "../ponte/cliente";
 import { toolsMotor } from "../tools/motor";
+import { atualizarOpcaoProjetos } from "../tools/projetos";
 import { TOOLS_SEI } from "../tools/sei";
 import { duracao, formatarUso, h, icone, markdown, moeda } from "./dom";
 import * as historico from "./historico";
@@ -545,6 +546,8 @@ class App {
     this.chaveTela = chave;
     this.tela = aba ? ((await this.ponte.executar("tela", {}).catch(() => null)) as TelaAtual | null) : null;
     if (this.tela) this.tela.editores = this.ponte.editores();
+    // A sugestão dos projetos depende da opção "Gerenciar Projetos": relida a cada tela (só no pacote com o módulo).
+    await atualizarOpcaoProjetos();
     if (!this.transcricao.length && !this.arquivada) this.redesenhar();
     await this.avaliarFluxos();
   }

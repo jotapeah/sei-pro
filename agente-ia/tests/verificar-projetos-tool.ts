@@ -16,8 +16,16 @@ import { prefixoMemoriaSigilo } from "@projetos/modelo/constantes";
 import { escoposDaUnidade } from "@projetos/modelo/escopo";
 import { RepositorioProjetos } from "@projetos/repositorio";
 import { HOSTIL } from "../../projetos/tests/cenarioGantt";
-import { SUGESTOES } from "../src/painel/sugestoes";
-import { definirAreaProjetos, definirOpcaoProjetos, MAX_ETAPAS, projetosInstalado, TOOL_PROJETOS } from "../src/tools/projetos";
+import { SUGESTOES, sugestoesPara } from "../src/painel/sugestoes";
+import {
+  atualizarOpcaoProjetos,
+  definirAreaProjetos,
+  definirOpcaoProjetos,
+  definirOrcamentoProjetos,
+  MAX_ETAPAS,
+  projetosInstalado,
+  TOOL_PROJETOS,
+} from "../src/tools/projetos";
 import { checar, lanca, secao } from "./util";
 
 type Etapa = { nome: string; fase?: string; situacao: string; inicio: string; termino: string; responsavel?: string; progresso?: string; observacoes?: string; checklist?: string[]; marco?: boolean };
@@ -28,6 +36,7 @@ type Saida = {
   semana?: number;
   sigilososOmitidos?: number;
   etapasCortadas?: number;
+  projetosCortados?: number;
   projetos: Array<{ nome: string; vis: string; progresso: string; termino?: string; atrasadas: number; etapas: Etapa[] }>;
   desligado?: boolean;
   mensagem?: string;
@@ -35,6 +44,22 @@ type Saida = {
 
 const HOST = "sei.exemplo.gov.br";
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+/** O limite do motor para o resultado de uma ferramenta (`motor.ts`, `limiteResultado`). */
+const LIMITE_DO_MOTOR = 12_000;
+const g = globalThis as { chrome?: unknown };
+
+/** Roda `fn` com o `chrome` global trocado e o devolve como estava. */
+async function comChrome<T>(chrome: unknown, fn: () => Promise<T>): Promise<T> {
+  const tinha = "chrome" in g;
+  const antes = g.chrome;
+  g.chrome = chrome;
+  try {
+    return await fn();
+  } finally {
+    if (tinha) g.chrome = antes;
+    else delete g.chrome;
+  }
+}
 
 function contexto(pedidos: string[] = [], vistos: string[] = [], achados: Array<[string, Array<{ classe: string }>]> = []) {
   return {
@@ -149,6 +174,17 @@ export async function verificarProjetosTool(): Promise<void> {
   checar("filtro semana sem nada: lista vazia, contadores ficam", sem.projetos.length === 0 && sem.totalProjetos === 2, sem);
   const busca = await rodar({ projeto: "plano PESSOAL" });
   checar("busca pelo nome sem caixa nem acento", busca.projetos.map((p) => p.nome).join() === "Plano pessoal" && busca.totalProjetos === 1, busca.projetos);
+  checar(
+    "sigilososOmitidos e da unidade toda: a busca e o filtro nao mudam a conta",
+    busca.sigilososOmitidos === 2 && atr.sigilososOmitidos === 2 && sem.sigilososOmitidos === 2,
+    [busca.sigilososOmitidos, atr.sigilososOmitidos, sem.sigilososOmitidos],
+  );
+  let leituras = 0;
+  const contada: Area = { ...area, obter: (k) => (leituras++, area.obter(k)) };
+  definirAreaProjetos(() => contada);
+  await rodar({});
+  checar("uma leitura por escopo e a da memoria do sigilo", leituras === 3, leituras);
+  definirAreaProjetos(() => area);
 
   secao("agente: projetos_listar - sigilo pela regra e pela memoria");
   // Os itens são gravados SEM a marca e a memória só depois: o que os tira da resposta é a memória local do
@@ -204,6 +240,45 @@ export async function verificarProjetosTool(): Promise<void> {
   const porNumero = await rodar({ projeto: "50300" }, contexto());
   checar("a busca nao acha pelo numero que nao sai", porNumero.projetos.length === 0 && porNumero.totalProjetos === 0, porNumero.projetos);
 
+  secao("agente: projetos_listar - numero sigiloso com invisivel, espaco ou travessao");
+  // O número só a memória conhece; escrito de modo que o reconhecimento simples não o veja (e o varrer, que tira os
+  // invisíveis DEPOIS, remontaria). Nenhum pode sair.
+  const ZWSP = String.fromCharCode(0x200b);
+  const BOM = String.fromCharCode(0xfeff);
+  const NBSP = String.fromCharCode(0xa0);
+  const MEIA = String.fromCharCode(0x2013);
+  const area4 = areaMemoria();
+  const un4 = new RepositorioProjetos(area4, esc.unidade, carimbo);
+  const p4 = await un4.criarProjeto({ nome: "Comum" });
+  const variantes: Record<string, string> = {
+    zwsp: `A 50300${ZWSP}.000001/2026-01 fim`,
+    bom: `B 50300${BOM}000001202601 fim`,
+    nbsp: `C 50300.000001${NBSP}/${NBSP}2026-01 fim`,
+    espaco: `D 50300.000001 / 2026-01 fim`,
+    travessao: `E 50300.000001/2026${MEIA}01 fim`,
+    quebra: `F 50300.${ZWSP}000001 /\n2026 - 01 fim`,
+    curto: `G 12003/1234${MEIA}202 fim`,
+  };
+  for (const [nome, observacoes] of Object.entries(variantes)) await un4.criarEtapa({ projeto: p4.id, nome, inicio: d(1), fim: d(2), observacoes });
+  await un4.criarEtapa({ projeto: p4.id, nome: "soltos", inicio: d(1), fim: d(2), observacoes: "H 1234 5678 fim" });
+  await area4.gravar({ [`${memoria}p/50300000001202601`]: "aprendida", [`${memoria}p/120031234202`]: "aprendida", [`${memoria}d/12345678`]: "aprendida" });
+  definirAreaProjetos(() => area4);
+  const achados4: Array<[string, Array<{ classe: string }>]> = [];
+  const r4 = await rodar({}, contexto([], [], achados4));
+  const obs = new Map((r4.projetos[0]?.etapas ?? []).map((e) => [e.nome, e.observacoes ?? ""]));
+  const vazou = Object.keys(variantes).filter((k) => {
+    const o = obs.get(k) ?? "";
+    const digitos = o.replace(/\D/g, "");
+    return !o.includes("[nº de processo]") || !o.endsWith(" fim") || digitos.includes("50300") || digitos.includes("000001") || digitos.includes("120031234");
+  });
+  checar("ZWSP, BOM, NBSP, espaco, quebra e travessao dentro do numero: nunca sai", vazou.length === 0, vazou.map((k) => [k, obs.get(k)]));
+  checar("digitos soltos separados so por espaco nao viram um numero", obs.get("soltos") === "H 1234 5678 fim", obs.get("soltos"));
+  checar(
+    "o invisivel de dentro do numero ainda vai ao relatorio de integridade",
+    achados4.some(([, a]) => a.some((x) => x.classe === "invisivel")),
+    achados4,
+  );
+
   secao("agente: projetos_listar - memoria do sigilo ilegivel: falha fechada");
   const quebrada: Area = {
     ...area3,
@@ -223,7 +298,7 @@ export async function verificarProjetosTool(): Promise<void> {
     erro?.message,
   );
 
-  secao("agente: projetos_listar - teto de etapas");
+  secao("agente: projetos_listar - teto de etapas e tamanho da resposta");
   const area2 = areaMemoria();
   const un2 = new RepositorioProjetos(area2, esc.unidade, carimbo);
   for (let i = 0; i < 2; i++) {
@@ -231,11 +306,50 @@ export async function verificarProjetosTool(): Promise<void> {
     for (let n = 0; n < 160; n++) await un2.criarEtapa({ projeto: p.id, nome: `Etapa ${n}`, inicio: d(n), fim: d(n + 1) });
   }
   definirAreaProjetos(() => area2);
+  // O teto de etapas sozinho (sem o limite de tamanho): 300 das 320.
+  definirOrcamentoProjetos(Number.POSITIVE_INFINITY);
   const grande = await rodar({});
+  definirOrcamentoProjetos();
   const total = grande.projetos.reduce((n, p) => n + p.etapas.length, 0);
   checar(`no maximo ${MAX_ETAPAS} etapas, com quantas ficaram de fora`, total === MAX_ETAPAS && grande.etapasCortadas === 20, [total, grande.etapasCortadas]);
   const ch2 = Object.keys(grande);
   checar("etapasCortadas tambem antes da lista", ch2.indexOf("etapasCortadas") < ch2.indexOf("projetos"), ch2);
+  // Com o limite de tamanho (o padrão): cabe no corte do motor, e a conta diz quantas ficaram de fora de verdade.
+  const curta = await rodar({});
+  const totalCurta = curta.projetos.reduce((n, p) => n + p.etapas.length, 0);
+  checar(
+    "320 etapas curtas: a resposta cabe no limite do motor e etapasCortadas fecha a conta",
+    JSON.stringify(curta).length < LIMITE_DO_MOTOR && totalCurta > 0 && totalCurta + (curta.etapasCortadas ?? 0) === 320,
+    [JSON.stringify(curta).length, totalCurta, curta.etapasCortadas],
+  );
+  const area5 = areaMemoria();
+  const un5 = new RepositorioProjetos(area5, esc.unidade, carimbo);
+  const longo = await un5.criarProjeto({ nome: "Textos longos" });
+  for (let n = 0; n < 300; n++)
+    await un5.criarEtapa({ projeto: longo.id, nome: `Etapa longa ${n} ${"x".repeat(150)}`, inicio: d(1), fim: d(2), observacoes: `Observação ${n} ${"y".repeat(400)}` });
+  definirAreaProjetos(() => area5);
+  const longa = await rodar({});
+  const totalLonga = longa.projetos.reduce((n, p) => n + p.etapas.length, 0);
+  checar(
+    "300 etapas de texto longo: abaixo do limite, com etapasCortadas > 0",
+    JSON.stringify(longa).length < LIMITE_DO_MOTOR && (longa.etapasCortadas ?? 0) > 0 && totalLonga + (longa.etapasCortadas ?? 0) === 300,
+    [JSON.stringify(longa).length, totalLonga, longa.etapasCortadas],
+  );
+  const area6 = areaMemoria();
+  const un6 = new RepositorioProjetos(area6, esc.unidade, carimbo);
+  for (let n = 0; n < 60; n++) await un6.criarProjeto({ nome: `Projeto ${String(n).padStart(2, "0")} ${"z".repeat(180)}` });
+  definirAreaProjetos(() => area6);
+  const muitos = await rodar({});
+  const ch6 = Object.keys(muitos);
+  checar(
+    "60 projetos de nome longo: abaixo do limite, projetosCortados conta os que nao couberam (antes da lista)",
+    JSON.stringify(muitos).length < LIMITE_DO_MOTOR &&
+      muitos.totalProjetos === 60 &&
+      (muitos.projetosCortados ?? 0) > 0 &&
+      muitos.projetos.length + (muitos.projetosCortados ?? 0) === 60 &&
+      ch6.indexOf("projetosCortados") < ch6.indexOf("projetos"),
+    [JSON.stringify(muitos).length, muitos.projetos.length, muitos.projetosCortados],
+  );
 
   secao("agente: projetos_listar - desligado e sem unidade");
   definirOpcaoProjetos(async () => false);
@@ -252,6 +366,33 @@ export async function verificarProjetosTool(): Promise<void> {
   const sem2 = (await TOOL_PROJETOS.executar({}, semUnidade)) as Saida;
   checar("aba sem unidade: a mensagem", sem2.totalProjetos === 0 && (sem2.mensagem ?? "").includes("unidade"), sem2);
 
+  secao("agente: projetos_listar - opcao ilegivel conta como desligada");
+  definirAreaProjetos(() => area);
+  // A opção de verdade (chrome.storage.sync.dataValues), como o content script e o app a leem.
+  definirOpcaoProjetos();
+  const comSync = (get: () => Promise<unknown>) => ({ storage: { sync: { get } } });
+  const pedidosOpcao: string[] = [];
+  const ilegivel = await comChrome(
+    comSync(async () => {
+      throw new Error("sync quebrado");
+    }),
+    () => rodar({}, contexto(pedidosOpcao)),
+  );
+  checar("sync ilegivel: desligada, nem pede a aba", ilegivel.desligado === true && pedidosOpcao.length === 0 && !ilegivel.projetos.length, ilegivel);
+  const semChrome = await rodar({}, contexto(pedidosOpcao));
+  checar("sem chrome nenhum: desligada", semChrome.desligado === true && pedidosOpcao.length === 0, semChrome);
+  const desligada = await comChrome(
+    comSync(async () => ({ dataValues: JSON.stringify([{ configGeral: [{ name: "gerenciarprojetos", value: false }] }]) })),
+    () => rodar({}, contexto(pedidosOpcao)),
+  );
+  checar("desligada nas opcoes: desligada", desligada.desligado === true && pedidosOpcao.length === 0, desligada);
+  const ausente = await comChrome(
+    comSync(async () => ({})),
+    () => rodar({}, contexto(pedidosOpcao)),
+  );
+  checar("ausente conta como ligada (a regra do legado)", ausente.desligado === undefined && ausente.totalProjetos === 2 && pedidosOpcao.join() === "favoritos.escopo", ausente);
+  definirOpcaoProjetos(async () => true);
+
   secao("agente: projetos_listar - so com o modulo no manifest");
   const sug = SUGESTOES.find((x) => x.rotulo === "O que vence nos projetos");
   const caixa = { acao: "procedimento_controlar" } as never;
@@ -262,29 +403,36 @@ export async function verificarProjetosTool(): Promise<void> {
   // O manifest do Lab (dist/manifest.json) traz o init_projetos.js; o oficial é o mesmo sem ele.
   const lab = JSON.parse(readFileSync(join(RAIZ, "dist", "manifest.json"), "utf8")) as { content_scripts: Array<{ js?: string[] }> };
   const oficial = { ...lab, content_scripts: lab.content_scripts.map((c) => ({ ...c, js: (c.js ?? []).filter((j) => j !== "js/init_projetos.js") })) };
-  const g = globalThis as { chrome?: unknown };
-  const tinha = "chrome" in g;
-  const antes = g.chrome;
   // O registro (TOOLS_SEI) é montado quando o módulo carrega: um carregamento novo para cada manifest.
   const carregarTools = async (marca: string) =>
     ((await import(`../src/tools/sei.ts?${marca}`)) as { TOOLS_SEI: Array<{ nome: string }> }).TOOLS_SEI.map((t) => t.nome);
-  try {
-    g.chrome = { runtime: { getManifest: () => lab } };
-    const toolsLab = await carregarTools("lab");
+  const naCaixa = () => sugestoesPara(caixa).map((x) => x.rotulo);
+  const toolsLab = await comChrome({ runtime: { getManifest: () => lab } }, async () => {
+    const tools = await carregarTools("lab");
+    definirOpcaoProjetos(async () => true);
+    await atualizarOpcaoProjetos();
     checar(
-      "Lab (init_projetos.js no manifest): instalado, ferramenta registrada e sugestao na caixa",
-      projetosInstalado() && toolsLab.filter((n) => n === "projetos_listar").length === 1 && !!sug?.cabe(caixa) && !sug?.cabe({ acao: "arvore_visualizar" } as never),
-      toolsLab.length,
+      "Lab (init_projetos.js no manifest) com a opcao ligada: instalado, ferramenta registrada e sugestao entre as 4 da caixa",
+      projetosInstalado() &&
+        tools.filter((n) => n === "projetos_listar").length === 1 &&
+        !!sug?.cabe(caixa) &&
+        naCaixa().includes("O que vence nos projetos") &&
+        !sug?.cabe({ acao: "arvore_visualizar" } as never),
+      [tools.length, naCaixa()],
     );
-    g.chrome = { runtime: { getManifest: () => oficial } };
-    const toolsOficial = await carregarTools("oficial");
+    definirOpcaoProjetos(async () => false);
+    await atualizarOpcaoProjetos();
+    checar("Lab com a opcao desligada: a sugestao some (a ferramenta nao cumpriria)", !sug?.cabe(caixa) && !naCaixa().includes("O que vence nos projetos"), naCaixa());
+    return tools;
+  });
+  await comChrome({ runtime: { getManifest: () => oficial } }, async () => {
+    const tools = await carregarTools("oficial");
+    definirOpcaoProjetos(async () => true);
+    await atualizarOpcaoProjetos();
     checar(
-      "oficial (sem init_projetos.js): nem ferramenta, nem sugestao",
-      !projetosInstalado() && !toolsOficial.includes("projetos_listar") && toolsOficial.length === toolsLab.length - 1 && !sug?.cabe(caixa),
-      toolsOficial.length,
+      "oficial (sem init_projetos.js): nem ferramenta, nem sugestao (nem com a opcao ligada)",
+      !projetosInstalado() && !tools.includes("projetos_listar") && tools.length === toolsLab.length - 1 && !sug?.cabe(caixa),
+      tools.length,
     );
-  } finally {
-    if (tinha) g.chrome = antes;
-    else delete g.chrome;
-  }
+  });
 }
