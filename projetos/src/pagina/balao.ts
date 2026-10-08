@@ -10,7 +10,7 @@
  */
 
 const ESTILO_BALAO = `:host{all:initial}
-.pb{box-sizing:border-box;width:340px;max-width:calc(100vw - 16px);display:grid;gap:8px;padding:12px 14px;font:13px/1.4 var(--spro-fonte);color:var(--spro-texto);background:var(--spro-fundo);border:1px solid var(--spro-borda);border-radius:12px;box-shadow:var(--spro-sombra-3)}
+.pb{box-sizing:border-box;width:340px;max-width:var(--pb-max,340px);display:grid;gap:8px;padding:12px 14px;font:13px/1.4 var(--spro-fonte);color:var(--spro-texto);background:var(--spro-fundo);border:1px solid var(--spro-borda);border-radius:12px;box-shadow:var(--spro-sombra-3)}
 .pb-cab{display:flex;align-items:center;gap:10px}
 .pb-ic{display:grid;place-items:center;width:32px;height:32px;flex:none;border-radius:8px;color:var(--spro-destaque);background:var(--spro-destaque-suave)}
 .pb-tit{flex:1;min-width:0;display:grid;line-height:1.25}
@@ -115,10 +115,13 @@ export function abrirBalaoNaPagina(ancora: HTMLElement, conteudo: HTMLElement, o
     b.fechar();
   };
   // O foco que vai a outro elemento da página (fora da sombra) fecha; o que anda dentro do balão, ou some com um
-  // redesenho (sem destino), não.
+  // redesenho (sem destino), não. Nem o que vai à âncora: é o clique nela (o mousedown foca antes do click), que
+  // alterna; fechar aqui faria o click reabrir.
   const saiu = (ev: Event) => {
     const para = (ev as FocusEvent).relatedTarget as Node | null;
-    if (para && typeof para.nodeType === "number" && para !== host && !raiz.contains(para)) b.fechar();
+    if (!para || typeof para.nodeType !== "number" || para === host || raiz.contains(para)) return;
+    if (para === ancora || ancora.contains(para)) return;
+    b.fechar();
   };
   caixa.addEventListener("keydown", tab);
   caixa.addEventListener("focusout", saiu);
@@ -144,16 +147,19 @@ export function abrirBalaoNaPagina(ancora: HTMLElement, conteudo: HTMLElement, o
     },
   };
   const r = ancora.getBoundingClientRect();
-  const largura = v?.innerWidth ?? 1024;
-  const esquerda = Math.max(8, Math.min(r.left, largura - 348)) + (v?.scrollX ?? 0);
+  // A largura útil da página (`clientWidth`, sem a barra de rolagem clássica; `innerWidth` a inclui e o balão ficaria
+  // atrás dela): a posição e a largura máxima (`--pb-max`, herdada pela sombra) saem dela.
+  const largura = doc.documentElement.clientWidth || v?.innerWidth || 1024;
+  const maxima = Math.max(0, largura - 16);
+  const esquerda = Math.max(8, Math.min(r.left, largura - Math.min(340, maxima) - 8)) + (v?.scrollX ?? 0);
   const posicionar = (topo: number) => {
-    host.style.cssText = `position:absolute;z-index:2147483000;left:${Math.round(esquerda)}px;top:${Math.round(topo)}px`;
+    host.style.cssText = `position:absolute;z-index:2147483000;left:${Math.round(esquerda)}px;top:${Math.round(topo)}px;--pb-max:${maxima}px`;
   };
   posicionar(r.bottom + (v?.scrollY ?? 0) + 6);
   doc.body.append(host);
   // Sem lugar embaixo (a linha no fim da tela) e com lugar em cima: o balão abre para cima.
   const altura = host.getBoundingClientRect().height;
-  const alturaJanela = v?.innerHeight ?? 0;
+  const alturaJanela = doc.documentElement.clientHeight || v?.innerHeight || 0;
   if (altura && alturaJanela && r.bottom + 6 + altura > alturaJanela && r.top - 6 - altura > 0)
     posicionar(r.top + (v?.scrollY ?? 0) - 6 - altura);
   doc.addEventListener("pointerdown", fora, true);

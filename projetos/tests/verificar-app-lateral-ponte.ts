@@ -390,7 +390,13 @@ export async function verificarAppLateralPonte(): Promise<void> {
   await f.area.gravar({ [CHAVE_FOCO]: { alvo: "lateral", chave: k, projeto: "p1", etapa: "e9", ate: 20_000 } });
   await f.mudar(aba(ctx("110"), []));
   checar("pedido guardado antes de montar: atendido ao montar", f.focos.join() === `${k}:p1:e9`, f.focos);
-  checar("e apagado (vale uma vez)", !(CHAVE_FOCO in (await f.area.obter(CHAVE_FOCO))));
+  checar(
+    "fica guardado ate vencer (o lateral de outra janela da mesma chave tambem o atende)",
+    CHAVE_FOCO in (await f.area.obter(CHAVE_FOCO)),
+  );
+  await f.area.gravar({ [CHAVE_FOCO]: { alvo: "lateral", chave: k, projeto: "p1", etapa: "e9", ate: 20_000 } });
+  await tique(10);
+  checar("o mesmo pedido de novo: esta montagem nao o atende outra vez", f.focos.join() === `${k}:p1:e9`, f.focos);
   await f.area.gravar({ [CHAVE_FOCO]: { alvo: "lateral", chave: k, projeto: "p2", ate: 20_000 } });
   await tique(10);
   checar("pedido com o lateral ja montado: atendido na hora", f.focos.at(-1) === `${k}:p2:-`, f.focos);
@@ -407,6 +413,31 @@ export async function verificarAppLateralPonte(): Promise<void> {
   f.montagem.parar();
   checar("parar desmonta", f.destruidos.join() === k);
 
+  secao("lateral: dois laterais na mesma chave (duas janelas) e o pedido de foco");
+  const areaDois = areaMemoria();
+  const ja = cenario({ area: areaDois });
+  ja.montagem.iniciar();
+  await ja.mudar(aba(ctx("110"), []));
+  // O clique foi na árvore da OUTRA janela: o lateral de lá ainda vai montar; o desta já está aberto.
+  await areaDois.gravar({ [CHAVE_FOCO]: { alvo: "lateral", chave: k, projeto: "p8", ate: 20_000 } });
+  await tique(10);
+  const segundo = cenario({ area: areaDois });
+  segundo.montagem.iniciar();
+  await segundo.mudar(aba(ctx("110"), []));
+  checar(
+    "o ja aberto atende e nao apaga: o que monta depois (o da janela do clique) tambem abre o projeto",
+    ja.focos.join() === `${k}:p8:-` && segundo.focos.join() === `${k}:p8:-`,
+    { ja: ja.focos, segundo: segundo.focos },
+  );
+  await areaDois.gravar({ [CHAVE_FOCO]: { alvo: "lateral", chave: k, projeto: "p8", ate: 20_000 } });
+  await tique(10);
+  checar("cada um atende uma vez so", ja.focos.length === 1 && segundo.focos.length === 1, { ja: ja.focos, segundo: segundo.focos });
+  await areaDois.gravar({ [CHAVE_FOCO]: { alvo: "lateral", chave: k, projeto: "p9", ate: 20_001 } });
+  await tique(10);
+  checar("um pedido novo (outro clique): os dois atendem", ja.focos.at(-1) === `${k}:p9:-` && segundo.focos.at(-1) === `${k}:p9:-`);
+  ja.montagem.parar();
+  segundo.montagem.parar();
+
   secao("lateral: pedido de foco pelo chrome.storage de verdade (formato do Chrome, areaChrome)");
   const chromeFoco = instalarChromeStorage();
   try {
@@ -416,7 +447,7 @@ export async function verificarAppLateralPonte(): Promise<void> {
     await chromeFoco.local.gravar({ [CHAVE_FOCO]: { alvo: "lateral", chave: k, projeto: "p7", etapa: "e7", ate: 20_000 } });
     await tique(20);
     checar("com o lateral ja montado: atendido", fc.focos.join() === `${k}:p7:e7`, fc.focos);
-    checar("e apagado", !(CHAVE_FOCO in (await chromeFoco.local.obter(CHAVE_FOCO))));
+    checar("e guardado ate vencer", CHAVE_FOCO in (await chromeFoco.local.obter(CHAVE_FOCO)));
     fc.montagem.parar();
   } finally {
     chromeFoco.restaurar();

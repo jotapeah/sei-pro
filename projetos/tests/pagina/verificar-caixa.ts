@@ -542,9 +542,16 @@ async function verificarIconeAlterna(): Promise<void> {
   ic.click();
   await tique(30);
   checar("abre", balaoAberto() !== null && ic.getAttribute("aria-expanded") === "true");
+  // Como no navegador: o pointerdown no ícone, o foco que sai do balão para ele e o clique.
+  const Ev = (t.doc.defaultView as unknown as { Event: typeof Event }).Event;
+  disparar(ic, "pointerdown");
+  const focusout = new Ev("focusout", { bubbles: true });
+  Object.defineProperty(focusout, "relatedTarget", { value: ic });
+  balaoAberto()?.raiz.querySelector("button")?.dispatchEvent(focusout);
+  checar("o foco que sai do balao para o proprio icone nao fecha", balaoAberto()?.ancora === ic);
   ic.click();
   await tique(30);
-  checar("o mesmo icone fecha", balaoAberto() === null && ic.getAttribute("aria-expanded") === "false");
+  checar("o mesmo icone fecha (e nao reabre)", balaoAberto() === null && ic.getAttribute("aria-expanded") === "false");
   caixa.parar();
 }
 

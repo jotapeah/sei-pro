@@ -8,8 +8,11 @@
  *   guardado (`projetos/foco`, alvo "painel") para o painel de lá;
  * - da árvore (sem painel na aba): o background abre o painel lateral na aba
  *   Projetos e o pedido fica guardado (alvo "lateral") para o app de lá.
- * O pedido guardado vale uma vez, só para a mesma chave da aba e por 1 minuto
- * (quem lê confere a forma: `lerPedidoDeFoco`).
+ * O pedido guardado vale só para a mesma chave da aba e por 1 minuto (quem lê
+ * confere a forma: `lerPedidoDeFoco`). O do painel vale uma vez (o painel o
+ * apaga ao atender); o do lateral fica até vencer, porque dois laterais da
+ * mesma chave (duas janelas) atendem os dois, cada um uma vez
+ * (app/lateral/montagem.ts).
  */
 
 import type { Area } from "@comum/armazenamento/area";

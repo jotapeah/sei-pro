@@ -107,6 +107,9 @@ function semAba(): HTMLElement {
   );
 }
 
+/** Quantos pedidos de foco atendidos cada lateral lembra (um por clique na árvore; o pedido vale 1 minuto). */
+const MAX_ATENDIDOS = 20;
+
 export class MontagemLateral {
   private montado: { vez: Vez; app: AppDoLateral; sigla: string } | null = null;
   private fila: Promise<void> = Promise.resolve();
@@ -116,6 +119,8 @@ export class MontagemLateral {
   private carencia: ReturnType<typeof setTimeout> | null = null;
   /** O que uma desmontagem fechou e ainda não foi dito (sem aba, a unidade nova ainda não montou). */
   private fechadosSemAviso: Fechados | null = null;
+  /** Os pedidos de foco que este lateral já atendeu (chave, prazo, projeto e etapa): o pedido fica até vencer. */
+  private atendidos: string[] = [];
 
   constructor(private readonly d: DepsMontagem) {}
 
@@ -255,11 +260,12 @@ export class MontagemLateral {
   }
 
   /**
-   * O "Abrir no painel" da árvore: vale uma vez, só para a chave montada e dentro do prazo. Nunca derruba o app. O
-   * pedido vencido (ou torto) desta chave sai do storage ao ler; o de outra chave fica para ela. Dois laterais
-   * abertos na mesma chave (duas janelas do navegador no mesmo SEI, usuário e unidade) podem atender o mesmo pedido:
-   * os dois abrem o mesmo projeto, com os mesmos dados (aceito: o pedido não sabe de qual janela veio, e o content
-   * script não tem como saber em que janela está).
+   * O "Abrir no painel" da árvore: só para a chave montada e dentro do prazo, uma vez por lateral. Nunca derruba o
+   * app. Atender NÃO apaga o pedido: dois laterais na mesma chave (duas janelas do navegador no mesmo SEI, usuário e
+   * unidade) atendem os dois, e o da janela onde o clique aconteceu pode montar depois do outro, que já estava aberto
+   * (apagar ao atender deixava esse sem o projeto). O pedido vence no minuto; cada lateral lembra os que já atendeu
+   * (`atendidos`) e não os atende de novo, nem ao remontar. O vencido (ou torto) desta chave sai do storage ao ler; o
+   * de outra chave fica para ela.
    */
   private async atenderFoco(): Promise<void> {
     const m = this.montado;
@@ -272,8 +278,10 @@ export class MontagemLateral {
         if (pedidoDaChave(bruto, "lateral", m.vez.chave)) await this.d.area.remover(CHAVE_FOCO);
         return;
       }
-      await this.d.area.remover(CHAVE_FOCO);
-      if (this.montado === m) m.app.focarProjeto(p.projeto, p.etapa);
+      const assinatura = `${p.chave}|${p.ate}|${p.projeto}|${p.etapa ?? ""}`;
+      if (this.atendidos.includes(assinatura)) return;
+      this.atendidos = [...this.atendidos.slice(-(MAX_ATENDIDOS - 1)), assinatura];
+      m.app.focarProjeto(p.projeto, p.etapa);
     } catch (e) {
       console.warn("[SEI Pro] projetos: o pedido de foco não foi atendido:", e);
     }

@@ -46,8 +46,22 @@ const CAU = "99906.713-630.000032/2025-82";
  * dos literais, um deles cancelado; antes dela, a pasta II, mais antiga, que o usuário abriu depois da carga (os
  * documentos dela estão desenhados, mas não nos literais da página), também com um cancelado.
  */
+/** As telas que entraram em laço de recolocação do ícone (o disjuntor de `tela` cortou o laço). */
+const lacos: string[] = [];
+
 function tela(alvo: "ifrConteudoVisualizacao" | "ifrVisualizacao", o: { sigiloso?: boolean; desenhar?: boolean } = {}) {
   const { doc } = telaSei("sei41/arvore.html");
+  // Disjuntor: um laço de recolocação do ícone (que travaria a suíte: o observador do linkedom roda em microtarefa e
+  // os timers nunca chegam) é cortado tirando o topo, e vira FALHA no fim (`lacos`).
+  let colocacoes = 0;
+  const disjuntor = new doc.defaultView!.MutationObserver((rs) => {
+    for (const x of rs) for (const n of x.addedNodes) if ((n as Element).classList?.contains("spro-prj-ic")) colocacoes++;
+    if (colocacoes <= 20) return;
+    disjuntor.disconnect();
+    lacos.push(alvo);
+    doc.querySelector("#topmenu")?.replaceChildren();
+  });
+  disjuntor.observe(doc.querySelector("#topmenu")!, { childList: true, subtree: true });
   for (const s of doc.querySelectorAll("script")) {
     let t = s.textContent ?? "";
     if (!t.includes("infraArvoreNo(")) continue;
@@ -203,6 +217,14 @@ async function verificarIconeEFaixa(): Promise<void> {
     abrir: (ancora, processo, documentos) => void abertos.push({ ancora, p: processo, docs: documentos }),
   });
   const ic = t.doc.querySelector<HTMLElement>("#topmenu .spro-prj-ic")!;
+  // O espião das recolocações do ícone, desde a instalação: um laço de recolocação vira FALHA (a contagem), e não uma
+  // suíte travada, porque o espião para a instalação depois de 5.
+  let inseridos = 0;
+  const espia = new t.doc.defaultView!.MutationObserver((rs) => {
+    for (const x of rs) for (const n of x.addedNodes) if ((n as Element).classList?.contains("spro-prj-ic")) inseridos++;
+    if (inseridos > 5) inst?.parar();
+  });
+  espia.observe(t.doc.querySelector("#topmenu")!, { childList: true, subtree: true });
   checar("depois do numero e da estrela", !!inst && estrela.nextElementSibling === ic);
   checar("realcado (ligado) e com o ponto de atraso", !!ic?.hasAttribute("data-ativo") && !!ic?.hasAttribute("data-atraso"));
   checar(
@@ -262,12 +284,7 @@ async function verificarIconeEFaixa(): Promise<void> {
   checar("a 4 dias uteis (o feriado de 12/10 nao conta): sem faixa, icone so realcado", faixa.hidden && !!ic?.hasAttribute("data-ativo"));
 
   secao("arvore: o SEI redesenha o topo (sem duplicar e sem laco)");
-  let inseridos = 0;
-  const Obs = t.doc.defaultView!.MutationObserver;
-  const espia = new Obs((rs) => {
-    for (const x of rs) for (const n of x.addedNodes) if ((n as Element).classList?.contains("spro-prj-ic")) inseridos++;
-  });
-  espia.observe(t.doc.querySelector("#topmenu")!, { childList: true, subtree: true });
+  checar("ate aqui (pinturas, faixa, cliques), o icone nunca foi recolocado", inseridos === 0, inseridos);
   ic.remove();
   await tique(30);
   checar("o icone volta, uma vez so", t.doc.querySelectorAll("#topmenu .spro-prj-ic").length === 1 && inseridos === 1, inseridos);
@@ -358,6 +375,12 @@ async function verificarSei5(): Promise<void> {
   checar(
     "faixa escondida e o modo noturno",
     (t5.doc.querySelector(".spro-prj-faixa") as HTMLElement).hidden && ic5?.classList.contains("spro-prj-escuro") === true,
+  );
+  const css = t5.doc.getElementById("spro-prj-estilo-sei")?.textContent ?? "";
+  checar(
+    "modo noturno: o icone da faixa atrasada e o da que vence com as cores claras (contraste no fundo escuro)",
+    css.includes(".spro-prj-faixa.spro-prj-escuro svg{color:#ff7d73}") &&
+      css.includes(".spro-prj-faixa.spro-prj-escuro.spro-prj-vence svg{color:#e8b04a}"),
   );
   inst?.parar();
   checar(
@@ -775,6 +798,134 @@ function verificarLigacao(): void {
   );
 }
 
+async function verificarIconeAlterna(): Promise<void> {
+  secao("arvore: o icone (ou a faixa) com o balao aberto fecha, mesmo com o foco saindo do balao para ele");
+  const t = tela("ifrConteudoVisualizacao");
+  const r = await repos();
+  const p = await r.unidade.criarProjeto({ nome: "Revisão", processo: { protocolo: CAU } });
+  await r.unidade.criarEtapa({ projeto: p.id, nome: "Minuta", inicio: "2026-09-01", fim: "2026-10-01" });
+  const consentimento = consentimentoNaArea({
+    area: areaMemoria(),
+    chavePreferencias: "projetos/consentimento",
+    campo: "textoPadrao",
+    chave: "k",
+  });
+  const inst = await instalarNaArvore({
+    doc: t.doc,
+    url: URL_ARVORE,
+    repos: r,
+    hoje: () => HOJE,
+    temaEscuro: false,
+    esperarMs: 50,
+    atraso: 1,
+    abrir: (ancora, processo, documentos) =>
+      void abrirBalaoProcesso(ancora, processo, {
+        modo: "arvore",
+        repos: r,
+        hoje: () => HOJE,
+        sigla: "TESTE",
+        temaEscuro: false,
+        cssBase: "",
+        consentimento,
+        documentos,
+        abrirNoPainel: () => undefined,
+      }),
+  });
+  const ic = t.doc.querySelector<HTMLElement>("#topmenu .spro-prj-ic")!;
+  const faixa = t.doc.querySelector<HTMLElement>(".spro-prj-faixa")!;
+  /** O clique do usuário na âncora com o foco dentro do balão: pointerdown, o foco sai para a âncora, click. */
+  const clicarComFocoDentro = async (alvo: HTMLElement) => {
+    alvo.dispatchEvent(evento(t.doc, "pointerdown", {}));
+    const dentro = balaoAberto()?.raiz.querySelector<HTMLElement>("button");
+    dentro?.dispatchEvent(evento(t.doc, "focusout", { relatedTarget: alvo }));
+    const abertoAntesDoClique = balaoAberto();
+    alvo.click();
+    await tique(30);
+    return abertoAntesDoClique;
+  };
+  ic.click();
+  await tique(30);
+  checar("abre", balaoAberto()?.ancora === ic && ic.getAttribute("aria-expanded") === "true");
+  const antes = await clicarComFocoDentro(ic);
+  checar(
+    "o foco que sai do balao para o proprio icone nao fecha; o clique dele fecha (e nao reabre)",
+    antes?.ancora === ic && balaoAberto() === null && ic.getAttribute("aria-expanded") === "false",
+  );
+  faixa.click();
+  await tique(30);
+  checar("a faixa abre", balaoAberto()?.ancora === faixa);
+  await clicarComFocoDentro(faixa);
+  checar("e a faixa fecha do mesmo jeito", balaoAberto() === null && faixa.getAttribute("aria-expanded") === "false");
+  inst?.parar();
+}
+
+async function verificarLarguraUtil(): Promise<void> {
+  secao("balao: a largura util da pagina (sem a barra de rolagem classica)");
+  const t = tela("ifrConteudoVisualizacao");
+  const r = await repos();
+  const consentimento = consentimentoNaArea({
+    area: areaMemoria(),
+    chavePreferencias: "projetos/consentimento",
+    campo: "textoPadrao",
+    chave: "k",
+  });
+  // A janela tem 520 px, 20 da barra de rolagem: sobram 500 para a página.
+  Object.defineProperty(t.doc.defaultView!, "innerWidth", { value: 520, configurable: true });
+  Object.defineProperty(t.doc.documentElement, "clientWidth", { value: 500, configurable: true });
+  t.no.getBoundingClientRect = () => ({
+    left: 400,
+    right: 420,
+    top: 10,
+    bottom: 30,
+    width: 20,
+    height: 20,
+    x: 400,
+    y: 10,
+    toJSON: () => ({}),
+  });
+  const arv = lerArvore(paginaDe(t.doc, URL_ARVORE));
+  const b = await abrirBalaoProcesso(t.no, processoDaArvore(arv), {
+    modo: "arvore",
+    repos: r,
+    hoje: () => HOJE,
+    sigla: "TESTE",
+    temaEscuro: false,
+    cssBase: "",
+    consentimento,
+    documentos: () => [],
+    abrirNoPainel: () => undefined,
+  });
+  const estilo = t.doc.querySelector(".spro-prj-balao")?.getAttribute("style") ?? "";
+  const css = b.raiz.querySelector("style")?.textContent ?? "";
+  checar(
+    "o balao cabe nos 500 px da pagina (e nao nos 520 da janela, atras da barra)",
+    /left:152px/.test(estilo) && /--pb-max:484px/.test(estilo),
+    estilo,
+  );
+  checar("a largura maxima vem da pagina, nao de 100vw", css.includes("max-width:var(--pb-max") && !css.includes("100vw"));
+  b.fechar();
+  // Frame estreito (a árvore): 300 px úteis, o balão encolhe para 284 e encosta na margem.
+  Object.defineProperty(t.doc.documentElement, "clientWidth", { value: 300, configurable: true });
+  const estreito = await abrirBalaoProcesso(t.no, processoDaArvore(arv), {
+    modo: "arvore",
+    repos: r,
+    hoje: () => HOJE,
+    sigla: "TESTE",
+    temaEscuro: false,
+    cssBase: "",
+    consentimento,
+    documentos: () => [],
+    abrirNoPainel: () => undefined,
+  });
+  const estiloEstreito = t.doc.querySelector(".spro-prj-balao")?.getAttribute("style") ?? "";
+  checar(
+    "frame estreito: o balao encolhe e encosta na margem",
+    /left:8px/.test(estiloEstreito) && /--pb-max:284px/.test(estiloEstreito),
+    estiloEstreito,
+  );
+  estreito.fechar();
+}
+
 export async function verificarArvore(): Promise<void> {
   verificarLigacao();
   await verificarLeitura();
@@ -784,4 +935,7 @@ export async function verificarArvore(): Promise<void> {
   await verificarSigilo();
   await verificarBalaoArvore();
   await verificarRevisaoT7();
+  await verificarIconeAlterna();
+  await verificarLarguraUtil();
+  checar("nenhuma arvore das provas entrou em laco de recolocacao do icone", lacos.length === 0, lacos);
 }

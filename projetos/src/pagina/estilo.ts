@@ -27,7 +27,9 @@ const CSS = `.spro-prj-ic{position:relative;display:inline-grid;place-items:cent
 .spro-prj-faixa.spro-prj-vence{border-color:rgb(180 92 10 / 30%);background:rgb(180 92 10 / 9%)}
 .spro-prj-faixa.spro-prj-vence svg{color:#b45c0a}
 .spro-prj-faixa.spro-prj-escuro{color:#e7e9ec;background:rgb(255 125 115 / 12%);border-color:rgb(255 125 115 / 30%)}
-.spro-prj-faixa.spro-prj-escuro.spro-prj-vence{background:rgb(232 176 74 / 12%);border-color:rgb(232 176 74 / 30%)}`;
+.spro-prj-faixa.spro-prj-escuro.spro-prj-vence{background:rgb(232 176 74 / 12%);border-color:rgb(232 176 74 / 30%)}
+.spro-prj-faixa.spro-prj-escuro svg{color:#ff7d73}
+.spro-prj-faixa.spro-prj-escuro.spro-prj-vence svg{color:#e8b04a}`;
 
 export function instalarEstiloNaPagina(doc: Document): void {
   if (doc.getElementById(ID)) return;
