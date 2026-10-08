@@ -244,8 +244,27 @@ const MIN_DIGITOS = 4;
 /** Com tantos dígitos tem a forma de número de processo (o NUP tem 17; o do SEI-RJ, 16), mesmo desconhecido daqui. */
 const DIGITOS_DE_PROCESSO = 15;
 
-/** As cadeias de grupos de dígitos de `t`, na ordem do texto (ver a leitura acima). */
-function cadeiasDe(t: string): Grupo[][] {
+/** As escapadas do JSON e o caractere que cada uma representa. */
+const ESCAPADAS_JSON: Readonly<Record<string, string>> = { n: "\n", t: "\t", r: "\r", b: "\b", f: "\f", '"': '"', "\\": "\\", "/": "/" };
+const RE_HEX4 = /^[0-9a-fA-F]{4}$/;
+
+/**
+ * O caractere de `t` na posição `i` e onde ele acaba. Com `json` (o texto da ferramenta já em JSON), a escapada é UM
+ * caractere, o que ela representa ("\n" é a quebra de linha, "\"" as aspas): é assim que o modelo lê o JSON.
+ */
+function caractereEm(t: string, i: number, json: boolean): [string, number] {
+  if (json && t.charCodeAt(i) === 0x5c) {
+    const e = t.charAt(i + 1);
+    if (e === "u" && RE_HEX4.test(t.slice(i + 2, i + 6))) return [String.fromCharCode(Number.parseInt(t.slice(i + 2, i + 6), 16)), i + 6];
+    const ch = ESCAPADAS_JSON[e];
+    if (ch !== undefined) return [ch, i + 2];
+  }
+  const c = t.codePointAt(i) as number;
+  return [String.fromCodePoint(c), c > 0xffff ? i + 2 : i + 1];
+}
+
+/** As cadeias de grupos de dígitos de `t`, na ordem do texto (ver a leitura acima); com `json`, como o modelo lê o JSON. */
+function cadeiasDe(t: string, json: boolean): Grupo[][] {
   const cadeias: Grupo[][] = [];
   let cadeia: Grupo[] | null = null;
   let grupo: Grupo | null = null;
@@ -253,9 +272,8 @@ function cadeiasDe(t: string): Grupo[][] {
   let conectores = 0;
   let espaco = false;
   let quebrou = false;
-  let i = 0;
-  for (const ch of t) {
-    const fim = i + ch.length;
+  for (let i = 0; i < t.length; ) {
+    const [ch, fim] = caractereEm(t, i, json);
     for (const p of pecasDe(ch, ch.codePointAt(0) as number)) {
       if (p.k === "digito") {
         if (grupo) {
@@ -332,11 +350,11 @@ const inverso = (d: string): string => d.split("").reverse().join("");
 
 /**
  * Os trechos [primeiro grupo, último grupo, marcador] da cadeia (menos de 15 dígitos) que batem com um número conhecido:
- * cada trecho de grupos seguidos, na ordem do texto, com os dígitos ao contrário (RLO) e com os grupos ao contrário
- * (RLM). Os que se sobrepõem saem juntos ("5 - 12003/1234-202", com "512003" documento e "120031234202" processo, sai
- * inteiro); os vizinhos, cada um com o seu marcador.
+ * cada trecho de grupos seguidos, na ordem do texto e, com `inverter`, também com os dígitos ao contrário (RLO) e com os
+ * grupos ao contrário (RLM). Os que se sobrepõem saem juntos ("5 - 12003/1234-202", com "512003" documento e
+ * "120031234202" processo, sai inteiro); os vizinhos, cada um com o seu marcador.
  */
-function trechosConhecidos(cadeia: readonly Grupo[], n: NumerosConhecidos): Array<[number, number, string]> {
+function trechosConhecidos(cadeia: readonly Grupo[], n: NumerosConhecidos, inverter: boolean): Array<[number, number, string]> {
   const achados: Array<[number, number, string]> = [];
   const invertidos = cadeia.map((g) => inverso(g.d));
   for (let i = 0; i < cadeia.length; i++) {
@@ -348,7 +366,8 @@ function trechosConhecidos(cadeia: readonly Grupo[], n: NumerosConhecidos): Arra
       frente += d;
       aoContrario = invertidos[j] + aoContrario;
       gruposAoContrario = d + gruposAoContrario;
-      const marca = marcadorDe(frente, n) ?? marcadorDe(aoContrario, n) ?? (i < j ? marcadorDe(gruposAoContrario, n) : null);
+      const marca =
+        marcadorDe(frente, n) ?? (inverter ? (marcadorDe(aoContrario, n) ?? (i < j ? marcadorDe(gruposAoContrario, n) : null)) : null);
       if (marca) achados.push([i, j, marca]);
     }
   }
@@ -363,11 +382,48 @@ function trechosConhecidos(cadeia: readonly Grupo[], n: NumerosConhecidos): Arra
   return unidos;
 }
 
+/**
+ * Os controles de direção (\p{Bidi_C}: LRM, RLM, ALM, os encaixes, as substituições e os isolados). Dentro de uma
+ * cadeia, a ordem que a pessoa vê não é a do texto (o RLM entre alguns grupos, o RLO num grupo só), e simular o
+ * algoritmo bidi não cabe aqui: a cadeia sai inteira.
+ */
+const RE_DIRECAO = /\p{Bidi_C}/u;
+
+/**
+ * A ordem que a pessoa vê só difere da do texto com um controle de direção ou uma letra da direita para a esquerda (os
+ * blocos do hebraico, do árabe, do siríaco e afins: U+0590 a U+08FF, as formas de apresentação, U+10800 a U+10FFF e
+ * U+1E800 a U+1EFFF, estes dois pelo primeiro substituto). Sem eles, a ordem invertida nem é conferida: o número comum
+ * que, ao contrário, fosse um conhecido não sai à toa.
+ */
+function podeInverter(t: string): boolean {
+  if (RE_DIRECAO.test(t)) return true;
+  for (let i = 0; i < t.length; i++) {
+    const c = t.charCodeAt(i);
+    if ((c >= 0x590 && c <= 0x8ff) || (c >= 0xfb1d && c <= 0xfdff) || (c >= 0xfe70 && c <= 0xfefc)) return true;
+    if (c === 0xd802 || c === 0xd803 || c === 0xd83a || c === 0xd83b) return true;
+  }
+  return false;
+}
+
 /** Os invisíveis de `t`, juntos: vão logo depois do marcador, e o `varrer` ainda os acusa no relatório (e os tira). */
 const invisiveisDe = (t: string): string => (t.match(INVISIVEIS) ?? []).join("");
 
-/** O texto livre sem número de processo nem de documento (o que `n` conhece e o que tem a forma de processo). */
-function semNumeros(t: string, n: NumerosConhecidos): string {
+/**
+ * O que o JSON escreveria com dígito ("\u0001", "\ud800"): os controles (fora a tabulação, as quebras de linha e o
+ * avanço de página) e as metades soltas de um par UTF-16. Trocados pelo caractere de substituição, do mesmo tamanho:
+ * as posições não mudam, e a leitura também não (os dois são conector).
+ */
+const RE_QUE_O_JSON_ESCAPA = /[\p{Cc}\p{Cs}]/gu;
+const SUBSTITUTO = String.fromCharCode(0xfffd);
+const semControles = (t: string): string =>
+  t.replace(RE_QUE_O_JSON_ESCAPA, (c) => (c === "\t" || c === "\n" || c === "\r" || c === "\f" ? c : SUBSTITUTO));
+
+/**
+ * O texto livre sem número de processo nem de documento (o que `n` conhece e o que tem a forma de processo). Com
+ * `json`, `t` é o texto exato que vai ao modelo (o JSON do resultado, depois da anonimização e do corte do motor).
+ */
+function semNumeros(bruto: string, n: NumerosConhecidos, json = false): string {
+  const t = semControles(bruto);
   let saida = "";
   let desde = 0;
   const trocar = (ini: number, fim: number, marca: string) => {
@@ -377,14 +433,17 @@ function semNumeros(t: string, n: NumerosConhecidos): string {
     saida += `${t.slice(desde, de)}${marca}${invisiveisDe(t.slice(de, fim))}`;
     desde = fim;
   };
-  for (const cadeia of cadeiasDe(t)) {
+  const inverter = podeInverter(t);
+  for (const cadeia of cadeiasDe(t, json)) {
     const total = cadeia.reduce((soma, g) => soma + g.d.length, 0);
     if (total < MIN_DIGITOS) continue;
-    if (total >= DIGITOS_DE_PROCESSO) {
-      trocar((cadeia[0] as Grupo).ini, (cadeia[cadeia.length - 1] as Grupo).fim, SEM_NUMERO_PROCESSO);
+    const ini = (cadeia[0] as Grupo).ini;
+    const fim = (cadeia[cadeia.length - 1] as Grupo).fim;
+    if (total >= DIGITOS_DE_PROCESSO || RE_DIRECAO.test(t.slice(ini, fim))) {
+      trocar(ini, fim, SEM_NUMERO_PROCESSO);
       continue;
     }
-    for (const [i, j, marca] of trechosConhecidos(cadeia, n)) trocar((cadeia[i] as Grupo).ini, (cadeia[j] as Grupo).fim, marca);
+    for (const [i, j, marca] of trechosConhecidos(cadeia, n, inverter)) trocar((cadeia[i] as Grupo).ini, (cadeia[j] as Grupo).fim, marca);
   }
   return saida + t.slice(desde);
 }
@@ -472,6 +531,9 @@ export const TOOL_PROJETOS: DefTool = definirTool({
     const sigilo = sigiloDoEnvelope([...deUn.p, ...deEu.p], [...deUn.e, ...deEu.e], conhecidos);
     const numeros = numerosConhecidos([deUn, deEu], sigilo);
     const livre = (t: string) => semNumeros(t, numeros);
+    // E de novo sobre o texto exato que vai ao modelo: o "⟧" que o `varrer` põe no fim da frase e o rótulo da
+    // anonimização ("[PESSOA_1]") podem ligar dois pedaços que, no campo, estavam separados.
+    ctx.aoModelo?.((texto) => semNumeros(texto, numeros, true));
     const projetoSigiloso = (p: ProjetoNaTela) => sigilo.projetos.has(p.projeto.id) || sigilo.vinculo(p.projeto.processo);
     const filtro: Filtro = a.filtro === "atrasadas" || a.filtro === "semana" ? a.filtro : "todos";
     // A busca vê o nome como ele sai: um número que não vai na resposta também não serve para achar.

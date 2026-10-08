@@ -43,6 +43,12 @@ export interface ContextoTool {
   registrarAchados(documento: string, achados: Array<{ classe: string; trecho: string; motivo?: string }>): void;
   /** Registra nomes de pessoas vistos nos metadados, para o dicionário da anonimização. */
   pessoasVistas(nomes: string[]): void;
+  /**
+   * Pede uma última passada sobre o texto EXATO que vai ao modelo: o motor a aplica depois do JSON, da anonimização e
+   * do corte. O que a tool tirou do resultado pode ser remontado por esses passos (o rótulo "[PESSOA_1]" traz dígito).
+   * Se a passada falhar, nada do resultado vai ao modelo.
+   */
+  aoModelo?(passada: (texto: string) => string): void;
   /** Interface do painel (tools internas: perguntar, tarefas). */
   ui: InterfaceMotor;
   /** Credenciais de assinatura aprovadas no plano (só em tools de assinatura). */

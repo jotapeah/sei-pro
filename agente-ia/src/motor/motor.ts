@@ -185,12 +185,20 @@ export class Motor {
     }
   }
 
-  /** Resultado de tool → texto seguro para o modelo. */
-  private paraModelo(valor: unknown): string {
+  /**
+   * Resultado de tool → texto seguro para o modelo. `finais`: as passadas que a tool pediu (`ContextoTool.aoModelo`),
+   * sobre o texto exato que vai ao modelo (depois da anonimização e do corte); se uma falhar, nada do resultado vai.
+   */
+  private paraModelo(valor: unknown, finais: ReadonlyArray<(texto: string) => string> = []): string {
     let t = typeof valor === "string" ? valor : JSON.stringify(valor);
     t = this.o.privacidade.anonimizar(t ?? "");
     const limite = this.o.limiteResultado ?? 12_000;
     if (t.length > limite) t = `${t.slice(0, limite)}\n[... resultado cortado: ${t.length - limite} caracteres omitidos. Pe\u00E7a um trecho menor ou use os par\u00E2metros de pagina\u00E7\u00E3o da ferramenta.]`;
+    try {
+      for (const f of finais) t = f(t);
+    } catch {
+      return JSON.stringify({ erro: "N\u00E3o foi poss\u00EDvel conferir o resultado desta ferramenta antes de envi\u00E1-lo: nada dele foi enviado." });
+    }
     return t;
   }
 
@@ -257,12 +265,13 @@ export class Motor {
     await Promise.all(
       leituras.map(async ({ c, t, args }) => {
         this.o.ui.toolIniciada(c.id, t.nome, t.rotulo(args));
+        const finais: Array<(texto: string) => string> = [];
         try {
-          const r = await t.executar(args, this.contexto(sinal));
-          saida.set(c.id, this.paraModelo(r));
+          const r = await t.executar(args, this.contexto(sinal, { aoModelo: (f) => void finais.push(f) }));
+          saida.set(c.id, this.paraModelo(r, finais));
           this.o.ui.toolTerminada(c.id, true, "");
         } catch (e) {
-          saida.set(c.id, this.paraModelo(erroParaModelo(e)));
+          saida.set(c.id, this.paraModelo(erroParaModelo(e), finais));
           this.o.ui.toolTerminada(c.id, false, erroParaModelo(e).erro);
         }
       }),
@@ -272,23 +281,25 @@ export class Motor {
     // duas perguntas ao mesmo tempo no painel não têm como ser respondidas.
     for (const { c, t, args } of externas) {
       this.o.ui.toolIniciada(c.id, t.nome, t.rotulo(args));
+      const finais: Array<(texto: string) => string> = [];
       try {
-        const r = await t.executar(args, this.contexto(sinal));
-        saida.set(c.id, this.paraModelo(r));
+        const r = await t.executar(args, this.contexto(sinal, { aoModelo: (f) => void finais.push(f) }));
+        saida.set(c.id, this.paraModelo(r, finais));
         this.o.ui.toolTerminada(c.id, true, "");
       } catch (e) {
-        saida.set(c.id, this.paraModelo(erroParaModelo(e)));
+        saida.set(c.id, this.paraModelo(erroParaModelo(e), finais));
         this.o.ui.toolTerminada(c.id, false, erroParaModelo(e).erro);
       }
     }
 
     if (escritas.length) {
-      const resultados = await this.executarPlano(escritas.flatMap((e) => e.passos), escritas.map((e) => e.objetivo).filter(Boolean).join("; "), sinal);
+      const finais: Array<(texto: string) => string> = [];
+      const resultados = await this.executarPlano(escritas.flatMap((e) => e.passos), escritas.map((e) => e.objetivo).filter(Boolean).join("; "), sinal, finais);
       let i = 0;
       for (const e of escritas) {
         const meus = resultados.slice(i, i + e.passos.length);
         i += e.passos.length;
-        saida.set(e.c.id, this.paraModelo(e.passos.length === 1 && e.c.function.name !== "plano_propor" ? meus[0] : { passos: meus }));
+        saida.set(e.c.id, this.paraModelo(e.passos.length === 1 && e.c.function.name !== "plano_propor" ? meus[0] : { passos: meus }, finais));
       }
     }
     return saida;
@@ -314,7 +325,7 @@ export class Motor {
     return erros.length ? { erro: "Plano inv\u00E1lido.", detalhes: erros } : { passos };
   }
 
-  private async executarPlano(passos: PassoPlano[], objetivo: string, sinal: AbortSignal): Promise<unknown[]> {
+  private async executarPlano(passos: PassoPlano[], objetivo: string, sinal: AbortSignal, finais: Array<(texto: string) => string> = []): Promise<unknown[]> {
     // Prévia de cada passo independente (em paralelo; é leitura).
     await Promise.all(
       passos.map(async (p) => {
@@ -370,7 +381,8 @@ export class Motor {
           const { erros } = validar(t.parametros, args);
           if (erros.length) throw new Error(`Refer\u00EAncias n\u00E3o resolvidas: ${erros.join("; ")}`);
         }
-        const r = await t.executar(args, this.contexto(sinal, p.efeito === "assinatura" ? { assinatura: decisao.assinatura } : {}));
+        const aoModelo = (f: (texto: string) => string) => void finais.push(f);
+        const r = await t.executar(args, this.contexto(sinal, p.efeito === "assinatura" ? { assinatura: decisao.assinatura, aoModelo } : { aoModelo }));
         resultados.push(r);
         // Antes de `toolTerminada`: é ela que redesenha o item, e o painel
         // precisa já saber que aquela ação pode ser desfeita.
