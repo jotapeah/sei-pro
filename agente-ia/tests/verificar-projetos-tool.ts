@@ -625,6 +625,13 @@ export async function verificarProjetosTool(): Promise<void> {
   casos12["m.largura-total-e-nota"] = [`SEI ${largo("12345678")}${SOB1} fim`, `SEI ${ND}${SOB1} fim`];
   casos12["m.arabe-e-ascii"] = [`SEI ${noBloco("12345678", 0x660)}5 fim`, `SEI ${ND}5 fim`];
   casos12["m.nup-e-nota"] = [`processo 50300.000001/2026-01${SOB1} fim`, `processo ${NP} fim`];
+  // Entre os que não são decimais, cada sequência é uma escrita: o circulado e o sobrescrito, o sobrescrito e o subscrito.
+  const circulado = (t: string) => t.replace(/[0-9]/g, (c) => cp(c === "0" ? 0x24ea : 0x245f + Number(c)));
+  casos12["m.circulado-e-nota"] = [`SEI ${circulado("12345678")}${SOB1} fim`, `SEI ${ND}${SOB1} fim`];
+  casos12["m.sobrescrito-e-subscrito"] = [`SEI ${sob("12345678")}${cp(0x2081)} fim`, `SEI ${ND}${cp(0x2081)} fim`];
+  // E o número todo numa escrita só fica um número só, com o "¹²³" (U+00B9, U+00B2, U+00B3) e o "⓪" fora da sequência deles.
+  casos12["m.controle-sobrescrito"] = [`x ${sob("412345678")} fim`, `x ${sob("412345678")} fim`];
+  casos12["m.controle-circulado-zero"] = [`x ${circulado("9012345678")} fim`, `x ${circulado("9012345678")} fim`];
   // (n) Os espaços tipográficos (e o \v) contam como espaço: no máximo um conector por intervalo, e nenhum quando já há
   // outro conector. Dois e três de cada lado do separador ligam.
   const TIPOGRAFICOS = [0x0b, 0x1680, 0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200a, 0x202f, 0x205f, 0x3000];

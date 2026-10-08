@@ -138,12 +138,24 @@ const CONECTOR: Peca = { k: "conector" };
 const OCULTO: Peca = { k: "oculto" };
 
 /**
- * A escrita de um dígito: o zero do bloco, para os decimais (0x30 no ASCII; a largura total, o arábico, o negrito
- * matemático, cada um o seu); os outros (sobrescrito, subscrito, circulado, fração, dingbat), uma só. Quando ela muda,
- * o grupo fecha: a nota de rodapé colada ("12345678¹") não esconde o número.
+ * A escrita de um dígito: o zero da sequência do caractere, o código dele menos o valor (0x30 no ASCII; a largura
+ * total, o arábico, cada estilo do negrito matemático, o sobrescrito, o subscrito, o circulado, cada um o seu). Quando
+ * ela muda, o grupo fecha: a nota de rodapé colada ("12345678¹") não esconde o número.
  */
 const ESCRITA_ASCII = 0x30;
-const ESCRITA_NAO_DECIMAL = -1;
+/** Os dígitos que o Unicode pôs fora da sequência deles ("¹²³" longe de "⁰⁴", os zeros dos circulados): a da sequência. */
+const ESCRITA_FORA_DA_SEQUENCIA: ReadonlyMap<number, number> = new Map([
+  [0xb2, 0x2070],
+  [0xb3, 0x2070],
+  [0xb9, 0x2070],
+  [0x24ea, 0x245f],
+  [0x24ff, 0x2775],
+  [0x1f100, 0x2487],
+  [0x1f10b, 0x277f],
+  [0x1f10c, 0x2789],
+]);
+/** A escrita do caractere `c` fora do ASCII, cujos dígitos (lidos pelo valor) são `valor`. */
+const escritaDe = (c: number, valor: string): number => ESCRITA_FORA_DA_SEQUENCIA.get(c) ?? c - Number(valor);
 
 /** O espaço entre palavras: o comum, o NBSP, a tabulação, as quebras de linha e o avanço de página. */
 const espacoEntrePalavras = (c: number): boolean =>
@@ -217,10 +229,11 @@ const RE_LETRA_ASCII = /^[A-Za-z]/;
  * ("ç", "ã"; o "ª" e o "º" o NFKC já levou a "a" e "o"). As letras de outras escritas e as que parecem pontuação
  * ("ᐟ", "ᐧ", "ー") contam como conector: entre dois grupos de dígitos, a pessoa as lê como separador.
  */
-function pecaNormalizada(x: string, c: number, escrita: number): Peca {
-  if (RE_DECIMAL.test(x)) return { k: "digito", d: valorDecimal(c), escrita };
+function pecaNormalizada(x: string, c: number): Peca {
+  // A escrita é a do caractere de onde a peça saiu: `pecasDe` a põe.
+  if (RE_DECIMAL.test(x)) return { k: "digito", d: valorDecimal(c), escrita: ESCRITA_ASCII };
   const t = valorTabelado(c);
-  if (t !== null) return { k: "digito", d: t, escrita };
+  if (t !== null) return { k: "digito", d: t, escrita: ESCRITA_ASCII };
   if (oculto(x, c)) return OCULTO;
   if (RE_LETRA.test(x) && RE_LETRA_ASCII.test(x.normalize("NFD"))) return LETRA;
   return CONECTOR;
@@ -239,15 +252,19 @@ function pecasDe(ch: string, c: number): readonly Peca[] {
   else if (espacoEntrePalavras(c)) pecas = [ESPACO];
   else if (espacoTipografico(c)) pecas = [TIPOGRAFICO];
   else {
-    // Os dígitos que saem do caractere ficam com a escrita DELE (o "５" da largura total vira "5", mas não é ASCII).
-    const escrita = RE_DECIMAL.test(ch) ? c - Number(valorDecimal(c)) : ESCRITA_NAO_DECIMAL;
     pecas = [];
+    let valor = "";
     for (const x of ch.normalize("NFKC")) {
       const xc = x.codePointAt(0) as number;
-      const p = xc < 0x80 ? ((ASCII[xc] as readonly Peca[])[0] as Peca) : pecaNormalizada(x, xc, escrita);
+      const p = xc < 0x80 ? ((ASCII[xc] as readonly Peca[])[0] as Peca) : pecaNormalizada(x, xc);
+      if (p.k === "digito") valor += p.d;
       // O espaço que sai da decomposição de um caractere visível ("‗" e "´" dão espaço e marca) conta como conector.
-      if (p.k === "digito") pecas.push({ k: "digito", d: p.d, escrita });
-      else pecas.push(p.k === "espaco" || p.k === "tipografico" ? CONECTOR : p);
+      pecas.push(p.k === "espaco" || p.k === "tipografico" ? CONECTOR : p);
+    }
+    // Os dígitos que saem do caractere ficam com a escrita DELE (o "５" da largura total vira "5", mas não é ASCII).
+    if (valor) {
+      const escrita = escritaDe(c, valor);
+      pecas = pecas.map((p) => (p.k === "digito" ? { k: "digito", d: p.d, escrita } : p));
     }
   }
   if (PECAS.size >= 4096) PECAS.clear();
