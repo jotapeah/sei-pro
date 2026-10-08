@@ -293,13 +293,17 @@ export class Motor {
     }
 
     if (escritas.length) {
-      const finais: Array<(texto: string) => string> = [];
-      const resultados = await this.executarPlano(escritas.flatMap((e) => e.passos), escritas.map((e) => e.objetivo).filter(Boolean).join("; "), sinal, finais);
+      const passos = escritas.flatMap((e) => e.passos);
+      // As passadas de cada passo, à parte: valem só para a mensagem da chamada que o trouxe (a do plano_propor é um
+      // texto só, com os passos dele), nunca para o resultado de outra chamada.
+      const finais: Array<Array<(texto: string) => string>> = passos.map(() => []);
+      const resultados = await this.executarPlano(passos, escritas.map((e) => e.objetivo).filter(Boolean).join("; "), sinal, finais);
       let i = 0;
       for (const e of escritas) {
         const meus = resultados.slice(i, i + e.passos.length);
+        const minhas = finais.slice(i, i + e.passos.length).flat();
         i += e.passos.length;
-        saida.set(e.c.id, this.paraModelo(e.passos.length === 1 && e.c.function.name !== "plano_propor" ? meus[0] : { passos: meus }, finais));
+        saida.set(e.c.id, this.paraModelo(e.passos.length === 1 && e.c.function.name !== "plano_propor" ? meus[0] : { passos: meus }, minhas));
       }
     }
     return saida;
@@ -325,7 +329,8 @@ export class Motor {
     return erros.length ? { erro: "Plano inv\u00E1lido.", detalhes: erros } : { passos };
   }
 
-  private async executarPlano(passos: PassoPlano[], objetivo: string, sinal: AbortSignal, finais: Array<(texto: string) => string> = []): Promise<unknown[]> {
+  /** `finais[i]`: onde ficam as passadas finais (`ContextoTool.aoModelo`) que o passo `i` pedir. */
+  private async executarPlano(passos: PassoPlano[], objetivo: string, sinal: AbortSignal, finais: Array<Array<(texto: string) => string>> = []): Promise<unknown[]> {
     // Prévia de cada passo independente (em paralelo; é leitura).
     await Promise.all(
       passos.map(async (p) => {
@@ -381,7 +386,8 @@ export class Motor {
           const { erros } = validar(t.parametros, args);
           if (erros.length) throw new Error(`Refer\u00EAncias n\u00E3o resolvidas: ${erros.join("; ")}`);
         }
-        const aoModelo = (f: (texto: string) => string) => void finais.push(f);
+        const doPasso = (finais[i] ??= []);
+        const aoModelo = (f: (texto: string) => string) => void doPasso.push(f);
         const r = await t.executar(args, this.contexto(sinal, p.efeito === "assinatura" ? { assinatura: decisao.assinatura, aoModelo } : { aoModelo }));
         resultados.push(r);
         // Antes de `toolTerminada`: é ela que redesenha o item, e o painel

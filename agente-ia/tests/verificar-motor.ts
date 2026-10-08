@@ -352,6 +352,82 @@ export async function verificarMotor(): Promise<void> {
     checar("sem conectores, o prompt nao muda", !promptSistema(null, new Date(2026, 9, 1)).includes("Conectores do usuário"));
   }
 
+  secao("motor: a passada final (aoModelo) vale so para a chamada que a pediu");
+  {
+    // A passada troca "segredo" por "[x]"; a que lança impede que qualquer coisa do resultado vá ao modelo.
+    const trocar = (t: string) => t.replace(/segredo/g, "[x]");
+    const lancar = () => {
+      throw new Error("falhou");
+    };
+    const previa = async () => [{ alvo: "a", mudancas: [{ campo: "c", antes: "", depois: "d" }], resumo: "r" }];
+    const ferramenta = (nome: string, efeito: "leitura" | "escrita", passada?: (t: string) => string) =>
+      definirTool({
+        nome,
+        descricao: `ferramenta de prova ${nome}: devolve um texto com a palavra segredo e, se for o caso, pede a passada final`,
+        parametros: s.objeto({}),
+        efeito,
+        rotulo: () => nome,
+        executar: async (_a, ctx) => {
+          if (passada) ctx.aoModelo?.(passada);
+          // As leituras rodam em paralelo: a outra roda enquanto esta espera.
+          await new Promise((r) => setTimeout(r, 5));
+          return { texto: `segredo de ${nome}` };
+        },
+        ...(efeito === "escrita" ? { previsualizar: previa } : {}),
+      });
+    const registro = new RegistroTools([
+      ferramenta("le_com_passada", "leitura", trocar),
+      ferramenta("le_sem_passada", "leitura"),
+      ferramenta("le_que_lanca", "leitura", lancar),
+      ferramenta("escreve_com_passada", "escrita", trocar),
+      ferramenta("escreve_sem_passada", "escrita"),
+      ferramenta("escreve_que_lanca", "escrita", lancar),
+    ]);
+    /** As mensagens de ferramenta que o modelo recebe, por id da chamada, numa rodada com `nomes`. */
+    const rodada = async (nomes: string[]): Promise<Map<string, string>> => {
+      const m = new Motor({
+        provedor: provedor([() => ({ texto: "", chamadas: nomes.map((n) => chamada(n, {})), fim: "tool_calls" })], []),
+        tools: registro,
+        ui: ui({ aprovado: true }),
+        privacidade: new Pseudonimos(),
+        sei: seiFalso([]),
+        sistema: () => "s",
+      });
+      await m.enviar("prova");
+      return new Map(m.mensagens().flatMap((x) => (x.role === "tool" ? [[x.tool_call_id, x.content] as [string, string]] : [])));
+    };
+    const puro = (nome: string) => JSON.stringify({ texto: `segredo de ${nome}` });
+    const ERRO = "nada dele foi enviado";
+    const leituras = await rodada(["le_com_passada", "le_sem_passada", "le_que_lanca"]);
+    checar(
+      "leituras em paralelo: cada uma com a sua passada (a de uma nao vale para a outra)",
+      leituras.get("le_com_passada") === JSON.stringify({ texto: "[x] de le_com_passada" }) && leituras.get("le_sem_passada") === puro("le_sem_passada"),
+      [...leituras],
+    );
+    checar(
+      "passada que lanca: so a mensagem de erro vai ao modelo, nada do resultado",
+      (leituras.get("le_que_lanca") ?? "").includes(ERRO) && !(leituras.get("le_que_lanca") ?? "").includes("segredo"),
+      leituras.get("le_que_lanca"),
+    );
+    const sozinha = await rodada(["le_sem_passada"]);
+    checar("ferramenta sem passada: a saida e identica ao resultado", sozinha.get("le_sem_passada") === puro("le_sem_passada"), sozinha.get("le_sem_passada"));
+    const escritas = await rodada(["escreve_com_passada", "escreve_sem_passada"]);
+    checar(
+      "passos do mesmo plano: a passada de um nao vale para o resultado do outro",
+      escritas.get("escreve_com_passada") === JSON.stringify({ texto: "[x] de escreve_com_passada" }) &&
+        escritas.get("escreve_sem_passada") === puro("escreve_sem_passada"),
+      [...escritas],
+    );
+    const escritas2 = await rodada(["escreve_que_lanca", "escreve_sem_passada"]);
+    checar(
+      "passo cuja passada lanca: so ele vira a mensagem de erro; o outro passo do plano chega inteiro",
+      (escritas2.get("escreve_que_lanca") ?? "").includes(ERRO) &&
+        !(escritas2.get("escreve_que_lanca") ?? "").includes("segredo") &&
+        escritas2.get("escreve_sem_passada") === puro("escreve_sem_passada"),
+      [...escritas2],
+    );
+  }
+
   secao("tools: contrato");
   checar("toda escrita tem previa", tools.todas().every((t) => t.efeito === "leitura" || t.efeito === "interna" || typeof t.previsualizar === "function"));
   checar("todo esquema e objeto", tools.todas().every((t) => t.parametros.type === "object"));
