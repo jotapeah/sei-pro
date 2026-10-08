@@ -400,6 +400,10 @@ export async function verificarAppLateralPonte(): Promise<void> {
   await f.area.gravar({ [CHAVE_FOCO]: { alvo: "lateral", chave: k, projeto: "p4", ate: 5_000 } });
   await tique(10);
   checar("pedido vencido: ignorado", f.focos.length === 2);
+  checar("e o vencido da propria chave sai ao ler (nao fica no storage)", !(CHAVE_FOCO in (await f.area.obter(CHAVE_FOCO))));
+  await f.area.gravar({ [CHAVE_FOCO]: { alvo: "lateral", chave: "sei.x.gov.br|ana|u:220", projeto: "p5", ate: 5_000 } });
+  await tique(10);
+  checar("o vencido de outra chave fica (e dela)", f.focos.length === 2 && CHAVE_FOCO in (await f.area.obter(CHAVE_FOCO)));
   f.montagem.parar();
   checar("parar desmonta", f.destruidos.join() === k);
 

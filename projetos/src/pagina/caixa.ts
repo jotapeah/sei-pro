@@ -17,10 +17,12 @@
  * inserido, não). Várias mudanças seguidas viram uma pintura (uma por `atraso`).
  *
  * Sigilo da linha: todo processo que a caixa mostra como sigiloso vai a
- * `marcarSigiloso` nos dois escopos, uma vez por carga e um de cada vez (cada
- * chamada lê o escopo inteiro): marca os vínculos e lembra o número que só ficou
- * no histórico (o número não vai ao Texto Padrão). A memória do sigilo ilegível
- * (`ErroMemoriaSigilo`) só vai ao console: a caixa segue.
+ * `marcarSigilosos` nos dois escopos, uma vez por carga cada número: os que uma
+ * pintura vê pela primeira vez vão juntos, num pedido por escopo (uma leitura
+ * do escopo para todos), e os pedidos vão um de cada vez. Marca os vínculos e
+ * lembra o número que só ficou no histórico (o número não vai ao Texto Padrão).
+ * A memória do sigilo ilegível (`ErroMemoriaSigilo`) só vai ao console: a caixa
+ * segue.
  */
 
 import { icone } from "@comum/ui/dom";
@@ -104,18 +106,23 @@ export function instalarIconesCaixa(d: DepsCaixa): { atualizar(): Promise<void>;
   let indice = new Map<string, VinculoProcesso[]>();
   let parado = false;
 
-  // O sigilo da linha: uma vez por carga cada número, nos dois escopos, um pedido de cada vez.
+  // O sigilo da linha: uma vez por carga cada número; os novos de uma pintura num pedido por escopo, um de cada vez.
   const marcados = new Set<string>();
   let fila: Promise<void> = Promise.resolve();
-  const marcarSigiloso = (protocolo: string) => {
-    const k = chaveProtocolo(protocolo);
-    if (!k || marcados.has(k)) return;
-    marcados.add(k);
+  const marcarSigilosos = (protocolos: readonly string[]) => {
+    const novos: string[] = [];
+    for (const p of protocolos) {
+      const k = chaveProtocolo(p);
+      if (!k || marcados.has(k)) continue;
+      marcados.add(k);
+      novos.push(p);
+    }
+    if (!novos.length) return;
     fila = fila.then(async () => {
       for (const r of [d.repos.unidade, d.repos.eu]) {
         if (parado) return;
         try {
-          await r.marcarSigiloso(protocolo);
+          await r.marcarSigilosos(novos);
         } catch (e) {
           // Memória do sigilo ilegível (falha fechada: nada gravado). A caixa segue; a próxima carga tenta de novo.
           console.warn("[SEI Pro] projetos: sigilo da linha", e instanceof Error ? e.message : e);
@@ -128,9 +135,10 @@ export function instalarIconesCaixa(d: DepsCaixa): { atualizar(): Promise<void>;
   const pintar = () => {
     if (parado) return;
     const hoje = d.hoje();
+    const sigilosos: string[] = [];
     for (const tr of d.doc.querySelectorAll(LINHAS)) {
       const p = processoDaLinha(tr);
-      if (p?.sigiloso) marcarSigiloso(p.protocolo);
+      if (p?.sigiloso) sigilosos.push(p.protocolo);
       const existentes = [...tr.querySelectorAll<HTMLElement>(`.${ICONE}`)];
       const vinculos = p ? (indice.get(chaveProtocolo(p.protocolo)) ?? []) : [];
       if (!vinculos.length) {
@@ -146,6 +154,7 @@ export function instalarIconesCaixa(d: DepsCaixa): { atualizar(): Promise<void>;
         colocar(tr, novo);
       }
     }
+    marcarSigilosos(sigilosos);
     // O que esta pintura mudou não volta como trabalho (a tela já está como ela deixou).
     observador?.takeRecords?.();
   };

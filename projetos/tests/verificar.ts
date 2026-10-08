@@ -109,4 +109,6 @@ const suitePaginaIntegracao = "./pagina/verificar-pagina-integracao";
 await ((await import(suitePaginaIntegracao)) as { verificarPaginaIntegracao(): Promise<void> }).verificarPaginaIntegracao();
 const suiteCaixa = "./pagina/verificar-caixa";
 await ((await import(suiteCaixa)) as { verificarCaixa(): Promise<void> }).verificarCaixa();
+const suiteArvore = "./pagina/verificar-arvore";
+await ((await import(suiteArvore)) as { verificarArvore(): Promise<void> }).verificarArvore();
 resumo();

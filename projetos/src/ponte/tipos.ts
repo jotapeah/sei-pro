@@ -97,3 +97,13 @@ export function lerPedidoDeFoco(v: unknown, alvo: PedidoDeFoco["alvo"], chave: s
   if (textoCurto(p.etapa)) saida.etapa = p.etapa;
   return saida;
 }
+
+/**
+ * O valor guardado é um pedido deste alvo e desta chave (valendo ou não): quem o lê e não o atende (vencido, torto)
+ * o apaga, porque ninguém mais o atenderia. O de outra chave fica: é de outra aba.
+ */
+export function pedidoDaChave(v: unknown, alvo: PedidoDeFoco["alvo"], chave: string): boolean {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return false;
+  const p = v as { alvo?: unknown; chave?: unknown };
+  return !!chave && p.alvo === alvo && p.chave === chave;
+}

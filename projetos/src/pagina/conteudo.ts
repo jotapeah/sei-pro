@@ -10,21 +10,27 @@
  * do Texto Padrão da unidade aparece no próprio balão (`perguntarEntendi`, que
  * o consentimento da P4 chama: pagina/balaoProcesso.ts). O aviso mora num
  * lugar só dele: aparecer e sumir não refaz os formulários (o que foi digitado
- * fica). Nomes e textos entram como texto (`h()`), nunca como HTML.
+ * fica); o "Agora não" deixa uma frase neutra (`MENSAGEM_AGORA_NAO`), não o
+ * alerta de erro. Os redesenhos internos (abrir um formulário, "Cancelar")
+ * põem o foco no primeiro controle do que apareceu (ou de volta no botão que o
+ * abriu), e o segmentado "Como" muda no lugar. Nomes e textos entram como
+ * texto (`h()`), nunca como HTML.
  */
 
 import { h, icone } from "@comum/ui/dom";
+import { MENSAGEM_SEM_ENTENDI } from "../app/colaboracao/consentir";
 import type { ProjetoNaTela } from "../app/dados";
 import { mensagemDoErro } from "../app/erros";
 import { iconeProjetos, iconeSituacao } from "../app/icones";
-import { dataNaFaixa } from "../modelo/calendario";
+import { dataNaFaixa, MAX_DIAS_UTEIS } from "../modelo/calendario";
 import { LIMITES } from "../modelo/constantes";
 import { rotuloDaVis } from "../modelo/escopo";
 import { textoDoPrazo } from "../modelo/prazo";
 import { situacaoEtapa } from "../modelo/situacao";
 import type { DataISO, DocumentoSei, Etapa, Vinculo, Vis } from "../modelo/tipos";
+import { ErroValidacao } from "../modelo/validacao";
 import { chaveProtocolo, type VinculoProcesso, vinculoSemProcesso } from "../modelo/vinculos";
-import type { ComoAdicionar, PedidoAdicionar } from "./adicionar";
+import { type ComoAdicionar, JA_E_O_PROCESSO, type PedidoAdicionar } from "./adicionar";
 
 export interface ProcessoNaTela {
   protocolo: string;
@@ -61,6 +67,35 @@ export interface AcoesConteudo {
 }
 
 const MAX_ETAPAS = 4;
+
+/**
+ * O "Agora não" no balão: nada foi gravado, sem alarme. A mensagem do app (`MENSAGEM_SEM_ENTENDI`) fala do seletor
+ * "Só eu", que o balão não tem.
+ */
+export const MENSAGEM_AGORA_NAO = "Nada foi gravado: os projetos de “Toda a unidade” só mudam depois do “Entendi”.";
+
+const semEntendi = (e: unknown): boolean =>
+  e instanceof ErroValidacao && e.mensagens.length === 1 && e.mensagens[0] === MENSAGEM_SEM_ENTENDI;
+
+/** Onde vai a resposta de uma gravação que não aconteceu: o erro (alerta) ou, no "Agora não", a frase neutra (status). */
+function avisos(): { erro: HTMLElement; nota: HTMLElement; limpar(): void; mostrar(e: unknown): void } {
+  const erro = h("p", { class: "pb-erro", role: "alert" });
+  const nota = h("p", { class: "pb-nota", role: "status" });
+  return {
+    erro,
+    nota,
+    limpar() {
+      erro.textContent = "";
+      nota.textContent = "";
+    },
+    mostrar(e) {
+      if (semEntendi(e)) nota.textContent = MENSAGEM_AGORA_NAO;
+      else erro.textContent = mensagemDoErro(e);
+    },
+  };
+}
+
+const focar = (el: HTMLElement | null | undefined) => el?.focus?.({ preventScroll: true });
 
 /** O botão de cada conteúdo que pediu a última gravação: o foco volta a ele depois da resposta ao aviso. */
 const ultimaAcao = new WeakMap<HTMLElement, HTMLElement>();
@@ -136,6 +171,12 @@ export function montarConteudo(d: DadosConteudo, a: AcoesConteudo): HTMLElement 
   let concluindo: string | null = null;
   let formAberto = d.modo === "arvore";
   const slotPergunta = h("div", { class: "pb-slot" });
+  /** O que recebe o foco depois do redesenho interno em curso (o primeiro controle do que abriu, ou a volta). */
+  let focoPedido: string | null = null;
+  let alvoFoco: HTMLElement | null = null;
+  const marcarFoco = (chave: string, el: HTMLElement) => {
+    if (focoPedido === chave && !alvoFoco) alvoFoco = el;
+  };
 
   /** Botão que grava: lembra quem pediu (o foco volta a ele depois do aviso da unidade). */
   const gravar = (rotulo: string, fazer: () => void, ...antes: Node[]) => {
@@ -152,7 +193,7 @@ export function montarConteudo(d: DadosConteudo, a: AcoesConteudo): HTMLElement 
   };
 
   const formConcluir = (v: VinculoProcesso, etapas: Etapa[]): HTMLElement => {
-    const erro = h("p", { class: "pb-erro", role: "alert" });
+    const aviso = avisos();
     const selEtapa = h("select", { class: "spro-campo", name: "etapa" }, ...etapas.map((e, i) => opcao(e.id, e.nome, i === 0)));
     const selDoc = h(
       "select",
@@ -161,12 +202,11 @@ export function montarConteudo(d: DadosConteudo, a: AcoesConteudo): HTMLElement 
       ...d.documentos.map((x) => opcao(x.numero, `${x.titulo} (${x.numero})`)),
     );
     const data = h("input", { class: "spro-campo", type: "date", name: "data", value: d.hoje });
+    marcarFoco("concluir", etapas.length > 1 ? selEtapa : selDoc);
     const concluir = () => {
       const doc = d.documentos.find((x) => x.numero === selDoc.value);
-      erro.textContent = "";
-      void a.concluir(v.vis, selEtapa.value, doc ? { numero: doc.numero, titulo: doc.titulo } : undefined, data.value).catch((e) => {
-        erro.textContent = mensagemDoErro(e);
-      });
+      aviso.limpar();
+      void a.concluir(v.vis, selEtapa.value, doc ? { numero: doc.numero, titulo: doc.titulo } : undefined, data.value).catch(aviso.mostrar);
     };
     return h(
       "div",
@@ -174,17 +214,32 @@ export function montarConteudo(d: DadosConteudo, a: AcoesConteudo): HTMLElement 
       etapas.length > 1 ? campo("Etapa", selEtapa) : h("p", { class: "pb-dica" }, `Concluir “${etapas[0]?.nome ?? ""}”`),
       campo("Documento", selDoc),
       campo("Concluída em", data),
-      erro,
+      aviso.erro,
+      aviso.nota,
       h(
         "div",
         { class: "pb-rod" },
         botao("Cancelar", "spro-botao pequeno", () => {
           concluindo = null;
-          desenhar();
+          desenhar(`voltar:${v.vis}:${v.projeto.id}`);
         }),
         gravar("Concluir", concluir, icone("check", 13)),
       ),
     );
+  };
+
+  const botaoConcluir = (chave: string): HTMLElement => {
+    const b = botao(
+      "Concluir com documento…",
+      "spro-botao primario pequeno",
+      () => {
+        concluindo = chave;
+        desenhar("concluir");
+      },
+      icone("documento", 13),
+    );
+    marcarFoco(`voltar:${chave}`, b);
+    return b;
   };
 
   const blocoVinculo = (v: VinculoProcesso, comPainel: boolean): HTMLElement => {
@@ -220,17 +275,7 @@ export function montarConteudo(d: DadosConteudo, a: AcoesConteudo): HTMLElement 
           ? h(
               "div",
               { class: "pb-botoes" },
-              d.modo === "arvore" && lista.length
-                ? botao(
-                    "Concluir com documento…",
-                    "spro-botao primario pequeno",
-                    () => {
-                      concluindo = chave;
-                      desenhar();
-                    },
-                    icone("documento", 13),
-                  )
-                : null,
+              d.modo === "arvore" && lista.length ? botaoConcluir(chave) : null,
               botao("Abrir no painel", "spro-botao pequeno", () => a.abrirNoPainel(v.projeto.id, lista[0]?.id), iconeProjetos("abrir", 13)),
             )
           : null,
@@ -249,7 +294,7 @@ export function montarConteudo(d: DadosConteudo, a: AcoesConteudo): HTMLElement 
     const primeiro = d.projetos.find((p) => !ligado.has(valorDe(p))) ?? d.projetos[0]!;
     let escolhido = valorDe(primeiro);
     let como: ComoAdicionar = "etapa";
-    const erro = h("p", { class: "pb-erro", role: "alert" });
+    const aviso = avisos();
     const selProjeto = h(
       "select",
       { class: "spro-campo", name: "projeto" },
@@ -263,7 +308,16 @@ export function montarConteudo(d: DadosConteudo, a: AcoesConteudo): HTMLElement 
       value: nomePadrao(d.processo),
     });
     const inicio = h("input", { class: "spro-campo", type: "date", name: "inicio", value: d.hoje });
-    const duracao = h("input", { class: "spro-campo", type: "number", name: "duracao", min: "1", max: "2600", step: "1", value: "10" });
+    const duracao = h("input", {
+      class: "spro-campo",
+      type: "number",
+      name: "duracao",
+      min: "1",
+      max: String(MAX_DIAS_UTEIS),
+      step: "1",
+      value: "10",
+    });
+    marcarFoco("adicionar", selProjeto);
     const selEtapa = h("select", { class: "spro-campo", name: "etapaLigar" });
     const variavel = h("div", { class: "pb-form-como" });
     const projetoEscolhido = () => d.projetos.find((p) => valorDe(p) === escolhido) ?? primeiro;
@@ -272,25 +326,28 @@ export function montarConteudo(d: DadosConteudo, a: AcoesConteudo): HTMLElement 
       ["ligar", "Ligar a uma etapa"],
       ["projeto", "Processo do projeto"],
     ];
-    const segmentado = h("div", { class: "spro-segmentado", role: "group", "aria-label": "Como" });
     const chaveProc = chaveProtocolo(d.processo.protocolo);
+    // Os botões do "Como" nascem uma vez: escolher muda só o aria-pressed (o foco fica no botão tocado).
+    const botoesComo = comoBotoes.map(([v, rotulo]) =>
+      h(
+        "button",
+        {
+          type: "button",
+          "aria-pressed": String(como === v),
+          onclick: () => {
+            como = v;
+            pintarComo();
+          },
+        },
+        rotulo,
+      ),
+    );
+    const segmentado = h("div", { class: "spro-segmentado", role: "group", "aria-label": "Como" }, ...botoesComo);
     const pintarComo = () => {
-      segmentado.replaceChildren(
-        ...comoBotoes.map(([v, rotulo]) =>
-          h(
-            "button",
-            {
-              type: "button",
-              "aria-pressed": String(como === v),
-              onclick: () => {
-                como = v;
-                pintarComo();
-              },
-            },
-            rotulo,
-          ),
-        ),
-      );
+      botoesComo.forEach((b, i) => {
+        const pressionado = String(comoBotoes[i]?.[0] === como);
+        if (b.getAttribute("aria-pressed") !== pressionado) b.setAttribute("aria-pressed", pressionado);
+      });
       const p = projetoEscolhido();
       if (como === "etapa")
         variavel.replaceChildren(
@@ -321,7 +378,7 @@ export function montarConteudo(d: DadosConteudo, a: AcoesConteudo): HTMLElement 
             { class: "pb-dica" },
             atual?.protocolo || atual?.sigiloso
               ? chaveProtocolo(atual.protocolo) === chaveProc && atual.protocolo
-                ? "Este já é o processo do projeto."
+                ? JA_E_O_PROCESSO
                 : `O projeto passa a ter este processo no lugar de ${atual.sigiloso ? "um processo sigiloso" : atual.protocolo}.`
               : "O projeto passa a ter este processo (as etapas sem processo próprio vêm junto).",
           ),
@@ -341,11 +398,9 @@ export function montarConteudo(d: DadosConteudo, a: AcoesConteudo): HTMLElement 
       const pedido: PedidoAdicionar = { vis: p.vis, projeto: p.projeto.id, como, processo };
       if (como === "etapa") Object.assign(pedido, { nome: nome.value, inicio: inicio.value, duracao: Number(duracao.value) });
       if (como === "ligar") pedido.etapa = selEtapa.value;
-      erro.textContent = "";
-      // Em "Toda a unidade", o repositório pergunta antes de gravar (o aviso no balão); "Agora não" volta como erro.
-      void a.adicionar(pedido).catch((e) => {
-        erro.textContent = mensagemDoErro(e);
-      });
+      aviso.limpar();
+      // Em "Toda a unidade", o repositório pergunta antes de gravar (o aviso no balão); "Agora não" volta como a frase neutra.
+      void a.adicionar(pedido).catch(aviso.mostrar);
     };
     return h(
       "div",
@@ -354,12 +409,16 @@ export function montarConteudo(d: DadosConteudo, a: AcoesConteudo): HTMLElement 
       campo("Projeto", selProjeto),
       h("div", { class: "pb-campo" }, h("span", { class: "pb-rotulo" }, "Como"), segmentado),
       variavel,
-      erro,
+      aviso.erro,
+      aviso.nota,
       h("div", { class: "pb-rod" }, gravar("Adicionar", adicionar, icone("mais", 13))),
     );
   };
 
-  function desenhar(): void {
+  /** `foco`: o redesenho interno que pediu (o foco vai ao que ele marcou; sem `foco`, o balão cuida). */
+  function desenhar(foco: string | null = null): void {
+    focoPedido = foco;
+    alvoFoco = null;
     const n = d.vinculos.length;
     const titulo = d.modo === "arvore" ? "Projetos deste processo" : `Em ${n} ${n === 1 ? "projeto" : "projetos"}`;
     const umSo = d.modo === "caixa" && n === 1;
@@ -386,7 +445,7 @@ export function montarConteudo(d: DadosConteudo, a: AcoesConteudo): HTMLElement 
             { class: "pb-rod" },
             botao(n ? "Adicionar a outro projeto" : "Adicionar a um projeto", "spro-botao pequeno", () => {
               formAberto = true;
-              desenhar();
+              desenhar("adicionar");
             }),
             umSo
               ? botao(
@@ -399,6 +458,9 @@ export function montarConteudo(d: DadosConteudo, a: AcoesConteudo): HTMLElement 
           ),
     ];
     raiz.replaceChildren(...partes.filter((x): x is Node => x !== null));
+    if (focoPedido) focar(alvoFoco);
+    focoPedido = null;
+    alvoFoco = null;
   }
 
   desenhar();

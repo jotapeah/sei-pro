@@ -808,40 +808,56 @@ export class RepositorioProjetos {
    * memória a local. Sem vínculo nenhum com o número, mas com ele num registro "processo" do histórico (o projeto
    * ou a etapa trocou de processo): nada a marcar, e a memória guarda o número como local (o texto passa a raspar o
    * registro). Falha fechada: memória ilegível lança `ErroMemoriaSigilo` sem gravar nada. Devolve quantos vínculos
-   * foram marcados (0: número sem dígito, nenhum vínculo com ele ou todos já marcados).
+   * foram marcados (0: número sem dígito, nenhum vínculo com ele ou todos já marcados). Atalho de um item de
+   * `marcarSigilosos`.
    */
   async marcarSigiloso(protocolo: string): Promise<number> {
-    const k = typeof protocolo === "string" ? chaveProtocolo(protocolo) : "";
-    if (!k) return 0;
-    const doNumero = (v: Vinculo | undefined): v is Vinculo => !!v && typeof v.protocolo === "string" && chaveProtocolo(v.protocolo) === k;
-    const [projetos, etapas] = await Promise.all([this.projetos.listar(), this.etapas.listar()]);
-    const marcar = <T extends Projeto | Etapa>(x: T): T => ({ ...x, processo: { ...(x.processo as Vinculo), sigiloso: true } });
-    const ps = projetos.filter((p) => doNumero(p.processo) && p.processo.sigiloso !== true).map(marcar);
-    const es = etapas.filter((e) => doNumero(e.processo) && e.processo.sigiloso !== true).map(marcar);
-    if (!ps.length && !es.length) {
-      // Os registros só são lidos quando nenhum vínculo tem o número (a tela pede para todo sigiloso que mostra).
-      const doRegistro = (t: string | undefined) => typeof t === "string" && chaveProtocolo(t) === k;
-      if (
-        [...projetos, ...etapas].some((x) => doNumero(x.processo)) ||
-        (await this.registros.listar()).some((r) => r.campo === "processo" && (doRegistro(r.antes) || doRegistro(r.depois)))
-      )
-        await this.lembrarSigilo({ processos: [k], documentos: [] }, "local", { promover: true });
-      return 0;
+    return this.marcarSigilosos([protocolo]);
+  }
+
+  /**
+   * `marcarSigiloso` para todos os sigilosos que a tela mostrou de uma vez (a caixa inteira, a árvore): UMA leitura
+   * do escopo decide tudo (o custo não cresce com o número de linhas sigilosas), uma gravação marca os vínculos e
+   * outra, só se preciso, guarda na memória os números que não pediram marca (já marcados ou só num registro
+   * "processo"). Números repetidos ou sem dígito são ignorados.
+   */
+  async marcarSigilosos(protocolos: readonly string[]): Promise<number> {
+    const ks = new Set<string>();
+    for (const p of protocolos) {
+      const k = typeof p === "string" ? chaveProtocolo(p) : "";
+      if (k) ks.add(k);
     }
-    await this.salvar(
-      {
-        ...this.entradas(
-          this.projetos,
-          ps.map((p) => [p.id, p]),
-        ),
-        ...this.entradas(
-          this.etapas,
-          es.map((e) => [e.id, e]),
-        ),
-      },
-      [],
-      this.carimbo(),
-    );
+    if (!ks.size) return 0;
+    const chaveDe = (v: Vinculo | undefined): string => (v && typeof v.protocolo === "string" ? chaveProtocolo(v.protocolo) : "");
+    const t = await this.entidades();
+    const marcar = <T extends Projeto | Etapa>(x: T): T => ({ ...x, processo: { ...(x.processo as Vinculo), sigiloso: true } });
+    const precisa = (x: Projeto | Etapa) => ks.has(chaveDe(x.processo)) && x.processo?.sigiloso !== true;
+    const ps = t.p.filter(precisa).map(marcar);
+    const es = t.e.filter(precisa).map(marcar);
+    // O que esta gravação marca vai à memória por ela (`marcasAoGravar`); o resto dos números da tela que este escopo
+    // conhece (no vínculo já marcado ou num registro "processo") vai à memória aqui.
+    const marcados = new Set([...ps, ...es].map((x) => chaveDe(x.processo)));
+    const conhecidos = new Set([...t.p, ...t.e].map((x) => chaveDe(x.processo)));
+    for (const r of t.h)
+      if (r.campo === "processo")
+        for (const x of [r.antes, r.depois]) if (typeof x === "string" && chaveProtocolo(x)) conhecidos.add(chaveProtocolo(x));
+    const lembrar = [...ks].filter((k) => !marcados.has(k) && conhecidos.has(k));
+    if (ps.length || es.length)
+      await this.salvar(
+        {
+          ...this.entradas(
+            this.projetos,
+            ps.map((p) => [p.id, p]),
+          ),
+          ...this.entradas(
+            this.etapas,
+            es.map((e) => [e.id, e]),
+          ),
+        },
+        [],
+        this.carimbo(),
+      );
+    if (lembrar.length) await this.lembrarSigilo({ processos: lembrar, documentos: [] }, "local", { promover: true });
     return ps.length + es.length;
   }
 

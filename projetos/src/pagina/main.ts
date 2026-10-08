@@ -13,13 +13,15 @@
  * - Controle de Processos (topo): o painel embutido, as pílulas (com o
  *   contador da aba do lateral), o "Abrir no painel" que o lateral deixou e o
  *   ícone dos projetos na caixa, com o balão do processo (pagina/caixa.ts);
- * - frames: nada ainda (a árvore do processo ganha o ícone, a faixa e o balão a
- *   seguir); nenhum trabalho pesado roda neles.
+ * - frame da árvore do processo: o ícone, a faixa e o balão, lendo só a árvore
+ *   que o frame já tem (pagina/arvore.ts), com o contexto (usuário, unidade) do
+ *   cabeçalho da janela de topo; "Abrir no painel" abre o lateral. Os outros
+ *   frames saem logo no começo, sem trabalho.
  *
- * Nada daqui abre a árvore de um processo nem monta link do SEI: a conferência
- * do número SEI vai pela pesquisa rápida da própria tela, a lista de usuários é
- * a parcial (pagina/usuarios.ts), e o armazém dos Textos Padrão e a ida ao
- * Controle de Processos usam o link do menu da tela.
+ * Nada daqui BUSCA a árvore de um processo nem monta link do SEI: a
+ * conferência do número SEI vai pela pesquisa rápida da própria tela, a lista
+ * de usuários é a parcial (pagina/usuarios.ts), e o armazém dos Textos Padrão
+ * e a ida ao Controle de Processos usam o link do menu da tela.
  */
 
 // Primeiro de tudo (efeito de importação): a marca do <html> antes de qualquer outro módulo.
@@ -37,7 +39,7 @@ import cssBase from "@comum/ui/base.css";
 import { Formulario } from "@nucleo/formulario/formulario";
 import { linkDoMenu } from "@nucleo/links/links";
 import { criarHttp } from "@nucleo/sessao/http";
-import { paginaDe } from "@nucleo/sessao/pagina";
+import { documentoTopo, paginaDe } from "@nucleo/sessao/pagina";
 import { gravadorDoContador } from "../app/contador";
 import { carregarUnidade } from "../app/dados";
 import { gravarPreferencias, lerPreferencias } from "../app/preferencias";
@@ -48,6 +50,7 @@ import { CANAL_LATERAL, CANAL_PROJETOS, type ContextoProjetos, chaveDaAba } from
 import { RepositorioProjetos } from "../repositorio";
 import { consentimentoProjetos } from "../sincronia/consentimento";
 import { armazemDoTexto, armazemNaTela } from "./armazem";
+import { instalarNaArvore } from "./arvore";
 import { atividadesDaAba } from "./atividades";
 import { abrirBalaoProcesso } from "./balaoProcesso";
 import { instalarIconesCaixa } from "./caixa";
@@ -89,9 +92,26 @@ interface Aba {
   sincronia: SincroniaPagina | null;
 }
 
+/**
+ * Os dois escopos da unidade. O content script também grava (os balões da caixa e da árvore): o carimbo leva o
+ * dispositivo de verdade, o mesmo do app (mesclagem e origem do sigilo).
+ */
+async function reposDaUnidade(ctx: ContextoProjetos, unidade: { id: string }, area: Area): Promise<Repos> {
+  const dispositivo = await idDispositivo(area);
+  const carimbo = (): Carimbo => ({ agora: Date.now(), dispositivo, por: ctx.login, nome: ctx.nome });
+  const escopos = escoposDaUnidade(ctx.host, ctx.login, unidade.id);
+  return {
+    unidade: new RepositorioProjetos(area, escopos.unidade, carimbo),
+    eu: new RepositorioProjetos(area, escopos.eu, carimbo),
+  };
+}
+
 async function principal(): Promise<void> {
-  // Nos frames, nada ainda (a árvore do processo vem a seguir): só a janela de topo segue.
-  if (window !== window.top) return;
+  // Nos frames, só o da árvore do processo; os outros saem já (o content script roda em todos os frames).
+  if (window !== window.top) {
+    if (qualTela(document) === "arvore") await principalArvore();
+    return;
+  }
   if (!(await lerOpcaoLegada("gerenciarprojetos"))) return;
   const ctx = contextoProjetos(
     document,
@@ -103,15 +123,7 @@ async function principal(): Promise<void> {
   const unidade = ctx.unidade;
   const naCaixa = qualTela(document) === "caixa";
   const area = areaChrome(chrome.storage.local, "local");
-  // P5: o content script também grava (os balões da caixa e da árvore): o carimbo leva o dispositivo de verdade,
-  // o mesmo do app (mesclagem e origem do sigilo).
-  const dispositivo = await idDispositivo(area);
-  const carimbo = (): Carimbo => ({ agora: Date.now(), dispositivo, por: ctx.login, nome: ctx.nome });
-  const escopos = escoposDaUnidade(ctx.host, ctx.login, unidade.id);
-  const repos: Repos = {
-    unidade: new RepositorioProjetos(area, escopos.unidade, carimbo),
-    eu: new RepositorioProjetos(area, escopos.eu, carimbo),
-  };
+  const repos = await reposDaUnidade(ctx, unidade, area);
   // Os dois Textos Padrão: o Controle de Processos lê ao abrir e ao ganhar foco; as outras telas só enviam, e só se
   // têm o item "Textos Padrão" no menu (senão o status "indisponível" valeria para todas as abas da unidade).
   const sincronia = ligarSincronia({
@@ -227,8 +239,45 @@ function ligarCaixa(aba: Aba, painel: Promise<PainelDaAba | null>): void {
   void caixa.atualizar().catch((e) => console.warn("[SEI Pro] projetos: ícones da caixa", e));
 }
 
+/**
+ * P5: a tela do processo (o frame da árvore): o ícone, a faixa e o balão. O cabeçalho (usuário, unidade) está na
+ * janela de topo, da mesma origem; a gravação do balão chega ao Texto Padrão pela sincronia de lá (que envia o que
+ * mudou). Nesta aba não há painel: "Abrir no painel" abre o lateral.
+ */
+async function principalArvore(): Promise<void> {
+  if (!(await lerOpcaoLegada("gerenciarprojetos"))) return;
+  const topo = documentoTopo();
+  const temaEscuro = temaEscuroLegado(localStorage);
+  const ctx = contextoProjetos(topo, { temaEscuro, atividades: atividadesConfigurado(localStorage) }, topo.location?.href);
+  if (!ctx?.unidade) return;
+  const unidade = ctx.unidade;
+  const area = areaChrome(chrome.storage.local, "local");
+  const repos = await reposDaUnidade(ctx, unidade, area);
+  const consentimento = consentimentoProjetos(areaChrome(chrome.storage.sync, "sync"), ctx.host, ctx.login, unidade.id, "unidade");
+  await instalarNaArvore({
+    doc: document,
+    url: location.href,
+    repos,
+    hoje: () => hojeISO(),
+    temaEscuro,
+    abrir: (ancora, processo, documentos) =>
+      void abrirBalaoProcesso(ancora, processo, {
+        modo: "arvore",
+        repos,
+        hoje: () => hojeISO(),
+        sigla: unidade.sigla || "unidade",
+        temaEscuro,
+        cssBase,
+        consentimento,
+        documentos,
+        // Ainda dentro do clique: o pedido ao background vai antes de qualquer await (pagina/foco.ts).
+        abrirNoPainel: (id, etapa) => abrirLateral({ ctx, area }, id, etapa),
+      }).catch((e) => console.warn("[SEI Pro] projetos: balão da árvore", e)),
+  });
+}
+
 /** O painel lateral na aba Projetos, com o projeto (pagina/foco.ts). Chamado direto do clique: o Chrome exige o gesto. */
-function abrirLateral(aba: Aba, id: string, etapa?: string): void {
+function abrirLateral(aba: Pick<Aba, "ctx" | "area">, id: string, etapa?: string): void {
   void pedirLateral(
     {
       area: aba.area,

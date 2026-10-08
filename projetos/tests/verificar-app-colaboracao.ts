@@ -448,6 +448,7 @@ export async function verificarAppColaboracao(): Promise<void> {
     // A marca do sigilo visto na tela (decisão 10 da P5): a prova de que grava sem perguntar está em
     // `verificar-integracao-modelo.ts`; aqui, um número que nenhum vínculo tem.
     marcarSigiloso: (r) => r.marcarSigiloso("50300.000999/2026-99"),
+    marcarSigilosos: (r) => r.marcarSigilosos(["50300.000999/2026-99"]),
   };
   // `private` no TypeScript: só a própria classe chama, com `this` = o repositório cru (sem passar pelo Proxy).
   const PRIVADOS = [

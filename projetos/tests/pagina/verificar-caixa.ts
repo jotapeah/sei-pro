@@ -23,7 +23,7 @@ import { adicionarAoProjeto, concluirComDocumento } from "../../src/pagina/adici
 import { balaoAberto } from "../../src/pagina/balao";
 import { abrirBalaoProcesso, type DepsBalaoProcesso } from "../../src/pagina/balaoProcesso";
 import { instalarIconesCaixa } from "../../src/pagina/caixa";
-import type { ProcessoNaTela } from "../../src/pagina/conteudo";
+import { MENSAGEM_AGORA_NAO, type ProcessoNaTela } from "../../src/pagina/conteudo";
 import { RepositorioProjetos } from "../../src/repositorio";
 import { HOSTIL } from "../cenarioGantt";
 import { HOJE } from "../fabrica";
@@ -83,14 +83,18 @@ function contarLeituras(repos: Record<Vis, RepositorioProjetos>): { n: number } 
   return c;
 }
 
-/** Anota cada `marcarSigiloso` pedido aos repositórios ("vis:numero"). */
-function espiarSigilo(repos: Record<Vis, RepositorioProjetos>): string[] {
+/**
+ * Anota cada número pedido a `marcarSigilosos` ("vis:numero") e cada pedido inteiro em `lotes` ("vis:numero,numero"):
+ * um pedido é uma leitura do escopo.
+ */
+function espiarSigilo(repos: Record<Vis, RepositorioProjetos>, lotes: string[] = []): string[] {
   const chamadas: string[] = [];
   for (const [vis, r] of Object.entries(repos)) {
-    const marcar = r.marcarSigiloso.bind(r);
-    r.marcarSigiloso = (p: string) => {
-      chamadas.push(`${vis}:${p}`);
-      return marcar(p);
+    const marcar = r.marcarSigilosos.bind(r);
+    r.marcarSigilosos = (lista: readonly string[]) => {
+      for (const p of lista) chamadas.push(`${vis}:${p}`);
+      lotes.push(`${vis}:${[...lista].sort().join(",")}`);
+      return marcar(lista);
     };
   }
   return chamadas;
@@ -251,7 +255,8 @@ async function verificarSigiloDaLinha(): Promise<void> {
   linha(s.doc, "112825").querySelector("input[type=checkbox]")!.setAttribute("aria-label", "Sigiloso / Tipo Ofício");
   const trocou = await s.repos.unidade.criarProjeto({ nome: "Trocou de processo", processo: { protocolo: OFICIO } });
   await s.repos.unidade.editarProjeto(trocou.id, { processo: { protocolo: "50300.000666/2026-06" } });
-  const chamadas = espiarSigilo(s.repos);
+  const lotes: string[] = [];
+  const chamadas = espiarSigilo(s.repos, lotes);
   const caixa = instalarIconesCaixa({ doc: s.doc, repos: s.repos, hoje: () => HOJE, temaEscuro: false, atraso: 1, abrir: () => undefined });
   await caixa.atualizar();
   await tique(40);
@@ -263,6 +268,12 @@ async function verificarSigiloDaLinha(): Promise<void> {
     [...chamadas].sort().join() === [`eu:${OFICIO}`, `eu:${SIGILOSO}`, `unidade:${OFICIO}`, `unidade:${SIGILOSO}`].sort().join(),
     chamadas,
   );
+  const lote = [OFICIO, SIGILOSO].sort().join(",");
+  checar(
+    "os sigilosos da mesma pintura num pedido so por escopo (uma leitura do escopo para todos)",
+    [...lotes].sort().join("|") === `eu:${lote}|unidade:${lote}`,
+    lotes,
+  );
   const chave = `${prefixoMemoriaSigilo(HOST, LOGIN)}p/${chaveProtocolo(OFICIO)}`;
   checar("o numero que so estava no historico fica na memoria do sigilo (local)", (await s.area.obter(chave))[chave] === "local");
   checar("sem vinculo: sem icone", icones(linha(s.doc, "112825")) === 0 && icones(s.doc) === 3);
@@ -271,7 +282,7 @@ async function verificarSigiloDaLinha(): Promise<void> {
   secao("caixa: memoria do sigilo ilegivel nao derruba a caixa");
   const f = await cenario();
   for (const r of Object.values(f.repos))
-    r.marcarSigiloso = async () => {
+    r.marcarSigilosos = async () => {
       throw new ErroMemoriaSigilo(new Error("falha simulada"));
     };
   const avisos: unknown[] = [];
@@ -405,13 +416,20 @@ async function verificarBalao(): Promise<void> {
       (await b.repos.unidade.dados()).etapas.length === 2 &&
       (await consentimento.estado()) === "nao-perguntado",
   );
-  checar("e diz por que (a mensagem da P4)", (f().querySelector(".pb-erro")?.textContent ?? "") === MENSAGEM_SEM_ENTENDI);
+  checar(
+    "e diz, sem alarme, que nada foi gravado (a frase do balao, sem o “Só eu” da mensagem da P4)",
+    (f().querySelector(".pb-nota")?.textContent ?? "") === MENSAGEM_AGORA_NAO &&
+      !(f().querySelector(".pb-erro")?.textContent ?? "") &&
+      !(balao.raiz.textContent ?? "").includes(MENSAGEM_SEM_ENTENDI),
+  );
   checar("o foco volta ao Adicionar", focados.at(-1) === botao(f(), "Adicionar"));
   botao(f(), "Adicionar")!.click();
   await tique(10);
   checar(
     "de novo: o aviso de novo (a mensagem anterior sai)",
-    !!balao.raiz.querySelector(".pb-pergunta") && !(f().querySelector(".pb-erro")?.textContent ?? ""),
+    !!balao.raiz.querySelector(".pb-pergunta") &&
+      !(f().querySelector(".pb-erro")?.textContent ?? "") &&
+      !(f().querySelector(".pb-nota")?.textContent ?? ""),
   );
   botao(balao.raiz, "Entendi")!.click();
   await tique(40);

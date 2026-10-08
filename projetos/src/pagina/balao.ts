@@ -2,9 +2,11 @@
  * Balão dos projetos na página do SEI (caixa e árvore), em Shadow DOM com o
  * CSS como texto (como o balão dos Favoritos): o CSS do SEI e o do legado não
  * o alcançam. Um aberto por vez; Esc e clique fora fecham (apertar a própria
- * âncora não fecha: o clique dela alterna); ao abrir, o foco vai para o
- * primeiro controle e, ao fechar, volta à âncora (o ícone que abriu), que
- * mostra `aria-expanded` enquanto o balão está aberto.
+ * âncora não fecha: o clique dela alterna); o foco que sai do balão também
+ * fecha (Tab no último controle, Shift+Tab no primeiro, ou o foco que vai a
+ * outro elemento da página); ao abrir, o foco vai para o primeiro controle e,
+ * ao fechar, volta à âncora (o ícone que abriu), que mostra `aria-expanded`
+ * enquanto o balão está aberto.
  */
 
 const ESTILO_BALAO = `:host{all:initial}
@@ -35,7 +37,8 @@ const ESTILO_BALAO = `:host{all:initial}
 .pb-dica{margin:0;color:var(--spro-suave);font-size:12px}
 .pb-ok{margin:0;color:var(--spro-ok);font-size:12px}
 .pb-erro{margin:0;color:var(--spro-perigo);font-size:12px}
-.pb-erro:empty,.pb-slot:empty{display:none}
+.pb-nota{margin:0;color:var(--spro-suave);font-size:12px}
+.pb-erro:empty,.pb-nota:empty,.pb-slot:empty{display:none}
 .pb-pergunta{display:grid;gap:8px;padding:8px 10px;border:1px solid color-mix(in srgb,var(--spro-aviso) 35%,transparent);border-radius:8px;background:color-mix(in srgb,var(--spro-aviso) 8%,var(--spro-fundo))}
 .pb-pergunta p{margin:0}
 .pb .spro-segmentado{justify-self:start;flex-wrap:wrap}
@@ -99,6 +102,26 @@ export function abrirBalaoNaPagina(ancora: HTMLElement, conteudo: HTMLElement, o
   const tecla = (ev: Event) => {
     if ((ev as KeyboardEvent).key === "Escape") b.fechar();
   };
+  // Tab no último controle ou Shift+Tab no primeiro: o foco sairia do balão (que fica no fim da página), então fecha
+  // e volta à âncora, de onde o Tab segue na página.
+  const tab = (ev: Event) => {
+    const k = ev as KeyboardEvent;
+    if (k.key !== "Tab") return;
+    const focaveis = [...caixa.querySelectorAll<HTMLElement>(FOCAVEIS)];
+    if (!focaveis.length) return;
+    const limite = k.shiftKey ? focaveis[0] : focaveis[focaveis.length - 1];
+    if (ev.target !== limite) return;
+    ev.preventDefault();
+    b.fechar();
+  };
+  // O foco que vai a outro elemento da página (fora da sombra) fecha; o que anda dentro do balão, ou some com um
+  // redesenho (sem destino), não.
+  const saiu = (ev: Event) => {
+    const para = (ev as FocusEvent).relatedTarget as Node | null;
+    if (para && typeof para.nodeType === "number" && para !== host && !raiz.contains(para)) b.fechar();
+  };
+  caixa.addEventListener("keydown", tab);
+  caixa.addEventListener("focusout", saiu);
   let fechado = false;
   const b: BalaoPagina = {
     raiz,

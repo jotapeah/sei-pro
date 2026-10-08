@@ -33,7 +33,7 @@ import type { Area } from "@comum/armazenamento/area";
 import { ErroRpc, type Rpc } from "@comum/ponte/rpc";
 import { avisar } from "@comum/ui/aviso";
 import { h, icone } from "@comum/ui/dom";
-import { CHAVE_FOCO, type ContextoProjetos, chaveDaAba, lerPedidoDeFoco } from "../../ponte/tipos";
+import { CHAVE_FOCO, type ContextoProjetos, chaveDaAba, lerPedidoDeFoco, pedidoDaChave } from "../../ponte/tipos";
 
 /** O que a montagem usa da `PonteLateral` (`@comum/ponte/lateral`). */
 export interface PonteDoLateral {
@@ -254,7 +254,13 @@ export class MontagemLateral {
     await this.atenderFoco();
   }
 
-  /** O "Abrir no painel" da árvore: vale uma vez, só para a chave montada e dentro do prazo. Nunca derruba o app. */
+  /**
+   * O "Abrir no painel" da árvore: vale uma vez, só para a chave montada e dentro do prazo. Nunca derruba o app. O
+   * pedido vencido (ou torto) desta chave sai do storage ao ler; o de outra chave fica para ela. Dois laterais
+   * abertos na mesma chave (duas janelas do navegador no mesmo SEI, usuário e unidade) podem atender o mesmo pedido:
+   * os dois abrem o mesmo projeto, com os mesmos dados (aceito: o pedido não sabe de qual janela veio, e o content
+   * script não tem como saber em que janela está).
+   */
   private async atenderFoco(): Promise<void> {
     const m = this.montado;
     if (!m) return;
@@ -262,7 +268,10 @@ export class MontagemLateral {
       const bruto = (await this.d.area.obter(CHAVE_FOCO))[CHAVE_FOCO];
       if (this.montado !== m) return;
       const p = lerPedidoDeFoco(bruto, "lateral", m.vez.chave, this.d.agora());
-      if (!p) return;
+      if (!p) {
+        if (pedidoDaChave(bruto, "lateral", m.vez.chave)) await this.d.area.remover(CHAVE_FOCO);
+        return;
+      }
       await this.d.area.remover(CHAVE_FOCO);
       if (this.montado === m) m.app.focarProjeto(p.projeto, p.etapa);
     } catch (e) {

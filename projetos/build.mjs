@@ -14,9 +14,11 @@
  *   - DOM seguro: nenhuma escrita de innerHTML/outerHTML, nenhum insertAdjacentHTML, nenhuma acao em
  *     atributo on*; no app, que leva a Frappe, nem a palavra innerHTML/outerHTML (no content script o
  *     paginaDe do nucleo LE outerHTML);
- *   - o content script nao fala com a arvore do processo nem com o formulario de atribuicao: abrir a
- *     arvore grava "Processo recebido" em nome do usuario (ruling da T12). Nenhum destes enderecos do
- *     SEI pode estar no pacote, nem em codigo morto que um dia volte a ser chamado.
+ *   - o content script nao BUSCA a arvore do processo nem o formulario de atribuicao: buscar a arvore
+ *     grava "Processo recebido" em nome do usuario (ruling da T12). Nenhum destes enderecos do SEI pode
+ *     estar no pacote, nem em codigo morto que um dia volte a ser chamado. (No P5 o content script le a
+ *     arvore JA aberta no proprio frame, por lerArvore sobre a pagina: nenhuma requisicao; o abrirArvore
+ *     do nucleo, que tem esses enderecos, sai do pacote pelo tree-shaking, e este portao confere.)
  */
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -89,7 +91,7 @@ for (const { saida, estrito } of ENTRADAS) {
   if ((estrito ? PALAVRA_HTML : ESCRITA_HTML).test(texto)) erro(`dist/${saida}: innerHTML/outerHTML/insertAdjacentHTML no pacote`);
   if (HANDLER.test(texto)) erro(`dist/${saida}: acao em atributo on* no pacote`);
   if (saida === CONTENT_SCRIPT)
-    for (const p of SEI_PROIBIDO) if (texto.includes(p)) erro(`dist/${saida}: "${p}" no content script (arvore do processo / atribuicao)`);
+    for (const p of SEI_PROIBIDO) if (texto.includes(p)) erro(`dist/${saida}: "${p}" no content script (busca da arvore do processo / atribuicao)`);
 }
 for (const f of [...PROPRIOS.map((p) => resolve(AQUI, p)), join(DIST, "css", "projetos.css"), join(DIST, "html", "projetos.html")]) {
   const bytes = await readFile(f);
@@ -101,4 +103,4 @@ const kb = async (f) => `${((await stat(join(DIST, f))).size / 1024).toFixed(1)}
 console.log("\nProjetos -- build");
 for (const f of [...ENTRADAS.map((e) => e.saida), "html/projetos.html", "css/projetos.css"]) console.log(`  ${f.padEnd(26)} ${await kb(f)}`);
 if (falhou) process.exit(1);
-console.log("  portoes: ASCII, DOM seguro e content script sem arvore/atribuicao ok");
+console.log("  portoes: ASCII, DOM seguro e content script sem busca de arvore/atribuicao ok");

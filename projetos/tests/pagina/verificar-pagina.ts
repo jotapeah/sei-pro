@@ -338,7 +338,8 @@ export async function verificarPagina(): Promise<void> {
     .filter((f) => f.endsWith(".ts"))
     .map((f) => ({ f, codigo: semComentario(readFileSync(join(PASTA_PAGINA, f), "utf8")) }));
   const PROIBIDOS = [
-    /@nucleo\/dominio\/(arvore|opcoes)/,
+    // P5: a árvore JÁ aberta é lida no próprio frame (pagina/arvore.ts, conferido abaixo); buscar, nunca.
+    /@nucleo\/dominio\/opcoes/,
     /\blistarOpcoes\b/,
     /\babrirArvore\b/,
     /\.arvore\(/,
@@ -351,6 +352,14 @@ export async function verificarPagina(): Promise<void> {
     "content script: sem leitura de arvore, sem lista do formulario de atribuicao, sem URL montada",
     fontes.length >= 7 && achados.length === 0,
     achados.length ? achados : fontes.map((x) => x.f),
+  );
+  const daArvore = fontes.filter((x) => /@nucleo\/dominio\/arvore/.test(x.codigo));
+  checar(
+    "da arvore, so o lerArvore sobre a propria pagina do frame (pagina/arvore.ts), sem buscar nem acao",
+    daArvore.map((x) => x.f).join() === "arvore.ts" &&
+      /lerArvore\(paginaDe\(d\.doc, d\.url\)\)/.test(daArvore[0]?.codigo ?? "") &&
+      !/\babrirArvore\b|\bacaoNaArvore\b/.test(daArvore[0]?.codigo ?? ""),
+    daArvore.map((x) => x.f),
   );
   const principal = fontes.find((x) => x.f === "main.ts")?.codigo ?? "";
   checar("main liga os usuarios sem fonte completa", /buscarCompleta:\s*null/.test(principal));

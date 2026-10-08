@@ -328,6 +328,117 @@ async function verificarMarcarSigiloso(): Promise<void> {
   );
 }
 
+/** Conta as idas ao storage (cada `obter` e cada `chaves` é uma). */
+function areaQueConta(base: Area): { area: Area; leituras(): number } {
+  let n = 0;
+  const area: Area = {
+    ...base,
+    obter: async (ch) => {
+      n++;
+      return base.obter(ch);
+    },
+    aoMudar: base.aoMudar.bind(base),
+  };
+  if (base.chaves) {
+    const chaves = base.chaves.bind(base);
+    area.chaves = async () => {
+      n++;
+      return chaves();
+    };
+  }
+  return { area, leituras: () => n };
+}
+
+async function verificarMarcarSigilosos(): Promise<void> {
+  secao("integracao: marcarSigilosos (a carga da tela inteira) le o escopo uma vez para todos os numeros");
+  const cenario = async (k: number) => {
+    const contador = areaQueConta(areaMemoria());
+    const { repo } = novoRepo(ESCOPO_UN, contador.area, "s");
+    const numeros: string[] = [];
+    for (let i = 0; i < k; i++) {
+      const n = `50300.00${String(100 + i)}/2026-0${i % 10}`;
+      await repo.criarProjeto({ nome: `P${i}`, processo: { protocolo: n } });
+      numeros.push(n);
+    }
+    return { repo, numeros, leituras: contador.leituras };
+  };
+  const custo = async (k: number, umAUm = false) => {
+    const c = await cenario(k);
+    const antes = c.leituras();
+    let marcados = 0;
+    if (umAUm) for (const n of c.numeros) marcados += await c.repo.marcarSigiloso(n);
+    else marcados = await c.repo.marcarSigilosos(c.numeros);
+    return { leituras: c.leituras() - antes, marcados };
+  };
+  const [um, seis, umAUm] = [await custo(1), await custo(6), await custo(6, true)];
+  checar(
+    "seis sigilosos custam as mesmas idas ao storage que um (e todos ficam marcados)",
+    um.marcados === 1 && seis.marcados === 6 && seis.leituras === um.leituras,
+    { um, seis },
+  );
+  checar("um a um, o custo cresceria com a tela", umAUm.marcados === 6 && umAUm.leituras > seis.leituras, { umAUm, seis });
+
+  secao("integracao: marcarSigilosos com numeros de todo tipo");
+  const { repo: rm, area: am } = novoRepo(ESCOPO_UN, areaMemoria(), "m");
+  const marcar = await rm.criarProjeto({ nome: "A marcar", processo: { protocolo: "50300.000701/2026-01" } });
+  const etapa = await rm.criarEtapa({
+    projeto: marcar.id,
+    nome: "Do outro",
+    inicio: "2026-10-01",
+    fim: "2026-10-02",
+    processo: { protocolo: "50300.000702/2026-02" },
+  });
+  await rm.criarProjeto({ nome: "Já marcado por colega", processo: { protocolo: "50300.000703/2026-03", sigiloso: true } });
+  const trocou = await rm.criarProjeto({ nome: "Trocou", processo: { protocolo: "50300.000704/2026-04" } });
+  await rm.editarProjeto(trocou.id, { processo: { protocolo: "50300.000705/2026-05" } });
+  const chave = (n: string) => `${MEMORIA}p/${chaveProtocolo(n)}`;
+  await am.gravar({ [chave("50300.000703/2026-03")]: "aprendida" });
+  const antes = (await rm.historico()).length;
+  const n = await rm.marcarSigilosos([
+    "50300.000701/2026-01",
+    "50300000702202602",
+    "50300.000703/2026-03",
+    "50300.000704/2026-04",
+    "50300.000999/2026-99",
+    "",
+    "abc",
+    "50300.000701/2026-01",
+  ]);
+  const vistos = ["50300.000701/2026-01", "50300.000702/2026-02", "50300.000703/2026-03", "50300.000704/2026-04", "50300.000999/2026-99"];
+  const memoria = await am.obter(vistos.map(chave));
+  checar(
+    "marca os vinculos com os numeros (com ou sem pontuacao), uma vez cada, numa gravacao sem registro",
+    n === 2 &&
+      (await rm.obterProjeto(marcar.id))?.processo?.sigiloso === true &&
+      (await rm.obterEtapa(etapa.id))?.processo?.sigiloso === true &&
+      (await rm.obterProjeto(trocou.id))?.processo?.sigiloso !== true &&
+      (await rm.historico()).length === antes,
+    n,
+  );
+  checar(
+    "a memoria: os marcados, o ja marcado (promovido) e o so do historico como LOCAL; o desconhecido, nada",
+    memoria[chave("50300.000701/2026-01")] === "local" &&
+      memoria[chave("50300.000702/2026-02")] === "local" &&
+      memoria[chave("50300.000703/2026-03")] === "local" &&
+      memoria[chave("50300.000704/2026-04")] === "local" &&
+      !(chave("50300.000999/2026-99") in memoria),
+    memoria,
+  );
+  checar("lista vazia ou sem numero: nada", (await rm.marcarSigilosos([])) === 0 && (await rm.marcarSigilosos(["", "x"])) === 0);
+  const falha = { ler: false };
+  const { repo: rf } = novoRepo(ESCOPO_UN, areaQueFalhaNaMemoria(areaMemoria(), falha), "q");
+  await rf.criarProjeto({ nome: "Já sigiloso", processo: { protocolo: "50300.000100/2026-01", sigiloso: true } });
+  const alvo = await rf.criarProjeto({ nome: "Visto na tela", processo: { protocolo: "50300.000200/2026-02" } });
+  falha.ler = true;
+  const erro = await lanca(() => rf.marcarSigilosos(["50300.000200/2026-02", "50300.000100/2026-01"]));
+  falha.ler = false;
+  checar(
+    "memoria ilegivel: falha fechada (nada marcado)",
+    erro instanceof ErroMemoriaSigilo && (await rf.obterProjeto(alvo.id))?.processo?.sigiloso !== true,
+    erro?.message,
+  );
+}
+
 async function verificarEntendi(): Promise<void> {
   secao("integracao: em Toda a unidade, concluir pelo balao pede o Entendi e marcar sigilo nao (decisao 10)");
   const { repo: cru } = novoRepo(ESCOPO_UN, areaMemoria(), "u");
@@ -358,5 +469,6 @@ export async function verificarIntegracaoModelo(): Promise<void> {
   await verificarIndice();
   await verificarConcluirSeAberta();
   await verificarMarcarSigiloso();
+  await verificarMarcarSigilosos();
   await verificarEntendi();
 }
