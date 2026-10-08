@@ -398,6 +398,183 @@ export async function verificarProjetosTool(): Promise<void> {
   const t8 = JSON.stringify(r8);
   checar("(d) etiquetas do projeto e da etapa nunca vao (nem o numero de dentro delas)", !t8.includes("etiqueta") && !t8.includes('"etiquetas"'), t8.slice(0, 200));
 
+  secao("agente: projetos_listar - leitura generica: conectores, digitos pelo valor, ordem e chave do documento");
+  // Sem lista de separadores: os grupos de dígitos (lidos pelo valor) se ligam por qualquer trecho de 1 a 3 caracteres que
+  // não seja letra nem o espaço entre palavras. Todos os números só na memória.
+  const cp = (...c: number[]) => String.fromCodePoint(...c);
+  const PROC = "x [nº de processo] fim";
+  const area9 = areaMemoria();
+  const un9 = new RepositorioProjetos(area9, esc.unidade, carimbo);
+  const p9 = await un9.criarProjeto({ nome: "Leitura generica" });
+  const casos9: Record<string, [string, string]> = {};
+  // (e) Conectores fora da lista antiga: pontuação comum, os parecidos de outras escritas e dos símbolos, os espaços
+  // tipográficos (o separador de milhar do SI), o que aparece como traço (U+1680), o braille em branco e os repetidos.
+  const CONECTORES: Record<string, string> = {
+    virgula: ",",
+    ponto_e_virgula: ";",
+    dois_pontos: ":",
+    til: "~",
+    barra_invertida: "\\",
+    "U+FF0C": cp(0xff0c),
+    "U+201A": cp(0x201a),
+    "U+060C": cp(0x60c),
+    "U+2216": cp(0x2216),
+    "U+FF3C": cp(0xff3c),
+    "U+2571": cp(0x2571),
+    "U+27CB": cp(0x27cb),
+    "U+0387": cp(0x387),
+    "U+2219": cp(0x2219),
+    "U+22C5": cp(0x22c5),
+    "U+2022": cp(0x2022),
+    "U+2E31": cp(0x2e31),
+    "U+FF65": cp(0xff65),
+    "U+3002": cp(0x3002),
+    "U+06D4": cp(0x6d4),
+    "U+1427": cp(0x1427),
+    "U+207B": cp(0x207b),
+    "U+208B": cp(0x208b),
+    "U+2796": cp(0x2796),
+    "U+02D7": cp(0x2d7),
+    "U+2500": cp(0x2500),
+    "U+23AF": cp(0x23af),
+    "U+2043": cp(0x2043),
+    "U+30FC": cp(0x30fc),
+    "U+FF3F": cp(0xff3f),
+    "U+2017": cp(0x2017),
+    "U+00B4": cp(0xb4),
+    "U+2009": cp(0x2009),
+    "U+202F": cp(0x202f),
+    "U+2007": cp(0x2007),
+    "U+3000": cp(0x3000),
+    "U+1680": cp(0x1680),
+    "U+2800": cp(0x2800),
+    "U+2800/": `${cp(0x2800)}/`,
+    "..": "..",
+    "//": "//",
+    "--": "--",
+    "/-": "/-",
+    " - - ": " - - ",
+    " ; ": " ; ",
+  };
+  for (const [nome, s] of Object.entries(CONECTORES)) {
+    casos9[`e.${nome}.curto`] = [`x 12003${s}1234${s}202 fim`, PROC];
+    casos9[`e.${nome}.nup`] = [`x 50300${s}000001${s}2026${s}01 fim`, PROC];
+  }
+  casos9["e.virgula-so-no-ponto"] = ["x 50300,000001/2026-01 fim", PROC];
+  casos9["e.virgula-e-espaco"] = ["x 50300, 000001/2026-01 fim", PROC];
+  casos9["e.fino-em-volta"] = [`x 50300${cp(0x2009)}.${cp(0x2009)}000001${cp(0x202f)}/${cp(0x202f)}2026-01 fim`, PROC];
+  casos9["e.milhar-fino"] = [`x 50${cp(0x2009)}300.000${cp(0x2009)}001/2026-01 fim`, PROC];
+  casos9["e.braille-em-volta"] = [`x 12003${cp(0x2800)}/${cp(0x2800)}1234-202 fim`, PROC];
+  casos9["e.hifen-duplo-so-no-fim"] = ["x 50300.000001/2026--01 fim", PROC];
+  casos9["e.barra-dupla-so"] = ["x 50300.000001//2026-01 fim", PROC];
+  casos9["e.barra-invertida-so"] = ["x 12003\\1234-202 fim", PROC];
+  // (f) Dígitos pelo valor: sobrescrito e subscrito com o menos deles, sinal de outra escrita no meio, os dingbats e os
+  // circulados sem decomposição, o dígito com ponto (U+2488) e a tecla de emoji.
+  const SOB = [0x2070, 0xb9, 0xb2, 0xb3, 0x2074, 0x2075, 0x2076, 0x2077, 0x2078, 0x2079];
+  const sob = (t: string) => t.replace(/[0-9]/g, (c) => cp(SOB[Number(c)] as number));
+  const sub = (t: string) => t.replace(/[0-9]/g, (c) => cp(0x2080 + Number(c)));
+  const comZero = (t: string, zero: number, um: number) => t.replace(/[0-9]/g, (c) => cp(c === "0" ? zero : um + Number(c) - 1));
+  casos9["f.sobrescrito-menos"] = [`x ${sob("12003/1234")}${cp(0x207b)}${sob("202")} fim`, PROC];
+  casos9["f.subscrito-menos"] = [`x ${sub("12003/1234")}${cp(0x208b)}${sub("202")} fim`, PROC];
+  casos9["f.sobrescrito-silabico.curto"] = [`x ${sob("12003")}${cp(0x141f)}${sob("1234")}${cp(0x207b)}${sob("202")} fim`, PROC];
+  casos9["f.sobrescrito-silabico.nup"] = [`x ${sob("50300")}${cp(0xb7)}${sob("000001")}${cp(0x141f)}${sob("2026")}${cp(0x207b)}${sob("01")} fim`, PROC];
+  casos9["f.dingbat-negativo.curto"] = [`x ${comZero("12003/1234-202", 0x24ff, 0x2776)} fim`, PROC];
+  casos9["f.dingbat-negativo.nup"] = [`x ${comZero("50300.000001/2026-01", 0x24ff, 0x2776)} fim`, PROC];
+  casos9["f.dingbat-sem-serifa"] = [`x ${comZero("12003/1234-202", 0x1f10b, 0x2780)} fim`, PROC];
+  casos9["f.dingbat-negativo-sem-serifa"] = [`x ${comZero("12003/1234-202", 0x1f10c, 0x278a)} fim`, PROC];
+  casos9["f.duplo-circulado"] = [`x ${comZero("12003/1234-202", 0x24ea, 0x24f5)} fim`, PROC];
+  casos9["f.digito-com-ponto"] = [`x ${comZero("120031234202", 0x1f100, 0x2488)} fim`, PROC];
+  casos9["f.tecla-emoji"] = [`x ${"12003".replace(/[0-9]/g, (c) => c + cp(0xfe0f, 0x20e3))}/1234-202 fim`, PROC];
+  // (g) A ordem em que a pessoa vê: o RLO inverte os dígitos; o RLM antes de cada grupo inverte a ordem dos grupos.
+  const RLO = cp(0x202e);
+  const PDF = cp(0x202c);
+  const RLM = cp(0x200f);
+  casos9["g.rlo.curto"] = [`x ${RLO}${[..."12003/1234-202"].reverse().join("")}${PDF} fim`, PROC];
+  casos9["g.rlo.documento"] = [`x ${RLO}87654321${PDF} fim`, "x [nº de documento] fim"];
+  casos9["g.rlm.grupos"] = [`x ${RLM}202${RLM} / ${RLM}1234${RLM} / ${RLM}12003 fim`, PROC];
+  // (i) Dois conhecidos que se sobrepõem ("5 - 12003" é um documento, "12003/1234-202" um processo): sai a união.
+  casos9["i.sobrepostos"] = ["x 5 - 12003/1234-202 fim", PROC];
+  // (j) O espaço entre palavras sozinho (ASCII, NBSP, tabulação, quebra de linha) continua separando; e o texto comum fica.
+  for (const [nome, s] of Object.entries({ espaco: " ", nbsp: cp(0xa0), tab: "\t", quebra: "\n" }))
+    casos9[`j.${nome}`] = [`x 12003${s}1234${s}202 fim`, `x 12003${s}1234${s}202 fim`];
+  const COMUNS = [
+    "prazo 01/10/2026 fim",
+    "prazo 01.10.2026 fim",
+    "prazo 2026-10-01 fim",
+    "de 01/10/2026 a 15/10/2026 fim",
+    "em 01/10/2026 14:30 fim",
+    "Prazo 01/10/2026, 5 dias.",
+    "R$ 1.234.567,89 fim",
+    "R$ 1.000,00; R$ 2.000,00 e R$ 3.000,00 fim",
+    "(61) 3333-4444 fim",
+    "+55 61 99999-8888 fim",
+    "3333-4444 ramal 1234 fim",
+    "CPF 123.456.789-09 fim",
+    "CEP 70000-000 fim",
+    "anos 2024-2026 e 2021, 2022, 2023 fim",
+    "v2.6.1 fim",
+    "Lei 14.133/2021, art. 75, II fim",
+    "Decreto 10.024/2019 fim",
+    "Portaria 1.234/2026-GAB fim",
+    `1.500 m${cp(0xb2)} fim`,
+    `conforme 2026${cp(0xb9)} fim`,
+    "IMG_20261001_143022 fim",
+    `das 8${cp(0xb7)}00 as 12${cp(0xb7)}00 fim`,
+    `1${cp(0xba)}/10/2026 fim`,
+    "12,5% e 7,25% fim",
+    "Contrato 12/2026 - item 3 fim",
+    "itens 1, 2 e 3; 4 a 7 fim",
+  ];
+  COMUNS.forEach((t, i) => {
+    casos9[`j.comum-${String.fromCharCode(97 + i)}`] = [t, t];
+  });
+  for (const [nome, [observacoes]] of Object.entries(casos9)) await un9.criarEtapa({ projeto: p9.id, nome, inicio: d(1), fim: d(2), observacoes });
+  await area9.gravar({
+    [`${memoria}p/50300000001202601`]: "aprendida",
+    [`${memoria}p/120031234202`]: "aprendida",
+    [`${memoria}d/12345678`]: "aprendida",
+    [`${memoria}d/512003`]: "aprendida",
+  });
+  definirAreaProjetos(() => area9);
+  // São 150 etapas: sem o corte de tamanho, para cada uma vir na resposta.
+  definirOrcamentoProjetos(Number.POSITIVE_INFINITY);
+  const r9 = await rodar({}, contexto());
+  definirOrcamentoProjetos();
+  const obs9 = new Map((r9.projetos[0]?.etapas ?? []).map((e) => [e.nome, e.observacoes ?? ""]));
+  const rotulos9: Record<string, string> = {
+    e: "conectores fora da lista: o numero da memoria nunca sai",
+    f: "digitos pelo valor (sobrescrito, subscrito, dingbats, circulados, com ponto, emoji)",
+    g: "a ordem que a pessoa ve (RLO e RLM): o numero da memoria nunca sai",
+    i: "conhecidos sobrepostos: sai a uniao",
+    j: "espaco entre palavras separa e o texto comum fica intacto",
+  };
+  for (const [grupo, rotulo] of Object.entries(rotulos9)) {
+    const doGrupo = Object.keys(casos9).filter((k) => k.startsWith(`${grupo}.`));
+    const ruins = doGrupo.filter((k) => obs9.get(k) !== (casos9[k] as [string, string])[1]);
+    checar(`(${grupo}) ${doGrupo.length} casos: ${rotulo}`, doGrupo.length > 0 && ruins.length === 0, ruins.map((k) => [k, obs9.get(k)]));
+  }
+  // (h) A chave do documento, não o tamanho bruto: com só o documento 123456 na memória, os zeros à esquerda não o escondem.
+  const area10 = areaMemoria();
+  const un10 = new RepositorioProjetos(area10, esc.unidade, carimbo);
+  const p10 = await un10.criarProjeto({ nome: "Chave do documento" });
+  const casos10: Record<string, [string, string]> = {
+    "h.sei-7": ["x SEI n 0123456 fim", "x SEI n [nº de documento] fim"],
+    "h.zeros": ["x doc 000123456 fim", "x doc [nº de documento] fim"],
+    "h.colado": ["x 0123456 / 2026 fim", "x [nº de documento] / 2026 fim"],
+    "h.sem-zero": ["x doc 123456 fim", "x doc [nº de documento] fim"],
+  };
+  for (const [nome, [observacoes]] of Object.entries(casos10)) await un10.criarEtapa({ projeto: p10.id, nome, inicio: d(1), fim: d(2), observacoes });
+  await area10.gravar({ [`${memoria}d/123456`]: "aprendida" });
+  definirAreaProjetos(() => area10);
+  const r10 = await rodar({}, contexto());
+  const obs10 = new Map((r10.projetos[0]?.etapas ?? []).map((e) => [e.nome, e.observacoes ?? ""]));
+  const ruins10 = Object.entries(casos10).filter(([k, [, esperado]]) => obs10.get(k) !== esperado);
+  checar(
+    `(h) ${Object.keys(casos10).length} casos: documento com zeros a esquerda e o maior conhecido curto`,
+    ruins10.length === 0,
+    ruins10.map(([k]) => [k, obs10.get(k)]),
+  );
+
   secao("agente: projetos_listar - memoria do sigilo ilegivel: falha fechada");
   const quebrada: Area = {
     ...area3,
