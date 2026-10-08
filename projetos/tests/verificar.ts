@@ -107,4 +107,6 @@ const suiteExecutorP4 = "./pagina/verificar-executor-p4";
 await ((await import(suiteExecutorP4)) as { verificarExecutorP4(): Promise<void> }).verificarExecutorP4();
 const suitePaginaIntegracao = "./pagina/verificar-pagina-integracao";
 await ((await import(suitePaginaIntegracao)) as { verificarPaginaIntegracao(): Promise<void> }).verificarPaginaIntegracao();
+const suiteCaixa = "./pagina/verificar-caixa";
+await ((await import(suiteCaixa)) as { verificarCaixa(): Promise<void> }).verificarCaixa();
 resumo();

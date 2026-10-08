@@ -233,6 +233,42 @@ async function verificarMarcarSigiloso(): Promise<void> {
     naoLigado === 0 && Object.keys(semEntrada).length === 0,
   );
 
+  secao("integracao: marcarSigiloso lembra o numero que so ficou num registro do historico (T7)");
+  const { repo: r5, area: a5, relogio: rel5 } = novoRepo(ESCOPO_UN, areaMemoria(), "r");
+  // O projeto trocou de processo: o número antigo não está em vínculo nenhum, só no registro "processo" (antes).
+  const trocou = await r5.criarProjeto({ nome: "Trocou de processo", processo: { protocolo: "50300.000555/2026-05" } });
+  await r5.editarProjeto(trocou.id, { processo: { protocolo: "50300.000666/2026-06" } });
+  checar(
+    "antes: o numero antigo so esta no registro 'processo' e ainda iria ao texto",
+    (await textoDe(r5, rel5())).includes("50300.000555/2026-05") &&
+      (await r5.historico()).some((r) => r.campo === "processo" && r.antes === "50300.000555/2026-05"),
+  );
+  const chaveReg = `${MEMORIA}p/50300000555202605`;
+  const nReg = await r5.marcarSigiloso("50300000555202605");
+  checar(
+    "nada a marcar (nenhum vinculo tem o numero), mas a memoria do sigilo o guarda como LOCAL",
+    nReg === 0 && (await a5.obter(chaveReg))[chaveReg] === "local",
+    { nReg, memoria: await a5.obter(chaveReg) },
+  );
+  const depoisReg = await textoDe(r5, rel5());
+  checar(
+    "o texto da unidade nao leva mais o numero (o registro sai raspado) e o processo atual nao muda",
+    !depoisReg.includes("000555") &&
+      !depoisReg.includes("50300000555202605") &&
+      depoisReg.includes("50300.000666/2026-06") &&
+      (await r5.obterProjeto(trocou.id))?.processo?.sigiloso !== true,
+  );
+  checar("registro com 'processo sigiloso' nao vira numero", (await r5.marcarSigiloso("processo sigiloso")) === 0);
+  const falhaReg = { ler: false };
+  const { repo: r6 } = novoRepo(ESCOPO_UN, areaQueFalhaNaMemoria(areaMemoria(), falhaReg), "g");
+  await r6.criarProjeto({ nome: "Já sigiloso", processo: { protocolo: "50300.000100/2026-01", sigiloso: true } });
+  const trocou6 = await r6.criarProjeto({ nome: "Trocou", processo: { protocolo: "50300.000555/2026-05" } });
+  await r6.editarProjeto(trocou6.id, { processo: { protocolo: "50300.000666/2026-06" } });
+  falhaReg.ler = true;
+  const erroReg = await lanca(() => r6.marcarSigiloso("50300.000555/2026-05"));
+  falhaReg.ler = false;
+  checar("so no registro, com a memoria ilegivel: falha fechada (ErroMemoriaSigilo)", erroReg instanceof ErroMemoriaSigilo, erroReg);
+
   secao("integracao: marcarSigiloso com numero de letras, em lapide, e o ja marcado");
   const { repo: r3, area: a3, relogio: rel3 } = novoRepo(ESCOPO_EU, areaMemoria(), "l");
   const rj = await r3.criarProjeto({ nome: "Do RJ", processo: { protocolo: "SEI-150016/000123/2021" } });

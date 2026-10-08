@@ -11,7 +11,8 @@
  *   envia o que mudou aqui, porque o lateral e a árvore gravam) e o lado da aba
  *   do painel lateral (pagina/lateral.ts, chave host|login|u:<unidade>);
  * - Controle de Processos (topo): o painel embutido, as pílulas (com o
- *   contador da aba do lateral) e o "Abrir no painel" que o lateral deixou;
+ *   contador da aba do lateral), o "Abrir no painel" que o lateral deixou e o
+ *   ícone dos projetos na caixa, com o balão do processo (pagina/caixa.ts);
  * - frames: nada ainda (a árvore do processo ganha o ícone, a faixa e o balão a
  *   seguir); nenhum trabalho pesado roda neles.
  *
@@ -32,6 +33,7 @@ import { avisoComAcoesNaPagina, avisoNaPagina } from "@comum/painel/aviso";
 import { ligarPortaDoPainel, type PainelMontado } from "@comum/painel/embutido";
 import type { PortaRpc } from "@comum/ponte/rpc";
 import { ocultarTextosInternos } from "@comum/sincronia/controlePagina";
+import cssBase from "@comum/ui/base.css";
 import { Formulario } from "@nucleo/formulario/formulario";
 import { linkDoMenu } from "@nucleo/links/links";
 import { criarHttp } from "@nucleo/sessao/http";
@@ -44,12 +46,15 @@ import { escoposDaUnidade } from "../modelo/escopo";
 import type { Carimbo, Vis } from "../modelo/tipos";
 import { CANAL_LATERAL, CANAL_PROJETOS, type ContextoProjetos, chaveDaAba } from "../ponte/tipos";
 import { RepositorioProjetos } from "../repositorio";
+import { consentimentoProjetos } from "../sincronia/consentimento";
 import { armazemDoTexto, armazemNaTela } from "./armazem";
 import { atividadesDaAba } from "./atividades";
+import { abrirBalaoProcesso } from "./balaoProcesso";
+import { instalarIconesCaixa } from "./caixa";
 import { atividadesConfigurado, contextoProjetos } from "./contexto";
 import { conferirDocumento } from "./documento";
 import { tratadoresProjetos } from "./executor";
-import { atenderPedidoDoLateral, focoDaAba, type PainelDaAba } from "./foco";
+import { atenderPedidoDoLateral, focarNoPainelDaAba, focoDaAba, type PainelDaAba, pedirLateral } from "./foco";
 import { ligarLateralDaAba } from "./lateral";
 import { ligarAlertas, montarPainelProjetos, ordemDoPainel } from "./painel";
 import { ligarSincronia, type SincroniaPagina } from "./sincronia";
@@ -125,6 +130,7 @@ async function principal(): Promise<void> {
   // null: a tela não recebe o painel (as outras telas e a visão por marcadores); rejeitada: a montagem falhou.
   const painel: Promise<PainelDaAba | null> = naCaixa ? montarNaCaixa(aba) : Promise.resolve(null);
   painel.catch((e) => console.warn("[SEI Pro] projetos: painel", e));
+  if (naCaixa) ligarCaixa(aba, painel);
   // O lado da aba do lateral já (sem esperar o painel): a página recarregada volta antes do fim da carência.
   ligarLateralDaAba({
     doc: document,
@@ -171,6 +177,69 @@ async function montarNaCaixa(aba: Aba): Promise<PainelDaAba | null> {
   const painel: PainelDaAba = { painel: montado.painel, corpo: montado.corpo, rpc: porta.rpc };
   void atenderPedidoDoLateral(area, chaveDaAba(ctx), Date.now(), painel).catch(() => undefined);
   return painel;
+}
+
+/**
+ * P5: o ícone dos projetos na caixa e o balão do processo. "Abrir no painel" vai ao painel desta aba; sem ele (a
+ * visão por marcadores, ou a montagem que falhou), ao painel lateral na aba Projetos.
+ */
+function ligarCaixa(aba: Aba, painel: Promise<PainelDaAba | null>): void {
+  const { ctx, unidade, repos } = aba;
+  // O painel já resolvido: o clique decide sem esperar (o lateral precisa do gesto do usuário, que não atravessa await).
+  let montado: PainelDaAba | null | undefined;
+  painel.then(
+    (p) => {
+      montado = p;
+    },
+    () => {
+      montado = null;
+    },
+  );
+  const abrirNoPainel = (id: string, etapa?: string) => {
+    if (montado) focarNoPainelDaAba(montado, id, etapa);
+    else if (montado === null) abrirLateral(aba, id, etapa);
+    // Ainda montando (o clique veio antes do painel): o desta aba vem já.
+    else
+      void painel.then(
+        (p) => (p ? void focarNoPainelDaAba(p, id, etapa) : abrirLateral(aba, id, etapa)),
+        () => abrirLateral(aba, id, etapa),
+      );
+  };
+  const consentimento = consentimentoProjetos(areaChrome(chrome.storage.sync, "sync"), ctx.host, ctx.login, unidade.id, "unidade");
+  const caixa = instalarIconesCaixa({
+    doc: document,
+    repos,
+    hoje: () => hojeISO(),
+    temaEscuro: ctx.temaEscuro,
+    abrir: (ancora, processo) =>
+      void abrirBalaoProcesso(ancora, processo, {
+        modo: "caixa",
+        repos,
+        hoje: () => hojeISO(),
+        sigla: unidade.sigla || "unidade",
+        temaEscuro: ctx.temaEscuro,
+        cssBase,
+        consentimento,
+        documentos: () => [],
+        abrirNoPainel,
+      }).catch((e) => console.warn("[SEI Pro] projetos: balão da caixa", e)),
+  });
+  void caixa.atualizar().catch((e) => console.warn("[SEI Pro] projetos: ícones da caixa", e));
+}
+
+/** O painel lateral na aba Projetos, com o projeto (pagina/foco.ts). Chamado direto do clique: o Chrome exige o gesto. */
+function abrirLateral(aba: Aba, id: string, etapa?: string): void {
+  void pedirLateral(
+    {
+      area: aba.area,
+      chave: chaveDaAba(aba.ctx),
+      agora: Date.now(),
+      abrir: () => chrome.runtime.sendMessage({ tipo: "abrirPainel", aba: "projetos" }),
+      janela: () => void window.open(chrome.runtime.getURL("html/painel.html#aba=projetos"), "seiProPainel", "popup,width=420,height=760"),
+    },
+    id,
+    etapa,
+  ).catch(() => undefined);
 }
 
 /** O que o app (do painel embutido ou do lateral) pede a esta aba. */

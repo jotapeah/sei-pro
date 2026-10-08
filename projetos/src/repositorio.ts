@@ -805,8 +805,10 @@ export class RepositorioProjetos {
    * (como as de `marcasDeSigilo`; nenhum registro novo, e o histórico nunca leva o número), a gravação marca junto o
    * que a regra deduz (o documento da etapa que herda o processo) e a memória do sigilo guarda o número como local
    * (`marcasAoGravar`: esta gravação mudou o campo). Já marcado, nada é gravado no escopo, mas a tela promove a
-   * memória a local. Falha fechada: memória ilegível lança `ErroMemoriaSigilo` sem gravar nada. Devolve quantos
-   * vínculos foram marcados (0: número sem dígito, nenhum vínculo com ele ou todos já marcados).
+   * memória a local. Sem vínculo nenhum com o número, mas com ele num registro "processo" do histórico (o projeto
+   * ou a etapa trocou de processo): nada a marcar, e a memória guarda o número como local (o texto passa a raspar o
+   * registro). Falha fechada: memória ilegível lança `ErroMemoriaSigilo` sem gravar nada. Devolve quantos vínculos
+   * foram marcados (0: número sem dígito, nenhum vínculo com ele ou todos já marcados).
    */
   async marcarSigiloso(protocolo: string): Promise<number> {
     const k = typeof protocolo === "string" ? chaveProtocolo(protocolo) : "";
@@ -817,7 +819,12 @@ export class RepositorioProjetos {
     const ps = projetos.filter((p) => doNumero(p.processo) && p.processo.sigiloso !== true).map(marcar);
     const es = etapas.filter((e) => doNumero(e.processo) && e.processo.sigiloso !== true).map(marcar);
     if (!ps.length && !es.length) {
-      if ([...projetos, ...etapas].some((x) => doNumero(x.processo)))
+      // Os registros só são lidos quando nenhum vínculo tem o número (a tela pede para todo sigiloso que mostra).
+      const doRegistro = (t: string | undefined) => typeof t === "string" && chaveProtocolo(t) === k;
+      if (
+        [...projetos, ...etapas].some((x) => doNumero(x.processo)) ||
+        (await this.registros.listar()).some((r) => r.campo === "processo" && (doRegistro(r.antes) || doRegistro(r.depois)))
+      )
         await this.lembrarSigilo({ processos: [k], documentos: [] }, "local", { promover: true });
       return 0;
     }
