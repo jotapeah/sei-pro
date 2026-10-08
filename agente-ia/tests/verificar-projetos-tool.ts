@@ -279,6 +279,34 @@ export async function verificarProjetosTool(): Promise<void> {
     achados4,
   );
 
+  secao("agente: projetos_listar - processo conhecido colado a outro numero");
+  // Com menos de 15 dígitos, o número conhecido não cai na regra da forma de processo: colado a outro por " - " ou " / ",
+  // a sequência inteira não bate com nada, e cada trecho tem de ser conferido (processo e documento).
+  const area7 = areaMemoria();
+  const un7 = new RepositorioProjetos(area7, esc.unidade, carimbo);
+  const p7 = await un7.criarProjeto({ nome: "Colados" });
+  const colados: Record<string, [string, string]> = {
+    depois: ["a 120031234202 - 5 fim", "a [nº de processo] - 5 fim"],
+    antes: ["b 5 - 120031234202 fim", "b 5 - [nº de processo] fim"],
+    pontuado: ["c 12003/1234-202 / 7 fim", "c [nº de processo] / 7 fim"],
+    doisConhecidos: ["d 1200312 - 7654321 fim", "d [nº de processo] - [nº de processo] fim"],
+    comInvisivel: [`e 5 -${ZWSP} 1200312${ZWSP}34202 fim`, "e 5 - [nº de processo] fim"],
+    documento: ["f 0123 - 12345678 fim", "f 0123 - [nº de documento] fim"],
+    controle: ["g prazo 01/10/2026 - 5 dias, 2026 / 7 e 1234 - 9876 fim", "g prazo 01/10/2026 - 5 dias, 2026 / 7 e 1234 - 9876 fim"],
+  };
+  for (const [nome, [observacoes]] of Object.entries(colados)) await un7.criarEtapa({ projeto: p7.id, nome, inicio: d(1), fim: d(2), observacoes });
+  await area7.gravar({
+    [`${memoria}p/120031234202`]: "aprendida",
+    [`${memoria}p/1200312`]: "aprendida",
+    [`${memoria}p/7654321`]: "aprendida",
+    [`${memoria}d/12345678`]: "aprendida",
+  });
+  definirAreaProjetos(() => area7);
+  const r7 = await rodar({}, contexto());
+  const obs7 = new Map((r7.projetos[0]?.etapas ?? []).map((e) => [e.nome, e.observacoes ?? ""]));
+  // Só o conhecido sai, o resto fica; o número comum fica intacto.
+  for (const [k, [, esperado]] of Object.entries(colados)) checar(`colado a outro numero (${k})`, obs7.get(k) === esperado, obs7.get(k));
+
   secao("agente: projetos_listar - memoria do sigilo ilegivel: falha fechada");
   const quebrada: Area = {
     ...area3,

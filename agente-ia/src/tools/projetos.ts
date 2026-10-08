@@ -127,6 +127,8 @@ const DIGITOS_DE_PROCESSO = 15;
 interface NumerosConhecidos {
   processos: ReadonlySet<string>;
   documentos: ReadonlySet<string>;
+  /** Quantos dígitos tem o maior deles: nenhum trecho mais longo bate. */
+  maior: number;
 }
 
 /** Os da regra e da memória (`s`) mais todo vínculo, documento e registro dos dois escopos (vivos e lápides). */
@@ -149,20 +151,55 @@ function numerosConhecidos(escopos: readonly Entidades[], s: SigiloDoEnvelope): 
       if (r?.campo === "documento") for (const t of [r.antes, r.depois]) documento(t);
     }
   }
-  return { processos, documentos };
+  // Sem espalhar em `Math.max`: a memória pode ter dezenas de milhares de números.
+  let maior = 0;
+  for (const k of [...processos, ...documentos]) if (k.length > maior) maior = k.length;
+  return { processos, documentos, maior };
 }
+
+/** O marcador do trecho de dígitos `d` que `n` conhece (processo pelos dígitos, documento pela `chaveDocumento`), ou null. */
+function marcadorDe(d: string, n: NumerosConhecidos): string | null {
+  if (d.length < MIN_DIGITOS) return null;
+  if (n.processos.has(d)) return SEM_NUMERO_PROCESSO;
+  return n.documentos.has(chaveDocumento(d)) ? SEM_NUMERO_DOCUMENTO : null;
+}
+
+/** Os invisíveis de `t`, juntos: vão logo depois do marcador, e o `varrer` ainda os acusa no relatório (e os tira). */
+const invisiveisDe = (t: string): string => (t.match(INVISIVEIS) ?? []).join("");
 
 /** O texto livre sem número de processo nem de documento (o que `n` conhece e o que tem a forma de processo). */
 function semNumeros(t: string, n: NumerosConhecidos): string {
   return t.replace(RE_NUMERO, (m) => {
     const digitos = m.replace(/\D/g, "");
     if (digitos.length < MIN_DIGITOS) return m;
-    // Os invisíveis de dentro do número ficam depois do marcador: o `varrer` ainda os acusa no relatório (e os tira).
-    const ocultos = (m.match(INVISIVEIS) ?? []).join("");
-    if (digitos.length >= DIGITOS_DE_PROCESSO || n.processos.has(digitos)) return `${SEM_NUMERO_PROCESSO}${ocultos}`;
-    // Documento colado a outro ("0123456/0123457") também sai: cada pedaço conta.
-    const pedacos = [digitos, ...m.split(/\D+/)].filter((p) => p.length >= MIN_DIGITOS);
-    return pedacos.some((p) => n.documentos.has(chaveDocumento(p))) ? `${SEM_NUMERO_DOCUMENTO}${ocultos}` : m;
+    if (digitos.length >= DIGITOS_DE_PROCESSO) return `${SEM_NUMERO_PROCESSO}${invisiveisDe(m)}`;
+    // O número conhecido pode estar colado a outro ("120031234202 - 5", "5 / 12003/1234-202", "0123 - 12345678"): cada
+    // trecho de grupos de dígitos seguidos é conferido, do mais longo ao mais curto a partir de cada grupo, e só o trecho
+    // que bate sai (o resto fica). A sequência inteira é um desses trechos.
+    const grupos = [...m.matchAll(/\d+/g)].map((g) => ({ ini: g.index ?? 0, fim: (g.index ?? 0) + g[0].length, d: g[0] }));
+    let saida = "";
+    let desde = 0;
+    for (let i = 0; i < grupos.length; ) {
+      let achado: { ate: number; marca: string } | null = null;
+      let d = "";
+      for (let j = i; j < grupos.length; j++) {
+        const g = grupos[j] as { ini: number; fim: number; d: string };
+        if (d.length + g.d.length > n.maior) break;
+        d += g.d;
+        const marca = marcadorDe(d, n);
+        if (marca) achado = { ate: j, marca };
+      }
+      if (!achado) {
+        i++;
+        continue;
+      }
+      const ini = (grupos[i] as { ini: number }).ini;
+      const fim = (grupos[achado.ate] as { fim: number }).fim;
+      saida += `${m.slice(desde, ini)}${achado.marca}${invisiveisDe(m.slice(ini, fim))}`;
+      desde = fim;
+      i = achado.ate + 1;
+    }
+    return saida + m.slice(desde);
   });
 }
 
