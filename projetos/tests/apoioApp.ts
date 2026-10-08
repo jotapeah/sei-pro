@@ -61,7 +61,8 @@ export function itensDoMenu(raiz: ParentNode, menu: string): string[] {
   const b = raiz.querySelector<HTMLButtonElement>(`button[aria-haspopup="menu"][aria-label="${menu}"]`);
   if (!b) return [];
   b.click();
-  const itens = [...b.ownerDocument.querySelectorAll(".spro-menu-pop [role='menuitem']")].map((i) =>
+  // Itens comuns e marcáveis (menuitemcheckbox).
+  const itens = [...b.ownerDocument.querySelectorAll(".spro-menu-pop [role^='menuitem']")].map((i) =>
     texto(i.querySelector(".spro-menu-rotulo")),
   );
   b.click();
@@ -73,7 +74,7 @@ export function itemDoMenu(raiz: ParentNode, menu: string, item: string): boolea
   const b = raiz.querySelector<HTMLButtonElement>(`button[aria-haspopup="menu"][aria-label="${menu}"]`);
   if (!b) return false;
   if (b.getAttribute("aria-expanded") !== "true") b.click();
-  const alvo = [...b.ownerDocument.querySelectorAll<HTMLButtonElement>(".spro-menu-pop [role='menuitem']")].find(
+  const alvo = [...b.ownerDocument.querySelectorAll<HTMLButtonElement>(".spro-menu-pop [role^='menuitem']")].find(
     (i) => texto(i.querySelector(".spro-menu-rotulo")) === item,
   );
   if (!alvo) {

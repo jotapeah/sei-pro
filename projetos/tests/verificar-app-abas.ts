@@ -71,6 +71,19 @@ export async function verificarAppAbas(): Promise<void> {
     tabs[1]?.title.endsWith("Toda a unidade") === true && tabs[3]?.title.endsWith("Só eu") === true,
   );
   checar("excesso no 'Mais N'", itensDoMenu(abas, "Mais 2 projetos").join() === "Projeto p3,Projeto p4");
+  const tablist = abas.querySelector("[role='tablist']");
+  checar(
+    "a11y: no tablist so abas (o 'Mais N' fica fora dele, ao lado)",
+    !!tablist && [...tablist.children].every((c) => c.getAttribute("role") === "tab") && !tablist.querySelector("[aria-haspopup='menu']"),
+  );
+  checar(
+    "a11y: o leitor de tela ouve o escopo, o atraso e o percentual da aba",
+    /Toda a unidade · com etapa atrasada · \d+%$/.test(tabs[1]?.getAttribute("aria-label") ?? "") &&
+      (tabs[3]?.getAttribute("aria-label") ?? "").includes("Só eu") &&
+      !(tabs[3]?.getAttribute("aria-label") ?? "").includes("atrasada") &&
+      tabs[0]?.getAttribute("aria-label") === "Todos os projetos (5)",
+    tabs.map((t) => t.getAttribute("aria-label")),
+  );
   itemDoMenu(abas, "Mais 2 projetos", "Projeto p4");
   tabs[0]!.click();
   checar("escolher pelo 'Mais' e pela aba", escolhidos.join() === "p4,todos");
@@ -107,9 +120,8 @@ export async function verificarAppAbas(): Promise<void> {
     itens,
   );
   bm.click();
-  const marcados = [...docM.querySelectorAll(".spro-menu-pop [role='menuitem']")]
-    .filter((i) => i.querySelector(".spro-menu-icone svg"))
-    .map((i) => texto(i));
+  // P5 (a11y): os marcáveis dizem o estado ao leitor de tela.
+  const marcados = [...docM.querySelectorAll(".spro-menu-pop [role='menuitemcheckbox'][aria-checked='true']")].map((i) => texto(i));
   bm.click();
   const dicaDaOrdem = () => {
     bm.click();

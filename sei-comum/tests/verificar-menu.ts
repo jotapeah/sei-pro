@@ -67,6 +67,37 @@ export async function verificarMenu(): Promise<void> {
   await tique();
   checar("clicar fora fecha", !pop());
 
+  secao("menu: item marcavel (liga e desliga)");
+  const comMarcas = criarMenu({
+    rotulo: "Ajustes",
+    itens: () => [
+      { rotulo: "Mostrar lista", marcado: true, fazer: () => undefined },
+      { rotulo: "Mover dependentes", marcado: false, fazer: () => undefined },
+      { rotulo: "Exportar", icone: "planilha", fazer: () => undefined },
+    ],
+  });
+  doc.getElementById("r")!.append(comMarcas);
+  comMarcas.click();
+  await tique();
+  const marcaveis = [...doc.querySelectorAll<HTMLElement>('.spro-menu-pop [role="menuitemcheckbox"]')];
+  checar(
+    "marcavel: menuitemcheckbox com aria-checked; o check so no marcado",
+    marcaveis.length === 2 &&
+      marcaveis[0]?.getAttribute("aria-checked") === "true" &&
+      !!marcaveis[0]?.querySelector(".spro-menu-icone svg") &&
+      marcaveis[1]?.getAttribute("aria-checked") === "false" &&
+      !marcaveis[1]?.querySelector(".spro-menu-icone svg"),
+  );
+  checar(
+    "item comum continua menuitem, sem aria-checked",
+    doc.querySelectorAll('.spro-menu-pop [role="menuitem"]').length === 1 &&
+      !doc.querySelector('.spro-menu-pop [role="menuitem"]')?.hasAttribute("aria-checked"),
+  );
+  tecla(marcaveis[0]!, "ArrowDown");
+  checar("o teclado anda pelos marcaveis tambem", marcaveis[1]?.getAttribute("tabindex") === "0");
+  tecla(marcaveis[1]!, "Escape");
+  await tique();
+
   secao("menu: dentro de um dialogo, a lista fica no dialogo (camada de cima)");
   const noDialogo = criarMenu({ rotulo: "Mais", itens: () => [{ rotulo: "Um", fazer: () => undefined }] });
   doc.getElementById("dentro")!.append(noDialogo);

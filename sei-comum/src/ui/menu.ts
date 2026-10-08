@@ -19,6 +19,11 @@ export interface ItemMenu {
   /** Texto curto à direita (atalho, quantidade). */
   dica?: string;
   desativado?: boolean;
+  /**
+   * Item que liga e desliga ("Mostrar lista de etapas"): o leitor de tela ouve se esta marcado
+   * (`menuitemcheckbox` com `aria-checked`); marcado, o check aparece no lugar do icone.
+   */
+  marcado?: boolean;
 }
 
 /** `"-"` = separador; null/false = item que não se aplica agora. */
@@ -77,12 +82,13 @@ export function criarMenu(cfg: ConfigMenu): HTMLButtonElement {
         "button",
         {
           type: "button",
-          role: "menuitem",
+          role: e.marcado === undefined ? "menuitem" : "menuitemcheckbox",
+          "aria-checked": e.marcado === undefined ? undefined : String(e.marcado),
           class: `spro-menu-item${e.perigo ? " spro-menu-perigo" : ""}`,
           tabindex: "-1",
           disabled: e.desativado,
         },
-        h("span", { class: "spro-menu-icone" }, e.icone ? icone(e.icone, 16) : null),
+        h("span", { class: "spro-menu-icone" }, e.marcado ? icone("check", 16) : e.icone ? icone(e.icone, 16) : null),
         h("span", { class: "spro-menu-rotulo" }, e.rotulo),
         e.dica ? h("span", { class: "spro-menu-dica" }, e.dica) : null,
       );

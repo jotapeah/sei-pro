@@ -1736,7 +1736,13 @@ html[data-sobreposto="abrindo"] dialog.spro-dialogo::backdrop {
   min-width: 0;
   overflow: hidden;
 }
-.prj-abas-lista > button {
+/* As abas ficam num tablist dentro do segmentado (o "Mais N" fica fora dele: a11y). */
+.prj-abas-tabs {
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+}
+.prj-abas-lista button {
   min-height: 32px;
   padding: 0 12px;
   font-size: 13px;

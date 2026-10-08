@@ -39,12 +39,17 @@ function visiveis(ativos: readonly ProjetoNaTela[], aberto: string, limite: numb
 }
 
 function aba(p: ProjetoNaTela, selecionada: boolean, aoEscolher: (id: string) => void): HTMLButtonElement {
+  // O ponto vermelho e o ícone do escopo não têm texto: o rótulo diz tudo ao leitor de tela.
+  const rotulo = [p.projeto.nome, rotuloDaVis(p.vis), p.resumo.atrasadas ? "com etapa atrasada" : "", `${p.resumo.progresso}%`]
+    .filter(Boolean)
+    .join(" · ");
   return h(
     "button",
     {
       type: "button",
       role: "tab",
       "aria-selected": String(selecionada),
+      "aria-label": rotulo,
       "data-aba": p.projeto.id,
       title: `${p.projeto.nome} · ${rotuloDaVis(p.vis)}`,
       onclick: () => aoEscolher(p.projeto.id),
@@ -65,15 +70,17 @@ export function montarAbas(o: OpcoesAbas): HTMLElement {
   const mostradas = visiveis(o.ativos, o.aberto, o.limite);
   const ids = new Set(mostradas.map((p) => p.projeto.id));
   const resto = o.ativos.filter((p) => !ids.has(p.projeto.id));
-  const lista = h(
+  // O tablist só tem abas (a11y): o "Mais N" fica no mesmo segmentado, mas fora dele.
+  const tabs = h(
     "div",
-    { class: "spro-segmentado prj-abas-lista", role: "tablist", "aria-label": "Projetos" },
+    { class: "prj-abas-tabs", role: "tablist", "aria-label": "Projetos" },
     h(
       "button",
       {
         type: "button",
         role: "tab",
         "aria-selected": String(o.aberto === "todos"),
+        "aria-label": `Todos os projetos (${o.ativos.length})`,
         "data-aba": "todos",
         title: "Todos os projetos (portfólio)",
         onclick: () => o.aoEscolher("todos"),
@@ -84,6 +91,7 @@ export function montarAbas(o: OpcoesAbas): HTMLElement {
     ),
     ...mostradas.map((p) => aba(p, p.projeto.id === o.aberto, o.aoEscolher)),
   );
+  const lista = h("div", { class: "spro-segmentado prj-abas-lista" }, tabs);
   if (resto.length)
     lista.append(
       criarMenu({

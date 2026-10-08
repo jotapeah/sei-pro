@@ -61,14 +61,11 @@ export function criarMenuAjustes(estado: () => OpcoesMenuAjustes): HTMLButtonEle
         ...(ext.sincronia?.() ?? []),
         o.arquivados > 0 ? { rotulo: "Projetos arquivados", icone: "pasta", dica: String(o.arquivados), fazer: o.aoArquivados } : null,
         "-",
-        {
-          rotulo: "Mostrar lista de etapas",
-          icone: o.mostrarLista ? "check" : undefined,
-          fazer: () => o.aoMostrarLista(!o.mostrarLista),
-        },
+        // Marcáveis: o leitor de tela ouve se estão ligados. "Ordenar etapas" alterna, não é marcável.
+        { rotulo: "Mostrar lista de etapas", marcado: o.mostrarLista, fazer: () => o.aoMostrarLista(!o.mostrarLista) },
         {
           rotulo: "Mover dependentes ao arrastar",
-          icone: o.moverDependentes ? "check" : undefined,
+          marcado: o.moverDependentes,
           fazer: () => o.aoMoverDependentes(!o.moverDependentes),
         },
         itemDaOrdem(o.ordemEtapas, o.aoOrdenar),
