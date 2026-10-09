@@ -2,6 +2,20 @@
 
 ## ![SEI Pro Histórico de Versões](../img/icon-historico.png) Histórico de versões
 
+### Versão 2.7
+09/10/2026
+
+O gerenciador de projetos foi refeito do zero e chega primeiro ao SEI Pro Lab, em versão de teste. Duas falhas do painel lateral e dos favoritos novos também foram corrigidas.
+
+- **Novo (em teste) — [gerenciador de Projetos](../pages/PROJETOS.md) reescrito, no *SEI Pro Lab* (Chrome e Edge).** Quem usa a versão da loja continua com o gerenciador de sempre e recebe o novo depois dessa validação. Para ligar, marque *Gerenciar Projetos* nas configurações do SEI Pro.
+- **Painel no Controle de Processos.** Projetos com fases, etapas, marcos, dependências e linha de base, em Gantt ou em lista, com filtros, visão de todos os projetos, exportação para planilha e impressão. As etapas atrasadas e as que vencem na semana aparecem em pílulas no título do painel.
+- **Os projetos acompanham o processo.** Na caixa, um ícone ao lado da estrela dos favoritos abre um balão com os projetos e as etapas ligados ao processo. Na árvore do processo, o ícone mostra uma faixa quando há etapa atrasada e permite concluir a etapa escolhendo um documento da própria árvore, sem carregar nada em segundo plano.
+- **Painel lateral.** Uma aba *Projetos* ao lado de Favoritos, Histórico e Agente de IA, com a *Agenda* (atrasadas, desta semana e dos próximos 30 dias) e um mini-Gantt de cada projeto. O número vermelho da aba mostra as etapas atrasadas.
+- **Para toda a unidade ou só seu.** O projeto da unidade fica num Texto Padrão do SEI e aparece para os colegas que usam o SEI Pro (você confirma com *Entendi* na primeira vez). O projeto só seu fica no navegador, com cópias diárias e arquivo para enviar e receber.
+- **O Agente de IA lê os seus projetos** (*"quais etapas minhas estão atrasadas?"*). Processos sigilosos ficam de fora: o número deles não vai ao Texto Padrão, nem aos arquivos, nem ao Agente.
+- **Correção:** com o painel lateral aberto em mais de uma janela do navegador, abrir uma aba (por exemplo, pelo botão dos favoritos) trocava a aba do painel de **todas** as janelas. Agora só troca o painel da janela em que você clicou.
+- **Correção nos favoritos novos (SEI Pro Lab):** o número de pendências nas abas do painel lateral, a troca de aba pedida pelo SEI com o painel aberto e a barra de progresso (com o *Cancelar*) do *Atualizar* não funcionavam, porque a extensão lia errado o aviso de mudança do armazenamento do Chrome. Os três voltam a funcionar.
+
 ### Versão 2.6
 07/10/2026
 
