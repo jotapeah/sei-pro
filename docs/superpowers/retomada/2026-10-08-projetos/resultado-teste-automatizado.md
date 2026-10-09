@@ -35,7 +35,7 @@ Os scripts ficaram no scratchpad da sessão (não versionados). Dados de teste a
 6. **`Hash inválido`: era meu script**, não a extensão.
 
 ### Limpeza que eu tinha deixado furada
-Apaguei os dados locais e o Texto Padrão com as abas do SEI ainda abertas; a sincronia da aba regravou o `[_SEIPRO_PRJ_UNIDADE]` e o projeto "Teste MJ 2" voltou. Moral: fechar (ou recarregar) as abas do SEI antes de apagar o armazenamento, e só então excluir o Texto Padrão.
+Apaguei os dados locais e o Texto Padrão com as abas do SEI ainda abertas; a sincronia da aba regravou o `[_SEIPRO_PRJ_UNIDADE]` e o projeto "Teste MJ 2" voltou. Moral: tirar a aba do SEI do ar (memória zerada), apagar o armazenamento e só então excluir o Texto Padrão. Refeito assim em 09/10: SP e MJ sem `[_SEIPRO_PRJ_UNIDADE]`, conferido 40 s depois (não voltou).
 
 ## Fora do teste
 
