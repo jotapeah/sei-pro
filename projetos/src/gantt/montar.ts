@@ -16,6 +16,7 @@ import { diferencaDias, somarDias } from "@comum/datas/dias";
 import { dataDe, feriadosNoPeriodo } from "../modelo/calendario";
 import type { DataISO, MudancaDeDatas } from "../modelo/tipos";
 import Gantt, { type BarraFrappe, type OpcoesFrappe } from "../vendor/frappe-gantt/index";
+import { manterRotulosArrumados } from "./cabecalho";
 import { decorar, decorarBarra, pxPorDia } from "./decorar";
 import { ESCALAS, type Escala, escalaEditavel, MEDIDAS, MODOS } from "./escalas";
 import type { Linha } from "./linhas";
@@ -140,6 +141,7 @@ export function montarGantt(area: HTMLElement, linhas: readonly Linha[], op: Opc
   let atuais: readonly Linha[] = linhas;
   let mapa = new Map(atuais.map((l) => [l.id, l]));
   let gantt: Gantt | null = null;
+  let pararCabecalho: (() => void) | null = null;
   let pendente = false;
   /** x e largura de cada barra no `mousedown`: só quem mexeu entra no lote (datas presas ou saneadas não contam). */
   let posicoes = new Map<string, string>();
@@ -216,6 +218,8 @@ export function montarGantt(area: HTMLElement, linhas: readonly Linha[], op: Opc
     // não vale: as posições guardadas são de outras barras.
     pendente = false;
     const rolagem = manterRolagem ? gantt?.$container.scrollLeft : undefined;
+    pararCabecalho?.();
+    pararCabecalho = null;
     gantt?.destroy();
     gantt = null;
     area.replaceChildren();
@@ -231,6 +235,7 @@ export function montarGantt(area: HTMLElement, linhas: readonly Linha[], op: Opc
         after_render: (g, barra) => (barra ? decorarBarra(g, barra, mapa.get(barra.task.id), dec) : decorar(g, mapa, dec)),
       });
       if (rolagem !== undefined) gantt.$container.scrollLeft = rolagem;
+      pararCabecalho = manterRotulosArrumados(gantt.$container);
     } catch (erro) {
       gantt = null;
       area.replaceChildren();
@@ -274,6 +279,8 @@ export function montarGantt(area: HTMLElement, linhas: readonly Linha[], op: Opc
     destruir() {
       doc.removeEventListener("mouseup", aoSoltar);
       area.removeEventListener("mousedown", aoPressionar);
+      pararCabecalho?.();
+      pararCabecalho = null;
       gantt?.destroy();
       gantt = null;
       area.replaceChildren();

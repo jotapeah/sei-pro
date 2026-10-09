@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { diferencaDias, somarDias } from "@comum/datas/dias";
+import { planejarRotulos } from "../src/gantt/cabecalho";
 import { decorarBarra } from "../src/gantt/decorar";
 import { MODOS } from "../src/gantt/escalas";
 import { idLinhaFase, linhasDoProjeto } from "../src/gantt/linhas";
@@ -17,6 +18,40 @@ import { checar, disparar, secao } from "./util";
 export async function verificarGantt(): Promise<void> {
   const { fases, etapas } = cenario();
   const todas = linhasDoProjeto({ projeto: "p1", fases, etapas }, { hoje: HOJE, ordem: "inicio", recolhidas: new Set<string>() });
+
+  secao("projetos: rotulos do cabecalho (mes preso x seguinte)");
+  {
+    const semChoque = planejarRotulos([
+      { esquerda: 17, direita: 94, topo: 113, preso: true },
+      { esquerda: 192, direita: 242, topo: 119, preso: false },
+    ]);
+    checar(
+      "mes seguinte longe: o preso desce ate a altura dos outros e nada some",
+      semChoque.descer === 6 && semChoque.esconder.length === 0,
+      semChoque,
+    );
+    const choque = planejarRotulos([
+      { esquerda: 17, direita: 94, topo: 113, preso: true },
+      { esquerda: 64, direita: 114, topo: 119, preso: false },
+    ]);
+    checar("mes seguinte na 2a coluna: o preso some (a data de baixo diz o mes)", choque.esconder.join() === "0", choque);
+    const soUm = planejarRotulos([{ esquerda: 0, direita: 60, topo: 113, preso: true }]);
+    checar("um rotulo so: nada a alinhar nem esconder", soUm.descer === 0 && soUm.esconder.length === 0, soUm);
+    const semPreso = planejarRotulos([
+      { esquerda: 0, direita: 60, topo: 119, preso: false },
+      { esquerda: 40, direita: 90, topo: 119, preso: false },
+    ]);
+    checar("sem rotulo preso nunca esconde (so ele pode ser empurrado)", semPreso.esconder.length === 0 && semPreso.descer === 0, semPreso);
+    const ordemTroca = planejarRotulos([
+      { esquerda: 64, direita: 114, topo: 119, preso: false },
+      { esquerda: 17, direita: 94, topo: 113, preso: true },
+    ]);
+    checar(
+      "a ordem recebida nao importa: esconde o indice do preso",
+      ordemTroca.esconder.join() === "1" && ordemTroca.descer === 6,
+      ordemTroca,
+    );
+  }
 
   secao("projetos: opcoes da Frappe");
   const oDia = opcoesFrappe({ escala: "Dia", hoje: HOJE, moverDependentes: true }, todas);

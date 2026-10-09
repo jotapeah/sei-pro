@@ -25,14 +25,17 @@ Os scripts ficaram no scratchpad da sessão (não versionados). Dados de teste a
 | 19 CSV com processo em branco; "Enviar projeto por arquivo" sem o número; Agente omite o projeto sigiloso | OK | não testado |
 | 20 Limpeza (local + Texto Padrão) | feita | feita |
 
-## Achados (nenhum bloqueia; decidir)
+## Achados e desfecho (rodada de correção, 09/10/2026)
 
-1. **Escala Semana: os rótulos "Setembro" e "Outubro" se sobrepõem** no cabeçalho do Gantt quando o mês muda no meio da semana (visual; SP e MJ).
-2. **Árvore, "Abrir no painel": 3 mensagens `abrirPainel` por um clique** (vistas no service worker, tab/frames iguais). Inofensivo (todas gravam a mesma aba), mas indica 3 ligações do clique ou 3 instâncias do balão.
-3. **Agente (`projetos_listar`) omite o projeto sigiloso inteiro** ("1 projeto sigiloso omitido") em vez de listá-lo sem o número. Mais restritivo que a spec 7 (que diz "sigilosos fora, só contados"); está de acordo, mas o usuário não vê o nome do projeto.
-4. **Lateral no MJ: "A conexão com a aba do SEI caiu"** apareceu uma vez, com várias abas SEI de hosts diferentes e 5 abas de painel na mesma janela; após fechar as abas extras e recarregar, funcionou. Não reproduzido em ambiente limpo; vale repetir à mão.
-5. "Abrir no painel" do balão da caixa (SP): o painel embutido ficou visível, mas não confirmei a rolagem (scrollY ficou em 0 com o painel já em tela).
-6. O `Hash inválido` do SEI aparece se a URL do Controle for montada à mão (foi o meu script, não a extensão): sempre usar o link do menu.
+1. **Rótulos "Setembro"/"Outubro" sobrepostos (escala Semana): CORRIGIDO.** Causa: o rótulo do mês corrente é `position: sticky` (a Frappe o prende à esquerda), fica uns 6 px acima dos demais e, com o mês virando na 2ª coluna, a largura dele passa da coluna. `gantt/cabecalho.ts` desce o preso até a altura dos outros e o esconde só quando encosta no seguinte (a data da linha de baixo diz o mês); roda no desenho, na rolagem e no redimensionamento. Prova ao vivo no MJ (colisão reproduzida: 294–371 contra 358; depois, preso escondido e alinhado) e a função de decisão tem teste (`planejarRotulos`).
+2. **3 mensagens `abrirPainel` por clique: NÃO ERA DEFEITO.** Artefato da medição: eu tinha deixado 2 listeners de teste no service worker de rodadas anteriores. Um clique = uma mensagem.
+3. **Agente omite o projeto sigiloso inteiro: MANTIDO.** É o que a spec 7 e o ruling de sigilo pedem (sigilosos fora, só contados); mostrar o nome do projeto revelaria o assunto do processo sigiloso. Se quiser mudar, é decisão de produto.
+4. **"A conexão com a aba do SEI caiu" no lateral do MJ: NÃO REPRODUZIDO.** Com o lateral aberto e o SEI navegando para outra tela (pelo link do menu), o lateral continua com os dados. O erro apareceu quando a aba do SEI estava na tela de login (meu `Hash inválido`) e com abas de painel duplicadas; a mensagem é a correta nesse caso.
+5. **"Abrir no painel" do balão da caixa: FUNCIONA.** O painel foi de 1771 px abaixo da dobra para 525 px (dentro da tela); a rolagem do SEI não é a da janela, por isso `scrollY` ficava 0.
+6. **`Hash inválido`: era meu script**, não a extensão.
+
+### Limpeza que eu tinha deixado furada
+Apaguei os dados locais e o Texto Padrão com as abas do SEI ainda abertas; a sincronia da aba regravou o `[_SEIPRO_PRJ_UNIDADE]` e o projeto "Teste MJ 2" voltou. Moral: fechar (ou recarregar) as abas do SEI antes de apagar o armazenamento, e só então excluir o Texto Padrão.
 
 ## Fora do teste
 
