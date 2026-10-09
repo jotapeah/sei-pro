@@ -50,6 +50,7 @@
   overflow: auto;
   font: 13px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   color: var(--pnl-texto);
+  text-align: left;
   background: var(--pnl-fundo);
   border: 1px solid var(--pnl-linha);
   border-radius: 12px;

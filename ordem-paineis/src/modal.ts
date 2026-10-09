@@ -155,7 +155,13 @@ export function abrirModal(doc: Document, paineis: Painel[], cfg: Config, aoSalv
     desenhar();
   });
   salvar.addEventListener('click', () => {
-    aoSalvar(salvarConfig(cfg, itens.map(i => i.id), itens.filter(i => !i.mostrar).map(i => i.id)));
+    const ids = itens.map(i => i.id);
+    const ocultos = itens.filter(i => !i.mostrar).map(i => i.id);
+    const nova = salvarConfig(cfg, ids, ocultos);
+    // Na ordem natural e com tudo à mostra não há o que lembrar: some a escolha desses painéis (a dos
+    // ausentes fica), em vez de fixar a ordem de hoje.
+    if (ocultos.length === 0 && ids.every((id, i) => id === naturais[i])) nova.ordem = nova.ordem.filter(id => !naturais.includes(id));
+    aoSalvar(nova);
     fechar();
   });
 

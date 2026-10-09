@@ -112,7 +112,7 @@ export async function verificarModal(teste: (nome: string, fn: () => void | Prom
     assert.deepEqual(ids(d), IDS);
     assert.equal(caixa(d, 'atividadesPro')!.checked, true);
     rodape(d, 'spro-pnl-salvar').click();
-    assert.deepEqual(salvos[0], { v: 1, ordem: IDS, ocultos: [] });
+    assert.deepEqual(salvos[0], { v: 1, ordem: [], ocultos: [] });
   });
   await teste('modal: abrir de novo não empilha diálogos', () => {
     const { d, modal } = abrir();
