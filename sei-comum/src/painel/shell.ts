@@ -18,6 +18,27 @@ import { h, icone, type NomeIcone } from "../ui/dom";
 
 export const CHAVE_ABA = "painelAba";
 
+/**
+ * O `storage.session` e um so para a extensao inteira, entao o pedido de aba leva a janela de quem pediu:
+ * `{ aba, janela }`. O painel so segue o pedido da propria janela (uma `string` pura, sem janela, vale para
+ * qualquer um: e o formato antigo e o do navegador sem API de janelas). A escolha feita no clique do proprio
+ * painel fica numa chave por janela, para nao mexer no painel das outras.
+ */
+export const chaveAbaDaJanela = (janela: number): string => `${CHAVE_ABA}:${janela}`;
+
+interface PedidoAba {
+  aba: unknown;
+  janela: number | null;
+}
+
+function lerPedido(v: unknown): PedidoAba {
+  if (v && typeof v === "object") {
+    const o = v as { aba?: unknown; janela?: unknown };
+    return { aba: o.aba, janela: typeof o.janela === "number" ? o.janela : null };
+  }
+  return { aba: v, janela: null };
+}
+
 export interface DefAba {
   id: string;
   rotulo: string;
@@ -40,6 +61,8 @@ export interface DepsAbas {
   url(caminho: string): string;
   /** Aba pedida pelo endereço (`#aba=agente`), quando o painel abre numa janela comum (Firefox). */
   abaDoEndereco?: string | null;
+  /** Id da janela deste painel (`chrome.windows.getCurrent()`); sem ele, segue o pedido de qualquer janela. */
+  janela?: () => Promise<number | null>;
 }
 
 export async function montarAbas(raiz: HTMLElement, d: DepsAbas): Promise<{ mostrar(aba: string): void; atual(): string }> {
@@ -48,6 +71,10 @@ export async function montarAbas(raiz: HTMLElement, d: DepsAbas): Promise<{ most
   const botoes = new Map<string, HTMLButtonElement>();
   const corpo = h("div", { class: "painel-corpo" });
   let atual: string = defs[0]?.id ?? "";
+
+  const minhaJanela = await (d.janela?.() ?? Promise.resolve(null)).catch(() => null);
+  // Pedido de outra janela nao e meu; pedido sem janela (formato antigo) vale para todos.
+  const meu = (p: PedidoAba): boolean => p.janela === null || minhaJanela === null || p.janela === minhaJanela;
 
   const valida = (v: unknown): string | null => (defs.some((x) => x.id === v) ? (v as string) : null);
 
@@ -77,7 +104,8 @@ export async function montarAbas(raiz: HTMLElement, d: DepsAbas): Promise<{ most
           title: def.rotulo,
           onclick: () => {
             mostrar(def.id);
-            void d.sessao.gravar({ [CHAVE_ABA]: def.id }).catch(() => undefined);
+            const chave = minhaJanela === null ? CHAVE_ABA : chaveAbaDaJanela(minhaJanela);
+            void d.sessao.gravar({ [chave]: { aba: def.id, t: Date.now() } }).catch(() => undefined);
           },
         },
         icone(def.icone, 15),
@@ -115,10 +143,25 @@ export async function montarAbas(raiz: HTMLElement, d: DepsAbas): Promise<{ most
       });
     }
   }
-  const gravada = (await d.sessao.obter(CHAVE_ABA).catch(() => ({}) as Record<string, unknown>))[CHAVE_ABA];
-  mostrar(valida(d.abaDoEndereco) ?? valida(gravada) ?? defs[0]?.id ?? "");
+  const chaveMinha = minhaJanela === null ? null : chaveAbaDaJanela(minhaJanela);
+  const lidas = await d.sessao.obter(chaveMinha ? [CHAVE_ABA, chaveMinha] : CHAVE_ABA).catch(() => ({}) as Record<string, unknown>);
+  const pedido = lerPedido(lidas[CHAVE_ABA]);
+  const propria = chaveMinha ? lerPedido(lidas[chaveMinha]) : { aba: undefined, janela: null };
+  const tempo = (v: unknown): number => {
+    const t = v && typeof v === "object" ? (v as { t?: unknown }).t : undefined;
+    return typeof t === "number" ? t : 0;
+  };
+  // Vale o mais recente entre o pedido do background (para esta janela) e o ultimo clique neste painel.
+  const doPedido = meu(pedido) ? valida(pedido.aba) : null;
+  const doClique = valida(propria.aba);
+  const gravada =
+    doPedido && doClique ? (tempo(lidas[chaveMinha as string]) > tempo(lidas[CHAVE_ABA]) ? doClique : doPedido) : (doPedido ?? doClique);
+  mostrar(valida(d.abaDoEndereco) ?? gravada ?? defs[0]?.id ?? "");
   d.sessao.aoMudar((m) => {
-    const nova = valida(m[CHAVE_ABA]?.novo);
+    if (!(CHAVE_ABA in m)) return;
+    const p = lerPedido(m[CHAVE_ABA]?.novo);
+    if (!meu(p)) return;
+    const nova = valida(p.aba);
     if (nova && nova !== atual) mostrar(nova);
   });
   return { mostrar, atual: () => atual };

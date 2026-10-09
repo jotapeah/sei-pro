@@ -25,7 +25,7 @@ export async function verificarShell(): Promise<void> {
   );
   const agente = frames().find((f) => f.src.endsWith("agente.html"))!;
   checar("o agente fica vivo, so escondido", agente.hidden && raiz.contains(agente));
-  checar("a escolha fica na sessao", (await sessao.obter("painelAba")).painelAba === "favoritos");
+  checar("a escolha fica na sessao", ((await sessao.obter("painelAba")).painelAba as { aba?: string }).aba === "favoritos");
   botao(raiz, "Agente de IA")!.click();
   await tique();
   checar("voltar nao recria o iframe", frames().length === 2 && !agente.hidden);

@@ -92,6 +92,25 @@ function verificarDecisao(): void {
     telas,
     divergem,
   });
+
+  // O contexto da janela de topo nao serializa a pagina inteira (outerHTML) para ler o cabecalho.
+  const comUnidade = readdirSync(FIXTURES_41)
+    .filter((f) => f.endsWith(".html"))
+    .map((f) => tela(f))
+    .find((t) => t.doc.documentElement && temUnidade(t.doc, t.pagina.url));
+  if (comUnidade) {
+    const el = comUnidade.doc.documentElement;
+    let leituras = 0;
+    Object.defineProperty(el, "outerHTML", {
+      configurable: true,
+      get() {
+        leituras++;
+        return "";
+      },
+    });
+    const ctx = contextoProjetos(comUnidade.doc, { temaEscuro: false, atividades: false }, comUnidade.pagina.url);
+    checar("contextoProjetos le o cabecalho sem serializar a pagina", !!ctx?.unidade && leituras === 0, { leituras });
+  }
 }
 
 async function verificarCarga(): Promise<void> {

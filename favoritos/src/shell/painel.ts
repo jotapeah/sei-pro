@@ -23,6 +23,8 @@ export interface DepsShell {
   url(caminho: string): string;
   /** Aba pedida pelo endereço (`#aba=agente`), quando o painel abre numa janela comum (Firefox). */
   abaDoEndereco?: AbaPainel | null;
+  /** Id da janela deste painel: o pedido de aba de outra janela nao troca a aba daqui. */
+  janela?: () => Promise<number | null>;
   /** chrome.storage.local: o app grava as pendências (lembretes + novidades) em `favoritos/contadorPainel`. */
   local?: Area;
 }
@@ -114,7 +116,14 @@ export async function montarShell(raiz: HTMLElement, d: DepsShell): Promise<{ mo
         ]
       : []),
   ];
-  const r = await montarAbas(raiz, { sessao: d.sessao, local: d.local, abas, url: d.url, abaDoEndereco: d.abaDoEndereco });
+  const r = await montarAbas(raiz, {
+    sessao: d.sessao,
+    local: d.local,
+    abas,
+    url: d.url,
+    abaDoEndereco: d.abaDoEndereco,
+    janela: d.janela,
+  });
   return {
     mostrar: (aba) => r.mostrar(aba),
     atual: () => (r.atual() || "agente") as AbaPainel,

@@ -1,7 +1,6 @@
 /** Contexto da aba (spec 7): host, login, nome e unidade, lidos do cabeçalho do SEI. */
 
 import { lerContexto } from "@nucleo/sei";
-import { paginaDe } from "@nucleo/sessao/pagina";
 import type { ContextoProjetos } from "../ponte/tipos";
 
 export function contextoProjetos(
@@ -9,7 +8,9 @@ export function contextoProjetos(
   extras: { temaEscuro: boolean; corTema?: string; atividades: boolean },
   url?: string,
 ): ContextoProjetos | null {
-  const c = lerContexto(paginaDe(doc, url));
+  // html vazio, como o carregador: `paginaDe` serializaria a pagina inteira (outerHTML) em toda janela de topo, so
+  // para ler a versao do SEI, que nada daqui usa (`versao` fica "" ate alguem precisar).
+  const c = lerContexto({ url: url ?? doc.location?.href ?? "https://sei.invalido/sei/", status: 200, html: "", doc });
   if (!c.usuario.login) return null;
   const ctx: ContextoProjetos = {
     host: c.host,

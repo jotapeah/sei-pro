@@ -89,13 +89,14 @@ if(!isChrome && typeof browser.runtime.getBrowserInfo === "function") {
  * "projetos" e o item "Agente de IA" do menu (js/init_agente.js) pede "abrirAgente".
  * O clique do usuario e o gesto que o Chrome exige para sidePanel.open; por
  * isso a chamada e feita direto no listener, ANTES de qualquer await. A aba
- * pedida vai para o storage.session: o painel le ao abrir e, se ja estiver
- * aberto, troca de aba pelo onChanged.
+ * pedida vai para o storage.session como {aba, janela, t}: o painel le ao abrir
+ * e, se ja estiver aberto, troca de aba pelo onChanged, mas so se a janela for
+ * a dele (o storage.session e um so para todas as janelas).
  ******************************************************************************/
-function gravarAbaDoPainel(aba) {
+function gravarAbaDoPainel(aba, janela) {
   if (!browser.storage || !browser.storage.session) return;
   try {
-    var p = browser.storage.session.set({ painelAba: aba });
+    var p = browser.storage.session.set({ painelAba: { aba: aba, janela: typeof janela === "number" ? janela : null, t: Date.now() } });
     if (p && p.catch) p.catch(function () { /* sem sessao: o painel abre na aba padrao */ });
   } catch (e) { /* idem */ }
 }
@@ -108,7 +109,7 @@ browser.runtime.onMessage.addListener(function (msg, sender) {
   } else if (browser.sidebarAction && browser.sidebarAction.open) {
     browser.sidebarAction.open();
   }
-  gravarAbaDoPainel(aba);
+  gravarAbaDoPainel(aba, sender.tab.windowId);
 });
 
 /******************************************************************************

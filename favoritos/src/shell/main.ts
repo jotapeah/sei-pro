@@ -10,4 +10,6 @@ void montarShell(document.getElementById("painel")!, {
   local: areaChrome(chrome.storage.local, "local"),
   url: (c) => chrome.runtime.getURL(c),
   abaDoEndereco: abaPedidaNoEndereco(location.hash),
+  // Sidebar do Firefox: sem API de janelas, segue qualquer pedido.
+  janela: async () => (await chrome.windows?.getCurrent?.())?.id ?? null,
 });

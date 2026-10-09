@@ -120,7 +120,14 @@ export async function principalTopo(): Promise<void> {
   // null: a tela não recebe o painel (as outras telas e a visão por marcadores); rejeitada: a montagem falhou.
   const painel: Promise<PainelDaAba | null> = naCaixa ? montarNaCaixa(aba) : Promise.resolve(null);
   painel.catch((e) => console.warn("[SEI Pro] projetos: painel", e));
-  if (naCaixa) ligarCaixa(aba, painel);
+  // Isolada: uma excecao da caixa nao pode deixar a aba sem o lado do lateral logo abaixo.
+  if (naCaixa) {
+    try {
+      ligarCaixa(aba, painel);
+    } catch (e) {
+      console.warn("[SEI Pro] projetos: caixa", e);
+    }
+  }
   // O lado da aba do lateral já (sem esperar o painel): a página recarregada volta antes do fim da carência.
   ligarLateralDaAba({
     doc: document,

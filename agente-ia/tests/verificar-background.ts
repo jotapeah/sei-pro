@@ -139,7 +139,7 @@ export async function verificarBackground(): Promise<void> {
     amb.ouvintes.clique[0]("rotina-pendente:r1");
     await new Promise((r) => setTimeout(r, 10));
     checar("abre o painel lateral na aba ativa", amb.paineisAbertos.join() === "7", amb.paineisAbertos);
-    checar("ja na aba do agente", amb.sessao.some((v) => v.painelAba === "agente"), amb.sessao);
+    checar("ja na aba do agente", amb.sessao.some((v) => v.painelAba?.aba === "agente" && v.painelAba?.janela === null), amb.sessao);
     amb.ouvintes.clique[0]("promocao-qualquer");
     await new Promise((r) => setTimeout(r, 10));
     checar("notificacao de outra origem e ignorada", amb.paineisAbertos.length === 1 && amb.abas.length === 0);
@@ -148,23 +148,23 @@ export async function verificarBackground(): Promise<void> {
   secao("background: pedidos para abrir o painel");
   {
     const amb = carregar([]);
-    const tab = { tab: { id: 42 } };
+    const tab = { tab: { id: 42, windowId: 9 } };
     amb.ouvintes.mensagem[0]({ tipo: "abrirPainel", aba: "favoritos" }, tab);
     await new Promise((r) => setTimeout(r, 10));
     checar("abrirPainel abre o painel na aba que pediu", amb.paineisAbertos.join() === "42", amb.paineisAbertos);
-    checar("e grava a aba pedida", amb.sessao.at(-1)?.painelAba === "favoritos", amb.sessao);
+    checar("e grava a aba pedida", amb.sessao.at(-1)?.painelAba?.aba === "favoritos" && amb.sessao.at(-1)?.painelAba?.janela === 9, amb.sessao);
     amb.ouvintes.mensagem[0]({ tipo: "abrirAgente" }, tab);
     await new Promise((r) => setTimeout(r, 10));
-    checar("abrirAgente (botoes antigos) abre na aba do agente", amb.sessao.at(-1)?.painelAba === "agente" && amb.paineisAbertos.length === 2);
+    checar("abrirAgente (botoes antigos) abre na aba do agente", amb.sessao.at(-1)?.painelAba?.aba === "agente" && amb.paineisAbertos.length === 2);
     amb.ouvintes.mensagem[0]({ tipo: "abrirPainel", aba: "projetos" }, tab);
     await new Promise((r) => setTimeout(r, 10));
-    checar("abrirPainel na aba Projetos (caixa, arvore)", amb.sessao.at(-1)?.painelAba === "projetos" && amb.paineisAbertos.length === 3);
+    checar("abrirPainel na aba Projetos (caixa, arvore)", amb.sessao.at(-1)?.painelAba?.aba === "projetos" && amb.paineisAbertos.length === 3);
     amb.ouvintes.mensagem[0]({ tipo: "abrirPainel", aba: "historico" }, tab);
     await new Promise((r) => setTimeout(r, 10));
-    checar("e na aba Historico", amb.sessao.at(-1)?.painelAba === "historico");
+    checar("e na aba Historico", amb.sessao.at(-1)?.painelAba?.aba === "historico");
     amb.ouvintes.mensagem[0]({ tipo: "abrirPainel", aba: "qualquer" }, tab);
     await new Promise((r) => setTimeout(r, 10));
-    checar("aba desconhecida vira favoritos", amb.sessao.at(-1)?.painelAba === "favoritos");
+    checar("aba desconhecida vira favoritos", amb.sessao.at(-1)?.painelAba?.aba === "favoritos");
     amb.ouvintes.mensagem[0]({ tipo: "abrirPainel", aba: "favoritos" }, {});
     await new Promise((r) => setTimeout(r, 10));
     checar("pedido sem aba de origem e ignorado", amb.paineisAbertos.length === 5);

@@ -109,6 +109,42 @@ export async function verificarAreaChrome(): Promise<void> {
     await c.session.gravar({ painelAba: "b" });
     await tique(10);
     checar("pedido de aba do background com o painel aberto: troca a aba", shell.atual() === "b", shell.atual());
+
+    secao("painel: o pedido de aba vale so para a janela de quem pediu");
+    const monta = async (janela: number) => {
+      const d = instalarDom('<html><body><div id="painel"></div></body></html>');
+      const r = d.getElementById("painel")!;
+      const sh = await montarAbas(r, {
+        sessao: c.session,
+        url: (x) => `chrome-extension://id/${x}`,
+        janela: async () => janela,
+        abas: [
+          { id: "a", rotulo: "Aba A", icone: "estrela", caminho: "a.html", titulo: "A" },
+          { id: "b", rotulo: "Aba B", icone: "historico", caminho: "b.html", titulo: "B" },
+        ],
+      });
+      return { sh, r };
+    };
+    await c.session.remover("painelAba");
+    const j1 = await monta(1);
+    const j2 = await monta(2);
+    await c.session.gravar({ painelAba: { aba: "b", janela: 2, t: 10 } });
+    await tique(10);
+    checar("pedido da janela 2: troca a janela 2", j2.sh.atual() === "b", j2.sh.atual());
+    checar("pedido da janela 2: a janela 1 fica onde estava", j1.sh.atual() === "a", j1.sh.atual());
+    (j1.r.querySelectorAll('[role="tab"]')[1] as HTMLElement).click();
+    await tique(10);
+    checar("clique na janela 1: troca so a janela 1", j1.sh.atual() === "b", j1.sh.atual());
+    (j2.r.querySelectorAll('[role="tab"]')[0] as HTMLElement).click();
+    await tique(10);
+    checar("clique na janela 2 nao leva a janela 1", j2.sh.atual() === "a" && j1.sh.atual() === "b", `${j2.sh.atual()}/${j1.sh.atual()}`);
+    const j2b = await monta(2);
+    checar("reabrir a janela 2: lembra o ultimo clique dela, nao o pedido velho", j2b.sh.atual() === "a", j2b.sh.atual());
+    await c.session.gravar({ painelAba: { aba: "b", janela: 1, t: Date.now() + 1000 } });
+    await tique(10);
+    const j1b = await monta(1);
+    checar("pedido novo para a janela 1: ao abrir, vale o pedido (mais recente que o clique)", j1b.sh.atual() === "b", j1b.sh.atual());
+    checar("pedido da janela 1 nao mexeu na janela 2", j2b.sh.atual() === "a", j2b.sh.atual());
   } finally {
     c.restaurar();
   }
