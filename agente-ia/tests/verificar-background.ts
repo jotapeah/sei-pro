@@ -39,7 +39,7 @@ function carregar(rotinas: unknown[], opcoes: Opcoes = {}) {
   const notificadas: Array<{ id: string; titulo: string; corpo: string }> = [];
   const abas: string[] = [];
   const paineisAbertos: number[] = [];
-  const sessao: Array<Record<string, unknown>> = [];
+  const sessao: Array<{ painelAba?: { aba?: string; janela?: number | null } }> = [];
   const chrome = {
     runtime: {
       onInstalled: { addListener: (f: (d: unknown) => void) => ouvintes.instalado.push(f) },
@@ -59,7 +59,7 @@ function carregar(rotinas: unknown[], opcoes: Opcoes = {}) {
         },
         set: async () => undefined,
       },
-      session: { set: async (v: Record<string, unknown>) => void sessao.push(v) },
+      session: { set: async (v: (typeof sessao)[number]) => void sessao.push(v) },
     },
     alarms: { onAlarm: { addListener: (f: (a: { name: string }) => void) => ouvintes.alarme.push(f) } },
     notifications: {
