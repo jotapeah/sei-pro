@@ -14,6 +14,9 @@ const CSS = `.spro-prj-ic{position:relative;display:inline-grid;place-items:cent
 .spro-prj-ic:hover,.spro-prj-ic[data-ativo],.spro-prj-ic[aria-expanded="true"]{background:rgb(31 95 191 / 12%)}
 .spro-prj-ic:focus-visible{outline:2px solid #1a73e8;outline-offset:1px}
 .spro-prj-ic svg{display:block;width:18px;height:18px}
+/* Na arvore o icone acompanha a estrela e o botao dos Favoritos (mesma regra deles): inline-block na linha de base, caixa de 24 px, svg centrado. */
+#topmenu .spro-prj-ic{display:inline-block;width:26px;height:24px;padding:0;margin:0 1px;line-height:0;vertical-align:baseline}
+#topmenu .spro-prj-ic svg{display:block;width:18px;height:18px;margin:3px auto}
 .spro-prj-ic[data-atraso]::after{content:"";position:absolute;top:1px;right:1px;width:6px;height:6px;border-radius:50%;background:#d1352b;border:1.5px solid #fff}
 .spro-prj-ic.spro-prj-escuro{color:#79acff}
 .spro-prj-ic.spro-prj-escuro:hover,.spro-prj-ic.spro-prj-escuro[data-ativo],.spro-prj-ic.spro-prj-escuro[aria-expanded="true"]{background:rgb(121 172 255 / 16%)}

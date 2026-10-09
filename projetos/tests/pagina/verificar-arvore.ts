@@ -382,6 +382,12 @@ async function verificarSei5(): Promise<void> {
     css.includes(".spro-prj-faixa.spro-prj-escuro svg{color:#ff7d73}") &&
       css.includes(".spro-prj-faixa.spro-prj-escuro.spro-prj-vence svg{color:#e8b04a}"),
   );
+  checar(
+    "na arvore o icone usa a mesma geometria do botao dos Favoritos (inline-block, linha de base, 24 px) e fica alinhado a eles",
+    css.includes(
+      "#topmenu .spro-prj-ic{display:inline-block;width:26px;height:24px;padding:0;margin:0 1px;line-height:0;vertical-align:baseline}",
+    ) && css.includes("#topmenu .spro-prj-ic svg{display:block;width:18px;height:18px;margin:3px auto}"),
+  );
   inst?.parar();
   checar(
     "sem o no do processo desenhado: nada",
