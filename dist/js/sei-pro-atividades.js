@@ -13651,13 +13651,8 @@ function configPessoal() {
 
         textBox +=  '<table style="font-size: 10pt; float: left; margin-top: 30px;" class="seiProForm">'+
                     '   <tr style="height: 40px;">'+
-                    '       <td style="width: 460px;vertical-align: bottom;"><i class="iconPopup far fa-hand-rock cinzaColor"></i> Ordenar pain\u00E9is de gest\u00E3o arrastando e soltando</td>'+
-                    '       <td colspan="2" style="vertical-align: top;">'+
-                    '           <div class="infraAncoraSigla" style="float: left;">'+
-                    '               <input type="checkbox" onchange="changePanelSortPro(this);saveConfigPersonalUser(this);" name="infraAncoraSigla" class="infraLinkOrgao" id="panelSortPro" tabindex="0" '+statePanelSortPro+'>'+
-                    '               <label class="infraAreaDados" for="panelSortPro"></label>'+
-                    '           </div>'+
-                    '       </td>'+
+                    '       <td style="width: 460px;vertical-align: bottom;"><i class="iconPopup fas fa-sort cinzaColor"></i> Ordem e visibilidade dos pain\u00E9is</td>'+
+                    '       <td colspan="2" style="vertical-align: top;"><span class="info">Use o bot\u00E3o &quot;Ordenar e ocultar pain\u00E9is&quot; na barra do Controle de Processos.</span></td>'+
                     '   </tr>'+
                     '   <tr style="height: 40px;">'+
                     '       <td style="vertical-align: bottom;"><i class="iconPopup fas fa-arrows-alt-h cinzaColor"></i> Ordenar colunas do painel de '+__.demandas+' arrastando e soltando</td>'+

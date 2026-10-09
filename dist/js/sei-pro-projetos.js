@@ -605,13 +605,8 @@ function openProjetoConfig() {
                     '       </td>'+
                     '   </tr>'+
                     '   <tr style="height: 40px;">'+
-                    '       <td><i class="iconPopup far fa-hand-rock cinzaColor"></i> Ordenar pain\u00E9is de gest\u00E3o arrastando e soltando</td>'+
-                    '       <td>'+
-                    '           <div class="infraAncoraSigla">'+
-                    '               <input type="checkbox" onchange="changePanelSortPro(this)" name="infraAncoraSigla" class="infraLinkOrgao" id="panelSortPro" tabindex="0" '+statePanelSortPro+'>'+
-                    '               <label class="infraAreaDados" for="panelSortPro"></label>'+
-                    '           </div>'+
-                    '       </td>'+
+                    '       <td><i class="iconPopup fas fa-sort cinzaColor"></i> Ordem e visibilidade dos pain\u00E9is</td>'+
+                    '       <td><span class="info">Use o bot\u00E3o &quot;Ordenar e ocultar pain\u00E9is&quot; na barra do Controle de Processos.</span></td>'+
                     '   </tr>'+
                     '</table>';
     resetDialogBoxPro('dialogBoxPro');

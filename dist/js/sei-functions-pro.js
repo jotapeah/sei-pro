@@ -2032,6 +2032,9 @@ function changePanelLabPro(this_) {
     }
 }
 function setSortDivPanel() {
+    // Aposentado: a ordem dos paineis agora e do modulo ordem-paineis (CSS order, sem mover nos).
+    // O sortable do jQuery UI brigaria com ele e recarregava os iframes dos paineis.
+    return;
     if (getOptionsPro('panelSortPro')) {
         if ($('#panelHomePro').hasClass('ui-sortable')) {
             // console.log('### refresh #panelHomePro');
