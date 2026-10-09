@@ -1,4 +1,5 @@
 import { verificarModelo } from './verificar-modelo';
+import { verificarControle } from './verificar-controle';
 import { verificarModal } from './verificar-modal';
 import { verificarPaineis } from './verificar-paineis';
 
@@ -8,5 +9,6 @@ async function teste(nome: string, fn: () => void | Promise<void>) { await fn();
 await verificarModelo(teste);
 await verificarPaineis(teste);
 await verificarModal(teste);
+await verificarControle(teste);
 
 console.log(`${n} verificações passaram.`);
