@@ -3,26 +3,30 @@
 Documento para continuar o trabalho numa sessão nova (nuvem ou local), sem o histórico da conversa
 original. Leia inteiro antes de agir. Tudo em português do Brasil.
 
-## 1. Onde parou (08/10/2026)
+## 1. Onde parou (09/10/2026)
 
-- Branch `feat/projetos-ts`, HEAD `6799b2b` (mais o commit deste pacote). Sem push, sem merge, sem release.
+- Branch `feat/projetos-ts`, já com o `origin/master` (2.6) mesclado (merge `0937081`). Sem push, sem merge no master, sem release.
 - Spec: `docs/superpowers/specs/2026-10-06-projetos-design.md` + telas aprovadas em
   `docs/superpowers/specs/2026-10-06-projetos-telas/` (painel, formularios, integracao).
 - Plano-mestre: `docs/superpowers/plans/2026-10-06-projetos-00-mapa.md`; planos das fases P1 a P5 na mesma pasta.
 - Fases:
-  - P1 (comum), P2 (núcleo), P3 (app do painel), P4 (sincronia e colaboração): **concluídas**, cada uma com revisão
-    final e leva de correção.
-  - P5 (painel lateral, caixa, árvore, Agente): as 11 tarefas **concluídas e aprovadas**; a **revisão final da fase
-    já rodou** ("with fixes", 0 Critical, 1 Important) e **falta a leva de correção** (seção 2).
-  - P6 (validação ao vivo e revisão final da branch): **não começou** (seção 3).
-- Suítes no HEAD (todas 0 falha): projetos 2581, sei-comum 486, sei-nucleo 136, favoritos 607, historico 485,
-  agente-ia 1138.
+  - P1 a P4: **concluídas**, cada uma com revisão final e leva de correção.
+  - P5 (painel lateral, caixa, árvore, Agente): **fechada em 09/10/2026** com uma leva MÍNIMA (commit `ae6e892`):
+    o Important (shell troca de aba só na própria janela) e os Minors 2 (`lerContexto` sem serializar a página) e 4
+    (`ligarCaixa` isolada). **Não houve re-revisão** (decisão do autor: sem revisores); o resto virou pendência, na lista
+    da seção 2 abaixo, para a P6 ou uma leva posterior. Roteiro de teste manual: `roteiro-teste.md`.
+  - P6 (validação ao vivo e revisão final da branch): **não começou** (seção 3); o roteiro de teste à mão no SEI SP
+    4.1.5 é o primeiro passo.
+- Suítes no HEAD (todas 0 falha): projetos 2582, sei-comum 502, sei-nucleo 136, favoritos 607, historico 485,
+  agente-ia 1138, anotacoes-controle 29.
+- Correção dos Favoritos já publicados (tradução `newValue`/`oldValue` + troca de aba por janela) preparada à parte na
+  branch local `fix/area-chrome-novo-antigo` (a partir do `origin/master`).
 
-## 2. Próximo passo: leva final da P5 (uma rodada de correção + uma re-revisão)
+## 2. Pendências da P5 (a leva mínima já fez o Important e os Minors 2 e 4; o resto segue aberto)
 
 Fonte: fim de `ledgers/ledger-p5-integracao.md` (linha "P5 final review" e as linhas `parked`/"leva final").
 
-**Important**
+**Important** — FEITO em `ae6e892` (background grava `{aba, janela, t}`; shell segue só a própria janela; clique do shell numa chave por janela)
 1. A correção do `areaChrome` (P5 T5) fez o shell do painel lateral trocar de aba em TODAS as janelas:
    `painelAba` vive no `storage.session`, que é um só para a extensão. Corrigir: o background
    (`dist/background.js`, JS legado, editar à mão sem acento) grava `{ aba, janela: sender.tab.windowId }`; o shell
@@ -30,12 +34,12 @@ Fonte: fim de `ledgers/ledger-p5-integracao.md` (linha "P5 final review" e as li
    `iniciarLateral` já faz); o clique do próprio shell grava numa chave por janela. Prova com duas janelas.
 
 **Minors da revisão final**
-2. `projetos/src/pagina/contexto.ts:12`: `lerContexto(paginaDe(doc))` serializa a página inteira (`outerHTML`) em toda
+2. FEITO em `ae6e892` (a `versao` do SEI no contexto fica "", sem uso). `projetos/src/pagina/contexto.ts:12`: `lerContexto(paginaDe(doc))` serializa a página inteira (`outerHTML`) em toda
    janela de topo — passar `{ url, status: 200, html: "", doc }` como o carregador faz; `armazemNaTela`
    (`pagina/armazem.ts:22`) olha só o menu.
 3. `pagina/caixa.ts:135-160`: o `pintar` relê todas as linhas a cada mutação — sair cedo sem vínculos e sem sigiloso
    pendente (ou tratar só as linhas acrescentadas).
-4. `pagina/principal.ts:123-125`: isolar `ligarCaixa` com `try` (ou ligar o lateral antes) para uma exceção não deixar a
+4. FEITO em `ae6e892` (sem teste: o `principal.ts` não roda fora do Chrome). `pagina/principal.ts:123-125`: isolar `ligarCaixa` com `try` (ou ligar o lateral antes) para uma exceção não deixar a
    aba sem o lado do lateral.
 5. `repositorio.ts:832-860` `marcarSigilosos`: reler as chaves logo antes de gravar (não desfazer edição concorrente).
 6. `pagina/lateral.ts:48` e `sei-comum/src/ponte/lateral.ts:179-185`: aba órfã depois de atualizar a extensão —
@@ -60,8 +64,7 @@ Fonte: fim de `ledgers/ledger-p5-integracao.md` (linha "P5 final review" e as li
 - T11: (1) `chrome.runtime?.id` antes do `import()` do balão + aviso "recarregue a página"; (3) prova que amarra os
   `matches` do WAR aos do content script; (4) ajuda: desinstalar apaga projetos e cópias diárias.
 
-Depois da leva: uma re-revisão da leva (subagente revisor), rodar TODAS as suítes, registrar no ledger
-"P5 CLOSED".
+Os itens 3, 5, 6, 7, 8 e 9 e todos os "Guardados" acima seguem ABERTOS. O ledger registra "P5 CLOSED (leva mínima)".
 
 ## 3. Depois: P6 — validação ao vivo e revisão final da branch
 
