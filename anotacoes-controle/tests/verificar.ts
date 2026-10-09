@@ -328,4 +328,31 @@ await teste('ordenação e filtros salvos migram entre layouts sem acumular desl
   assert.deepEqual(valores['tablesorter-filters'], ['', 'Marcador', '123', '(ana)', '2026-10-09']);
 });
 
+await teste('a cópia em memória da ordenação (sortListSaved) migra junto, sem deslocar duas vezes', () => {
+  const legado = readFileSync(new URL('../../dist/js/sei-pro.js', import.meta.url), 'utf8');
+  const valores: Record<string, any> = { 'tablesorter-savesort': { sortList: [[3, 1]] } };
+  const d = tabela(linha5('Anotação / nota / ana'));
+  const alvo = { 0: d.querySelector('table')!, find: (seletor: string) => d.querySelectorAll(seletor) };
+  alvo[0].id = 'tblProcessosRecebidos';
+  const contexto = {
+    $: { tablesorter: { storage(_t: unknown, nome: string, valor?: unknown) {
+      if (valor !== undefined) valores[nome] = valor;
+      return valores[nome];
+    } } },
+    sortListSaved: { tblProcessosRecebidos: { sortList: [[3, 1]] } } as Record<string, { sortList: number[][] }>,
+    migrarEstadoAnotacao: undefined as unknown as (t: unknown) => unknown,
+  };
+  runInNewContext(legado.slice(legado.indexOf('function deslocarOrdemAnotacao(')), contexto);
+  // Estava salvo sem coluna (layout ausente); agora há coluna: o índice 3 vira 4 nas duas cópias.
+  renderizar(d, true, true);
+  contexto.migrarEstadoAnotacao(alvo);
+  assert.equal(JSON.stringify(valores['tablesorter-savesort'].sortList), '[[4,1]]');
+  assert.equal(JSON.stringify(contexto.sortListSaved.tblProcessosRecebidos.sortList), '[[4,1]]');
+  contexto.migrarEstadoAnotacao(alvo);
+  assert.equal(JSON.stringify(contexto.sortListSaved.tblProcessosRecebidos.sortList), '[[4,1]]');
+  renderizar(d, true);
+  contexto.migrarEstadoAnotacao(alvo);
+  assert.equal(JSON.stringify(contexto.sortListSaved.tblProcessosRecebidos.sortList), '[[3,1]]');
+});
+
 console.log(`${n} verificações passaram.`);

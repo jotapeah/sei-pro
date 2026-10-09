@@ -3706,6 +3706,12 @@ function migrarEstadoAnotacao(tabela) {
             else filtros.splice(2, 1);
             $.tablesorter.storage(tabela[0], 'tablesorter-filters', filtros, { storageType: 'local' });
         }
+        // sortListSaved e lido uma vez no carregamento e reaproveitado quando o tablesorter e
+        // recriado (o widget limpa o armazenamento ao iniciar): migra a copia em memoria tambem.
+        var emMemoria = (typeof sortListSaved !== 'undefined' && sortListSaved) ? sortListSaved[tabela[0].id] : null;
+        if (emMemoria && Array.isArray(emMemoria.sortList)) {
+            emMemoria.sortList = deslocarOrdemAnotacao(emMemoria.sortList, coluna ? 1 : -1);
+        }
     }
     $.tablesorter.storage(tabela[0], 'spro-anotacao-layout', { coluna: coluna }, { storageType: 'local' });
     return salva;
