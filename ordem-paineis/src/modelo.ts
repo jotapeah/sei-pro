@@ -25,6 +25,7 @@ const NOMES: Record<string, string> = {
   favoritesPro: 'Favoritos',
   atividadesPro: 'Atividades',
   projetosGantt: 'Projetos',
+  projetosPro: 'Projetos',
 };
 
 export const configVazia = (): Config => ({ v: 1, ordem: [], ocultos: [] });
