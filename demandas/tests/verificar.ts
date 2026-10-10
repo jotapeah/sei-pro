@@ -1,6 +1,9 @@
 import { resumo } from "./util";
 import { verificarAlertas } from "./verificar-alertas";
 import { verificarAndaime } from "./verificar-andaime";
+import { verificarAppBase } from "./verificar-app-base";
+import { verificarAppDialogos } from "./verificar-app-dialogos";
+import { verificarAppTabela } from "./verificar-app-tabela";
 import { verificarArquivo } from "./verificar-arquivo";
 import { verificarArquivoMorto } from "./verificar-arquivo-morto";
 import { verificarEscala } from "./verificar-escala";
@@ -30,4 +33,7 @@ await verificarPreferencias();
 await verificarOrquestrador();
 await verificarArquivo();
 await verificarArquivoMorto();
+await verificarAppBase();
+await verificarAppTabela();
+await verificarAppDialogos();
 resumo();
