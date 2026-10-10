@@ -813,6 +813,8 @@
         "html/demandas.html",
         "js/demandas/app.js",
         "js/demandas/pagina.js",
+        "js/demandas/balao.js",
+        "js/demandas/pagina-comum.js",
         "css/demandas.css",
         "icons/menu/favoritos.svg",
         "js/estudio/estudio.js",
