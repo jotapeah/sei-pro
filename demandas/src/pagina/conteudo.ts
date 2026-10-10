@@ -110,6 +110,7 @@ export function perguntarEntendi(raiz: HTMLElement, sigla: string): { resposta: 
         {},
         `As demandas de “Toda a unidade” ficam guardadas no próprio SEI, num Texto Padrão da ${sigla}: todos da unidade que usam o SEI Pro veem e editam. O número de processo sigiloso não vai.`,
       ),
+      h("p", {}, AVISO_SIGILO),
       h(
         "div",
         { class: "pb-botoes" },
@@ -121,6 +122,9 @@ export function perguntarEntendi(raiz: HTMLElement, sigla: string): { resposta: 
   entendi.focus?.({ preventScroll: true });
   return { resposta, cancelar: () => fim(false) };
 }
+
+/** O mesmo aviso do app: o título e a descrição vão em claro ao Texto Padrão. */
+const AVISO_SIGILO = "Não escreva dados sigilosos no título ou na descrição: ficam no Texto Padrão e todos da unidade os leem.";
 
 /** Os usuários da lista, sem repetir, com o próprio usuário primeiro. */
 function responsaveisDaLista(eu: Responsavel, usuarios: readonly UsuarioDaUnidade[]): Responsavel[] {

@@ -182,6 +182,20 @@ export function montarVistaCronograma(area: HTMLElement, o: OpcoesCronograma): C
   if (falhou || !controle) return null;
   const real = controle;
   preencherLargura(real);
+  // Janela redimensionada ou aba que estava oculta (largura 0 ao montar): estica de novo, no máximo uma vez por quadro.
+  let quadro: ReturnType<typeof setTimeout> | null = null;
+  let vivo = true;
+  const observador =
+    typeof ResizeObserver === "function"
+      ? new ResizeObserver(() => {
+          if (quadro !== null || !vivo) return;
+          quadro = setTimeout(() => {
+            quadro = null;
+            if (vivo) preencherLargura(real);
+          }, 16);
+        })
+      : null;
+  observador?.observe(areaGantt);
   // Trocar a escala ou atualizar refaz a Frappe com a coluna original: estica de novo.
   return {
     get escala() {
@@ -200,6 +214,11 @@ export function montarVistaCronograma(area: HTMLElement, o: OpcoesCronograma): C
     },
     rolarParaHoje: () => real.rolarParaHoje(),
     realcar: (id, ligado) => real.realcar(id, ligado),
-    destruir: () => real.destruir(),
+    destruir: () => {
+      vivo = false;
+      if (quadro !== null) clearTimeout(quadro);
+      observador?.disconnect();
+      real.destruir();
+    },
   };
 }

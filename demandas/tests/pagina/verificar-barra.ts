@@ -185,6 +185,8 @@ function verificarDeteccao(): void {
       "Despacho 0103984" &&
       tituloSugerido({ protocolo: CAU, sigiloso: false, tipo: arv.tipo }, null) === arv.tipo &&
       tituloSugerido({ protocolo: CAU, sigiloso: true, tipo: "Tipo X" }, null) === "" &&
+      tituloSugerido({ protocolo: CAU, sigiloso: true, tipo: "Tipo X" }, { numero: "0103984", titulo: "Despacho", sigiloso: false }) ===
+        "Despacho" &&
       tituloSugerido({ protocolo: CAU, sigiloso: false }, { numero: "0103984", titulo: "Despacho", sigiloso: true }) === "",
   );
 }
@@ -534,8 +536,10 @@ async function verificarSigiloso(): Promise<void> {
   const ancora = doc.querySelector("#divArvoreAcoes")!.appendChild(doc.createElement("a")) as HTMLElement;
   const b = await abrirBalaoDemandas(ancora, x, deps(r));
   checar(
-    "sem titulo sugerido (o titulo vai ao texto) e o aviso de sigilo no formulario",
-    entrada(b, "titulo").getAttribute("value") === "" &&
+    "titulo sugerido sem numero (o titulo vai ao texto) e o aviso de sigilo no formulario",
+    !!x.documento &&
+      entrada(b, "titulo").getAttribute("value") === x.documento.titulo &&
+      !(entrada(b, "titulo").getAttribute("value") ?? "").includes(x.documento.numero) &&
       (b.raiz.querySelector("[data-nova]")?.textContent ?? "").includes("sigiloso") &&
       !(b.raiz.querySelector("[data-nova]")?.textContent ?? "").includes(CAU),
   );
@@ -617,6 +621,12 @@ async function verificarConsentimento(): Promise<void> {
   checar(
     "o aviso no proprio balao, e nada gravado ainda",
     !!b.raiz.querySelector(".pb-pergunta") && (await r.unidade.dados()).length === 0 && (await porta.estado()) !== "ligado",
+  );
+  checar(
+    "o aviso do balao tem a frase de nao escrever dados sigilosos, como o app",
+    (b.raiz.querySelector(".pb-pergunta")?.textContent ?? "").includes(
+      "Não escreva dados sigilosos no título ou na descrição: ficam no Texto Padrão e todos da unidade os leem.",
+    ),
   );
   botao(b.raiz, "Agora não")!.click();
   await tique(30);

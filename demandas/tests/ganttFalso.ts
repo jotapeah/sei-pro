@@ -41,7 +41,14 @@ export function ganttFalso(o: { falhar?: boolean; medidas?: MedidasFalsas } = {}
       ? {
           dates: new Array(o.medidas.colunas).fill(0),
           config: { column_width: base() },
-          $container: { clientWidth: o.medidas.largura, scrollLeft: 0 },
+          // A largura segue a janela simulada (`medidas.largura`), como o `clientWidth` de verdade.
+          $container: {
+            get clientWidth() {
+              return o.medidas?.largura ?? 0;
+            },
+            set clientWidth(_v: number) {},
+            scrollLeft: 0,
+          },
           render() {
             a.renders += 1;
           },

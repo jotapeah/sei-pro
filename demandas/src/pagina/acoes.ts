@@ -52,9 +52,13 @@ export function vinculoDaTela(p: ProcessoNaTela): Vinculo {
   return v;
 }
 
-/** O título sugerido: "<nome do documento> <nº SEI>" com documento aberto; senão o texto do nó do processo. Sigiloso: vazio. */
+/**
+ * O título sugerido: "<nome do documento> <nº SEI>" com documento aberto; senão o texto do nó do processo. Documento
+ * sigiloso: vazio. Processo sigiloso: só o tipo do documento, sem o número (o título nunca passa pelo corte do sigilo).
+ */
 export function tituloSugerido(processo: ProcessoNaTela, documento: DocumentoAberto | null): string {
-  if (processo.sigiloso || documento?.sigiloso) return "";
+  if (documento?.sigiloso) return "";
+  if (processo.sigiloso) return (documento?.titulo ?? "").trim().slice(0, LIMITES.titulo);
   const t = documento ? `${documento.titulo} ${documento.numero}`.trim() : (processo.tipo ?? "").trim();
   return t.slice(0, LIMITES.titulo);
 }
