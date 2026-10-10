@@ -1,11 +1,14 @@
 import { resumo } from "./util";
 import { verificarAlertas } from "./verificar-alertas";
 import { verificarAndaime } from "./verificar-andaime";
+import { verificarEscala } from "./verificar-escala";
 import { verificarEstatisticas } from "./verificar-estatisticas";
 import { verificarFiltro } from "./verificar-filtro";
 import { verificarOperacoes } from "./verificar-operacoes";
 import { verificarRepositorio } from "./verificar-repositorio";
+import { verificarSigilo } from "./verificar-sigilo";
 import { verificarSituacao } from "./verificar-situacao";
+import { verificarTextoPadrao } from "./verificar-textopadrao";
 import { verificarValidacao } from "./verificar-validacao";
 
 verificarAndaime();
@@ -16,4 +19,7 @@ verificarFiltro();
 verificarAlertas();
 verificarEstatisticas();
 await verificarRepositorio();
+verificarSigilo();
+await verificarTextoPadrao();
+await verificarEscala();
 resumo();
