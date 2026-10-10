@@ -56,10 +56,9 @@ export function abrirModal(doc: Document, paineis: Painel[], cfg: Config, aoSalv
   const aviso = el(doc, 'div', 'spro-pnl-aviso');
   aviso.setAttribute('aria-live', 'polite');
   const restaurar = botao(doc, 'spro-botao spro-pnl-restaurar', '', 'Restaurar padrão');
-  const cancelar = botao(doc, 'spro-botao spro-pnl-cancelar', '', 'Cancelar');
   const salvar = botao(doc, 'spro-botao spro-pnl-salvar', '', 'Salvar');
   const rodape = el(doc, 'footer', 'spro-pnl-rodape');
-  rodape.append(restaurar, el(doc, 'span', 'spro-pnl-espaco'), cancelar, salvar);
+  rodape.append(restaurar, el(doc, 'span', 'spro-pnl-espaco'), salvar);
   dialogo.append(cabecalho, dica, lista, aviso, rodape);
 
   const limparMarcas = () => lista.querySelectorAll('.spro-pnl-antes, .spro-pnl-depois').forEach(e => e.classList.remove('spro-pnl-antes', 'spro-pnl-depois'));
@@ -147,7 +146,6 @@ export function abrirModal(doc: Document, paineis: Painel[], cfg: Config, aoSalv
     dialogo.remove();
   };
   fecharX.addEventListener('click', fechar);
-  cancelar.addEventListener('click', fechar);
   dialogo.addEventListener('close', () => dialogo.remove());
   restaurar.addEventListener('click', () => {
     itens = montar({ v: 1, ordem: [], ocultos: [] });

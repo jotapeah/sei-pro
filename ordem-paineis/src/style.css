@@ -57,7 +57,12 @@
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
 }
 .spro-pnl-dialogo::backdrop {
-  background: rgba(15, 20, 26, 0.5);
+  background: rgba(15, 20, 26, 0.45);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+.dark-mode .spro-pnl-dialogo::backdrop {
+  background: rgba(0, 0, 0, 0.58);
 }
 .dark-mode .spro-pnl-dialogo {
   --pnl-fundo: #1a1d21;

@@ -9,7 +9,7 @@ Na tela de **Controle de Processos**, o SEI Pro pode mostrar vários painéis al
 1. Na barra de título do Controle de Processos, clique no botão **Ordenar e ocultar painéis**. Ele só aparece quando há dois ou mais painéis na tela.
 2. No modal, **arraste** cada painel pela alça (ou use as **setas** de subir e descer, que também funcionam pelo teclado) até a posição desejada.
 3. Para esconder um painel, desmarque **Mostrar**. O painel **Controle de Processos** fica sempre visível, porque é a própria tela.
-4. Clique em **Salvar**. A nova ordem já vale na hora. **Restaurar padrão** devolve a ordem original com todos os painéis à mostra.
+4. Clique em **Salvar** (ou no **X**, para sair sem mudar nada). A nova ordem já vale na hora. **Restaurar padrão** devolve a ordem original com todos os painéis à mostra.
 
 ### Bom saber
 

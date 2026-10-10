@@ -95,10 +95,11 @@ export async function verificarModal(teste: (nome: string, fn: () => void | Prom
     assert.deepEqual(salvos[0], { v: 1, ordem: ['projetosGantt', 'favoritesPro', 'processosSEIPro', 'fantasma'], ocultos: ['projetosGantt', 'fantasma'] });
     assert.equal(d.querySelector('dialog'), null);
   });
-  await teste('modal: Cancelar e fechar pelo evento do <dialog> não gravam', () => {
+  await teste('modal: o X e o evento de fechar do <dialog> não gravam (não há botão Cancelar)', () => {
     const a = abrir();
+    assert.equal(a.d.querySelector('.spro-pnl-cancelar'), null);
     botao(a.d, 'processosSEIPro', 'spro-pnl-descer').click();
-    rodape(a.d, 'spro-pnl-cancelar').click();
+    a.d.querySelector<HTMLButtonElement>('.spro-pnl-x')!.click();
     assert.equal(a.salvos.length, 0);
     assert.equal(a.d.querySelector('dialog'), null);
     const b = abrir();
