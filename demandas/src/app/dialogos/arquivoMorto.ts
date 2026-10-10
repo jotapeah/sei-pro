@@ -9,12 +9,19 @@ import { somarDias } from "@comum/datas/dias";
 import { versaoMaisNova } from "@comum/sincronia/textoPadraoCodec";
 import { h } from "@comum/ui/dom";
 import type { Vis } from "../../modelo/tipos";
-import { FORMATO_ARQUIVO_MORTO, lerArquivoMorto, montarArquivoMorto, nomeDoArquivoMorto } from "../../sincronia/arquivoMorto";
+import {
+  arquivoMortoGrandeDemais,
+  FORMATO_ARQUIVO_MORTO,
+  lerArquivoMorto,
+  montarArquivoMorto,
+  nomeDoArquivoMorto,
+} from "../../sincronia/arquivoMorto";
 import { mensagemDoErro } from "../erros";
 import { dataLonga, plural } from "../formato";
 import type { ContextoDialogo } from "../tipos";
 import { caixaDeErros, campo } from "./campos";
 
+export const MSG_GRANDE_DEMAIS = "Esse arquivo tem itens demais para ser importado de uma vez.";
 export const MSG_NAO_E_DO_GESTOR = "Esse arquivo não é do Gestor de Demandas.";
 export const MSG_ARQUIVO_MAIS_NOVO =
   "Esse arquivo foi gravado por uma versão mais nova do SEI Pro. Atualize a extensão neste computador e importe de novo.";
@@ -40,6 +47,7 @@ function interpretar(texto: string, d: Pick<DepsArquivoMorto, "contexto">, login
   }
   if (versaoMaisNova(bruto, FORMATO_ARQUIVO_MORTO, 1)) throw new Error(MSG_ARQUIVO_MAIS_NOVO);
   const morto = lerArquivoMorto(bruto);
+  if (!morto && arquivoMortoGrandeDemais(bruto)) throw new Error(MSG_GRANDE_DEMAIS);
   if (!morto || (morto.vis !== "unidade" && morto.vis !== "eu")) throw new Error(MSG_NAO_E_DO_GESTOR);
   const u = d.contexto.unidade;
   const mesmoLogin = morto.login.trim().toLowerCase() === login.trim().toLowerCase();
@@ -178,7 +186,7 @@ export function abrirArquivoMorto(d: DepsArquivoMorto): void {
       h(
         "p",
         { class: "dem-dica" },
-        "Baixe as demandas arquivadas antigas num arquivo e, só depois de guardá-lo, remova-as do SEI e deste computador. O arquivo pode ser importado de volta a qualquer momento.",
+        "Baixe as demandas arquivadas antigas num arquivo e, só depois de guardá-lo, remova-as do SEI e deste computador. Depois de remover, a importação só traz de volta o que não foi excluído há mais de 180 dias (unidade) ou 90 dias (só você); para reaver uma demanda já excluída, use o histórico (restaurar).",
       ),
       campo("Quem vê", vis),
       campo("Arquivadas antes de", limite),

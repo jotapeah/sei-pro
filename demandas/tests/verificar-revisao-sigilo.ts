@@ -1,6 +1,6 @@
 import { NADA_CONHECIDO } from "@projetos/modelo/sigilo";
-import { manterNumerosSigilosos } from "../src/repositorio";
 import { cortarSigiloDemandas } from "../src/modelo/sigilo";
+import { manterNumerosSigilosos } from "../src/repositorio";
 import { adaptadorDemandas } from "../src/sincronia/textoPadrao";
 import { repoDeTeste, T0 } from "./apoioRepositorio";
 import { demanda } from "./fabrica";
@@ -36,7 +36,10 @@ export async function verificarRevisaoSigilo(): Promise<void> {
   const d = demanda({ id: "dd", processos: [{ protocolo: X, sigiloso: true }], documentoEntregue: { numero: "7654321" } });
   const c = cortarSigiloDemandas([d], NADA_CONHECIDO);
   checar("o numero do documento nao aparece", !JSON.stringify(c.demandas).includes("7654321"));
-  checar("o documento vai como marcador", c.demandas[0]?.documentoEntregue?.sigiloso === true && c.demandas[0]?.documentoEntregue?.numero === "");
+  checar(
+    "o documento vai como marcador",
+    c.demandas[0]?.documentoEntregue?.sigiloso === true && c.demandas[0]?.documentoEntregue?.numero === "",
+  );
   checar("o numero do documento e memorizado", c.raspados.documentos.includes("7654321"));
   const dm = demanda({ id: "dm", processos: [{ protocolo: X }], documentoEntregue: { numero: "7654321" } });
   const cm = cortarSigiloDemandas([dm], { processos: new Set(["50300001234202611"]), documentos: new Set() });

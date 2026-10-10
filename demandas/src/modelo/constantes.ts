@@ -26,6 +26,8 @@ export const LIMITES = {
   ativas: 3000,
   /** Registros do histórico que a exportação leva ao texto (os mais recentes); o resto fica no local e no arquivo. */
   historicoNoTexto: 1500,
+  /** Registros do histórico que o local guarda por escopo; acima, a importação recusa e a gravação poda os mais antigos. */
+  historicoLocal: 5000,
 } as const;
 
 /** Registro do histórico com `quando` antes disto (2000-01-01) vem de um relógio quebrado ou é forjado. */

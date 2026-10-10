@@ -28,7 +28,10 @@ export function cortarSigiloDemandas(
     let documentoEntregue = d.documentoEntregue;
     const doc = d.documentoEntregue;
     // O documento entregue de uma demanda com processo sigiloso e sigiloso (como o Projetos deduz pelo processo).
-    if (doc && (processoSigiloso || doc.sigiloso === true || (doc.numero !== "" && conhecidos.documentos.has(chaveDocumento(doc.numero))))) {
+    if (
+      doc &&
+      (processoSigiloso || doc.sigiloso === true || (doc.numero !== "" && conhecidos.documentos.has(chaveDocumento(doc.numero))))
+    ) {
       if (doc.numero) raspados.documentos.push(doc.numero);
       documentoEntregue = { ...DOCUMENTO_VAZIO };
       mudou = true;

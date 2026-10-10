@@ -38,6 +38,7 @@ import type {
 import {
   checklistLimpo,
   conferirDemanda,
+  dataValida,
   ErroValidacao,
   etiquetasLimpas,
   idValido,
@@ -181,6 +182,16 @@ export class RepositorioDemandas {
       ...Object.fromEntries(demandas.map((d) => [this.demandas.chave(d.id), d])),
       ...Object.fromEntries(regs.map((r) => [this.registros.chave(r.id), r])),
     });
+    if (regs.length) await this.podarHistorico();
+  }
+
+  /** O histórico local não passa de `LIMITES.historicoLocal`: sai o mais antigo (o arquivo JSON leva o que existe). */
+  private async podarHistorico(): Promise<void> {
+    const todos = await this.registros.listar();
+    const sobra = todos.length - LIMITES.historicoLocal;
+    if (sobra <= 0) return;
+    const antigos = [...todos].sort((a, b) => a.quando - b.quando || (a.id < b.id ? -1 : 1)).slice(0, sobra);
+    await this.area.remover(antigos.map((x) => this.registros.chave(x.id)));
   }
 
   private async ativas(): Promise<Demanda[]> {
@@ -375,11 +386,12 @@ export class RepositorioDemandas {
     const porId = new Map(local.d.map((x) => [x.id, x]));
     let ativas = local.d.filter((x) => vivo(x) && x.arquivadoEm === undefined).length;
     const gravar: Demanda[] = [];
-    for (const x of ent.d ?? []) {
-      if (!entidadeValida(x, "d", agora)) {
+    for (const bruta of ent.d ?? []) {
+      if (!entidadeValida(bruta, "d", agora)) {
         r.ignorados += 1;
         continue;
       }
+      const x = limparEntidade(bruta, "d");
       const atual = porId.get(x.id);
       if (atual && !vence(x, atual)) continue;
       const ehAtiva = vivo(x) && x.arquivadoEm === undefined;
@@ -396,16 +408,27 @@ export class RepositorioDemandas {
     }
     const locaisH = new Map(local.h.map((x) => [x.id, x]));
     const gravarH: Registro[] = [];
-    for (const x of ent.h ?? []) {
-      if (!entidadeValida(x, "h", agora)) {
+    let totalH = local.h.length;
+    for (const bruto of ent.h ?? []) {
+      if (!entidadeValida(bruto, "h", agora)) {
         r.ignorados += 1;
         continue;
       }
+      const x = limparEntidade(bruto, "h");
       const atual = locaisH.get(x.id);
+      if (!atual && totalH >= LIMITES.historicoLocal) {
+        r.ignorados += 1;
+        r.excedentes += 1;
+        continue;
+      }
       if (!atual || vence(x, atual)) {
         gravarH.push(x);
         if (atual) r.atualizados += 1;
-        else r.novos += 1;
+        else {
+          r.novos += 1;
+          totalH += 1;
+          locaisH.set(x.id, x);
+        }
       }
     }
     if (gravar.length || gravarH.length)
@@ -581,16 +604,91 @@ const vinculoOk = (v: unknown): boolean =>
   objeto(v) &&
   typeof v.protocolo === "string" &&
   RE_PROTOCOLO.test(v.protocolo) &&
+  (v.idProcedimento === undefined || textoAte(LIMITES.rotulo)(v.idProcedimento)) &&
   (v.sigiloso === undefined || typeof v.sigiloso === "boolean");
 const itemOk = (i: unknown): boolean =>
   objeto(i) && idValido(i.id) && textoAte(LIMITES.checklistTexto)(i.texto) && typeof i.feito === "boolean";
-const pausaOk = (p: unknown): boolean => objeto(p) && typeof p.inicio === "number" && (p.fim === undefined || typeof p.fim === "number");
+const instante = (x: unknown): boolean => typeof x === "number" && Number.isFinite(x) && x >= 0;
+const pausaOk = (p: unknown): boolean => objeto(p) && instante(p.inicio) && (p.fim === undefined || instante(p.fim));
+const curto = textoAte(LIMITES.rotulo);
+const responsavelOk = (r: unknown): boolean => objeto(r) && curto(r.nome) && (r.login === undefined || curto(r.login));
+const etapaOk = (e: unknown): boolean => objeto(e) && curto(e.projeto) && curto(e.etapa) && curto(e.rotulo);
+const avaliacaoOk = (a: unknown): boolean =>
+  objeto(a) &&
+  typeof a.nota === "number" &&
+  Number.isInteger(a.nota) &&
+  a.nota >= 1 &&
+  a.nota <= 5 &&
+  (a.comentario === undefined || textoAte(LIMITES.comentario)(a.comentario)) &&
+  curto(a.por) &&
+  instante(a.em);
+const documentoOk = (d: unknown): boolean =>
+  objeto(d) &&
+  textoAte(40)(d.numero) &&
+  (d.titulo === undefined || textoAte(LIMITES.titulo)(d.titulo)) &&
+  (d.sigiloso === undefined || typeof d.sigiloso === "boolean");
+const opcional = (x: unknown, ok: (v: unknown) => boolean): boolean => x === undefined || ok(x);
+
+const CAMPOS_ENTIDADE = ["id", "atualizadoEm", "dispositivo", "removidoEm", "alteradoPor"];
+const CAMPOS_DEMANDA = [
+  ...CAMPOS_ENTIDADE,
+  "titulo",
+  "descricao",
+  "responsavel",
+  "distribuidaEm",
+  "prazo",
+  "prazoOriginal",
+  "prioridade",
+  "etiquetas",
+  "processos",
+  "checklist",
+  "tempoEstimadoMin",
+  "tempoGastoMin",
+  "etapa",
+  "iniciadaEm",
+  "pausas",
+  "concluidaEm",
+  "observacaoConclusao",
+  "documentoEntregue",
+  "avaliacao",
+  "arquivadoEm",
+  "ordem",
+  "criadoEm",
+];
+const CAMPOS_REGISTRO = [...CAMPOS_ENTIDADE, "demanda", "quando", "por", "nome", "campo", "antes", "depois", "motivo"];
+
+function so(x: unknown, campos: readonly string[]): unknown {
+  if (!objeto(x)) return x;
+  const y: Record<string, unknown> = {};
+  for (const k of campos) if (x[k] !== undefined) y[k] = x[k];
+  return y;
+}
+
+/**
+ * A entidade que passou por `entidadeValida`, so com os campos conhecidos (lista branca, tambem nos objetos de dentro):
+ * um campo oculto que chega de fora nao ocupa espaco do texto nem e regravado.
+ */
+export function limparEntidade<T extends Demanda | Registro>(x: T, tipo: "d" | "h"): T {
+  if (tipo === "h") return so(x, CAMPOS_REGISTRO) as T;
+  const d = so(x, CAMPOS_DEMANDA) as Record<string, unknown>;
+  const lista = (v: unknown, campos: readonly string[]) => (Array.isArray(v) ? v.map((i) => so(i, campos)) : v);
+  d.processos = lista(d.processos, ["protocolo", "idProcedimento", "sigiloso"]);
+  d.checklist = lista(d.checklist, ["id", "texto", "feito"]);
+  d.pausas = lista(d.pausas, ["inicio", "fim"]);
+  if (d.responsavel !== undefined) d.responsavel = so(d.responsavel, ["login", "nome"]);
+  if (d.etapa !== undefined) d.etapa = so(d.etapa, ["projeto", "etapa", "rotulo"]);
+  if (d.avaliacao !== undefined) d.avaliacao = so(d.avaliacao, ["nota", "comentario", "por", "em"]);
+  if (d.documentoEntregue !== undefined) d.documentoEntregue = so(d.documentoEntregue, ["numero", "titulo", "sigiloso"]);
+  return d as unknown as T;
+}
 
 /** Dado de fora (outro computador, arquivo editado à mão): a forma e os tetos; `agora` liga o corte do carimbo no futuro. */
 export function entidadeValida(x: unknown, tipo: "d" | "h", agora?: number): boolean {
   if (!objeto(x) || !carimboValido(x, agora)) return false;
+  if (!opcional(x.alteradoPor, curto)) return false;
   if (tipo === "h")
     return (
+      opcional(x.nome, curto) &&
       idValido(x.demanda) &&
       typeof x.quando === "number" &&
       x.quando >= QUANDO_MINIMO &&
@@ -613,6 +711,14 @@ export function entidadeValida(x: unknown, tipo: "d" | "h", agora?: number): boo
     Array.isArray(x.pausas) &&
     x.pausas.every(pausaOk) &&
     typeof x.criadoEm === "number" &&
+    opcional(x.responsavel, responsavelOk) &&
+    opcional(x.etapa, etapaOk) &&
+    opcional(x.avaliacao, avaliacaoOk) &&
+    opcional(x.documentoEntregue, documentoOk) &&
+    opcional(x.concluidaEm, dataValida) &&
+    opcional(x.prazoOriginal, dataValida) &&
+    opcional(x.iniciadaEm, instante) &&
+    opcional(x.arquivadoEm, instante) &&
     problemasDaDemanda(x as unknown as Demanda).length === 0
   );
 }

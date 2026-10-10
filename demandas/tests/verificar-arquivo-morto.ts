@@ -1,4 +1,6 @@
+import { TETOS_ENVELOPE } from "../src/modelo/constantes";
 import {
+  arquivoMortoGrandeDemais,
   candidatasAoArquivamento,
   estimarLiberacao,
   lerArquivoMorto,
@@ -82,5 +84,15 @@ export async function verificarArquivoMorto(): Promise<void> {
     "importar o arquivo morto de novo nao ressuscita (a lapide e mais nova)",
     volta.novos === 0 && (await repo.obter(x.id)) === undefined,
   );
+  secao("Revisao: teto de quantidade do arquivo morto");
+  const bom = montarArquivoMorto({ d: [], h: [] }, ESCOPO, "2026-06-01", 1);
+  checar("arquivo vazio e lido", lerArquivoMorto(bom) !== null);
+  const demais = { ...bom, demandas: Array.from({ length: TETOS_ENVELOPE.a + 1 }, (_, i) => demanda({ id: `m${i}` })) };
+  checar("demandas acima do teto sao recusadas", lerArquivoMorto(demais) === null && arquivoMortoGrandeDemais(demais));
+  const registrosDemais = {
+    ...bom,
+    registros: Array.from({ length: TETOS_ENVELOPE.h + 1 }, (_, i) => registro({ id: `q${i}`, demanda: "x" })),
+  };
+  checar("registros acima do teto sao recusados", lerArquivoMorto(registrosDemais) === null);
   void registro;
 }

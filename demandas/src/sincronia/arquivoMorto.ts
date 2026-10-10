@@ -1,4 +1,5 @@
 import { type DataISO, diferencaDias } from "@comum/datas/dias";
+import { TETOS_ENVELOPE } from "../modelo/constantes";
 import { situacaoBase } from "../modelo/situacao";
 import type { Demanda, Entidades, Escopo, Registro, Vis } from "../modelo/tipos";
 
@@ -50,9 +51,20 @@ export function montarArquivoMorto(ent: Entidades, escopo: Escopo, antesDe: Data
 
 export const nomeDoArquivoMorto = (_escopo: Escopo, antesDe: DataISO): string => `demandas-arquivo-${antesDe}.json`;
 
+/** Mais itens do que o teto do envelope (`TETOS_ENVELOPE`): nenhum arquivo legitimo chega la. */
+export function arquivoMortoGrandeDemais(bruto: unknown): boolean {
+  if (typeof bruto !== "object" || bruto === null) return false;
+  const b = bruto as Partial<ArquivoMorto>;
+  return (
+    (Array.isArray(b.demandas) && b.demandas.length > TETOS_ENVELOPE.a) ||
+    (Array.isArray(b.registros) && b.registros.length > TETOS_ENVELOPE.h)
+  );
+}
+
 export function lerArquivoMorto(bruto: unknown): ArquivoMorto | null {
   const b = bruto as Partial<ArquivoMorto> | null;
   if (!b || typeof b !== "object" || b.formato !== FORMATO_ARQUIVO_MORTO || b.versao !== 1) return null;
   if (!Array.isArray(b.demandas) || !Array.isArray(b.registros)) return null;
+  if (arquivoMortoGrandeDemais(b)) return null;
   return b as ArquivoMorto;
 }
