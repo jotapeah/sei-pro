@@ -4,6 +4,7 @@ import { verificarAndaime } from "./verificar-andaime";
 import { verificarEstatisticas } from "./verificar-estatisticas";
 import { verificarFiltro } from "./verificar-filtro";
 import { verificarOperacoes } from "./verificar-operacoes";
+import { verificarRepositorio } from "./verificar-repositorio";
 import { verificarSituacao } from "./verificar-situacao";
 import { verificarValidacao } from "./verificar-validacao";
 
@@ -14,4 +15,5 @@ await verificarOperacoes();
 verificarFiltro();
 verificarAlertas();
 verificarEstatisticas();
+await verificarRepositorio();
 resumo();
