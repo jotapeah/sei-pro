@@ -80,6 +80,11 @@ export async function verificarPonteApp(): Promise<void> {
   porta.fechar();
   checar("icone gantt (titulo do painel, abas e dialogos do Projetos)", icone("gantt", 20).querySelectorAll("path").length === 2);
 
+  checar(
+    "icone demandas (titulo do painel, aba lateral e atalhos do Gestor de Demandas): prancheta com o check e as linhas",
+    icone("demandas", 20).querySelectorAll("rect").length === 1 && icone("demandas", 20).querySelectorAll("path").length === 3,
+  );
+
   secao("aviso com duas acoes (concluir: Informar documento e Desfazer)");
   const docA = instalarDom();
   const feitos: string[] = [];

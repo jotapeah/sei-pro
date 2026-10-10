@@ -52,6 +52,8 @@ export interface DepsApp {
 }
 
 export interface AppMontado {
+  /** O clique numa pílula do título do painel embutido: mostra na Tabela as minhas atrasadas ou as da semana. */
+  aplicarAlerta(tipo: "atrasadas" | "semana"): void;
   atualizar(): Promise<void>;
   destruir(): void;
   aoRedimensionar(): void;

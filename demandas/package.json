@@ -6,8 +6,8 @@
   "description": "Gestor de demandas do SEI Pro (tabela, quadro, cronograma e painel), sem servidor",
   "scripts": {
     "build": "npm run verificar && node build.mjs",
-    "build:rapido": "DEMANDAS_SEM_WAR=1 node build.mjs",
-    "tipos": "tsc --noEmit",
+    "build:rapido": "node build.mjs",
+    "tipos": "tsc --noEmit && tsc --noEmit -p tsconfig.pagina.json",
     "verificar": "tsx tests/verificar.ts",
     "checar": "biome check src tests"
   },

@@ -23,6 +23,7 @@ import { h } from "@comum/ui/dom";
 import type { EntradaMenu } from "@comum/ui/menu";
 import { escoposDaUnidade } from "../modelo/escopo";
 import type { Carimbo, Tabela, Vis } from "../modelo/tipos";
+import { chaveDaAba } from "../ponte/tipos";
 import type { RepositorioDemandas } from "../repositorio";
 import {
   type ArmazemCopiasDemandas,
@@ -297,7 +298,7 @@ export class Colaboracao {
    */
   async sincronizarAgora(): Promise<RespostaSincronizar | null> {
     try {
-      const r = await this.d.rpc.chamar<unknown>("sincronizarAgora", undefined, 120_000);
+      const r = await this.d.rpc.chamar<unknown>("sincronizarAgora", { chave: chaveDaAba(this.d.contexto) }, 120_000);
       this.d.avisar(textoDoSincronizar(r));
       await this.provedor.ler().catch(() => undefined);
       return objeto(r) && tresStatus(r.unidade) ? (r as unknown as RespostaSincronizar) : null;
@@ -390,7 +391,7 @@ export class Colaboracao {
             this.d.avisar("Texto pessoal desligado. Ele continua no SEI até você apagá-lo.");
         },
         // A aba grava o "desligado" e exclui os textos pessoais (os da unidade são de todos e não têm "apagar").
-        apagar: async () => (await this.d.rpc.chamar<unknown>("apagarPessoal", undefined, 120_000)) === true,
+        apagar: async () => (await this.d.rpc.chamar<unknown>("apagarPessoal", { chave: chaveDaAba(this.d.contexto) }, 120_000)) === true,
       },
       arquivo: a
         ? {

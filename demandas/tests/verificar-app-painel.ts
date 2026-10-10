@@ -222,4 +222,43 @@ export async function verificarAppPainel(): Promise<void> {
     await tique(10);
     checar("o periodo escolhido vira preferencia", (await t.deps.preferencias.ler()).periodoPainel === "365");
   }
+
+  secao("painel: pilulas do titulo (aplicarAlerta)");
+  {
+    const t = appDeTeste();
+    const minhaAtrasada = await t.repos.unidade.criar({
+      titulo: "Minha atrasada",
+      prazo: "2026-10-05",
+      distribuidaEm: "2026-10-01",
+      responsavel: ana,
+    });
+    await t.repos.unidade.criar({
+      titulo: "De outro",
+      prazo: "2026-10-05",
+      distribuidaEm: "2026-10-01",
+      responsavel: { login: "carla", nome: "Carla Dias" },
+    });
+    const minhaSemana = await t.repos.unidade.criar({
+      titulo: "Minha da semana",
+      prazo: "2026-10-16",
+      distribuidaEm: "2026-10-01",
+      responsavel: ana,
+    });
+    const app = await t.montar();
+    app.aplicarAlerta("atrasadas");
+    await tique(10);
+    const ids = () => [...t.raiz.querySelectorAll(".dem-tab-linha")].map((l) => l.getAttribute("data-id"));
+    checar(
+      "atrasadas: a Tabela com so as minhas atrasadas",
+      t.raiz.querySelector('[data-aba="tabela"]')?.getAttribute("aria-selected") === "true" && ids().join() === minhaAtrasada.id,
+      ids(),
+    );
+    app.aplicarAlerta("semana");
+    await tique(10);
+    checar("semana: so as minhas que vencem nos proximos 7 dias", ids().join() === minhaSemana.id, ids());
+    checar("a visao escolhida vira preferencia", (await t.deps.preferencias.ler()).visao === "tabela");
+    app.destruir();
+    app.aplicarAlerta("atrasadas");
+    checar("depois de destruido, o pedido nao faz nada", t.raiz.querySelector(".dem-tabela") === null);
+  }
 }

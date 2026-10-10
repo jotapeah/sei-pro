@@ -251,6 +251,12 @@ const ICONES = {
     ["path", { d: "M4 5h9M7 12h11M4 19h7" }],
     ["path", { d: "M3 3v18" }],
   ],
+  demandas: [
+    ["rect", { x: "5", y: "4.5", width: "14", height: "16.5", rx: "2" }],
+    ["path", { d: "M9.5 4.5V4a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v.5" }],
+    ["path", { d: "m8.2 10.4 1.2 1.2 2.1-2.4" }],
+    ["path", { d: "M13.8 10.6h2.5M8.2 14.6h8.1M8.2 18h5.4" }],
+  ],
 } satisfies Record<string, Forma[]>;
 
 export type NomeIcone = keyof typeof ICONES;

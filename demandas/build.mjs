@@ -2,7 +2,8 @@
 /**
  * Build do Gestor de Demandas.
  *
- *   dist/js/init_demandas.js   content script (IIFE, mundo isolado)
+ *   dist/js/init_demandas.js   CARREGADOR do content script (IIFE, mundo isolado, todo frame): marca o <html>, decide pela tela
+ *   dist/js/demandas/pagina.js pacote da pagina (ESM, src/pagina/principal.ts): o carregador o importa so na janela de topo
  *   dist/js/demandas/app.js    app de html/demandas.html (ESM): painel embutido, lateral e pagina
  *   dist/html/demandas.html    copia de estatico/
  *   dist/css/demandas.css      sei-comum/src/ui/base.css + sei-comum/src/ui/lista.css + estatico/demandas.css + ../projetos/estatico/gantt.css
@@ -11,7 +12,8 @@
  *   - JS so ASCII; CSS e HTML gerados tambem;
  *   - DOM seguro: nenhuma escrita de innerHTML/outerHTML, nenhum insertAdjacentHTML, nenhuma acao em atributo on*;
  *   - nada que roda no SEI BUSCA a arvore do processo nem o formulario de atribuicao (grava "Processo recebido");
- *   - as saidas estao no web_accessible_resources do dist/manifest.json (desligado por DEMANDAS_SEM_WAR=1 ate a D13).
+ *   - o carregador nao leva nada pesado (teto de 16 KB) e o pacote da pagina nao leva o app nem a Frappe;
+ *   - as saidas estao no web_accessible_resources do dist/manifest.json.
  */
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -35,7 +37,10 @@ const comum = {
 
 const CONTENT_SCRIPT = "js/init_demandas.js";
 const APP = "js/demandas/app.js";
-const SAIDAS = [CONTENT_SCRIPT, APP];
+const PAGINA = "js/demandas/pagina.js";
+const SAIDAS = [CONTENT_SCRIPT, PAGINA, APP];
+/** O carregador roda em TODO frame do SEI: nada pesado entra nele. */
+const TETO_CARREGADOR = 16 * 1024;
 
 const ESCRITA_HTML = /\.(innerHTML|outerHTML)\s*=(?!=)|insertAdjacentHTML/;
 const HANDLER = /\bon[a-z]+\s*=\s*\\?["']/;
@@ -56,6 +61,7 @@ await mkdir(join(DIST, "css"), { recursive: true });
 
 await build({ ...comum, entryPoints: [resolve(AQUI, "src/app/main.ts")], outfile: join(DIST, APP), format: "esm" });
 await build({ ...comum, entryPoints: [resolve(AQUI, "src/pagina/main.ts")], outfile: join(DIST, CONTENT_SCRIPT), format: "iife" });
+await build({ ...comum, entryPoints: [resolve(AQUI, "src/pagina/principal.ts")], outfile: join(DIST, PAGINA), format: "esm" });
 
 await copyFile(resolve(AQUI, "estatico/demandas.html"), join(DIST, "html", "demandas.html"));
 // Os dois do sei-comum sem os comentarios (tem acento): a saida fica ASCII.
@@ -88,11 +94,19 @@ for (const f of [join(DIST, "css", "demandas.css"), join(DIST, "html", "demandas
   if (j >= 0) erro(`byte nao-ASCII em ${f} (posicao ${j}): ${trecho(bytes, j)}`);
 }
 
-if (process.env.DEMANDAS_SEM_WAR !== "1") {
+const tamanhoCarregador = (await stat(join(DIST, CONTENT_SCRIPT))).size;
+if (tamanhoCarregador > TETO_CARREGADOR)
+  erro(`dist/${CONTENT_SCRIPT}: ${tamanhoCarregador} bytes (teto ${TETO_CARREGADOR}): algo pesado entrou no carregador, que roda em todo frame`);
+const textoPagina = await readFile(join(DIST, PAGINA), "utf8");
+if (/frappe/i.test(textoPagina)) erro(`dist/${PAGINA}: a Frappe entrou no pacote da pagina`);
+
+{
   const manifest = JSON.parse(await readFile(join(DIST, "manifest.json"), "utf8"));
   const war = (manifest.web_accessible_resources ?? []).flatMap((w) => w.resources ?? []);
-  for (const saida of [APP, "html/demandas.html", "css/demandas.css"])
+  for (const saida of [PAGINA, APP, "html/demandas.html", "css/demandas.css"])
     if (!war.includes(saida)) erro(`dist/manifest.json: ${saida} fora do web_accessible_resources`);
+  const scripts = (manifest.content_scripts ?? []).flatMap((c) => c.js ?? []);
+  if (!scripts.includes(CONTENT_SCRIPT)) erro(`dist/manifest.json: ${CONTENT_SCRIPT} fora dos content_scripts`);
 }
 
 const kb = async (f) => `${((await stat(join(DIST, f))).size / 1024).toFixed(1)} KB`;

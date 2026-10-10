@@ -11,6 +11,8 @@ export interface PreferenciasDemandas {
   agrupamentoCronograma: "responsavel" | "situacao";
   escalaCronograma: Escala;
   periodoPainel: "30" | "90" | "365" | "tudo";
+  /** Painel embutido recolhido (o content script grava; o app, o resto). */
+  recolhido: boolean;
 }
 
 export const PADRAO: PreferenciasDemandas = {
@@ -20,6 +22,7 @@ export const PADRAO: PreferenciasDemandas = {
   agrupamentoCronograma: "responsavel",
   escalaCronograma: "Semana",
   periodoPainel: "90",
+  recolhido: false,
 };
 
 const VISOES = new Set(["tabela", "quadro", "cronograma", "painel"]);
@@ -45,6 +48,7 @@ export function normalizar(bruto: unknown): PreferenciasDemandas {
     periodoPainel: PERIODOS.has(b.periodoPainel as string)
       ? (b.periodoPainel as PreferenciasDemandas["periodoPainel"])
       : PADRAO.periodoPainel,
+    recolhido: typeof b.recolhido === "boolean" ? b.recolhido : PADRAO.recolhido,
   };
 }
 

@@ -12,7 +12,7 @@ import { criarMenu, type EntradaMenu } from "@comum/ui/menu";
 import type { Escala } from "@projetos/gantt/escalas";
 import type { ControleGantt } from "@projetos/gantt/montar";
 import type { UsuarioDaUnidade } from "@projetos/ponte/tipos";
-import { chaveResponsavel, type FiltroDemandas, filtrar } from "../modelo/filtro";
+import { chaveResponsavel, EU, type FiltroDemandas, filtrar } from "../modelo/filtro";
 import { COLUNAS_DO_QUADRO, planoDoMovimento } from "../modelo/quadro";
 import type { PreferenciasDemandas } from "../preferencias";
 import type { EstadoTabela } from "../sincronia/orquestrador";
@@ -437,6 +437,16 @@ export async function montarApp(deps: DepsApp): Promise<AppMontado> {
   pintar();
   await atualizar();
   return {
+    aplicarAlerta(tipo) {
+      if (!vivo) return;
+      // As minhas, abertas, na Tabela (a mesma saída do painel de estatísticas).
+      estado.filtro = { responsaveis: [EU], prazo: tipo };
+      filtroMontado.definir(estado.filtro);
+      estado.visao = "tabela";
+      gravarPrefs({ visao: "tabela" });
+      pintarAbas();
+      pintarVista();
+    },
     atualizar,
     destruir() {
       vivo = false;
