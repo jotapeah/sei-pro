@@ -2097,6 +2097,25 @@ function optionSearchInteressado(this_) {
     }
     _this.find('i').toggleClass('fa-check-square fa-square');
 }
+// Prazo do controle nativo do SEI (4.1.5+), lido da acao CONTROLEPRAZO que o SEI declara no script da arvore
+// (NosAcoes e variavel local da pagina, nao e global): sem requisicao. O titulo vem como
+// "Controle de Prazo:\nSIGLA dd/mm/aaaa (10 dias | atrasado N dias | ate hoje | concluido em dd/mm/aaaa)".
+function getHtmlPrazoNativoArvore() {
+    try {
+        var fonte = '';
+        for (var i = 0; i < document.scripts.length; i++) { fonte += document.scripts[i].textContent + '\n'; }
+        var acao = /infraArvoreAcao\("CONTROLEPRAZO","[^"]*","[^"]*","(?:[^"\\]|\\.)*",(?:null|"(?:[^"\\]|\\.)*"),"((?:[^"\\]|\\.)*)"/.exec(fonte);
+        if (!acao) return '';
+        var m = /(\d{2}\/\d{2}\/\d{4})\s*\(([^)]*)\)/.exec(acao[1].replace(/\\n/g, ' '));
+        if (!m) return '';
+        var estado = m[2].toLowerCase();
+        var cor = estado.indexOf('atrasado') === 0 ? '#c0392b' : (estado.indexOf('conclu') === 0 ? '#2e7d32' : '#4285f4');
+        var texto = $('<div></div>').text(m[1]+' ('+m[2]+')').html();
+        return '<a class="newLink spro-prazo-nativo" style="cursor:default;display:block;max-width: calc(100% - 70px);" onmouseover="return infraTooltipMostrar(\'Controle de prazo do SEI\');" onmouseout="return infraTooltipOcultar();"><i class="fas fa-clock" style="color:'+cor+';"></i> Prazo: '+texto+'</a>';
+    } catch (e) {
+        return '';
+    }
+}
 function setDadosProcessoArvore(dadosProcessoPro = false) {
     var id_procedimento = getParamsUrlPro(window.location.href).id_procedimento;
         id_procedimento = (typeof id_procedimento === 'undefined') ? getParamsUrlPro(window.location.href).id_protocolo : id_procedimento;
@@ -2126,6 +2145,7 @@ function setDadosProcessoArvore(dadosProcessoPro = false) {
         var htmlMarcador = parent.getHtmlMarcador(id_procedimento, processoAberto);
         var iconMarcador = htmlMarcador.icon;
         var linkPrazo = htmlMarcador.prazo;
+            linkPrazo = linkPrazo + getHtmlPrazoNativoArvore();
         var dataMarcador = htmlMarcador.data;
 
         if (typeof prop !== 'undefined' && typeof prop.txtDescricao !== 'undefined' && prop.txtDescricao && prop.txtDescricao.toLowerCase().indexOf('(urgente)') !== -1) {
