@@ -1,5 +1,5 @@
 /** Entrada isolada, como anotacoes-controle: configuração compartilhada e atualização ao vivo. */
-import { opcaoLegadaLigada } from '../../sei-comum/src/opcoes/legadas';
+import { opcaoLegadaMarcada } from '../../sei-comum/src/opcoes/legadas';
 import { contextoDaPagina } from './leitura';
 import { iniciar } from './controle';
 import css from './style.css';
@@ -15,13 +15,13 @@ function montar() {
   const configuracao = (mudancas: Record<string, chrome.storage.StorageChange>, area: string) => {
     if (area !== 'sync' || !('dataValues' in mudancas)) return;
     mudou = true;
-    controle.configurar(opcaoLegadaLigada(mudancas.dataValues!.newValue, OPCAO));
+    controle.configurar(opcaoLegadaMarcada(mudancas.dataValues!.newValue, OPCAO));
   };
   chrome.storage.onChanged.addListener(configuracao);
   chrome.storage.sync
     .get('dataValues')
     .then((itens) => {
-      if (!mudou) controle.configurar(opcaoLegadaLigada(itens.dataValues, OPCAO));
+      if (!mudou) controle.configurar(opcaoLegadaMarcada(itens.dataValues, OPCAO));
     })
     .catch(() => {
       /* Sem acesso ao storage: mantém o SEI nativo. */

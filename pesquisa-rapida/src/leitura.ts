@@ -36,6 +36,12 @@ export function buscarCampo(doc: Document): HTMLInputElement | null {
 export type Contexto = 'lista' | 'arvore' | 'documento';
 /** Nunca instala no editor. Frames filhos do visualizador usam o campo do pai. */
 export function contextoDaPagina(doc: Document): Contexto | null {
+  try {
+    // Iframe oculto do SEI Pro com uma cópia do processo: destacar nele só gera trabalho e mexe no DOM que ele lê.
+    if (doc.defaultView?.frameElement?.matches('#frmCheckerProcessoPro, [name="frmCheckerProcessoPro"]')) return null;
+  } catch {
+    /* Frame externo. */
+  }
   if (doc.querySelector('#frmEditor, [contenteditable="true"], .cke, .ck-editor')) return null;
   const acao =
     new URL(doc.URL || doc.defaultView?.location.href || 'https://localhost/').searchParams.get('acao') ?? '';

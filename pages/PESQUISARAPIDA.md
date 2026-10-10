@@ -2,7 +2,7 @@
 
 ## Filtrar a página pelo campo de pesquisa rápida
 
-Com esta opção ligada (padrão), digite no campo de pesquisa rápida do SEI sem
+Com esta opção ligada (vem desligada; ative em Configurações), digite no campo de pesquisa rápida do SEI sem
 pressionar Enter:
 
 - No controle de processos, a lista mostra os processos que correspondem ao
@@ -18,4 +18,8 @@ campo para o processo permanecer na lista.
 **Enter** mantém a pesquisa normal do SEI. **Escape** ou apagar o texto restaura a
 página. Desligar a opção nas configurações remove os filtros e destaques.
 
-A busca usa somente conteúdo já carregado, sem consultas ao servidor.
+A busca usa somente conteúdo já carregado, sem consultas ao servidor. Como o
+Controle de Processos carrega os processos em páginas, a legenda de cada tabela
+mostra quantos dos já carregados aparecem (por exemplo, "2 de 100 já
+carregados"). Processos já marcados que o filtro esconde são desmarcados, para
+que uma ação em lote não atinja o que você não está vendo.

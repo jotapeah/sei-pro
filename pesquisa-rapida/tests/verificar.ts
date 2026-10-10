@@ -5,7 +5,7 @@ import { contextoDaPagina } from '../src/leitura';
 import { readFileSync } from 'node:fs';
 import { definirAnalisador } from '../../sei-nucleo/src/sessao/dom';
 definirAnalisador((html) => parseHTML(html).document as unknown as Document);
-import { opcaoLegadaLigada } from '../../sei-comum/src/opcoes/legadas';
+import { opcaoLegadaMarcada } from '../../sei-comum/src/opcoes/legadas';
 
 let n = 0;
 async function teste(nome: string, fn: () => void | Promise<void>) {
@@ -34,14 +34,14 @@ function tecla(d: Document, key: string) {
   d.querySelector('#txtPesquisaRapida')!.dispatchEvent(evento);
   return evento;
 }
-await teste('preferência ausente liga e escolha salva desliga', () => {
-  assert.equal(opcaoLegadaLigada(undefined, 'filtrarpaginapelapesquisarapida'), true);
+await teste('preferência ausente deixa desligada e só a escolha salva liga', () => {
+  assert.equal(opcaoLegadaMarcada(undefined, 'filtrarpaginapelapesquisarapida'), false);
   assert.equal(
-    opcaoLegadaLigada(
-      JSON.stringify([{ configGeral: [{ name: 'filtrarpaginapelapesquisarapida', value: false }] }]),
+    opcaoLegadaMarcada(
+      JSON.stringify([{ configGeral: [{ name: 'filtrarpaginapelapesquisarapida', value: true }] }]),
       'filtrarpaginapelapesquisarapida',
     ),
-    false,
+    true,
   );
 });
 await teste('filtra número sem pontuação e oculta cabeçalho vazio', async () => {
@@ -270,3 +270,52 @@ await teste('limpar preserva ocultação de outros filtros e agrupamentos', asyn
   c.fechar();
 });
 console.log(`${n} verificações passaram.`);
+
+await teste('linha marcada que o filtro oculta é desmarcada para não entrar em ação em lote', async () => {
+  const d = criar(`<input id="txtPesquisaRapida"><table id="tblProcessosRecebidos"><tbody>
+<tr id="p1"><td><input type="checkbox" id="k1" checked></td><td>João</td></tr>
+<tr id="p2"><td><input type="checkbox" id="k2" checked></td><td>Maria</td></tr>
+</tbody></table>`);
+  const c = iniciar(d, 'lista');
+  try {
+    c.configurar(true);
+    digitar(d, 'Maria');
+    await esperar();
+    assert.equal(oculta(d, 'p1'), true);
+    assert.equal((d.getElementById('k1') as HTMLInputElement).checked, false);
+    assert.notEqual((d.getElementById('k2') as HTMLInputElement).checked, false); // linkedom nao reflete o atributo em .checked
+  } finally {
+    c.fechar();
+  }
+});
+await teste('legenda da tabela informa quantos dos carregados aparecem e some ao limpar', async () => {
+  const d = criar(`<input id="txtPesquisaRapida"><table id="tblProcessosRecebidos"><caption>Recebidos (300 registros - 1 a 100):</caption><tbody>
+<tr id="p1"><td>João</td></tr><tr id="p2"><td>Maria</td></tr><tr id="p3"><td>Maria Luiza</td></tr>
+</tbody></table>`);
+  const cap = d.querySelector('caption')!;
+  const c = iniciar(d, 'lista');
+  try {
+    c.configurar(true);
+    digitar(d, 'Maria');
+    await esperar();
+    assert.equal(cap.getAttribute('data-spro-filtro'), '2 de 3 já carregados');
+    assert.equal(cap.textContent, 'Recebidos (300 registros - 1 a 100):');
+    tecla(d, 'Escape');
+    await esperar();
+    assert.equal(cap.hasAttribute('data-spro-filtro'), false);
+  } finally {
+    c.fechar();
+  }
+});
+await teste('iframe oculto de checagem do SEI Pro não recebe o módulo', () => {
+  const url = 'https://sei.exemplo.br/sei/controlador.php?acao=procedimento_visualizar';
+  const d = criar('<div id="divArvore"><a>Despacho</a></div>');
+  Object.defineProperty(d, 'URL', { value: url });
+  assert.equal(contextoDaPagina(d), 'arvore');
+  const oculto = criar('<div id="divArvore"><a>Despacho</a></div>');
+  Object.defineProperty(oculto, 'URL', { value: url });
+  Object.defineProperty(oculto.defaultView!, 'frameElement', {
+    value: { id: 'frmCheckerProcessoPro', matches: (s: string) => /frmCheckerProcessoPro/.test(s) },
+  });
+  assert.equal(contextoDaPagina(oculto), null);
+});

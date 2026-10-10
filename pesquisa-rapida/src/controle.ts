@@ -2,6 +2,14 @@ import { tokens, corresponde } from './texto';
 import { TABELAS, GRUPOS, camposDaLinha, buscarCampo, type Contexto } from './leitura';
 import { destacar, limpar } from './destaque';
 export const OCULTA = 'spro-pesquisa-oculta';
+export const LEGENDA = 'data-spro-filtro';
+/** Linha oculta não pode continuar selecionada: Enviar/Concluir em lote atingiria um processo invisível. */
+function desmarcar(linha: Element) {
+  for (const marca of linha.querySelectorAll<HTMLInputElement>('input[type="checkbox"]:checked')) {
+    marca.click();
+    marca.checked = false;
+  }
+}
 const DICA = 'Digite para filtrar a página atual. Enter mantém a pesquisa rápida nativa.';
 
 /** Ciclo de vida do content script, sem Chrome, rede ou jQuery. */
@@ -63,6 +71,8 @@ export function iniciar(doc: Document, contexto: Contexto, campo = () => buscarC
         let grupo: Element[] = [];
         let temProcessos = false;
         let visivel = false;
+        let total = 0;
+        let mostradas = 0;
         const fecharGrupo = () => {
           for (const cabecalho of grupo) cabecalho.classList.toggle(OCULTA, termos.length > 0 && !visivel);
         };
@@ -82,9 +92,17 @@ export function iniciar(doc: Document, contexto: Contexto, campo = () => buscarC
           temProcessos = true;
           const casa = corresponde(camposDaLinha(linha), termos);
           linha.classList.toggle(OCULTA, !casa);
-          if (casa) visivel = true;
+          total++;
+          if (casa) {
+            visivel = true;
+            mostradas++;
+          } else desmarcar(linha);
         }
         fecharGrupo();
+        // A tabela só conhece a página carregada: a legenda diz isso, sem alterar o texto do SEI.
+        const legenda = tabela.querySelector('caption');
+        if (termos.length && total) legenda?.setAttribute(LEGENDA, `${mostradas} de ${total} já carregados`);
+        else legenda?.removeAttribute(LEGENDA);
       }
       if (!termos.length) for (const el of doc.querySelectorAll(`.${OCULTA}`)) el.classList.remove(OCULTA);
     }
