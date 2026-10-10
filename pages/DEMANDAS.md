@@ -37,6 +37,8 @@ Com um processo aberto, aparece o botão **Demandas** na barra de ações. Ele m
 
 O botão também permite **iniciar**, **concluir com este documento** (o documento aberto vira o documento entregue) e **abrir a demanda no painel**. Ele usa só o que já está na tela: não faz consultas extras ao SEI e não marca o processo como visualizado.
 
+No **Controle de Processos**, cada linha cujo processo tenha demandas ganha um pequeno ícone de demanda (com um número azul quando são duas ou mais). Clicar nele abre o mesmo menu do botão da barra, ali ao lado, com as demandas daquele processo e as ações iniciar, concluir e nova demanda. Demandas arquivadas não contam, e o ícone só aparece se a opção do Gestor de Demandas estiver ligada.
+
 ### Onde os dados ficam
 
 * **Neste navegador:** toda demanda é guardada no seu navegador, com cópias diárias automáticas.

@@ -10,6 +10,7 @@
  *   no Controle de Processos; nas outras telas só envia o que mudou aqui, porque o app grava no storage);
  * - no Controle de Processos, também o painel embutido (o iframe do app), as pílulas do título (com o contador da aba do
  *   lateral) e o "Abrir no painel" que o lateral deixou;
+ * - o ícone das demandas em cada linha da grade que tenha demanda (D18, pagina/caixa.ts), com o balão do processo;
  * - o lado da aba do painel lateral (pagina/lateral.ts, chave host|login|u:<unidade>), em toda tela de topo.
  *
  * Nada daqui BUSCA a árvore de um processo nem monta link do SEI: a lista de usuários é a parcial
@@ -36,6 +37,7 @@ import { RepositorioDemandas } from "../repositorio";
 import { consentimentoDemandas } from "../sincronia/consentimento";
 import { armazemDoTexto, armazemNaTela } from "./armazem";
 import { instalarNaBarra } from "./arvore";
+import { instalarIconesCaixa } from "./caixa";
 import { contextoDemandas } from "./contexto";
 import { tratadoresDemandas } from "./executor";
 import { atenderPedidoDoLateral, focoDaAba, irAoPainel, type PainelDaAba } from "./foco";
@@ -98,24 +100,62 @@ export async function principalTopo(): Promise<void> {
   // null: a tela não recebe o painel (as outras telas); rejeitada: a montagem falhou.
   const painel: Promise<PainelDaAba | null> = naCaixa ? montarNaCaixa(aba) : Promise.resolve(null);
   painel.catch((e) => console.warn("[SEI Pro] demandas: painel", e));
+  const focarNoPainel = focoDaAba({
+    painel,
+    area,
+    chave: chaveDaAba(ctx),
+    agora: () => Date.now(),
+    link: () => linkDoMenu(paginaDe(document, location.href), "procedimento_controlar"),
+    ir: (u) => location.assign(u),
+  });
+  // D18: o ícone das demandas na grade e o balão do processo. Isolada: uma exceção aqui não deixa a aba sem o lateral.
+  if (naCaixa) {
+    try {
+      ligarCaixa(aba, focarNoPainel);
+    } catch (e) {
+      console.warn("[SEI Pro] demandas: grade", e);
+    }
+  }
   // O lado da aba do lateral já (sem esperar o painel): a página recarregada volta antes do fim da carência.
   ligarLateralDaAba({
     doc: document,
     ctx,
     area,
     conectar: () => chrome.runtime.connect({ name: CANAL_LATERAL }) as unknown as PortaRpc,
-    tratadores: tratadores(aba, {
-      iframe: null,
-      focarNoPainel: focoDaAba({
-        painel,
-        area,
-        chave: chaveDaAba(ctx),
-        agora: () => Date.now(),
-        link: () => linkDoMenu(paginaDe(document, location.href), "procedimento_controlar"),
-        ir: (u) => location.assign(u),
-      }),
-    }),
+    tratadores: tratadores(aba, { iframe: null, focarNoPainel }),
   });
+}
+
+/**
+ * D18: o ícone das demandas na grade do Controle de Processos. O balão é o da D17 (sob demanda), com o processo da
+ * linha e sem documento aberto; "Abrir no painel" é o mesmo pedido de foco do lateral (painel desta aba, ou o
+ * Controle de Processos pelo menu na visão que não recebe o painel).
+ */
+function ligarCaixa(aba: Aba, focarNoPainel: (id: string) => Promise<"painel" | "navegou">): void {
+  const { ctx, unidade, area, repos } = aba;
+  const consentimento = consentimentoDemandas(areaChrome(chrome.storage.sync, "sync"), ctx.host, ctx.login, unidade.id, "unidade");
+  const eu = { login: ctx.login, nome: ctx.nome || ctx.login };
+  const caixa = instalarIconesCaixa({
+    doc: document,
+    repos,
+    hoje: () => hojeISO(),
+    abrir: (ancora, processo) =>
+      void abrirBalao(
+        ancora,
+        { processo, documento: null },
+        {
+          repos,
+          hoje: () => hojeISO(),
+          sigla: unidade.sigla || "unidade",
+          temaEscuro: ctx.temaEscuro,
+          consentimento,
+          eu,
+          usuarios: () => listaDeUsuarios({ ctx, unidade, area, repos }, document),
+          abrirNoPainel: (id) => void focarNoPainel(id).catch((e) => console.warn("[SEI Pro] demandas: abrir no painel", e)),
+        },
+      ).catch((e) => console.warn("[SEI Pro] demandas: balão da grade", e)),
+  });
+  void caixa.atualizar().catch((e) => console.warn("[SEI Pro] demandas: ícones da grade", e));
 }
 
 /**

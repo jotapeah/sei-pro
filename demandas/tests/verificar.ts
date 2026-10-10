@@ -67,6 +67,8 @@ const suitePagina = "./pagina/verificar-pagina";
 await ((await import(suitePagina)) as { verificarPagina(): Promise<void> }).verificarPagina();
 const suiteBarra = "./pagina/verificar-barra";
 await ((await import(suiteBarra)) as { verificarBarra(): Promise<void> }).verificarBarra();
+const suiteCaixa = "./pagina/verificar-caixa";
+await ((await import(suiteCaixa)) as { verificarCaixa(): Promise<void> }).verificarCaixa();
 const suiteExecutor = "./pagina/verificar-executor";
 await ((await import(suiteExecutor)) as { verificarExecutor(): Promise<void> }).verificarExecutor();
 const suitePainel = "./pagina/verificar-painel";
