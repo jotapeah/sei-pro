@@ -1,4 +1,12 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { parseHTML } from 'linkedom';
+import type { Http, OpcoesHttp, Pagina } from '../../sei-nucleo/src/sessao/http';
+import { definirAnalisador } from '../../sei-nucleo/src/sessao/dom';
+import { lerPrazoNativo, lerPrazosDaCaixa, temControleNativo } from '../src/nativo/leitura';
+import { interpretarResposta } from '../src/nativo/resposta';
+import { concluirPrazo, definirPrazo, excluirPrazo, grupoDaLinha, hrefDaBarra, obterAcaoDefinir } from '../src/nativo/formulario';
+definirAnalisador(html => parseHTML(html).document as unknown as Document);
 import { formatarMarcador, lerMarcador } from '../src/modelo/marcador';
 import { fundir } from '../src/modelo/fusao';
 import { resumir } from '../src/modelo/situacao';
@@ -98,6 +106,122 @@ await teste('fusão: marcador "desde" não aparece quando há nativo', () => {
 });
 await teste('fusão: concluído do nativo é preservado', () => {
   assert.equal(fundir('1', nat('2026-10-01', { estado: 'concluido', concluidoEm: '2026-10-08' }))?.concluidoEm, '2026-10-08');
+});
+
+// ---------------- Fase 2: nativo (fixtures reais do SEI 4.1.5, treinamento SP) ----------------
+const fx = (nome: string) => readFileSync(new URL(`./fixtures/sei41/${nome}`, import.meta.url), 'utf8');
+const docDe = (html: string) => parseHTML(html).document as unknown as Document;
+const pagina = (url: string, html: string): Pagina => { let d: Document | null = null; return { url, status: 200, html, get doc() { return (d ??= docDe(html)); } }; };
+const SEI = 'https://treinamento.sei.sp.gov.br/sei/';
+
+await teste('nativo: lê data, estado, sigla e ids do ícone de cada linha', () => {
+  const p = lerPrazosDaCaixa(docDe(fx('caixa_prazos.html')));
+  assert.equal(p.size, 6);
+  assert.deepEqual(p.get('21831'), { idControlePrazo: '1332', idProcedimento: '21831', sigla: 'usuario01', data: '2023-05-20', estado: 'atrasado' });
+  assert.deepEqual([p.get('150098')?.data, p.get('150098')?.estado, p.get('150098')?.idControlePrazo], ['2026-10-20', 'noPrazo', '8557']);
+  assert.deepEqual([p.get('112825') ?? null], [null]);
+  const hoje = [...p.values()].find(x => x.estado === 'hoje');
+  assert.deepEqual([hoje?.data, hoje?.sigla], ['2026-10-10', 'usuario02']);
+});
+await teste('nativo: prazo concluído guarda a data da conclusão', () => {
+  const p = lerPrazosDaCaixa(docDe(fx('caixa_concluido.html')));
+  const c = p.get('150098');
+  assert.deepEqual([c?.estado, c?.data, c?.concluidoEm], ['concluido', '2026-10-30', '2026-10-10']);
+});
+await teste('nativo: retorno programado e outros ícones com tooltip parecido não viram prazo', () => {
+  const d = docDe(fx('caixa_sem_prazo_nativo.html'));
+  const tr = d.querySelector('tr#P21831')!;
+  assert.match(tr.innerHTML, /retorno_programado3/);
+  assert.equal(lerPrazoNativo(tr)?.idControlePrazo, '1332');
+  assert.equal(lerPrazoNativo(d.querySelector('tr#P150098') ?? tr.cloneNode(false) as Element), null);
+});
+await teste('nativo: sem aria-label, o tooltip basta; rótulo ilegível não vira prazo', () => {
+  const linha = (extra: string) => docDe(`<table><tr id="P7"><td><a href="controlador.php?acao=controle_prazo_definir&amp;id_controle_prazo=3&amp;id_procedimento=7" ${extra}><img src="svg/controle_prazo1.svg"></a></td></tr></table>`).querySelector('tr')!;
+  const t = lerPrazoNativo(linha(`onmouseover="return infraTooltipMostrar('ana 05/11/2026 (25 dias)','Controle de Prazo');"`));
+  assert.deepEqual([t?.sigla, t?.data, t?.estado], ['ana', '2026-11-05', 'noPrazo']);
+  assert.equal(lerPrazoNativo(linha(`aria-label="Controle de Prazo / ana quando der"`)), null);
+});
+await teste('nativo: detecta o botão da barra e acha o link assinado', () => {
+  const d = docDe(fx('caixa_prazos.html'));
+  assert.equal(temControleNativo(d), true);
+  assert.match(hrefDaBarra(d, 'controle_prazo_definir')!, /^controlador\.php\?acao=controle_prazo_definir&acao_origem=procedimento_controlar&acao_retorno=procedimento_controlar&/);
+  assert.equal(temControleNativo(docDe('<html><body><a onclick="return acaoControleProcessos(\'controlador.php?acao=outra\')">x</a></body></html>')), false);
+});
+await teste('nativo: o grupo (hdn*) vem da tabela da linha', () => {
+  const d = docDe(fx('caixa_prazos.html'));
+  assert.equal(grupoDaLinha(d, '150098'), 'Recebidos');
+  assert.equal(grupoDaLinha(d, '7318'), 'Gerados');
+  assert.equal(grupoDaLinha(d, '999'), null);
+});
+await teste('resposta: sucesso é sair do formulário; erro vem de #divInfraMensagens', () => {
+  assert.deepEqual(interpretarResposta(pagina(`${SEI}controlador.php?acao=procedimento_controlar&acao_origem=controle_prazo_definir`, fx('caixa_prazos.html'))).ok, true);
+  const e = interpretarResposta(pagina(`${SEI}controlador.php?acao=controle_prazo_definir&acao_origem=controle_prazo_definir`, fx('definir_erro_passado.html')));
+  assert.deepEqual([e.ok, e.erro], [false, 'Data de prazo não pode estar no passado.']);
+  const sem = interpretarResposta(pagina(`${SEI}controlador.php?acao=controle_prazo_definir&acao_origem=controle_prazo_definir`, fx('definir_form.html')));
+  assert.equal(sem.ok, false);
+});
+
+/** Http de mentira: guarda o que foi enviado e responde pelo roteiro. */
+function httpFalso(responder: (metodo: 'obter' | 'enviar', url: string, campos?: ReadonlyArray<readonly [string, string]>) => Pagina) {
+  const chamadas: Array<{ metodo: string; url: string; campos?: Array<[string, string]> }> = [];
+  const http: Http = {
+    base: new URL(SEI),
+    absoluta: (u: string) => new URL(u, SEI).href,
+    async obter(url: string, _op?: OpcoesHttp) { chamadas.push({ metodo: 'obter', url }); return responder('obter', url); },
+    async enviar(url: string, campos: ReadonlyArray<readonly [string, string]>, _op?: OpcoesHttp) { chamadas.push({ metodo: 'enviar', url, campos: campos.map(c => [c[0], c[1]] as [string, string]) }); return responder('enviar', url, campos); },
+    async baixar() { throw new Error('não usado'); },
+  };
+  return { http, chamadas };
+}
+const valor = (campos: Array<[string, string]> | undefined, nome: string) => campos?.find(c => c[0] === nome)?.[1];
+
+await teste('escrita: obtém o action assinado sem mexer na seleção da tela e o reaproveita', async () => {
+  const doc = docDe(fx('caixa_prazos.html'));
+  const { http, chamadas } = httpFalso(() => pagina(`${SEI}controlador.php?acao=controle_prazo_definir`, fx('definir_form.html')));
+  const a1 = await obterAcaoDefinir(http, doc, `${SEI}controlador.php?acao=procedimento_controlar`, '150098');
+  assert.match(a1, /acao=controle_prazo_definir&acao_origem=controle_prazo_definir/);
+  const a2 = await obterAcaoDefinir(http, doc, `${SEI}controlador.php?acao=procedimento_controlar`, '7318');
+  assert.equal(a2, a1);
+  assert.equal(chamadas.length, 1);
+  assert.match(chamadas[0]!.url, /acao=controle_prazo_definir&acao_origem=procedimento_controlar/);
+  assert.equal(valor(chamadas[0]!.campos, 'hdnRecebidosItensSelecionados'), '150098');
+  assert.equal(valor(chamadas[0]!.campos, 'hdnGeradosItensSelecionados'), '');
+});
+await teste('escrita: definir por data e por dias úteis monta os campos do formulário do SEI', async () => {
+  const { http, chamadas } = httpFalso(() => pagina(`${SEI}controlador.php?acao=procedimento_controlar&acao_origem=controle_prazo_definir`, fx('caixa_prazos.html')));
+  const r1 = await definirPrazo(http, 'controlador.php?acao=controle_prazo_definir&x=1', ['1', '2'], { tipo: 'data', data: '2026-10-20' });
+  assert.equal(r1.ok, true);
+  const c1 = chamadas[0]!.campos;
+  assert.deepEqual([valor(c1, 'rdoPrazo'), valor(c1, 'txtPrazo'), valor(c1, 'txtDias'), valor(c1, 'hdnIdProcedimentos'), valor(c1, 'hdnIdControlePrazo'), valor(c1, 'sbmDefinirControlePrazo')], ['1', '20/10/2026', '', '1,2', '', 'Salvar']);
+  await definirPrazo(http, 'a', ['3'], { tipo: 'dias', dias: 5, uteis: true });
+  const c2 = chamadas[1]!.campos;
+  assert.deepEqual([valor(c2, 'rdoPrazo'), valor(c2, 'txtPrazo'), valor(c2, 'txtDias'), valor(c2, 'chkSinDiasUteis')], ['2', '', '5', 'on']);
+  await definirPrazo(http, 'a', ['3'], { tipo: 'dias', dias: 3, uteis: false });
+  assert.equal(valor(chamadas[2]!.campos, 'chkSinDiasUteis'), undefined);
+});
+await teste('escrita: o erro de validação do SEI volta ao chamador, sem exceção', async () => {
+  const { http } = httpFalso(() => pagina(`${SEI}controlador.php?acao=controle_prazo_definir&acao_origem=controle_prazo_definir`, fx('definir_erro_passado.html')));
+  const r = await definirPrazo(http, 'a', ['1'], { tipo: 'data', data: '2020-01-01' });
+  assert.deepEqual([r.ok, r.erro], [false, 'Data de prazo não pode estar no passado.']);
+});
+await teste('escrita: concluir usa rdoPrazo=3', async () => {
+  const { http, chamadas } = httpFalso(() => pagina(`${SEI}controlador.php?acao=procedimento_controlar`, fx('caixa_concluido.html')));
+  assert.equal((await concluirPrazo(http, 'a', ['150098'])).ok, true);
+  assert.equal(valor(chamadas[0]!.campos, 'rdoPrazo'), '3');
+});
+await teste('escrita: excluir abre a edição pelo link do ícone e posta no action de exclusão', async () => {
+  const { http, chamadas } = httpFalso((m) => m === 'obter' ? pagina(`${SEI}controlador.php?acao=controle_prazo_definir`, fx('definir_editar.html')) : pagina(`${SEI}controlador.php?acao=procedimento_controlar&acao_origem=controle_prazo_excluir`, fx('caixa_prazos.html')));
+  const r = await excluirPrazo(http, 'controlador.php?acao=controle_prazo_definir&id_controle_prazo=8557&id_procedimento=150098');
+  assert.equal(r.ok, true);
+  assert.equal(chamadas[0]!.metodo, 'obter');
+  assert.match(chamadas[1]!.url, /acao=controle_prazo_excluir&acao_origem=controle_prazo_definir&acao_retorno=procedimento_controlar&id_controle_prazo=8557/);
+  assert.equal(valor(chamadas[1]!.campos, 'hdnIdControlePrazo'), '8557');
+});
+await teste('escrita: sem o link de exclusão (sem permissão), diz isso em vez de falhar calado', async () => {
+  const { http } = httpFalso(() => pagina(`${SEI}controlador.php?acao=controle_prazo_definir`, fx('definir_form.html')));
+  const r = await excluirPrazo(http, 'controlador.php?acao=controle_prazo_definir&id_controle_prazo=1');
+  assert.equal(r.ok, false);
+  assert.match(r.erro!, /permiss/);
 });
 
 console.log(`\n${n} testes OK`);
