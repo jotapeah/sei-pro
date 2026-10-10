@@ -816,3 +816,215 @@ html[data-modo="embutido"] body {
   flex: 1;
   min-width: 0;
 }
+
+/* ---------- Painel de estatisticas ---------- */
+.dem-painel {
+  display: grid;
+  gap: 12px;
+}
+.dem-painel-cab {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--spro-suave);
+}
+.dem-painel-corpo {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+}
+.dem-bloco {
+  min-width: 0;
+  padding: 12px 14px;
+  background: var(--spro-fundo);
+  border: 1px solid var(--spro-borda);
+  border-radius: var(--spro-raio);
+}
+.dem-bloco h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+.dem-bloco h4 {
+  margin: 12px 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--spro-suave);
+}
+.dem-contas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+  gap: 8px;
+}
+.dem-cartao-conta {
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  font: inherit;
+  text-align: left;
+  color: var(--spro-texto);
+  cursor: pointer;
+  background: var(--spro-fundo-2);
+  border: 1px solid var(--spro-borda);
+  border-radius: var(--spro-raio-p);
+}
+.dem-cartao-conta:hover {
+  border-color: var(--spro-destaque);
+}
+.dem-cartao-conta:focus-visible {
+  outline: none;
+  box-shadow: var(--spro-anel);
+}
+.dem-conta-n {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.dem-conta-rotulo {
+  font-size: 12px;
+  color: var(--spro-suave);
+}
+.dem-atrasadas {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dem-atrasadas li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.dem-atrasada-titulo {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dem-atrasada-quem,
+.dem-atrasadas-mais {
+  font-size: 12px;
+  color: var(--spro-suave);
+}
+.dem-atrasada-dias {
+  flex: none;
+  font-weight: 600;
+  color: var(--spro-texto);
+}
+.dem-painel-vazio {
+  margin: 0;
+  color: var(--spro-suave);
+}
+.dem-resumo {
+  margin: 0 0 8px;
+  color: var(--spro-texto);
+}
+.dem-grafico {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.dem-grafico text {
+  font: 11px var(--spro-fonte);
+  fill: var(--spro-texto);
+}
+.dem-grafico .dem-g-eixo,
+.dem-grafico .dem-g-total {
+  fill: var(--spro-suave);
+}
+.dem-g-valor-dentro {
+  fill: var(--spro-destaque-texto);
+  font-weight: 600;
+}
+.dem-barra-fundo {
+  fill: transparent;
+}
+.dem-clicavel {
+  cursor: pointer;
+}
+.dem-clicavel:hover .dem-barra-fundo {
+  fill: var(--spro-destaque-suave);
+}
+.dem-destacada .dem-g-rotulo {
+  font-style: italic;
+}
+.dem-g-base {
+  stroke: var(--spro-borda-forte);
+  stroke-width: 1;
+}
+.dem-tom-aberta,
+.dem-chip-aberta {
+  fill: var(--spro-destaque);
+  background: var(--spro-destaque);
+}
+.dem-tom-atrasada,
+.dem-chip-atrasada {
+  fill: var(--spro-perigo);
+  background: var(--spro-perigo);
+}
+.dem-tom-concluida,
+.dem-chip-concluida,
+.dem-tom-noprazo,
+.dem-chip-noprazo {
+  fill: var(--spro-ok);
+  background: var(--spro-ok);
+}
+.dem-tom-foraprazo,
+.dem-chip-foraprazo {
+  fill: var(--spro-aviso);
+  background: var(--spro-aviso);
+}
+.dem-legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--spro-suave);
+}
+.dem-legenda-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.dem-chip {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+.dem-atalhos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.dem-notas {
+  display: grid;
+  gap: 4px;
+}
+.dem-nota-linha {
+  display: grid;
+  grid-template-columns: 34px 1fr 28px;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+}
+.dem-nota-trilho {
+  display: block;
+  height: 10px;
+  background: var(--spro-fundo-3);
+  border-radius: 3px;
+}
+.dem-tom-nota {
+  display: block;
+  height: 100%;
+  background: var(--spro-estrela);
+  border-radius: 3px;
+}
+.dem-nota-n {
+  text-align: right;
+  color: var(--spro-suave);
+}

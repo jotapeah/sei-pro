@@ -31,6 +31,7 @@ import { montarFaixas } from "./componentes/faixas";
 import { type FiltroMontado, montarFiltro } from "./componentes/filtro";
 import { montarNada, montarVazio } from "./componentes/vazio";
 import { montarVistaCronograma } from "./componentes/vistaCronograma";
+import { montarPainel } from "./componentes/vistaPainel";
 import { montarQuadro } from "./componentes/vistaQuadro";
 import { type ColunaTabela, montarTabelaDemandas } from "./componentes/vistaTabela";
 import { carregarDados, type DemandaNaTela, etiquetasUsadas, responsaveisUsados } from "./dados";
@@ -50,6 +51,7 @@ interface Estado {
   concluidasDias: number;
   escalaCronograma: Escala;
   agrupamento: "responsavel" | "situacao";
+  periodo: PreferenciasDemandas["periodoPainel"];
   falhou: boolean;
 }
 
@@ -66,6 +68,7 @@ export async function montarApp(deps: DepsApp): Promise<AppMontado> {
     concluidasDias: prefs?.concluidasNoQuadroDias ?? 30,
     escalaCronograma: prefs?.escalaCronograma ?? "Semana",
     agrupamento: prefs?.agrupamentoCronograma ?? "responsavel",
+    periodo: prefs?.periodoPainel ?? "90",
     falhou: false,
   };
   let usuarios: UsuarioDaUnidade[] = [];
@@ -270,7 +273,7 @@ export async function montarApp(deps: DepsApp): Promise<AppMontado> {
       );
       return;
     }
-    if (!lista.length) {
+    if (!lista.length && estado.visao !== "painel") {
       vistaEl.replaceChildren(montarNada("Nenhuma demanda com esses filtros.", { rotulo: "Limpar filtros", fazer: () => limparFiltros() }));
       return;
     }
@@ -346,8 +349,28 @@ export async function montarApp(deps: DepsApp): Promise<AppMontado> {
         }
         break;
       }
-      default:
-        vistaEl.replaceChildren(montarNada("Esta visão chega nas próximas etapas."));
+      case "painel":
+        vistaEl.replaceChildren(
+          montarPainel({
+            // O painel olha o escopo inteiro (arquivadas contam como entregas), sem o filtro das outras visões.
+            itens: estado.dados.filter((x) => estado.escopo === "ambos" || x.vis === estado.escopo),
+            hoje: deps.hoje(),
+            periodo: estado.periodo,
+            aoFiltrarTabela: (f) => {
+              estado.filtro = f;
+              filtroMontado.definir(f);
+              estado.visao = "tabela";
+              gravarPrefs({ visao: "tabela" });
+              pintarAbas();
+              pintarVista();
+            },
+            aoPeriodo: (p) => {
+              estado.periodo = p;
+              gravarPrefs({ periodoPainel: p });
+            },
+          }),
+        );
+        break;
     }
   }
   function limparFiltros(): void {
