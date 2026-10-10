@@ -16,6 +16,7 @@ export function fundir(idProcedimento: string, nativo?: PrazoNativo | null, marc
       vencimento: nativo.data,
       idControlePrazo: nativo.idControlePrazo,
       sigla: nativo.sigla,
+      linkNativo: nativo.link,
       ...(nativo.concluidoEm ? { concluidoEm: nativo.concluidoEm } : {}),
     };
     if (marcador?.vencimento && marcador.data === nativo.data) {

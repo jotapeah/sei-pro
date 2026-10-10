@@ -72,6 +72,10 @@ Ciclo completo executado e desfeito (nada ficou gravado). Capturas viraram fixtu
   passado."). `verificarPagina` do núcleo não a vê: tratar sucesso pela URL final e ler esse elemento.
 - **Excluir:** o `action` de exclusão está no JS da página de edição (`acaoExcluir`: `form.action='…controle_prazo_excluir…id_controle_prazo=N…'`),
   postado com `hdnIdControlePrazo`; a página de edição vem do próprio `href` do ícone. Redireciona à caixa.
+- **Prova da fase 2 (10/10/2026):** o próprio código do módulo (`prazos/src/nativo`, empacotado e injetado na
+  página do SP) rodou o ciclo inteiro com `criarHttp` do núcleo: ação assinada reaproveitada, data (+10), 2 ids
+  em 5 dias úteis, hoje, alterar (mesmo `id_controle_prazo`), data passada (erro lido de `#divInfraMensagens`),
+  concluir 2 ids e excluir 4 prazos; a resposta de cada gravação já traz os ícones novos. Nada ficou gravado.
 - **Pendente: SEI 5.0.4.** O MJ de homologação exige 2º fator e não foi possível logar por script; o fonte
   5.0.0 é a mesma tela. A validação no `hmlsei` fica para a fase 3 (precisa de sessão aberta do usuário).
 

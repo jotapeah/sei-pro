@@ -37,11 +37,12 @@ export function lerPrazoNativo(linha: Element): PrazoNativo | null {
   if (!m) return null;
   const est = estadoDe(m[5]!);
   if (!est) return null;
-  const p = parametros(decodificarEntidades(a.getAttribute('href') ?? ''));
+  const link = decodificarEntidades(a.getAttribute('href') ?? '');
+  const p = parametros(link);
   const idControlePrazo = p.get('id_controle_prazo') ?? '';
   const idProcedimento = p.get('id_procedimento') ?? linha.id.replace(/^P/, '');
   if (!idControlePrazo || !idProcedimento) return null;
-  return { idControlePrazo, idProcedimento, sigla: m[1]!, data: iso(m[2]!, m[3]!, m[4]!), ...est };
+  return { idControlePrazo, idProcedimento, sigla: m[1]!, data: iso(m[2]!, m[3]!, m[4]!), link, ...est };
 }
 
 /** Todos os prazos nativos das tabelas da caixa, por id do processo. */

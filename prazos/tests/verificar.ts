@@ -31,7 +31,7 @@ await teste('marcador: "ate" dentro de outra palavra não é vencimento (o legad
 });
 await teste('marcador: data impossível ou ausente não é prazo', () => {
   assert.equal(lerMarcador('Ate 31/02/2026'), null);
-  assert.equal(lerMarcador('Para Bruna assinar'), null);
+  assert.equal(lerMarcador('Para Ana assinar'), null);
   assert.equal(lerMarcador(''), null);
 });
 await teste('marcador: texto com data no meio guarda o resto sem a data', () => {
@@ -82,10 +82,10 @@ await teste('situação: a dica traz hora, texto e quem definiu', () => {
 });
 
 // ---------------- Fase 1: fusão ----------------
-const nat = (data: string, extra: Partial<PrazoNativo> = {}): PrazoNativo => ({ idControlePrazo: '9', idProcedimento: '1', sigla: 'ana', data, estado: 'noPrazo', ...extra });
+const nat = (data: string, extra: Partial<PrazoNativo> = {}): PrazoNativo => ({ idControlePrazo: '9', idProcedimento: '1', sigla: 'ana', data, estado: 'noPrazo', link: 'controlador.php?acao=controle_prazo_definir&id_controle_prazo=9', ...extra });
 await teste('fusão: sem nada, sem prazo', () => assert.equal(fundir('1', null, null), null));
 await teste('fusão: só nativo', () => {
-  assert.deepEqual(fundir('1', nat('2026-10-20')), { idProcedimento: '1', origem: 'nativo', vencimento: '2026-10-20', idControlePrazo: '9', sigla: 'ana' });
+  assert.deepEqual(fundir('1', nat('2026-10-20')), { idProcedimento: '1', origem: 'nativo', vencimento: '2026-10-20', idControlePrazo: '9', sigla: 'ana', linkNativo: 'controlador.php?acao=controle_prazo_definir&id_controle_prazo=9' });
 });
 await teste('fusão: só marcador, vencimento ou data inicial', () => {
   assert.equal(fundir('1', null, { data: '2026-10-20', vencimento: true, texto: 'x', hora: '10:00' })?.vencimento, '2026-10-20');
@@ -117,7 +117,9 @@ const SEI = 'https://treinamento.sei.sp.gov.br/sei/';
 await teste('nativo: lê data, estado, sigla e ids do ícone de cada linha', () => {
   const p = lerPrazosDaCaixa(docDe(fx('caixa_prazos.html')));
   assert.equal(p.size, 6);
-  assert.deepEqual(p.get('21831'), { idControlePrazo: '1332', idProcedimento: '21831', sigla: 'usuario01', data: '2023-05-20', estado: 'atrasado' });
+  const a = p.get('21831')!;
+  assert.deepEqual({ ...a, link: undefined }, { idControlePrazo: '1332', idProcedimento: '21831', sigla: 'usuario01', data: '2023-05-20', estado: 'atrasado', link: undefined });
+  assert.match(a.link, /^controlador\.php\?acao=controle_prazo_definir&acao_origem=procedimento_controlar&acao_retorno=procedimento_controlar&id_controle_prazo=1332&id_procedimento=21831&/);
   assert.deepEqual([p.get('150098')?.data, p.get('150098')?.estado, p.get('150098')?.idControlePrazo], ['2026-10-20', 'noPrazo', '8557']);
   assert.deepEqual([p.get('112825') ?? null], [null]);
   const hoje = [...p.values()].find(x => x.estado === 'hoje');

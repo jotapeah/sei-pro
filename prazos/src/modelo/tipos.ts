@@ -28,6 +28,8 @@ export interface PrazoNativo {
   data: DataISO;
   estado: EstadoNativo;
   concluidoEm?: DataISO;
+  /** Link assinado do ícone (abre a edição; é de onde sai a exclusão). */
+  link: string;
 }
 
 export type Origem = 'nativo' | 'marcador' | 'ambos';
@@ -45,6 +47,7 @@ export interface PrazoProcesso {
   concluidoEm?: DataISO;
   idControlePrazo?: string;
   sigla?: string;
+  linkNativo?: string;
 }
 
 export type Situacao = 'noPrazo' | 'hoje' | 'atrasado' | 'desde' | 'concluido';
