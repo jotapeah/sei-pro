@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { parseHTML } from "linkedom";
 import { aplicarConfigGeral, atualizarContagens, coletarConfigGeral, controleDe, type ItemConfig } from "../src/config";
 import { urlManual } from "../src/manual";
-import { montarMinimo } from "./montar-minimo";
+import { montarComplementos, montarGeral } from "../src/render";
 import { checar, instalarDom, secao } from "./util";
 
 const FIXTURE = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "options-legado.html");
@@ -26,6 +26,14 @@ function esperadoDoLegado(): ItemConfig[] {
       .map((e) => ({ name: nome(e), value: e.querySelector("option")?.getAttribute("value") ?? "" }))
       .filter((i) => i.value !== ""),
   ];
+}
+
+function montarMinimo(c: { lab: boolean; foraAntaq: boolean }): HTMLElement {
+  const raiz = document.createElement("div");
+  const ctx = { ...c, homepage: "https://seipro.app" };
+  raiz.append(montarGeral(ctx), montarComplementos(ctx));
+  document.body.append(raiz);
+  return raiz;
 }
 
 const nomes = (l: ItemConfig[]) => l.map((i) => i.name);
