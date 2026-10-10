@@ -1,7 +1,10 @@
 # Retorno de blocos na inclusão
 
 Content script isolado para `acao=bloco_escolher`. Acrescenta o botão nas barras
-de comandos da tela de inclusão; a janela permite escolher e confirmar o bloco.
+de comandos da tela de inclusão; a janela permite escolher e confirmar o bloco. A janela é o
+`dialog.spro-dialogo` do `sei-comum` (o mesmo dos Favoritos, Histórico, Projetos e Ordem dos painéis), num
+Shadow DOM, montado no documento do topo: a tela de inclusão fica num iframe da visualização e o modal
+cobre a janela inteira. Sair da tela (pagehide) ou desligar a opção remove o modal do topo.
 Sem barras reconhecidas, o botão fica junto ao seletor nativo.
 
 O núcleo distingue o id usado no formulário do número exibido, lê os controles

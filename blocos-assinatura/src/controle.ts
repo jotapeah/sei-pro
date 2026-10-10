@@ -1,18 +1,23 @@
 import { listarBlocosParaInclusao, retornarBlocoParaInclusao } from '../../sei-nucleo/src/dominio/blocos';
 import type { Sei } from '../../sei-nucleo/src/sei';
+import { criarModal, type Modal } from './modal';
 
 export interface Dependencias {
   doc: Document;
   url: string;
   sei: Sei;
+  /** A janela de topo, onde o modal é montado (a tela de inclusão fica num iframe). Padrão: `doc`. */
+  topo?: Document;
+  /** base.css + modal.css, para o Shadow DOM do modal. */
+  css?: string;
 }
 
 /** Ciclo da tela viva: só o núcleo conhece listagem, formulário e escrita do SEI. */
-export function iniciar({ doc, url, sei }: Dependencias) {
+export function iniciar({ doc, url, sei, topo = doc, css = '' }: Dependencias) {
   let ligada = false;
   let encerrada = false;
   let escrevendo = false;
-  let dialogo: HTMLDialogElement | null = null;
+  let modal: Modal | null = null;
   let leitura: AbortController | null = null;
   let origem: HTMLElement | null = null;
   const botoes = new Set<HTMLButtonElement>();
@@ -20,10 +25,9 @@ export function iniciar({ doc, url, sei }: Dependencias) {
 
   function fecharDialogo() {
     leitura?.abort(); leitura = null;
-    const atual = dialogo;
-    dialogo = null;
-    if (atual?.open) atual.close();
-    atual?.remove();
+    const atual = modal;
+    modal = null;
+    atual?.remover();
     if (origem?.isConnected) origem.focus();
     origem = null;
   }
@@ -54,37 +58,16 @@ export function iniciar({ doc, url, sei }: Dependencias) {
   }
 
   async function abrir(botao: HTMLElement) {
-    if (!ligada || encerrada || dialogo || escrevendo) return;
+    if (!ligada || encerrada || modal || escrevendo) return;
     origem = botao;
-    const atual = doc.createElement('dialog');
-    atual.className = 'spro-blocos-dialog';
-    atual.setAttribute('aria-labelledby', 'spro-blocos-titulo');
-    const titulo = doc.createElement('h2');
-    titulo.id = 'spro-blocos-titulo'; titulo.textContent = 'Retornar bloco disponibilizado';
-    const explicacao = doc.createElement('p');
-    explicacao.textContent = 'O retorno cancela a disponibilização para outras unidades e libera o bloco para incluir novos documentos. Depois da inclusão, você pode disponibilizá-lo novamente.';
-    const status = doc.createElement('p');
-    status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
-    status.textContent = 'Carregando blocos disponibilizados…';
-    const lista = doc.createElement('fieldset');
-    lista.className = 'spro-blocos-lista'; lista.hidden = true;
-    const legenda = doc.createElement('legend'); legenda.textContent = 'Selecione o bloco'; lista.append(legenda);
-    const acoes = doc.createElement('div'); acoes.className = 'spro-blocos-acoes';
-    const confirmar = doc.createElement('button');
-    confirmar.type = 'button'; confirmar.className = 'infraButton';
-    confirmar.dataset.sproConfirmar = ''; confirmar.textContent = 'Retornar bloco'; confirmar.disabled = true;
-    const fechar = doc.createElement('button');
-    fechar.type = 'button'; fechar.className = 'infraButton';
-    fechar.dataset.sproFechar = ''; fechar.textContent = 'Cancelar';
-    acoes.append(fechar, confirmar); atual.append(titulo, explicacao, status, lista, acoes);
-    dialogo = atual;
-    doc.body.append(atual);
-    atual.addEventListener('cancel', evento => {
-      evento.preventDefault();
-      if (!escrevendo) fecharDialogo();
-    });
-    fechar.addEventListener('click', () => { if (!escrevendo) fecharDialogo(); });
-    atual.showModal(); fechar.focus();
+    const atual = criarModal(topo, { css, escuro: !!topo.body?.classList.contains('dark-mode') });
+    const { dialogo, titulo, explicacao, status, lista, confirmar, fecharX } = atual;
+    modal = atual;
+    const sair = () => { if (!escrevendo) fecharDialogo(); };
+    dialogo.addEventListener('cancel', evento => { evento.preventDefault(); sair(); });
+    dialogo.addEventListener('close', () => { if (modal === atual) { modal = null; leitura?.abort(); leitura = null; } });
+    fecharX.addEventListener('click', sair);
+    atual.abrir(); fecharX.focus();
     let selecionado = '';
     let aviso = '';
     const aoAviso = (mensagem: string) => { aviso = mensagem; };
@@ -93,20 +76,20 @@ export function iniciar({ doc, url, sei }: Dependencias) {
       confirmar.disabled = !selecionado || escrevendo;
     });
     const abort = new AbortController(); leitura = abort;
-    const ativa = () => !encerrada && ligada && dialogo === atual;
+    const ativa = () => !encerrada && ligada && modal === atual;
     try {
       const blocos = await listarBlocosParaInclusao(sei, { sinal: abort.signal, aoAviso });
       if (!ativa()) return;
       leitura = null;
       if (!blocos.length) {
         status.textContent = 'Nenhum bloco disponibilizado que possa retornar nesta unidade foi encontrado.' + (aviso ? ` ${aviso}` : '');
-        fechar.textContent = 'Fechar'; return;
+        confirmar.remove(); return;
       }
       for (const bloco of blocos) {
-        const rotulo = doc.createElement('label');
-        const radio = doc.createElement('input');
+        const rotulo = topo.createElement('label');
+        const radio = topo.createElement('input');
         radio.type = 'radio'; radio.name = 'spro-bloco-retorno'; radio.value = bloco.id;
-        const texto = doc.createElement('span'); texto.textContent = `${bloco.numero} - ${bloco.descricao}`;
+        const texto = topo.createElement('span'); texto.textContent = `${bloco.numero} - ${bloco.descricao}`;
         rotulo.append(radio, texto); lista.append(rotulo);
       }
       lista.hidden = false;
@@ -117,14 +100,14 @@ export function iniciar({ doc, url, sei }: Dependencias) {
       leitura = null;
       status.textContent = erro instanceof Error ? erro.message : 'Não foi possível carregar os blocos. Tente novamente.';
       if (aviso) status.textContent += ` ${aviso}`;
-      fechar.textContent = 'Fechar';
+      confirmar.remove();
     }
     confirmar.addEventListener('click', () => { void retornar(); });
 
     async function retornar() {
       if (!ativa() || escrevendo || !selecionado || confirmar.disabled) return;
       escrevendo = true;
-      confirmar.disabled = true; fechar.disabled = true; lista.disabled = true;
+      confirmar.disabled = true; fecharX.disabled = true; lista.disabled = true;
       for (const botao of botoes) botao.disabled = true;
       status.textContent = 'Retornando o bloco e verificando a inclusão…';
       try {
@@ -151,10 +134,8 @@ export function iniciar({ doc, url, sei }: Dependencias) {
           status.textContent = 'Bloco retornado e selecionado no campo Bloco. Você pode incluir os documentos marcados.';
         }
         if (aviso) status.textContent += ` ${aviso}`;
-        titulo.remove(); explicacao.remove(); lista.remove(); confirmar.remove();
-        atual.removeAttribute('aria-labelledby');
-        atual.setAttribute('aria-label', 'Bloco retornado');
-        fechar.textContent = 'Fechar';
+        titulo.textContent = 'Bloco retornado';
+        explicacao.remove(); lista.remove(); confirmar.remove();
       } catch (erro) {
         if (!ativa()) return;
         status.textContent = erro instanceof Error ? erro.message : 'Não foi possível confirmar o retorno. Confira o bloco no SEI antes de tentar novamente.';
@@ -163,7 +144,7 @@ export function iniciar({ doc, url, sei }: Dependencias) {
       } finally {
         escrevendo = false;
         for (const botao of botoes) botao.disabled = false;
-        if (ativa()) { fechar.disabled = false; lista.disabled = false; fechar.focus(); }
+        if (ativa()) { fecharX.disabled = false; lista.disabled = false; fecharX.focus(); }
       }
     }
   }

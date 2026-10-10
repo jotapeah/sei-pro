@@ -2,6 +2,8 @@ import { Sei } from '../../sei-nucleo/src/sei';
 import { documentoTopo, paginaDe } from '../../sei-nucleo/src/sessao/pagina';
 import { opcaoLegadaLigada } from '../../sei-comum/src/opcoes/legadas';
 import { iniciar } from './controle';
+import cssBase from '../../sei-comum/src/ui/base.css';
+import cssModal from './modal.css';
 import css from './style.css';
 
 const CHAVE = 'retornarblocodisponibilizado';
@@ -12,7 +14,7 @@ function montar() {
     const topo = documentoTopo();
     return paginaDe(topo, topo.location?.href ?? location.href);
   });
-  const controle = iniciar({ doc: document, url: location.href, sei });
+  const controle = iniciar({ doc: document, url: location.href, sei, topo: documentoTopo(), css: `${cssBase}\n${cssModal}` });
   let mudou = false;
   const aoMudar = (mudancas: Record<string, chrome.storage.StorageChange>, area: string) => {
     if (area !== 'sync' || !('dataValues' in mudancas)) return;
