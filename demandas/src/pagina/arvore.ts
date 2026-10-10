@@ -14,14 +14,14 @@
  * botão aparecer, para o balão não abrir (nem gravar) com o vínculo ainda sem a marca.
  */
 
-import { icone } from "@comum/ui/dom";
 import { chaveProtocolo } from "@projetos/modelo/vinculos";
 import { balaoAberto } from "@projetos/pagina/balaoAtual";
 import { carregarDados } from "../app/dados";
 import type { DataISO, Vis } from "../modelo/tipos";
 import type { RepositorioDemandas } from "../repositorio";
 import { type Detectado, detectarNaArvore } from "./deteccao";
-import { corDoIcone, instalarEstiloNaPagina } from "./estilo";
+import { instalarEstiloNaPagina } from "./estilo";
+import { iconeColoridoDemandas } from "./icone";
 
 export const BARRA = "#divArvoreAcoes";
 const CLASSE = "spro-dem-ic";
@@ -94,7 +94,16 @@ export async function instalarNaBarra(d: DepsBarra): Promise<{ atualizar(): Prom
   botao.setAttribute("aria-expanded", "false");
   botao.setAttribute("aria-label", ROTULO_BOTAO);
   botao.title = "Demandas";
-  botao.append(icone("demandas", 22));
+  // O invólucro tem o tamanho do SVG (40 px) e a margem dos ícones vizinhos (3 px); o selo se põe sobre ele sem mudar a caixa.
+  const env = d.doc.createElement("span");
+  env.className = "spro-dem-env";
+  env.append(iconeColoridoDemandas(d.doc, 40));
+  const selo = d.doc.createElement("span");
+  selo.className = "spro-dem-selo";
+  selo.hidden = true;
+  selo.setAttribute("aria-hidden", "true");
+  env.append(selo);
+  botao.append(env);
   botao.addEventListener("click", (ev) => {
     ev.preventDefault();
     ev.stopPropagation();
@@ -116,7 +125,6 @@ export async function instalarNaBarra(d: DepsBarra): Promise<{ atualizar(): Prom
   const colocar = () => {
     const barra = d.doc.querySelector(BARRA);
     if (!barra || botao.isConnected) return;
-    botao.style.setProperty("--spro-dem-cor", corDoIcone(barra));
     barra.append(botao);
   };
 
@@ -124,6 +132,9 @@ export async function instalarNaBarra(d: DepsBarra): Promise<{ atualizar(): Prom
     const rotulo = ativas
       ? `${ROTULO_BOTAO} (${ativas} ${ativas === 1 ? "demanda" : "demandas"}${atrasadas ? " · com prazo vencido" : ""})`
       : "Nova demanda deste processo";
+    const texto = ativas > 9 ? "9+" : String(ativas);
+    if (selo.textContent !== (ativas ? texto : "")) selo.textContent = ativas ? texto : "";
+    selo.hidden = !ativas;
     if (botao.hasAttribute("data-ativo") !== ativas > 0) botao.toggleAttribute("data-ativo", ativas > 0);
     if (botao.hasAttribute("data-atraso") !== atrasadas > 0) botao.toggleAttribute("data-atraso", atrasadas > 0);
     if (botao.getAttribute("aria-label") !== rotulo) {

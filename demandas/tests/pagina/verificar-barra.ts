@@ -24,6 +24,7 @@ import { abrirBalaoDemandas, type DepsBalaoDemandas } from "../../src/pagina/bal
 import { MENSAGEM_SEM_ENTENDI, METODOS_QUE_GRAVAM } from "../../src/pagina/consentir";
 import { MENSAGEM_AGORA_NAO } from "../../src/pagina/conteudo";
 import { type Detectado, detectarNaArvore } from "../../src/pagina/deteccao";
+import { PALETA_ICONE } from "../../src/pagina/icone";
 import { RepositorioDemandas } from "../../src/repositorio";
 import { paraOTexto } from "../../src/sincronia/textoPadrao";
 import { HOJE } from "../fabrica";
@@ -227,6 +228,39 @@ async function verificarBotao(): Promise<void> {
       !ic.hasAttribute("data-ativo"),
     ic?.outerHTML,
   );
+  const env = ic.querySelector<HTMLElement>(".spro-dem-env")!;
+  const svg = ic.querySelector("svg")!;
+  const css = doc.getElementById("spro-dem-estilo-sei")?.textContent ?? "";
+  const regraA = /\.spro-dem-ic\{([^}]*)\}/.exec(css)?.[1] ?? "";
+  const regraEnv = /\.spro-dem-env\{([^}]*)\}/.exec(css)?.[1] ?? "";
+  checar(
+    "icone 40x40 em invólucro com margem 3px e linha de base; o <a> e inline, sem largura/altura fixas",
+    svg.getAttribute("width") === "40" &&
+      svg.getAttribute("height") === "40" &&
+      svg.getAttribute("viewBox") === "0 0 40 40" &&
+      regraEnv.includes("margin:3px") &&
+      regraEnv.includes("vertical-align:baseline") &&
+      regraEnv.includes("width:40px") &&
+      regraEnv.includes("height:40px") &&
+      regraA.includes("display:inline;") &&
+      !/(^|;)(width|height|padding)\s*:/.test(regraA) &&
+      !ic.hasAttribute("style") &&
+      ic.getAttribute("tabindex") === "451" &&
+      env.parentElement === ic,
+    `${regraA} | ${regraEnv}`,
+  );
+  const cores = [...ic.querySelectorAll("[fill],[stroke]")].flatMap((e) => [e.getAttribute("fill"), e.getAttribute("stroke")]);
+  const usadas = [...cores, ...(css.match(/#[0-9a-fA-F]{3,6}\b/g) ?? [])]
+    .filter((c): c is string => !!c && c !== "none" && c !== "#1a73e8")
+    .map((c) => c.toLowerCase());
+  const permitidas = PALETA_ICONE.map((c) => c.toLowerCase());
+  checar(
+    "nenhuma cor do icone/selo fora da paleta",
+    usadas.every((c) => permitidas.includes(c)),
+    usadas.join(),
+  );
+  const selo0 = ic.querySelector<HTMLElement>(".spro-dem-selo")!;
+  checar("sem demandas: sem selo", selo0.hidden && (selo0.textContent ?? "") === "", selo0.outerHTML);
   checar(
     "nao instala duas vezes (o content script injetado de novo)",
     (await mk(doc)) === null && doc.querySelectorAll(".spro-dem-ic").length === 1,
@@ -296,13 +330,19 @@ async function verificarIndicador(): Promise<void> {
     ic.hasAttribute("data-ativo") && !ic.hasAttribute("data-atraso") && (ic.getAttribute("aria-label") ?? "").includes("(1 demanda)"),
     ic.getAttribute("aria-label"),
   );
+  const selo = ic.querySelector<HTMLElement>(".spro-dem-selo")!;
+  checar("1 demanda: selo mostra 1", !selo.hidden && selo.textContent === "1", selo.outerHTML);
   await r.eu.criar({ titulo: "Minha, pelos digitos", prazo: "2026-10-01", processos: [{ protocolo: DIGITOS_CAU }] });
   await tique(30);
+  checar("2 demandas: selo mostra 2", !selo.hidden && selo.textContent === "2", selo.outerHTML);
   checar(
     "as dos dois escopos (o numero casa pelos digitos); prazo vencido: ponto de atraso",
     ic.hasAttribute("data-atraso") && (ic.getAttribute("aria-label") ?? "").includes("2 demandas · com prazo vencido"),
     ic.getAttribute("aria-label"),
   );
+  for (let i = 0; i < 8; i++) await r.unidade.criar({ titulo: `Mais ${i}`, prazo: "2026-10-30", processos: [{ protocolo: CAU }] });
+  await tique(40);
+  checar("10 demandas: selo mostra 9+", !selo.hidden && selo.textContent === "9+", selo.textContent);
   void d;
   inst?.parar();
 }

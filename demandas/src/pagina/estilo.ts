@@ -6,12 +6,13 @@
 
 const ID = "spro-dem-estilo-sei";
 
-const CSS = `.spro-dem-ic{position:relative;display:inline-block;box-sizing:border-box;width:32px;height:32px;margin:0 2px;padding:0;border:0;border-radius:6px;background:none;color:var(--spro-dem-cor,#1f5fbf);cursor:pointer;vertical-align:middle;line-height:0;text-decoration:none}
-.spro-dem-ic:hover,.spro-dem-ic[aria-expanded="true"]{background:rgb(128 128 128 / 22%)}
-.spro-dem-ic:focus-visible{outline:2px solid #1a73e8;outline-offset:1px}
-.spro-dem-ic svg{display:block;width:22px;height:22px;margin:5px auto}
-.spro-dem-ic[data-ativo]::after{content:"";position:absolute;top:3px;right:3px;width:7px;height:7px;border-radius:50%;background:#e8710a;border:1.5px solid #fff}
-.spro-dem-ic[data-atraso]::after{background:#d1352b}`;
+const CSS = `.spro-dem-ic{display:inline;cursor:pointer;text-decoration:none;line-height:0}
+.spro-dem-env{position:relative;display:inline-block;box-sizing:content-box;width:40px;height:40px;margin:3px;vertical-align:baseline;border-radius:50%;line-height:0}
+.spro-dem-ic:hover .spro-dem-env,.spro-dem-ic[aria-expanded="true"] .spro-dem-env{box-shadow:0 0 0 3px rgba(242,129,79,.18);background:rgba(242,129,79,.18)}
+.spro-dem-ic:focus-visible{outline:2px solid #1a73e8;outline-offset:1px;border-radius:50%}
+.spro-dem-env svg{display:block;width:40px;height:40px}
+.spro-dem-selo{position:absolute;top:-3px;right:-3px;box-sizing:border-box;min-width:16px;height:16px;padding:0 3px;border:1.5px solid #fff;border-radius:8px;background:#2B5FB4;color:#fff;font:700 10px/13px Arial,sans-serif;text-align:center;pointer-events:none}
+.spro-dem-selo[hidden]{display:none}`;
 
 export function instalarEstiloNaPagina(doc: Document): void {
   if (doc.getElementById(ID)) return;
@@ -19,26 +20,4 @@ export function instalarEstiloNaPagina(doc: Document): void {
   s.id = ID;
   s.textContent = CSS;
   (doc.head ?? doc.documentElement).append(s);
-}
-
-/** "rgb(r, g, b)" ou "rgba(r, g, b, a)" -> [r, g, b, a]; qualquer outra coisa: null. */
-function lerRgb(css: string): [number, number, number, number] | null {
-  const m = /^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?\s*\)$/.exec(css.trim());
-  if (!m) return null;
-  return [Number(m[1]), Number(m[2]), Number(m[3]), m[4] === undefined ? 1 : Number(m[4])];
-}
-
-/**
- * Branco sobre fundo escuro, azul sobre fundo claro: o primeiro fundo com cor, da barra para cima. Sem leitura (o
- * navegador de provas não calcula estilo), o azul da barra clara.
- */
-export function corDoIcone(barra: Element): string {
-  const v = barra.ownerDocument.defaultView;
-  for (let e: Element | null = barra; e; e = e.parentElement) {
-    const rgb = lerRgb(v?.getComputedStyle?.(e)?.backgroundColor ?? "");
-    if (!rgb || rgb[3] < 0.5) continue;
-    const luz = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255;
-    return luz < 0.55 ? "#ffffff" : "#1f5fbf";
-  }
-  return "#1f5fbf";
 }

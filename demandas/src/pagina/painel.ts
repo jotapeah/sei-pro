@@ -13,6 +13,7 @@ import { carregarDados } from "../app/dados";
 import type { Vis } from "../modelo/tipos";
 import type { TipoAlerta } from "../ponte/tipos";
 import type { RepositorioDemandas } from "../repositorio";
+import { iconeColoridoDemandas } from "./icone";
 
 export const ID_PAINEL = "demandasPro";
 const PREFIXO = "spro-dem";
@@ -59,9 +60,7 @@ export function montarPainelDemandas(doc: Document, o: OpcoesPainelDemandas): Pa
     prefixo: PREFIXO,
     rotulos: { mostrar: "Mostrar demandas", recolher: "Recolher demandas" },
     icone: () => {
-      const g = icone("demandas", 22);
-      g.setAttribute("style", `color:${o.temaEscuro ? "#79acff" : "#1f5fbf"}`);
-      return g;
+      return iconeColoridoDemandas(doc, 24);
     },
     estilo: instalarEstilo,
     alturaInicial: 160,

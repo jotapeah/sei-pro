@@ -81,8 +81,8 @@ export async function verificarPonteApp(): Promise<void> {
   checar("icone gantt (titulo do painel, abas e dialogos do Projetos)", icone("gantt", 20).querySelectorAll("path").length === 2);
 
   checar(
-    "icone demandas (titulo do painel, aba lateral e atalhos do Gestor de Demandas): prancheta com o check e as linhas",
-    icone("demandas", 20).querySelectorAll("rect").length === 1 && icone("demandas", 20).querySelectorAll("path").length === 3,
+    "icone demandas (titulo do painel, aba lateral e atalhos do Gestor de Demandas): pessoa (cabeca e ombros) com o selo de check",
+    icone("demandas", 20).querySelectorAll("circle").length === 2 && icone("demandas", 20).querySelectorAll("path").length === 2,
   );
 
   secao("aviso com duas acoes (concluir: Informar documento e Desfazer)");
