@@ -736,27 +736,11 @@ export const OPCOES_COMPLEMENTOS: Opcao[] = [
     padrao: false,
   },
   {
-    nome: "gerenciarformularios",
-    rotulo: "Gerenciar Formulários",
-    tipo: "chave",
-    icone: "fas fa-clipboard-list",
-    padrao: true,
-    visivelEm: "lab",
-  },
-  {
     nome: "sincronizarprocessos",
     rotulo: "Sincronizar Base de Processos",
     tipo: "chave",
     icone: "fas fa-folder-open",
     padrao: true,
-    visivelEm: "lab",
-  },
-  {
-    nome: "natjus",
-    rotulo: "Pesquisa NatJus",
-    tipo: "chave",
-    icone: "fa fa-stethoscope",
-    padrao: false,
     visivelEm: "lab",
   },
 ];

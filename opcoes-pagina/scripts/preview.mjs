@@ -22,13 +22,19 @@ writeFileSync(
   window.chrome = {
     runtime: {
       lastError: undefined,
-      getManifest: function () { return { short_name: q.get("produto") || "SEI Pro Lab", homepage_url: "https://seipro.app", icons: { "32": "icons/lab/icon-32.png" } }; },
+      getManifest: function () { return { short_name: q.get("produto") || "SEI Pro Lab", homepage_url: "https://seipro.app", icons: { "32": "icons/lab/icon-32.png" }, content_scripts: [{ js: ["js/init_favoritos.js"] }] }; },
       getURL: function (p) { return "../../dist/" + p; }
     },
     storage: { sync: {
-      get: function (k, cb) { cb({ dataValues: mem.dataValues }); },
-      set: function (o, cb) { Object.assign(mem, o); cb && cb(); }
-    } }
+      // Aceita callback (a pagina de opcoes) e Promise (os modulos de sei-comum), como o chrome.storage.
+      get: function (k, cb) {
+        var r = typeof k === "string" ? (function () { var o = {}; o[k] = mem[k]; return o; })() : Object.assign({}, k, mem);
+        if (cb) { cb(r); return undefined; }
+        return Promise.resolve(r);
+      },
+      set: function (o, cb) { Object.assign(mem, o); if (cb) { cb(); return undefined; } return Promise.resolve(); },
+      remove: function (k, cb) { delete mem[k]; if (cb) { cb(); return undefined; } return Promise.resolve(); }
+    }, onChanged: { addListener: function () {}, removeListener: function () {} } }
   };
 })();`,
 );

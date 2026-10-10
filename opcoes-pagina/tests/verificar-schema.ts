@@ -9,16 +9,25 @@ const FIXTURE = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "optio
 const norm = (s: string) => s.replace(/\s+/g, " ").trim();
 const nomeDe = (el: Element) => el.getAttribute("data-name") ?? "";
 
+/** Opcoes que existiam na pagina legada e foram removidas de proposito (pedido do usuario em 10/10/2026). */
+export const REMOVIDAS = ["gerenciarformularios", "natjus"];
+
 export function verificarSchema(): void {
   secao("schema: paridade com a pagina de opcoes legada");
   const { document: doc } = parseHTML(readFileSync(FIXTURE, "latin1")) as unknown as { document: Document };
-  const legados = [...doc.querySelectorAll<HTMLElement>('[id^="itemConfigGeral_"]')];
+  const todosLegados = [...doc.querySelectorAll<HTMLElement>('[id^="itemConfigGeral_"]')];
+  const legados = todosLegados.filter((el) => !REMOVIDAS.includes(nomeDe(el)));
   const schema = new Map(todasAsOpcoes().map((o) => [o.nome, o]));
 
-  checar("73 opcoes no legado e no schema", legados.length === 73 && schema.size === 73 && todasAsOpcoes().length === 73, {
-    legado: legados.length,
-    schema: schema.size,
-  });
+  checar(
+    "73 no legado; 71 no schema (menos as 2 removidas)",
+    todosLegados.length === 73 && legados.length === 71 && schema.size === 71 && todasAsOpcoes().length === 71,
+    {
+      legado: todosLegados.length,
+      schema: schema.size,
+    },
+  );
+  for (const n of REMOVIDAS) checar(`${n}: removida do schema`, !schema.has(n));
 
   for (const el of legados) {
     const nome = nomeDe(el);
@@ -67,7 +76,9 @@ export function verificarSchema(): void {
   checar(
     "complementos: mesmas opcoes, mesma ordem",
     JSON.stringify(OPCOES_COMPLEMENTOS.map((o) => o.nome)) ===
-      JSON.stringify([...doc.querySelectorAll('#options-complements [id^="itemConfigGeral_"]')].map(nomeDe)),
+      JSON.stringify(
+        [...doc.querySelectorAll('#options-complements [id^="itemConfigGeral_"]')].map(nomeDe).filter((n) => !REMOVIDAS.includes(n)),
+      ),
   );
 
   secao("schema: dependencias");

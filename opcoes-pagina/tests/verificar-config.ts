@@ -6,6 +6,7 @@ import { aplicarConfigGeral, atualizarContagens, coletarConfigGeral, controleDe,
 import { urlManual } from "../src/manual";
 import { montarComplementos, montarGeral } from "../src/render";
 import { checar, instalarDom, secao } from "./util";
+import { REMOVIDAS } from "./verificar-schema";
 
 const FIXTURE = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "options-legado.html");
 
@@ -15,11 +16,12 @@ function esperadoDoLegado(): ItemConfig[] {
   const nome = (e: Element) => e.getAttribute("data-name") as string;
   const chaves = (raiz: string) =>
     [...d.querySelectorAll(`${raiz} input[name="infraAncoraSigla"]`)].map((e) => ({ name: nome(e), value: e.hasAttribute("checked") }));
+  const sobrevive = <T extends { name: string }>(i: T) => !REMOVIDAS.includes(i.name);
   const naoVazios = (sel: string) =>
     [...d.querySelectorAll(`#options-functions ${sel}`)].filter((e) => (e.getAttribute("value") ?? "") !== "");
   return [
     ...chaves("#options-functions"),
-    ...chaves("#options-complements"),
+    ...chaves("#options-complements").filter(sobrevive),
     ...naoVazios('input[type="text"]').map((e) => ({ name: nome(e), value: e.getAttribute("value") as string })),
     ...naoVazios('input[type="number"]').map((e) => ({ name: nome(e), value: Number.parseInt(e.getAttribute("value") as string, 10) })),
     ...[...d.querySelectorAll("#options-functions select")]
@@ -58,8 +60,8 @@ export function verificarConfig(): void {
   const atual = coletarConfigGeral(raiz);
   const legado = esperadoDoLegado();
   checar("mesmos itens, mesma ordem", JSON.stringify(atual) === JSON.stringify(legado), { atual: atual.length, legado: legado.length });
-  // 62 chaves + 1 texto preenchido (certidaosigilo_nomedoc) + 3 numeros + 3 selects com valor (newdocsigilo, vazio, nao entra)
-  checar("69 itens na pagina intocada", atual.length === 69, atual.length);
+  // 60 chaves (62 menos formularios e natjus) + 1 texto preenchido (certidaosigilo_nomedoc) + 3 numeros + 3 selects com valor (newdocsigilo, vazio, nao entra)
+  checar("67 itens na pagina intocada (69 menos as 2 removidas)", atual.length === 67, atual.length);
 
   secao("config: dependencias");
   const marcar = (r: ParentNode, n: string, v: boolean) => {
@@ -150,5 +152,6 @@ export function verificarConfig(): void {
     (r5.querySelector('[data-opcao="ferramentasia"]') as Element).hasAttribute("hidden") &&
       valor(coletarConfigGeral(r5), "ferramentasia") === true,
   );
-  checar("gerenciarformularios (so Lab) coletado fora do Lab", valor(coletarConfigGeral(r5), "gerenciarformularios") === true);
+  checar("sincronizarprocessos (so Lab) coletado fora do Lab", valor(coletarConfigGeral(r5), "sincronizarprocessos") === true);
+  checar("opcoes removidas nao sao mais gravadas", !nomes(coletarConfigGeral(r5)).some((n) => REMOVIDAS.includes(n)));
 }
