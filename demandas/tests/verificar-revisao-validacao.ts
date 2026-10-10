@@ -86,8 +86,11 @@ export async function verificarRevisaoValidacao(): Promise<void> {
     registro({ id: `rr${i}`, demanda: "d", quando: T0 + i, atualizadoEm: 1 }),
   );
   const rh = await H.repo.importar({ d: [], h: lote }, AG + 100_000);
-  checar("importar aceita ate o teto", rh.novos === LIMITES.historicoLocal);
-  checar("o que passaria conta em excedentes e ignorados", rh.excedentes === 3 && rh.ignorados === 3);
+  checar("importar aceita tudo e a poda fica com os mais recentes", rh.novos === LIMITES.historicoLocal + 3 && rh.excedentes === 0);
+  checar(
+    "os 3 mais antigos sairam",
+    !(await H.repo.historico()).some((x) => x.id === "rr0" || x.id === "rr2") && (await H.repo.historico()).some((x) => x.id === "rr3"),
+  );
   checar("o local nao passa do teto", (await H.repo.historico()).length === LIMITES.historicoLocal);
   const P = repoDeTeste();
   await P.repo.importar({ d: [], h: lote.slice(0, LIMITES.historicoLocal) }, AG + 100_000);

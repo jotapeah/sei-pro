@@ -408,7 +408,6 @@ export class RepositorioDemandas {
     }
     const locaisH = new Map(local.h.map((x) => [x.id, x]));
     const gravarH: Registro[] = [];
-    let totalH = local.h.length;
     for (const bruto of ent.h ?? []) {
       if (!entidadeValida(bruto, "h", agora)) {
         r.ignorados += 1;
@@ -416,17 +415,11 @@ export class RepositorioDemandas {
       }
       const x = limparEntidade(bruto, "h");
       const atual = locaisH.get(x.id);
-      if (!atual && totalH >= LIMITES.historicoLocal) {
-        r.ignorados += 1;
-        r.excedentes += 1;
-        continue;
-      }
       if (!atual || vence(x, atual)) {
         gravarH.push(x);
         if (atual) r.atualizados += 1;
         else {
           r.novos += 1;
-          totalH += 1;
           locaisH.set(x.id, x);
         }
       }
@@ -436,6 +429,8 @@ export class RepositorioDemandas {
         ...Object.fromEntries(gravar.map((d) => [this.demandas.chave(d.id), d])),
         ...Object.fromEntries(gravarH.map((h) => [this.registros.chave(h.id), h])),
       });
+    // O teto vale depois de aceitar: ficam os mais recentes (o que o colega acabou de fazer vence o antigo daqui).
+    if (gravarH.length) await this.podarHistorico();
     return r;
   }
 
@@ -692,6 +687,7 @@ export function entidadeValida(x: unknown, tipo: "d" | "h", agora?: number): boo
       idValido(x.demanda) &&
       typeof x.quando === "number" &&
       x.quando >= QUANDO_MINIMO &&
+      (agora === undefined || x.quando <= agora + FOLGA_RELOGIO_MS) &&
       textoAte(LIMITES.rotulo)(x.por) &&
       typeof x.campo === "string" &&
       CAMPOS.has(x.campo) &&

@@ -23,6 +23,7 @@ import { verificarPreferencias } from "./verificar-preferencias";
 import { verificarQuadro } from "./verificar-quadro";
 import { verificarRepositorio } from "./verificar-repositorio";
 import { verificarRevisaoApp } from "./verificar-revisao-app";
+import { verificarRevisaoFinal } from "./verificar-revisao-final";
 import { verificarRevisaoSigilo } from "./verificar-revisao-sigilo";
 import { verificarRevisaoValidacao } from "./verificar-revisao-validacao";
 import { verificarSigilo } from "./verificar-sigilo";
@@ -60,6 +61,7 @@ await verificarContador();
 await verificarAppLateral();
 await verificarIntegracaoProjetos();
 await verificarRevisaoApp();
+await verificarRevisaoFinal();
 // A camada da pagina importa o nucleo do SEI: caminho numa variavel, como no Projetos, para o tsc nao seguir o import.
 const suitePagina = "./pagina/verificar-pagina";
 await ((await import(suitePagina)) as { verificarPagina(): Promise<void> }).verificarPagina();

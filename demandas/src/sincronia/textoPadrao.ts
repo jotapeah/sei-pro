@@ -16,7 +16,7 @@ import { AVISO_TEXTO, chaveSyncTexto, FORMATO, TETO_TEXTO, TETOS_ENVELOPE, VERSA
 import { chaveEscopo } from "../modelo/escopo";
 import { cortarSigiloDemandas } from "../modelo/sigilo";
 import type { Demanda, EnvelopeDemandas, Escopo, Registro, Tabela, Vis } from "../modelo/tipos";
-import { entidadeValida, RepositorioDemandas } from "../repositorio";
+import { entidadeValida, limparEntidade, RepositorioDemandas } from "../repositorio";
 
 export { AVISO_TEXTO, TETO_TEXTO };
 
@@ -65,6 +65,8 @@ export function paraOTexto(env: EnvelopeDemandas, conhecidos: SigilosConhecidos)
   return { envelope: { ...env, entidades: { ...env.entidades, d: corte.demandas } }, raspados: corte.raspados };
 }
 
+const DIA_MS = 86_400_000;
+
 /**
  * Do envelope daqui, os itens do texto que a importação recusou só por virem do futuro (carimbo além de agora + 1
  * dia), no lugar do daqui de mesmo id. Item torto (que nem sem o relógio passaria) não é levado.
@@ -72,7 +74,10 @@ export function paraOTexto(env: EnvelopeDemandas, conhecidos: SigilosConhecidos)
 export function comOsDoFuturo(env: EnvelopeDemandas, remoto: EnvelopeDemandas | null, agora: number): EnvelopeDemandas {
   if (!remoto) return env;
   const lista = env.tabela === "h" ? "h" : "d";
-  const futuros = (remoto.entidades[lista] as unknown[]).filter((x) => entidadeValida(x, lista) && !entidadeValida(x, lista, agora));
+  // Só o que está até 7 dias à frente (a folga de 1 dia já vem na validação), e limpo pela lista branca.
+  const futuros = (remoto.entidades[lista] as unknown[])
+    .filter((x) => entidadeValida(x, lista) && !entidadeValida(x, lista, agora) && entidadeValida(x, lista, agora + 6 * DIA_MS))
+    .map((x) => limparEntidade(x as Demanda & Registro, lista));
   if (!futuros.length) return env;
   const ids = new Set(futuros.map((x) => (x as { id: string }).id));
   const mantidos = (env.entidades[lista] as Array<{ id: string }>).filter((x) => !ids.has(x.id));
