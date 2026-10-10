@@ -125,6 +125,14 @@ function save_options(reload) {
     var tabelasDescartadas = 0;
     $('.options-table').each(function(indexT){
 		var input = {};
+        /* O formulario de base de dados sempre existe na aba, em branco, esperando uma base nova. Tabela em que
+           NENHUM campo de texto foi preenchido (os selects ja vem com valor padrao) nao e uma base incompleta: e o
+           formulario virgem. Fica de fora sem marcar vermelho e sem avisar. */
+        var tabelaVirgem = true;
+        $(this).find('.input-config-pro').each(function(){
+            if (!$(this).is('select') && $.trim($(this).val() || '') != '') { tabelaVirgem = false; }
+        });
+        if (tabelaVirgem) { return; }
         /* O contador e POR TABELA. Era de todas: um campo obrigatorio vazio na
            primeira tabela descartava as seguintes, em silencio, e a base de
            dados configurada desaparecia. */
