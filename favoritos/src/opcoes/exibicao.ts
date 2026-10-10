@@ -39,12 +39,12 @@ export async function montarOpcoesExibicao(d: { sync: Area; lateralDisponivel: b
     h(
       "fieldset",
       {},
-      h("legend", {}, "Onde mostrar os favoritos"),
+      h("legend", {}, "Onde mostrar os monitorados"),
       ...radios.map((r) => h("label", {}, r, ` ${ROTULOS_EXIBIR[r.value as Preferencias["exibir"]]}`)),
       d.lateralDisponivel
         ? null
         : h("p", { class: "spro-fav-opcoes-nota" }, "Esta instalação não tem o painel lateral: a lista fica abaixo dos processos."),
     ),
-    h("label", {}, perguntar, " Perguntar pasta e etiquetas ao favoritar"),
+    h("label", {}, perguntar, " Perguntar pasta e etiquetas ao monitorar"),
   );
 }

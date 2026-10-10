@@ -61,7 +61,7 @@ export async function verificarModal(teste: (nome: string, fn: () => void | Prom
   await teste('modal: cada movimento é anunciado a leitores de tela', () => {
     const { d } = abrir();
     botao(d, 'favoritesPro', 'spro-pnl-descer').click();
-    assert.match(raizModal(d).querySelector('[aria-live]')!.textContent!, /Favoritos.*posição 3 de 4/);
+    assert.match(raizModal(d).querySelector('[aria-live]')!.textContent!, /Monitorados.*posição 3 de 4/);
   });
   await teste('modal: arrastar e soltar (antes e depois do alvo)', () => {
     const { d } = abrir();

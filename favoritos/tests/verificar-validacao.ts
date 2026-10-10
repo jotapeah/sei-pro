@@ -39,7 +39,7 @@ export function verificarValidacaoCampos(): void {
   };
   const r = lerEnvelope(env)!;
   const [f1, f2, f3] = r.envelope.escopos[0]!.favoritos;
-  checar("os favoritos ficam (so os campos quebrados saem)", r.envelope.escopos[0]!.favoritos.length === 3 && r.descartados === 0, r);
+  checar("os monitorados ficam (so os campos quebrados saem)", r.envelope.escopos[0]!.favoritos.length === 3 && r.descartados === 0, r);
   checar("lembrete sem data sai", f1!.lembrete === undefined);
   checar("documentos que nao sao lista saem", f1!.documentos === undefined);
   checar("visto que nao e leitura sai", f1!.visto === undefined);

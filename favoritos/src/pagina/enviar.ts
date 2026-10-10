@@ -106,7 +106,7 @@ export async function instalarManterNoEnvio(doc: Document, d: DepsEnvio): Promis
     emTodos({ prazo });
   });
 
-  const rotulo = varios ? `Manter os ${procs.length} processos em Favoritos` : "Manter processo em Favoritos";
+  const rotulo = varios ? `Manter os ${procs.length} processos em Monitorados` : "Manter processo em Monitorados";
   const bloco = h(
     "div",
     { class: "infraAreaDados spro-fav-envio", style: "position:relative;clear:both;height:auto;margin:10px 0;padding:0" },

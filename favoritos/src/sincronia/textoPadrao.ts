@@ -31,7 +31,7 @@ export function nomeDoTexto(login: string): string {
   return nomeDeTextoInterno("FAV", login.trim().toLowerCase());
 }
 
-export const DESCRICAO_TEXTO = "Dados internos do SEI Pro (favoritos). Não use em documentos nem edite.";
+export const DESCRICAO_TEXTO = "Dados internos do SEI Pro (monitorados). Não use em documentos nem edite.";
 
 /** O mínimo para levar uma remoção ou um sigilo: sem número, título, nota, prazo nem documentos. */
 function resumir(f: Favorito, extra: Partial<Favorito>): Favorito {
@@ -93,7 +93,7 @@ export async function envelopeDaUnidade(
 
 /** O parágrafo legível que abre o texto. */
 export function legivelFavoritos(nomeUsuario: string): string {
-  return `Dados internos do SEI Pro — favoritos de ${nomeUsuario}. Não use em documentos nem edite: o SEI Pro regrava este texto sozinho.`;
+  return `Dados internos do SEI Pro — monitorados de ${nomeUsuario}. Não use em documentos nem edite: o SEI Pro regrava este texto sozinho.`;
 }
 
 export function conteudoDoTexto(env: Envelope, nomeUsuario: string): Promise<string> {
@@ -111,7 +111,7 @@ export function validarEnvelopeDoTexto(bruto: unknown, escopo: Escopo): Validaca
   // Gravado por uma versão mais nova do SEI Pro: não é "inválido", e esta versão não pode regravar por cima.
   if (versaoMaisNova(bruto, "seipro-favoritos", 1)) return { maisNovo: true };
   const lido = lerEnvelope(bruto);
-  if (!lido) return { invalido: "o texto não está no formato dos favoritos" };
+  if (!lido) return { invalido: "o texto não está no formato dos monitorados" };
   const e = lido.envelope.escopos;
   if (e.length !== 1 || !mesmoEscopo(e[0]!.escopo, escopo)) return { invalido: "o texto é de outro usuário ou de outra unidade" };
   return { ok: lido.envelope };

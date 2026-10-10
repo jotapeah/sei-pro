@@ -91,7 +91,7 @@ function favoritosFalsos(inicial: string[], o: { falharNa?: number; idsFalham?: 
   };
   const f: FavoritosDoApp = {
     ids: async () => {
-      if (o.idsFalham) throw new Error("favoritos ilegíveis");
+      if (o.idsFalham) throw new Error("monitorados ilegíveis");
       return new Set(ids);
     },
     favoritar: async (v) => {
@@ -426,9 +426,9 @@ export async function verificarApp(): Promise<void> {
   const csv = e.baixados[0];
   checar("CSV com nome e data", csv?.nome === "historico-seipro-2026-10-02.csv", csv?.nome);
   checar("CSV so dos selecionados", csv?.conteudo === gerarCsv(linhasCsv([CINCO[0]!, CINCO[2]!])));
-  checar("sem Favoritos, lote sem 'Favoritar'", !botao(e.raiz, "Favoritar"));
-  checar("sem Favoritos, sem estrela", !e.raiz.querySelector(".spro-lista-estrela"));
-  checar("sem Favoritos, sem situacao de favoritos", !opcoesDoCombo(e.raiz, "Situação").includes("favoritos"));
+  checar("sem Monitorados, lote sem 'Monitorar'", !botao(e.raiz, "Monitorar"));
+  checar("sem Monitorados, sem estrela", !e.raiz.querySelector(".spro-lista-estrela"));
+  checar("sem Monitorados, sem situacao de monitorados", !opcoesDoCombo(e.raiz, "Situação").includes("favoritos"));
   botao(e.raiz, "Limpar seleção")!.click();
   checar("'Limpar seleção' esconde a barra", qtdLote(e.raiz) === null);
   const todos = () => e.raiz.querySelector<HTMLElement>('[role="checkbox"][aria-label="Selecionar todos os visíveis"]');
@@ -721,55 +721,55 @@ export async function verificarApp(): Promise<void> {
   await tique(60);
   checar("o Desfazer de dentro do dialogo devolve a visita", JSON.stringify(await rmd.repo.obter("2")) === JSON.stringify(antesD));
 
-  secao("historico app: com Favoritos");
+  secao("historico app: com Monitorados");
   const fv = favoritosFalsos(["1"]);
   const f = await montar({ favoritos: fv.f });
   await f.app.iniciar();
   const estrela = (id: string) => f.raiz.querySelector(`li[data-id="${id}"] .spro-lista-estrela`);
   checar(
-    "estrela nas linhas, cheia no favorito",
+    "estrela nas linhas, cheia no monitorado",
     estrela("1")?.getAttribute("aria-pressed") === "true" && estrela("2")?.getAttribute("aria-pressed") === "false",
   );
-  checar("situacao 'Nos favoritos' no seletor", opcoesDoCombo(f.raiz, "Situação").includes("favoritos"));
+  checar("situacao 'Nos monitorados' no seletor", opcoesDoCombo(f.raiz, "Situação").includes("favoritos"));
   (estrela("2") as HTMLElement).click();
   await tique(60);
   checar("estrela favorita", fv.log.join() === "fav:2" && estrela("2")?.getAttribute("aria-pressed") === "true", fv.log);
-  checar("aviso 'Favoritado em GPF'", textoAviso(f.doc).includes("Favoritado em GPF"));
+  checar("aviso 'Monitorado em GPF'", textoAviso(f.doc).includes("Monitorado em GPF"));
   botao(f.doc.body, "Desfazer")!.click();
   await tique(60);
   checar("Desfazer tira de novo", fv.log.at(-1) === "desfaz:2" && estrela("2")?.getAttribute("aria-pressed") === "false");
   (estrela("1") as HTMLElement).click();
   await tique(60);
-  checar("estrela cheia tira dos favoritos", fv.log.at(-1) === "tirar:1" && textoAviso(f.doc).includes("Tirado dos favoritos"));
+  checar("estrela cheia tira dos monitorados", fv.log.at(-1) === "tirar:1" && textoAviso(f.doc).includes("Tirado dos monitorados"));
   botao(f.doc.body, "Desfazer")!.click();
   await tique(60);
   checar("Desfazer devolve", fv.log.at(-1) === "volta:1" && estrela("1")?.getAttribute("aria-pressed") === "true");
   marcar(caixa(f.raiz, "1"));
-  checar("so favoritos selecionados: lote sem 'Favoritar'", !botao(f.raiz, "Favoritar"));
+  checar("so monitorados selecionados: lote sem 'Monitorar'", !botao(f.raiz, "Monitorar"));
   marcar(caixa(f.raiz, "2"));
   marcar(caixa(f.raiz, "3"));
-  botao(f.raiz, "Favoritar")!.click();
+  botao(f.raiz, "Monitorar")!.click();
   await tique(60);
   checar("lote favorita so os que nao sao", fv.log.slice(-2).join() === "fav:2,fav:3", fv.log);
-  checar("aviso do lote", textoAviso(f.doc).includes("2 processos favoritados em GPF"), textoAviso(f.doc));
+  checar("aviso do lote", textoAviso(f.doc).includes("2 processos monitorados em GPF"), textoAviso(f.doc));
   checar(
-    "menu da linha oferece 'Tirar dos favoritos'",
-    itemDoMenu(f.raiz.querySelector('li[data-id="2"]')!, "Mais ações para 50300.000002/2026-02", "Tirar dos favoritos"),
+    "menu da linha oferece 'Tirar dos monitorados'",
+    itemDoMenu(f.raiz.querySelector('li[data-id="2"]')!, "Mais ações para 50300.000002/2026-02", "Tirar dos monitorados"),
   );
   await tique(60);
   checar("e tira", fv.log.at(-1) === "tirar:2");
 
-  secao("historico app: favoritar em lote com falha no meio");
+  secao("historico app: monitorar em lote com falha no meio");
   const fp = favoritosFalsos([], { falharNa: 2 });
   const fl = await montar({ favoritos: fp.f });
   await fl.app.iniciar();
   marcar(caixa(fl.raiz, "1"));
   marcar(caixa(fl.raiz, "2"));
   marcar(caixa(fl.raiz, "3"));
-  botao(fl.raiz, "Favoritar")!.click();
+  botao(fl.raiz, "Monitorar")!.click();
   await tique(60);
   const tFl = textoAviso(fl.doc);
-  checar("um aviso so, com '1 de 3' e a falha", tFl.includes("1 de 3 favoritados em GPF.") && tFl.includes("Lista cheia"), tFl);
+  checar("um aviso so, com '1 de 3' e a falha", tFl.includes("1 de 3 monitorados em GPF.") && tFl.includes("Lista cheia"), tFl);
   checar("para no primeiro erro", fp.log.join() === "fav:1", fp.log);
   botao(fl.doc.body, "Desfazer")!.click();
   await tique(60);
@@ -779,22 +779,22 @@ export async function verificarApp(): Promise<void> {
   await fz0.app.iniciar();
   marcar(caixa(fz0.raiz, "1"));
   marcar(caixa(fz0.raiz, "2"));
-  botao(fz0.raiz, "Favoritar")!.click();
+  botao(fz0.raiz, "Monitorar")!.click();
   await tique(60);
   checar(
     "nada feito: so o erro, sem Desfazer",
-    textoAviso(fz0.doc).includes("Lista cheia") && !textoAviso(fz0.doc).includes("favoritados") && !botao(fz0.doc.body, "Desfazer"),
+    textoAviso(fz0.doc).includes("Lista cheia") && !textoAviso(fz0.doc).includes("monitorados") && !botao(fz0.doc.body, "Desfazer"),
     textoAviso(fz0.doc),
   );
 
-  secao("historico app: favoritos ilegiveis");
+  secao("historico app: monitorados ilegiveis");
   const fi = favoritosFalsos(["1"], { idsFalham: true });
   const fil = await montar({ favoritos: fi.f });
   const avisosFi = await avisosDoConsole(() => fil.app.iniciar());
   checar("a lista aparece mesmo assim, sem estrela", ids(fil.raiz) === "1,2,3,4,5" && !fil.raiz.querySelector(".spro-lista-estrela"));
   checar(
     "e registra no console",
-    avisosFi.some((a) => a.includes("favoritos ilegíveis")),
+    avisosFi.some((a) => a.includes("monitorados ilegíveis")),
     avisosFi,
   );
 
@@ -827,7 +827,7 @@ export async function verificarApp(): Promise<void> {
   const dz = await montar({ favoritos: fd.f });
   checar("antes de iniciar, nenhum ouvinte", dz.ouvintes() === 0 && fd.ouvintes() === 0);
   await dz.app.iniciar();
-  checar("iniciado: visitas e preferencias na area, e os favoritos", dz.ouvintes() === 2 && fd.ouvintes() === 1, {
+  checar("iniciado: visitas e preferencias na area, e os monitorados", dz.ouvintes() === 2 && fd.ouvintes() === 1, {
     area: dz.ouvintes(),
     fav: fd.ouvintes(),
   });
@@ -840,7 +840,7 @@ export async function verificarApp(): Promise<void> {
   checar("vivo, '/' foca a busca", focouDz === 1);
   dz.app.destruir();
   checar("destruido: nenhum ouvinte do app na area", dz.ouvintes() === 0, dz.ouvintes());
-  checar("nem nos favoritos", fd.ouvintes() === 0, fd.ouvintes());
+  checar("nem nos monitorados", fd.ouvintes() === 0, fd.ouvintes());
   tecla(dz.doc.body, "/");
   checar("destruido, '/' nao foca mais a busca", focouDz === 1);
   await dz.repo.registrarVisita({ id: "8", protocolo: "8/2026" }, AGORA + MIN);

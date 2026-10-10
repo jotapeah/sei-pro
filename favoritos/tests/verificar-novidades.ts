@@ -99,7 +99,7 @@ export async function verificarNovidades(): Promise<void> {
       .join() === "1,2",
   );
   checar(
-    "situacao: com documentos favoritos",
+    "situacao: com documentos monitorados",
     filtrar(lista, { situacoes: ["documentos"] }, apoio)
       .map((x) => x.id)
       .join() === "3",
@@ -115,7 +115,7 @@ export async function verificarNovidades(): Promise<void> {
       .join() === "3",
   );
   checar(
-    "busca pelo numero do documento favorito",
+    "busca pelo numero do documento monitorado",
     filtrar(lista, { busca: "0104019" }, apoio)
       .map((x) => x.id)
       .join() === "3",
@@ -156,7 +156,7 @@ export async function verificarContador(): Promise<void> {
   checar("lembrete vencido + novidade, nas duas listas", (await contarPendencias([u, p], "2026-10-01")) === 2);
   const b = instalarDom('<html><body><a class="spro-fav-botao"><img></a></body></html>').querySelector(".spro-fav-botao") as HTMLElement;
   pintarContador(b, 2);
-  checar("selo no botao com o numero", b.querySelector(".spro-fav-contador")?.textContent === "2" && /2 favoritos/.test(b.title));
+  checar("selo no botao com o numero", b.querySelector(".spro-fav-contador")?.textContent === "2" && /2 monitorados/.test(b.title));
   pintarContador(b, 0);
   checar("zerado: sem selo", !b.querySelector(".spro-fav-contador"));
 }
@@ -175,7 +175,7 @@ export async function verificarVistoSeparado(): Promise<void> {
   ta = 3000;
   await a.gravarAtual("1", I({ qtdDocumentos: 4, fonte: "arvore" }));
   await a.marcarVisto(["1"]);
-  checar("marcar visto nao reescreve o favorito", (await a.obter("1"))!.atualizadoEm === antes.atualizadoEm);
+  checar("marcar visto nao reescreve o monitorado", (await a.obter("1"))!.atualizadoEm === antes.atualizadoEm);
   await a.importar({ favoritos: [deB] });
   checar("a nota de B sobrevive", (await a.obter("1"))?.nota === "nota de B");
   checar("e o visto continua", (await a.vistos()).get("1")?.qtdDocumentos === 4);

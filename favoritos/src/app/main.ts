@@ -43,7 +43,7 @@ const raiz = document.getElementById("app")!;
 const conexao = lateral ? null : esperarConexaoDaAba(CANAL_FAVORITOS);
 
 const mostrarErro = (e: unknown) =>
-  raiz.replaceChildren(h("p", { class: "fav-erro" }, `Não foi possível abrir os favoritos: ${e instanceof Error ? e.message : String(e)}`));
+  raiz.replaceChildren(h("p", { class: "fav-erro" }, `Não foi possível abrir os monitorados: ${e instanceof Error ? e.message : String(e)}`));
 
 void (lateral ? iniciarLateral() : iniciarEmbutido()).catch(mostrarErro);
 
@@ -124,8 +124,8 @@ async function iniciarLateral(): Promise<void> {
   const esperando = h(
     "div",
     { class: "fav-sem-aba" },
-    icone("estrela", 28),
-    h("p", {}, "Abra o SEI nesta janela para ver seus favoritos."),
+    icone("alvo", 28),
+    h("p", {}, "Abra o SEI nesta janela para ver seus monitorados."),
     h("p", { class: "fav-dica" }, "Se o SEI já está aberto e nada aparece, recarregue a página dele (F5)."),
   );
   const reagir = () => {
@@ -216,7 +216,7 @@ function criarApp(b: Base, ctx: ContextoAba, rpc: Pick<Rpc, "chamar">, g: Gancho
           carimbo: b.carimbo,
           // Um arquivo por SEI e usuário: dois SEIs no mesmo arquivo funcionam, mas cada um fica mais simples sozinho.
           escolher: (modo) =>
-            escolherArquivoSync(modo, `favoritos-seipro-${ctx.login.toLowerCase()}-${ctx.host}.json`, "Favoritos do SEI Pro"),
+            escolherArquivoSync(modo, `favoritos-seipro-${ctx.login.toLowerCase()}-${ctx.host}.json`, "Monitorados do SEI Pro"),
         })
       : null,
   });

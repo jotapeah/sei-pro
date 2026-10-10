@@ -82,7 +82,7 @@ export async function verificarMotor(): Promise<void> {
   const m2 = montar({ remoto: await remotoDeOutro([{ id: "7", protocolo: "50300.000007/2026-07" }]) });
   await m2.repo.adicionar({ id: "1", protocolo: "50300.000001/2026-01" });
   await m2.motor.sincronizar();
-  checar("traz o favorito do outro computador", await m2.repo.contem("7"));
+  checar("traz o monitorado do outro computador", await m2.repo.contem("7"));
   checar("e empurra o local que faltava la", m2.destino.gravadas === 1 && (await m2.motor.status()).estado === "ok");
   const m3 = montar({ remoto: await remotoDeOutro([{ id: "7", protocolo: "50300.000007/2026-07" }]) });
   await m3.motor.sincronizar();

@@ -18,7 +18,7 @@ function extrair(nome: string): string {
 }
 
 export function verificarLegado(): void {
-  secao("legado: etiquetas dos Projetos sem o favoritos antigo");
+  secao("legado: etiquetas dos Projetos sem o monitorados antigo");
   const fontes = ["getColorTags", "sugestEtiquetaPro", "saveConfigEtiqueta"].map(extrair).join("\n");
   const $ = { map: (l: unknown[], f: (v: unknown) => unknown) => (l ?? []).flatMap((v) => f(v) ?? []) };
   const gravados: unknown[] = [];

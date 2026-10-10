@@ -73,10 +73,10 @@ export function verificarOperacoes(): void {
   checar("hoje", ids(filtrar(V, { periodos: ["hoje"] }, ap)) === "1");
   checar("ultimos 7 dias inclui hoje e ontem", ids(filtrar(V, { periodos: ["7dias"] }, ap)) === "1,2");
   checar("mais antigos", ids(filtrar(V, { periodos: ["antigos"] }, ap)) === "4");
-  checar("nos favoritos", ids(filtrar(V, { situacoes: ["favoritos"] }, ap)) === "2");
-  checar("fora dos favoritos", ids(filtrar(V, { situacoes: ["foraFavoritos"] }, ap)) === "1,3,4");
+  checar("nos monitorados", ids(filtrar(V, { situacoes: ["favoritos"] }, ap)) === "2");
+  checar("fora dos monitorados", ids(filtrar(V, { situacoes: ["foraFavoritos"] }, ap)) === "1,3,4");
   checar(
-    "sem favoritos ativos, foraFavoritos nao casa nenhum",
+    "sem monitorados ativos, foraMonitorados nao casa nenhum",
     filtrar(V, { situacoes: ["foraFavoritos"] }, { agora, favoritos: null }).length === 0,
   );
   checar("visitados mais de uma vez", ids(filtrar(V, { situacoes: ["repetidos"] }, ap)) === "1");

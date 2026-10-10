@@ -3445,7 +3445,7 @@ div#chartAtivActions .chosen-container {
 .kanban-item a.newLink .fa-archive {
     color: #666;
 }
-.infraAreaTabela .fa-star.iconFavoritePro {
+.infraAreaTabela .iconFavoritePro {
     color: #999 !important;
 }
 .infoDadosArvore .kanban-pinboard,

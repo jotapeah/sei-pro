@@ -17,8 +17,8 @@ const ORDENS: ReadonlyArray<{ valor: Ordem; rotulo: string; icone: NomeIcone; de
 
 /** `sempre`: aparece mesmo sem nenhum item; `favoritos`: só com Favoritos ativo. */
 const SITUACAO_OPCOES: ReadonlyArray<{ valor: Situacao; rotulo: string; icone: NomeIcone; sempre?: true; favoritos?: true }> = [
-  { valor: "favoritos", rotulo: "Nos favoritos", icone: "estrelaCheia", sempre: true, favoritos: true },
-  { valor: "foraFavoritos", rotulo: "Fora dos favoritos", icone: "estrela", sempre: true, favoritos: true },
+  { valor: "favoritos", rotulo: "Nos monitorados", icone: "alvoAtivo", sempre: true, favoritos: true },
+  { valor: "foraFavoritos", rotulo: "Fora dos monitorados", icone: "alvo", sempre: true, favoritos: true },
   { valor: "repetidos", rotulo: "Visitados mais de uma vez", icone: "camadas" },
   { valor: "publico", rotulo: "Públicos", icone: "olho", sempre: true },
   { valor: "restrito", rotulo: "Restritos", icone: "cadeado" },

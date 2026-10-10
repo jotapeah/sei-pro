@@ -55,7 +55,7 @@ export function verificarModelo(): void {
   checar("sigiloso sem especificacao", sig.sigiloso === true && sig.especificacao === undefined && sig.tipo === "T");
   const f = novoFavorito({ id: "1", protocolo: "50300.018905/2018-67", tipo: "Fiscalização", especificacao: "Porto X" }, "a0", c);
   checar(
-    "novo favorito carimbado",
+    "novo monitorado carimbado",
     f.criadoEm === 1000 && f.atualizadoEm === 1000 && f.dispositivo === "D1" && f.etiquetas.length === 0 && !("sigiloso" in f),
   );
   const e = editar(f, { titulo: "Meu título", nota: undefined }, { agora: 2000, dispositivo: "D2" });

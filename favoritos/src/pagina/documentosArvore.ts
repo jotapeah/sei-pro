@@ -43,11 +43,11 @@ export async function alternarDocumento(
 }
 
 function pintar(b: HTMLElement, ligado: boolean): void {
-  const rotulo = ligado ? "Tirar dos documentos favoritos" : "Guardar este documento nos favoritos";
+  const rotulo = ligado ? "Tirar dos documentos monitorados" : "Guardar este documento nos monitorados";
   b.setAttribute("aria-pressed", String(ligado));
   b.setAttribute("aria-label", rotulo);
   b.title = rotulo;
-  b.replaceChildren(icone(ligado ? "estrelaCheia" : "estrela", 15));
+  b.replaceChildren(icone(ligado ? "alvoAtivo" : "alvo", 15));
 }
 
 /** Põe as estrelas e as mantém (a árvore se redesenha); `repintar` acompanha mudanças feitas em outro lugar. */

@@ -59,7 +59,7 @@ export function verificarComponentes(): void {
     opcoesDoCombo(barra.el, "Período"),
   );
   checar(
-    "situacao sem favoritos e sem raras",
+    "situacao sem monitorados e sem raras",
     opcoesDoCombo(barra.el, "Situação").join() === "publico",
     opcoesDoCombo(barra.el, "Situação"),
   );
@@ -75,7 +75,7 @@ export function verificarComponentes(): void {
     }),
   );
   checar(
-    "situacao com favoritos e raras existentes",
+    "situacao com monitorados e raras existentes",
     opcoesDoCombo(barra.el, "Situação").join() === "favoritos,foraFavoritos,repetidos,publico,sigiloso",
     opcoesDoCombo(barra.el, "Situação"),
   );
@@ -139,8 +139,8 @@ export function verificarComponentes(): void {
   disparar(caixa, "change");
   const est = li.querySelector("button.spro-lista-estrela") as HTMLElement;
   checar(
-    "estrela favoritar",
-    est.getAttribute("aria-label") === "Favoritar 50300.000001/2026-01" && est.getAttribute("aria-pressed") === "false",
+    "estrela monitorar",
+    est.getAttribute("aria-label") === "Monitorar 50300.000001/2026-01" && est.getAttribute("aria-pressed") === "false",
   );
   est.click();
   checar("selo restrito", li.querySelector(".spro-lista-selo")?.textContent?.includes("restrito") === true);
@@ -162,7 +162,7 @@ export function verificarComponentes(): void {
   const menu = "Mais ações para 50300.000001/2026-01";
   itemDoMenu(li, menu, "Abrir em outra aba");
   itemDoMenu(li, menu, "Copiar número");
-  itemDoMenu(li, menu, "Favoritar");
+  itemDoMenu(li, menu, "Monitorar");
   itemDoMenu(li, menu, "Remover do histórico");
   checar("acoes do item", feito.slice(2).join() === "sel:1:true,fav:1,abrir:1:true,copiar:1,fav:1,remover:1", feito);
   li.remove();
@@ -173,16 +173,16 @@ export function verificarComponentes(): void {
     acoes,
   );
   document.body.append(li2);
-  checar("sem estrela com favorito null", !li2.querySelector(".spro-lista-estrela"));
+  checar("sem estrela com monitorado null", !li2.querySelector(".spro-lista-estrela"));
   checar("selo sigiloso", li2.querySelector(".spro-lista-selo")?.textContent?.includes("sigiloso") === true);
   checar("caixa marcada quando selecionado", li2.querySelector("input.spro-lista-sel")?.hasAttribute("checked") === true);
   checar("selecionado", li2.classList.contains("spro-lista-item-selecionado"));
   checar("sem 'visitas' com 1 so", !(li2.querySelector(".spro-lista-apoio")?.textContent ?? "").includes("visita"));
   checar("sigiloso mostra so o tipo", !(li2.textContent ?? "").includes("segredo"));
-  checar("menu sem favoritar com Favoritos inativo", !itemDoMenu(li2, "Mais ações para 2/2026", "Favoritar"));
+  checar("menu sem monitorar com Monitorados inativo", !itemDoMenu(li2, "Mais ações para 2/2026", "Monitorar"));
   li2.remove();
   const li3 = renderItem(visita({ id: "3" }), { agora: AGORA, selecionado: false, favorito: true }, acoes);
-  checar("estrela marcada", li3.querySelector(".spro-lista-estrela")?.getAttribute("aria-label") === "Tirar 3/2026 dos favoritos");
+  checar("estrela marcada", li3.querySelector(".spro-lista-estrela")?.getAttribute("aria-label") === "Tirar 3/2026 dos monitorados");
   checar("sem descricao", li3.querySelector(".spro-lista-principal")?.textContent?.includes("(sem descrição)") === true);
 
   secao("componentes: lista");

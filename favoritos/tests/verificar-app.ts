@@ -67,11 +67,11 @@ export async function verificarApp(): Promise<void> {
   await a.repos.unidade.adicionar({ id: "2", protocolo: "50300.000002/2026-02", tipo: "Contrato" });
   await a.app.iniciar();
   const itens = () => a.raiz.querySelectorAll("li.fav-item").length;
-  checar("lista os favoritos da unidade", itens() === 2, itens());
+  checar("lista os monitorados da unidade", itens() === 2, itens());
   checar("abas com contagem", !!botao(a.raiz, "GPF (2)") && !!botao(a.raiz, "Pessoal (0)"));
   await a.repos.unidade.adicionar({ id: "3", protocolo: "50300.000003/2026-03" });
   await tique(80);
-  checar("favorito gravado pela estrela (outro contexto) aparece sozinho", itens() === 3);
+  checar("monitorado gravado pela estrela (outro contexto) aparece sozinho", itens() === 3);
 
   (a.raiz.querySelector('li[data-id="1"] .fav-protocolo') as HTMLElement).click();
   checar(
@@ -132,10 +132,10 @@ export async function verificarApp(): Promise<void> {
   secao("app montado: Pessoal e lixeira");
   botao(a.raiz, "Pessoal (0)")!.click();
   await tique(80);
-  checar("aba Pessoal vazia convida a usar a estrela", (a.raiz.querySelector(".fav-vazio")?.textContent ?? "").includes("estrela"));
+  checar("aba Pessoal vazia convida a usar o alvo", (a.raiz.querySelector(".fav-vazio")?.textContent ?? "").includes("alvo"));
   botao(a.raiz, "GPF (3)")!.click();
   await tique(80);
-  itemDoMenu(a.raiz, "Opções dos favoritos", "Lixeira");
+  itemDoMenu(a.raiz, "Opções dos monitorados", "Lixeira");
   await tique(20);
   checar("lixeira abre (vazia depois do desfazer)", (a.raiz.textContent ?? "").includes("A lixeira está vazia."));
 
@@ -162,14 +162,14 @@ export async function verificarApp(): Promise<void> {
   await c.app.iniciar();
   checar("mesma unidade, sem faixa", !c.raiz.querySelector(".fav-faixa-unidade"));
 
-  secao("app montado: migracao dos favoritos antigos");
+  secao("app montado: migracao dos monitorados antigos");
   const legado = { favorites: [{ id_procedimento: "70", processo: "70/2026", categoria: "Contratos" }] };
   const m = montar({
     rpc: { chamar: (async (op: string) => (op === "lerLegado" ? { local: legado, arquivo: null } : true)) as DepsApp["rpc"]["chamar"] },
   });
   await m.app.iniciar();
   const dlg = m.modais[0];
-  checar("oferece trazer os antigos na primeira vez", dlg?.titulo === "Favoritos da versão anterior");
+  checar("oferece trazer os antigos na primeira vez", dlg?.titulo === "Monitorados da versão anterior");
   botao(dlg!.conteudo, "Trazer para GPF")!.click();
   await tique(80);
   checar(
@@ -186,10 +186,10 @@ export async function verificarApp(): Promise<void> {
   checar("'Agora nao' recente: nao pergunta de novo", m2.modais.length === 0);
   const m3 = montar({ rpc: legadoRpc }, { [chaveMigracao(CTX.host, "pedro.soares")]: { adiadoEm: Date.now() - 31 * dia } });
   await m3.app.iniciar();
-  checar("'Agora nao' ha mais de 30 dias: oferece de novo", m3.modais[0]?.titulo === "Favoritos da versão anterior");
+  checar("'Agora nao' ha mais de 30 dias: oferece de novo", m3.modais[0]?.titulo === "Monitorados da versão anterior");
   checar(
     "o dialogo diz onde achar a opcao depois",
-    (m3.modais[0]?.conteudo.textContent ?? "").includes("Trazer favoritos da versão anterior"),
+    (m3.modais[0]?.conteudo.textContent ?? "").includes("Trazer monitorados da versão anterior"),
   );
   const m4 = montar({ rpc: legadoRpc }, { [chaveMigracao(CTX.host, "pedro.soares")]: { em: 1, quantidade: 1, destino: "unidade" } });
   await m4.app.iniciar();
@@ -206,10 +206,10 @@ export async function verificarApp(): Promise<void> {
   secao("app: preferencias pelo menu");
   const pr = montar({ lateralDisponivel: true });
   await pr.app.iniciar();
-  itemDoMenu(pr.raiz, "Opções dos favoritos", "Preferências…");
+  itemDoMenu(pr.raiz, "Opções dos monitorados", "Preferências…");
   await tique(20);
   const dlgPref = pr.modais.at(-1);
-  checar("abre o dialogo de preferencias", dlgPref?.titulo === "Preferências dos favoritos");
+  checar("abre o dialogo de preferencias", dlgPref?.titulo === "Preferências dos monitorados");
   checar("com 'onde mostrar' (painel lateral disponivel)", !!dlgPref?.conteudo.querySelector('input[value="lateral"]'));
 
   secao("app: mapa");
@@ -235,7 +235,7 @@ export async function verificarApp(): Promise<void> {
   checar("item com local mostra o alfinete", !!mp.raiz.querySelector('li[data-id="61"] .fav-local'));
   itemDoMenu(mp.raiz.querySelector('li[data-id="61"]')!, "Mais ações para 50300.000061/2026-61", "Local no mapa…");
   await tique(80);
-  checar("abre o mapa do favorito", mp.modais.at(-1)?.titulo === "Local no mapa — 50300.000061/2026-61");
+  checar("abre o mapa do monitorado", mp.modais.at(-1)?.titulo === "Local no mapa — 50300.000061/2026-61");
   checar(
     "ja com o marcador no local salvo",
     marcadores.some(([a, b]) => a === -3.7 && b === -38.5),
@@ -243,15 +243,15 @@ export async function verificarApp(): Promise<void> {
   botao(mp.modais.at(-1)!.conteudo, "Remover local")!.click();
   await tique(40);
   checar("remover local grava", (await mp.repos.unidade.obter("61"))?.local === undefined);
-  itemDoMenu(mp.raiz, "Opções dos favoritos", "Mapa dos favoritos");
+  itemDoMenu(mp.raiz, "Opções dos monitorados", "Mapa dos monitorados");
   await tique(80);
   checar(
     "mapa geral abre mesmo sem locais e explica",
-    mp.modais.at(-1)?.titulo === "Mapa dos favoritos" && /Nenhum favorito/.test(mp.modais.at(-1)!.conteudo.textContent ?? ""),
+    mp.modais.at(-1)?.titulo === "Mapa dos monitorados" && /Nenhum monitorado/.test(mp.modais.at(-1)!.conteudo.textContent ?? ""),
   );
   const semMapa = montar();
   await semMapa.app.iniciar();
-  checar("sem carregador de mapa, sem item de mapa", !itemDoMenu(semMapa.raiz, "Opções dos favoritos", "Mapa dos favoritos"));
+  checar("sem carregador de mapa, sem item de mapa", !itemDoMenu(semMapa.raiz, "Opções dos monitorados", "Mapa dos monitorados"));
 
   secao("app: sincronia pelo Texto Padrao");
   const sy = montar();
@@ -296,7 +296,7 @@ export async function verificarApp(): Promise<void> {
   });
   await tique(30);
   checar("linha de status: erro com a mensagem", /expirada/.test(rodape()), rodape());
-  itemDoMenu(sy.raiz, "Opções dos favoritos", "Sincronização…");
+  itemDoMenu(sy.raiz, "Opções dos monitorados", "Sincronização…");
   await tique(20);
   const dlgS = sy.modais.at(-1)!;
   botao(dlgS.conteudo, "Sincronizar agora")!.click();
@@ -315,7 +315,7 @@ export async function verificarApp(): Promise<void> {
   // Na aba, o "apagar" desliga a unidade (pagina/sincronia.ts); aqui o rpc é falso, então desliga-se à mão.
   await definirTextoPadrao(sy.sync, CTX.host, CTX.login, CTX.unidade!.id, "desligado");
   await tique(30);
-  itemDoMenu(sy.raiz, "Opções dos favoritos", "Sincronização…");
+  itemDoMenu(sy.raiz, "Opções dos monitorados", "Sincronização…");
   await tique(30);
   const dlgD = sy.modais.at(-1)!;
   checar(
@@ -345,7 +345,7 @@ export async function verificarApp(): Promise<void> {
     lista.length === 1 && lista[0]!.dia === "2026-10-01",
     lista.map((c) => c.dia),
   );
-  itemDoMenu(ap.raiz, "Opções dos favoritos", "Sincronização…");
+  itemDoMenu(ap.raiz, "Opções dos monitorados", "Sincronização…");
   await tique(40);
   const dlgCp = ap.modais.at(-1)!;
   checar(
@@ -356,7 +356,7 @@ export async function verificarApp(): Promise<void> {
   await ap.repos.unidade.remover(["31"]);
   botao(dlgCp.conteudo, "Restaurar")!.click();
   await tique(60);
-  checar("restaurar devolve o favorito removido", await ap.repos.unidade.contem("31"));
+  checar("restaurar devolve o monitorado removido", await ap.repos.unidade.contem("31"));
 
   secao("app: o que mudou");
   const nv = montar();
@@ -418,7 +418,7 @@ export async function verificarApp(): Promise<void> {
     ordemIds().startsWith("73,") && !!fx.raiz.querySelector('.fav-fixados li[data-id="73"]'),
     ordemIds(),
   );
-  checar("grava no favorito", (await fx.repos.unidade.obter("73"))?.fixado === true);
+  checar("grava no monitorado", (await fx.repos.unidade.obter("73"))?.fixado === true);
   checar(
     "o pino fica marcado",
     fixar("73")?.getAttribute("aria-pressed") === "true" && fixar("73")?.getAttribute("aria-label") === "Desafixar",
@@ -557,13 +557,13 @@ export async function verificarApp(): Promise<void> {
     chrome.restaurar();
   }
 
-  secao("app: documentos favoritos no item");
+  secao("app: documentos monitorados no item");
   const df = montar();
   await df.repos.unidade.adicionar({ id: "71", protocolo: "50300.000071/2026-71" });
   await df.repos.unidade.editar("71", { documentos: [{ id: "9", numero: "0104019", titulo: "Despacho 12", criadoEm: 1 }] });
   await df.app.iniciar();
   const docs = df.raiz.querySelector('li[data-id="71"] .fav-docs');
-  checar("lista os documentos do favorito", !!docs && /0104019/.test(docs.textContent ?? "") && /Despacho 12/.test(docs.textContent ?? ""));
+  checar("lista os documentos do monitorado", !!docs && /0104019/.test(docs.textContent ?? "") && /Despacho 12/.test(docs.textContent ?? ""));
   botao(docs!, "0104019 — Despacho 12")!.click();
   await tique(20);
   checar(
@@ -572,7 +572,7 @@ export async function verificarApp(): Promise<void> {
       ([op, a]) => op === "abrirProcesso" && (a as { protocolo: string }).protocolo === "0104019" && (a as { id: string }).id === "",
     ),
   );
-  botao(docs!, "Tirar 0104019 dos documentos favoritos")!.click();
+  botao(docs!, "Tirar 0104019 dos documentos monitorados")!.click();
   await tique(60);
   checar("tirar o documento", !(await df.repos.unidade.obter("71"))?.documentos?.length);
 }

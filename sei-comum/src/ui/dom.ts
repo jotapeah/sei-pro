@@ -41,6 +41,16 @@ const CONTORNO_ESTRELA = "M12 3.2l2.7 5.5 6 .9-4.35 4.25 1 6L12 17l-5.35 2.85 1-
 const ICONES = {
   estrela: [["path", { d: CONTORNO_ESTRELA }]],
   estrelaCheia: [["path", { d: CONTORNO_ESTRELA, fill: "currentColor" }]],
+  // Processos Monitorados: o inativo é só o alvo; o ativo muda a silhueta (centro cheio e marcas de mira), não só a cor.
+  alvo: [
+    ["circle", { cx: "12", cy: "12", r: "7.5" }],
+    ["circle", { cx: "12", cy: "12", r: "3.2" }],
+  ],
+  alvoAtivo: [
+    ["circle", { cx: "12", cy: "12", r: "6.6" }],
+    ["circle", { cx: "12", cy: "12", r: "2.4", fill: "currentColor" }],
+    ["path", { d: "M12 2.2v3.4M12 18.4v3.4M2.2 12h3.4M18.4 12h3.4" }],
+  ],
   pasta: [["path", { d: "M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" }]],
   etiqueta: [
     ["path", { d: "M3.5 12.2V4.5a1 1 0 0 1 1-1h7.7l8.3 8.3a1 1 0 0 1 0 1.4l-7.1 7.1a1 1 0 0 1-1.4 0z" }],

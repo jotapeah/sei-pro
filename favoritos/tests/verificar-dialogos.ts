@@ -79,7 +79,7 @@ export async function verificarDialogos(): Promise<void> {
       prazoDosValores({ ...vazio, modo: "data", vencimento: "" }) === undefined,
   );
 
-  secao("editor do favorito");
+  secao("editor do monitorado");
   const pasta: Pasta = { id: "p1", nome: "Contratos", ordem: "a0", atualizadoEm: 1, dispositivo: "D" };
   const et: Etiqueta = { id: "e1", nome: "Urgente", cor: "#ffe0b2", atualizadoEm: 1, dispositivo: "D" };
   const salvos: MudancasFavorito[] = [];
@@ -285,7 +285,7 @@ export async function verificarDialogos(): Promise<void> {
   );
   checar("formato desconhecido", lerEnvelope({ formato: "outro" }) === null && lerEnvelope(null) === null);
 
-  secao("arquivo: dados editados a mao nao travam a lista nem o favoritar");
+  secao("arquivo: dados editados a mao nao travam a lista nem o monitorar");
   const torto = JSON.parse(JSON.stringify(env));
   const fx = torto.escopos[0].favoritos[0];
   fx.ordem = "b";
@@ -326,14 +326,14 @@ export async function verificarDialogos(): Promise<void> {
   await importarEnvelope(areaTorta, lidoTorto.envelope, carimbo, { host: CTX.host, login: "pedro.soares" });
   const repoTorto = new RepositorioFavoritos(areaTorta, lidoTorto.envelope.escopos[0]!.escopo, carimbo);
   checar(
-    "depois de importar, favoritar continua funcionando",
+    "depois de importar, monitorar continua funcionando",
     (await repoTorto.adicionar({ id: "novo", protocolo: "9/2026" })).id === "novo",
   );
   const areaLixo = areaMemoria();
   const repoLixo = new RepositorioFavoritos(areaLixo, esc.unidade!, carimbo);
   await repoLixo.favoritos.gravar("velho", { ...fx, id: "velho", ordem: "b" });
   checar(
-    "chave de ordem invalida ja gravada nao trava o proximo favorito",
+    "chave de ordem invalida ja gravada nao trava o proximo monitorado",
     (await repoLixo.adicionar({ id: "outro", protocolo: "8/2026" })).id === "outro",
   );
 }

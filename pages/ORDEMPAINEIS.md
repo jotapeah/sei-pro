@@ -2,7 +2,7 @@
 
 ## ![SEI Pro Ordem dos painéis](../img/icon-notaarvore.png) Ordem e visibilidade dos painéis
 
-Na tela de **Controle de Processos**, o SEI Pro pode mostrar vários painéis além da lista de processos: **Favoritos**, **Atividades**, **Projetos**. Com esta função, **você decide a ordem deles** e **quais ficam visíveis**, sem precisar recarregar a página.
+Na tela de **Controle de Processos**, o SEI Pro pode mostrar vários painéis além da lista de processos: **Monitorados**, **Atividades**, **Projetos**. Com esta função, **você decide a ordem deles** e **quais ficam visíveis**, sem precisar recarregar a página.
 
 ### Como usar
 
@@ -21,4 +21,4 @@ Na tela de **Controle de Processos**, o SEI Pro pode mostrar vários painéis al
 
 ## Próximo item
 
-> [Gerenciar processos favoritos](../pages/FAVORITOS.md)
+> [Gerenciar processos monitorados](../pages/FAVORITOS.md)

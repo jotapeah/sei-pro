@@ -17,9 +17,9 @@ export function criarEstrela(ativo: boolean, comoIcone = false): HTMLButtonEleme
 
 export function atualizarEstrela(b: HTMLButtonElement, ativo: boolean): void {
   if (b.getAttribute("aria-pressed") === String(ativo) && b.firstChild) return;
-  const rotulo = ativo ? "Remover dos favoritos" : "Adicionar aos favoritos";
+  const rotulo = ativo ? "Remover dos monitorados" : "Adicionar aos monitorados";
   b.setAttribute("aria-pressed", String(ativo));
   b.setAttribute("aria-label", rotulo);
   b.title = rotulo;
-  b.replaceChildren(icone(ativo ? "estrelaCheia" : "estrela", 16));
+  b.replaceChildren(icone(ativo ? "alvoAtivo" : "alvo", 16));
 }

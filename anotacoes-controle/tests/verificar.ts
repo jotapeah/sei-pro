@@ -229,7 +229,7 @@ await teste('seta só aparece com transbordamento medido e recolhe quando cabe',
   assert.equal(botao.getAttribute('aria-expanded'), 'false');
   assert.equal(d.querySelector('.spro-anotacao-expandida'), null);
 });
-await teste('núcleo (agente e favoritos) lê a mesma linha com o cartão', () => {
+await teste('núcleo (agente e monitorados) lê a mesma linha com o cartão', () => {
   const d = fixture41(); const linha = d.querySelector('#P148265')!;
   const antes = lerLinhaCaixa(linha, 'recebidos');
   renderizar(d, true);

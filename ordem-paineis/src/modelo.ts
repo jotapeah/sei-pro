@@ -22,7 +22,7 @@ const LIMITE = 50;
 
 const NOMES: Record<string, string> = {
   processosSEIPro: 'Controle de Processos',
-  favoritesPro: 'Favoritos',
+  favoritesPro: 'Monitorados',
   atividadesPro: 'Atividades',
   projetosGantt: 'Projetos',
   projetosPro: 'Projetos',

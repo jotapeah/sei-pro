@@ -48,8 +48,8 @@ export function renderItem(v: Visita, a: ApoioItem, acoes: AcoesItem): HTMLLIEle
       { rotulo: "Copiar número", icone: "copiar", fazer: () => acoes.copiar(v) },
       favoritavel
         ? {
-            rotulo: a.favorito ? "Tirar dos favoritos" : "Favoritar",
-            icone: a.favorito ? "estrelaCheia" : "estrela",
+            rotulo: a.favorito ? "Tirar dos monitorados" : "Monitorar",
+            icone: a.favorito ? "alvoAtivo" : "alvo",
             fazer: () => acoes.alternarFavorito?.(v),
           }
         : null,
@@ -83,11 +83,11 @@ export function renderItem(v: Visita, a: ApoioItem, acoes: AcoesItem): HTMLLIEle
             type: "button",
             class: "spro-lista-estrela",
             "aria-pressed": String(!!a.favorito),
-            "aria-label": a.favorito ? `Tirar ${v.protocolo} dos favoritos` : `Favoritar ${v.protocolo}`,
-            title: a.favorito ? "Tirar dos favoritos" : "Favoritar",
+            "aria-label": a.favorito ? `Tirar ${v.protocolo} dos monitorados` : `Monitorar ${v.protocolo}`,
+            title: a.favorito ? "Tirar dos monitorados" : "Monitorar",
             onclick: () => acoes.alternarFavorito?.(v),
           },
-          a.favorito ? h("span", { style: "color:#e0a100" }, icone("estrelaCheia", 15)) : icone("estrela", 15),
+          a.favorito ? h("span", { style: "color:#e0a100" }, icone("alvoAtivo", 15)) : icone("alvo", 15),
         )
       : null,
     h(

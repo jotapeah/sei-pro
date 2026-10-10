@@ -9,7 +9,7 @@ const url = (c: string) => `chrome-extension://x/${c}`;
 const AQUI = dirname(fileURLToPath(import.meta.url));
 
 export async function verificarShell(): Promise<void> {
-  secao("painel lateral: abas Favoritos | Agente");
+  secao("painel lateral: abas Monitorados | Agente");
   const doc = instalarDom('<html><body><div id="painel"></div></body></html>');
   const sessao = areaMemoria({ painelAba: "agente" });
   const raiz = doc.getElementById("painel")!;
@@ -17,10 +17,10 @@ export async function verificarShell(): Promise<void> {
   const frames = () => [...raiz.querySelectorAll("iframe")] as HTMLIFrameElement[];
   checar("abre na aba pedida pelo background", shell.atual() === "agente");
   checar("so a aba aberta tem iframe (preguicoso)", frames().length === 1 && frames()[0]!.src.endsWith("html/agente.html"));
-  botao(raiz, "Favoritos")!.click();
+  botao(raiz, "Monitorados")!.click();
   await tique();
   checar(
-    "trocar cria o iframe do favoritos, em modo lateral",
+    "trocar cria o iframe do monitorados, em modo lateral",
     frames().length === 2 && frames().some((f) => f.src.endsWith("favoritos.html#modo=lateral")),
   );
   const agente = frames().find((f) => f.src.endsWith("agente.html"))!;
@@ -32,25 +32,25 @@ export async function verificarShell(): Promise<void> {
   await sessao.gravar({ painelAba: "favoritos" });
   await tique();
   checar("pedido novo do background com o painel aberto troca a aba", shell.atual() === "favoritos");
-  checar("aba marcada", botao(raiz, "Favoritos")!.getAttribute("aria-selected") === "true");
+  checar("aba marcada", botao(raiz, "Monitorados")!.getAttribute("aria-selected") === "true");
 
-  secao("painel lateral: contador na aba Favoritos");
+  secao("painel lateral: contador na aba Monitorados");
   const doc3 = instalarDom('<html><body><div id="painel"></div></body></html>');
   const local = areaMemoria({ "favoritos/contadorPainel": 3 });
   const raiz3 = doc3.getElementById("painel")!;
   await montarShell(raiz3, { sessao: areaMemoria(), temAgente: true, url, local });
   await tique();
-  checar("mostra as pendencias na aba", botao(raiz3, "Favoritos (3)") !== undefined, raiz3.querySelector('[role="tab"]')?.textContent);
+  checar("mostra as pendencias na aba", botao(raiz3, "Monitorados (3)") !== undefined, raiz3.querySelector('[role="tab"]')?.textContent);
   await local.gravar({ "favoritos/contadorPainel": 0 });
   await tique();
-  checar("zerou: sem numero", botao(raiz3, "Favoritos") !== undefined);
+  checar("zerou: sem numero", botao(raiz3, "Monitorados") !== undefined);
 
-  secao("painel lateral: pacote sem o favoritos novo (oficial ainda com o antigo)");
+  secao("painel lateral: pacote sem o monitorados novo (oficial ainda com o antigo)");
   const doc4 = instalarDom('<html><body><div id="painel"></div></body></html>');
   const raiz4 = doc4.getElementById("painel")!;
   const s4 = await montarShell(raiz4, { sessao: areaMemoria({ painelAba: "favoritos" }), temAgente: true, temFavoritos: false, url });
   checar(
-    "so o agente, sem a aba Favoritos que nunca conectaria",
+    "so o agente, sem a aba Monitorados que nunca conectaria",
     s4.atual() === "agente" && raiz4.querySelectorAll("iframe").length === 1 && !raiz4.querySelector('[role="tablist"]'),
   );
 
@@ -58,16 +58,16 @@ export async function verificarShell(): Promise<void> {
   const doc2 = instalarDom('<html><body><div id="painel"></div></body></html>');
   const raiz2 = doc2.getElementById("painel")!;
   const s2 = await montarShell(raiz2, { sessao: areaMemoria({ painelAba: "agente" }), temAgente: false, url });
-  checar("sem agente, so favoritos", s2.atual() === "favoritos" && raiz2.querySelectorAll("iframe").length === 1);
+  checar("sem agente, so monitorados", s2.atual() === "favoritos" && raiz2.querySelectorAll("iframe").length === 1);
   checar("e sem barra de abas", !raiz2.querySelector('[role="tablist"]'));
 
-  secao("painel lateral: tres abas na ordem Favoritos | Historico | Agente");
+  secao("painel lateral: tres abas na ordem Monitorados | Historico | Agente");
   {
     const docH = instalarDom('<html><body><div id="painel"></div></body></html>');
     const raizH = docH.getElementById("painel")!;
     const shellH = await montarShell(raizH, { sessao: areaMemoria({ painelAba: "historico" }), temAgente: true, temHistorico: true, url });
     const rotulos = [...raizH.querySelectorAll('[role="tab"]')].map((b) => b.getAttribute("aria-label"));
-    checar("ordem das abas", JSON.stringify(rotulos) === JSON.stringify(["Favoritos", "Hist\u00f3rico", "Agente de IA"]), rotulos);
+    checar("ordem das abas", JSON.stringify(rotulos) === JSON.stringify(["Monitorados", "Hist\u00f3rico", "Agente de IA"]), rotulos);
     checar("abre na aba historico pedida", shellH.atual() === "historico");
     const f = raizH.querySelector("iframe") as HTMLIFrameElement;
     checar("iframe do historico em modo lateral", f.src.endsWith("html/historico.html#modo=lateral"));
@@ -95,8 +95,8 @@ export async function verificarShell(): Promise<void> {
     await tique();
     const rotulos = [...raizP.querySelectorAll('[role="tab"]')].map((b) => b.getAttribute("aria-label"));
     checar(
-      "ordem Favoritos | Historico | Projetos | Agente",
-      JSON.stringify(rotulos) === JSON.stringify(["Favoritos", "Hist\u00f3rico", "Projetos (2)", "Agente de IA"]),
+      "ordem Monitorados | Historico | Projetos | Agente",
+      JSON.stringify(rotulos) === JSON.stringify(["Monitorados", "Hist\u00f3rico", "Projetos (2)", "Agente de IA"]),
       rotulos,
     );
     checar("abre na aba pedida pelo background", shellP.atual() === "projetos");

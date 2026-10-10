@@ -32,8 +32,8 @@ export async function montarGerenciar(d: DepsGerenciar): Promise<HTMLElement> {
     );
     const aviso =
       tipo === "pasta"
-        ? `Excluir a pasta "${item.nome}"? Os favoritos dela ficam sem pasta.`
-        : `Excluir a etiqueta "${item.nome}"? Ela sai de todos os favoritos.`;
+        ? `Excluir a pasta "${item.nome}"? Os monitorados dela ficam sem pasta.`
+        : `Excluir a etiqueta "${item.nome}"? Ela sai de todos os monitorados.`;
     const excluir = h(
       "button",
       {

@@ -6,7 +6,7 @@ import { checar, instalarDom, secao, tique } from "./util";
 import { CTX } from "./verificar-modelo";
 
 export async function verificarDocumentosFavoritos(): Promise<void> {
-  secao("documentos favoritos: alternar");
+  secao("documentos monitorados: alternar");
   const area = areaMemoria();
   let t = 1;
   const carimbo = () => ({ agora: ++t, dispositivo: "A" });
@@ -18,7 +18,7 @@ export async function verificarDocumentosFavoritos(): Promise<void> {
   const proc = { id: "148265", protocolo: "99906.713-630.000032/2025-82", tipo: "Contratação" };
   const d1 = { id: "160288", numero: "0104019", titulo: "Despacho 12" };
   checar(
-    "documento de processo que nao e favorito: o processo entra na unidade",
+    "documento de processo que nao e monitorado: o processo entra na unidade",
     (await alternarDocumento(repos, proc, d1)) && (await repos.unidade.contem("148265")),
   );
   checar("e o documento fica guardado", (await repos.unidade.obter("148265"))?.documentos?.[0]?.numero === "0104019");
@@ -35,7 +35,7 @@ export async function verificarDocumentosFavoritos(): Promise<void> {
     (await repos.pessoal.obter("5"))?.documentos?.length === 1 && !(await repos.unidade.contem("5")),
   );
 
-  secao("documentos favoritos: estrelas na arvore");
+  secao("documentos monitorados: estrelas na arvore");
   const doc = instalarDom(
     '<html><body><div id="divArvore"><a id="anchor160288">Despacho 12 (0104019)</a><a id="anchor160290">Nota (0104020)</a></div></body></html>',
   );
@@ -55,7 +55,7 @@ export async function verificarDocumentosFavoritos(): Promise<void> {
   const estrelas = doc.querySelectorAll(".spro-fav-doc");
   checar("uma estrela por documento, depois do nome", estrelas.length === 2 && estrelas[0]!.previousElementSibling?.id === "anchor160288");
   checar(
-    "documento favorito ja vem marcado",
+    "documento monitorado ja vem marcado",
     estrelas[1]!.getAttribute("aria-pressed") === "true" && estrelas[0]!.getAttribute("aria-pressed") === "false",
   );
   (estrelas[0] as HTMLElement).click();
@@ -64,7 +64,7 @@ export async function verificarDocumentosFavoritos(): Promise<void> {
   checar("nao e a estrela do processo (delegacao separada)", !estrelas[0]!.classList.contains("spro-fav-estrela"));
   parar();
 
-  secao("documentos favoritos: convivencia com os icones do SEI Pro antigo na arvore");
+  secao("documentos monitorados: convivencia com os icones do SEI Pro antigo na arvore");
   const docL = instalarDom(
     '<html><body><div id="divArvore"><a id="anchor7">Despacho 7</a><span class="action-doc action-copy"></span><span class="action-doc action-link"></span><a class="infraArvoreInformacao">GPF</a><a id="anchor8">Nota 8</a></div></body></html>',
   );

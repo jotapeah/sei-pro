@@ -35,12 +35,12 @@ export function montarPainel(doc: Document, o: OpcoesPainel): PainelMontado | nu
   return montarPainelEmbutido(doc, {
     ...o,
     id: ID_PAINEL,
-    titulo: "Favoritos",
-    tituloIframe: "Favoritos do SEI Pro",
+    titulo: "Monitorados",
+    tituloIframe: "Monitorados do SEI Pro",
     prefixo: "spro-fav",
-    rotulos: { mostrar: "Mostrar favoritos", recolher: "Recolher favoritos" },
+    rotulos: { mostrar: "Mostrar monitorados", recolher: "Recolher monitorados" },
     icone: () => {
-      const estrela = icone("estrelaCheia", 20);
+      const estrela = icone("alvoAtivo", 20);
       estrela.setAttribute("style", "color:#e0a100");
       return estrela;
     },

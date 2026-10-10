@@ -39,7 +39,7 @@ export function renderLista(o: OpcoesLista): HTMLElement {
     return h(
       "div",
       { class: "fav-vazio" },
-      h("span", { class: "fav-vazio-arte", "aria-hidden": "true" }, icone("estrela", 28)),
+      h("span", { class: "fav-vazio-arte", "aria-hidden": "true" }, icone("alvo", 28)),
       h("p", { class: "fav-vazio-texto" }, o.vazio),
       o.vazioDica ? h("p", { class: "fav-vazio-dica" }, o.vazioDica) : null,
     );

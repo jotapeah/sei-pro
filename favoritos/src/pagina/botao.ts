@@ -33,12 +33,12 @@ export function instalarBotaoCaixa(
       href: "#",
       role: "button",
       class: "botaoSEI spro-fav-botao",
-      title: "Favoritos",
-      "aria-label": "Favoritos",
+      title: "Monitorados",
+      "aria-label": "Monitorados",
       tabindex: "452",
       style: "cursor: pointer;",
     },
-    h("img", { class: "infraCorBarraSistema", src: o.url("icons/menu/favoritos.svg"), alt: "Favoritos", title: "Favoritos" }),
+    h("img", { class: "infraCorBarraSistema", src: o.url("icons/menu/favoritos.svg"), alt: "Monitorados", title: "Monitorados" }),
   );
   b.addEventListener("click", (ev) => {
     ev.preventDefault();
@@ -52,7 +52,7 @@ export function instalarBotaoCaixa(
 export function instalarBotaoArvore(doc: Document, o: { url: (c: string) => string; abrirLateral(): void }): HTMLElement | null {
   const estrela = doc.querySelector("#topmenu .spro-fav-estrela");
   if (!estrela || estrela.parentElement?.querySelector(".spro-fav-abrir")) return null;
-  const rotulo = "Abrir a lista de favoritos no painel lateral";
+  const rotulo = "Abrir a lista de monitorados no painel lateral";
   // Classe própria: `.spro-fav-estrela` seria capturada pela delegação das estrelas e alternaria o favorito.
   const b = h("button", { type: "button", class: "spro-fav-abrir", title: rotulo, "aria-label": rotulo }, icone("painel", 16));
   b.addEventListener("click", (ev) => {
@@ -82,7 +82,7 @@ export async function contarPendencias(repos: RepositorioFavoritos[], hoje: Data
 
 export function pintarContador(botao: HTMLElement, n: number): void {
   botao.querySelector(".spro-fav-contador")?.remove();
-  botao.title = n ? `Favoritos: ${n} ${n === 1 ? "favorito pede" : "favoritos pedem"} atenção (lembrete ou novidade)` : "Favoritos";
+  botao.title = n ? `Monitorados: ${n} ${n === 1 ? "monitorado pede" : "monitorados pedem"} atenção (lembrete ou novidade)` : "Monitorados";
   if (!n) return;
   botao.append(h("span", { class: "spro-fav-contador", "aria-hidden": "true" }, String(n)));
 }

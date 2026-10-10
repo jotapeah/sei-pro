@@ -51,7 +51,7 @@ export async function alternarComAviso(servico: ServicoFavoritosPagina, dados: D
     estrela.removeAttribute("data-erro");
   } catch (e) {
     console.warn("[SEI Pro] favoritos: não foi possível gravar", e);
-    const aviso = "Não foi possível gravar o favorito. Tente de novo.";
+    const aviso = "Não foi possível gravar o monitorado. Tente de novo.";
     estrela.setAttribute("data-erro", "1");
     estrela.setAttribute("aria-label", aviso);
     estrela.title = aviso;

@@ -1665,7 +1665,7 @@ function initLoadLocalFilePro() {
     $('#selectLocalFilesPro[type=file]').trigger('click');
 }
 function loadLocalFilePro() {
-    confirmaFraseBoxPro('Esta a\u00E7\u00E3o ir\u00E1 substituir todos os dados de processos favoritos. Tem certeza que deseja prosseguir?', 'SIM', 
+    confirmaFraseBoxPro('Esta a\u00E7\u00E3o ir\u00E1 substituir todos os dados de processos monitorados. Tem certeza que deseja prosseguir?', 'SIM', 
         function(){
             var files = document.getElementById('selectLocalFilesPro').files;
             if (files.length <= 0) { return false; }
@@ -1692,8 +1692,8 @@ function htmlIconFavorites(id_procedimento, float = false) {
     var dataFavorites = (jmespath.search(storeFavorites, "[?id_procedimento=='"+id_procedimento+"'] | length(@)") > 0) ? jmespath.search(storeFavorites, "[?id_procedimento=='"+id_procedimento+"'] | [0]") : '';
     var floatStyle = (float) ? 'float: '+float+';' : '';
     var iconStar = (dataFavorites == '') 
-                    ? '<i title="Adicionar Processo aos Favoritos" id="iconFavoritePro_'+id_procedimento+'" data-id_procedimento="'+id_procedimento+'" onclick="parent.actFavoritePro(this, \'add\')" class="far fa-star iconFavoritePro" style="font-size: 12pt; margin: 0 5px; color: #666; cursor: pointer; '+floatStyle+'"></i>'
-                    : '<i title="Remover Processo dos Favoritos" id="iconFavoritePro_'+id_procedimento+'" data-id_procedimento="'+id_procedimento+'" onclick="parent.actFavoritePro(this, \'remove\')" class="fas fa-star starGold iconFavoritePro" style="font-size: 12pt; margin: 0 5px; cursor: pointer; -webkit-text-fill-color: #FED35B; -webkit-text-stroke-color: rgb(216 162 22); -webkit-text-stroke-width: 2px; '+floatStyle+'"></i>';
+                    ? '<i title="Monitorar Processo" id="iconFavoritePro_'+id_procedimento+'" data-id_procedimento="'+id_procedimento+'" onclick="parent.actFavoritePro(this, \'add\')" class="far fa-dot-circle iconFavoritePro" style="font-size: 12pt; margin: 0 5px; color: #666; cursor: pointer; '+floatStyle+'"></i>'
+                    : '<i title="Parar de Monitorar Processo" id="iconFavoritePro_'+id_procedimento+'" data-id_procedimento="'+id_procedimento+'" onclick="parent.actFavoritePro(this, \'remove\')" class="fas fa-bullseye starGold iconFavoritePro" style="font-size: 12pt; margin: 0 5px; cursor: pointer; -webkit-text-fill-color: #FED35B; -webkit-text-stroke-color: rgb(216 162 22); -webkit-text-stroke-width: 2px; '+floatStyle+'"></i>';
     return iconStar;
 }
 function resizeWinArvore(widthArvore) {
@@ -6592,7 +6592,7 @@ function addOptionsEtiqueta(this_, mode) {
         var htmlOptions =   '<input type="color" class="tagFavAddColorInput" value="'+backgroundColor+'" onchange="parent.changeColorEtiqueta(this, \''+mode+'\')">'+
                             '<i class="tagFavEditIcon fas fa-'+iconValue+'" data-icontag="'+iconValue+'" onclick="parent.openBoxIconsFA(\'selectIconEtiqueta\', \''+tagName+'\', \''+mode+'\')" onmouseover="return infraTooltipMostrar(\'Alterar \u00EDcone\');" onmouseout="return infraTooltipOcultar();"></i>'+
                             '<i class="tagFavAddColor fas fa-fill-drip" onclick="parent.openColorEtiqueta(this)" onmouseover="return infraTooltipMostrar(\'Alterar cor\');" onmouseout="return infraTooltipOcultar();"></i>';
-            htmlOptions = getHtmlJanelaProcessoPro(htmlOptions, this); // etiquetas do "Manter em Favoritos" do Enviar Processo
+            htmlOptions = getHtmlJanelaProcessoPro(htmlOptions, this); // etiquetas do "Manter em Monitorados" do Enviar Processo
         if (colorValue != '') {
             $(this).css({'background-color': colorValue, 'color': textColour}).find('.tag-text').css('color',textColour);
         }

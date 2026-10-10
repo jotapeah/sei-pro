@@ -152,12 +152,12 @@ export function montarBalao(d: DepsBalao): HTMLElement {
 
   return h(
     "div",
-    { class: "fav-balao", role: "dialog", "aria-label": `Favorito ${fav.protocolo}` },
+    { class: "fav-balao", role: "dialog", "aria-label": `Monitorado ${fav.protocolo}` },
     h(
       "div",
       { class: "fav-balao-topo" },
-      h("span", { class: "fav-balao-estrela" }, icone("estrelaCheia", 16)),
-      h("span", { class: "fav-balao-titulo" }, h("strong", {}, "Favoritado"), h("span", {}, fav.protocolo)),
+      h("span", { class: "fav-balao-estrela" }, icone("alvoAtivo", 16)),
+      h("span", { class: "fav-balao-titulo" }, h("strong", {}, "Monitorado"), h("span", {}, fav.protocolo)),
       listas,
       h(
         "button",

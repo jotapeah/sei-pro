@@ -30,9 +30,9 @@ const visita = (id: string, extra: Partial<Visita> = {}): Visita => ({
 const carimbo = () => ({ agora: 1000, dispositivo: "d1" });
 
 export async function verificarFavoritos(): Promise<void> {
-  secao("historico: ligacao com os Favoritos");
+  secao("historico: ligacao com os Monitorados");
   const area = areaMemoria();
-  checar("favoritosAtivo false devolve null", favoritosDoApp(area, ctx({ favoritosAtivo: false }), carimbo) === null);
+  checar("monitoradosAtivo false devolve null", favoritosDoApp(area, ctx({ favoritosAtivo: false }), carimbo) === null);
 
   const fav = favoritosDoApp(area, ctx(), carimbo)!;
   const esc = escoposDoContexto({ ...ctx(), login: "ana" });
@@ -41,7 +41,7 @@ export async function verificarFavoritos(): Promise<void> {
   checar("ids vazio no comeco", (await fav.ids()).size === 0);
 
   const r = await fav.favoritar(visita("1", { nivel: "sigiloso" }));
-  checar("favoritar devolve a sigla da unidade", r.lista === "GPF");
+  checar("monitorar devolve a sigla da unidade", r.lista === "GPF");
   const gravado = (await gpf.ativos())[0];
   checar(
     "grava na lista da unidade com protocolo e tipo",
@@ -54,7 +54,7 @@ export async function verificarFavoritos(): Promise<void> {
   checar("ids reune unidade e pessoal", [...(await fav.ids())].sort().join() === "1,2,3");
 
   await r.desfazer();
-  checar("desfazer do favoritar tira o favorito", !(await fav.ids()).has("1"));
+  checar("desfazer do monitorar tira o monitorado", !(await fav.ids()).has("1"));
 
   const t = await fav.tirar("3");
   checar("tirar da pessoal sai de ids", !!t && !(await fav.ids()).has("3"));
@@ -64,7 +64,7 @@ export async function verificarFavoritos(): Promise<void> {
   checar("tirar da unidade", !!t2 && !(await gpf.contem("2")));
   await t2!.desfazer();
   checar("desfazer restaura na unidade", await gpf.contem("2"));
-  checar("tirar de quem nao e favorito devolve null", (await fav.tirar("999")) === null);
+  checar("tirar de quem nao e monitorado devolve null", (await fav.tirar("999")) === null);
 
   let n = 0;
   const parar = fav.aoMudar(() => n++);
@@ -82,7 +82,7 @@ export async function verificarFavoritos(): Promise<void> {
   const p = await semUnidade.favoritar(visita("7"));
   checar("sem unidade grava na Pessoal", p.lista === "Pessoal" && (await pessoal.contem("7")));
 
-  secao("historico: favoritos nas duas listas, lixeira e silencio");
+  secao("historico: monitorados nas duas listas, lixeira e silencio");
   const a2 = areaMemoria();
   const f2 = favoritosDoApp(a2, ctx(), carimbo)!;
   const e2 = escoposDoContexto({ ...ctx(), login: "ana" });
@@ -102,7 +102,7 @@ export async function verificarFavoritos(): Promise<void> {
   await g2.remover(["10"]);
   checar("na lixeira nao conta em ids", !(await f2.ids()).has("10"));
   const rf = await f2.favoritar(visita("10"));
-  checar("re-favoritar o que estava na lixeira volta a ids", (await f2.ids()).has("10"));
+  checar("re-monitorar o que estava na lixeira volta a ids", (await f2.ids()).has("10"));
   await rf.desfazer();
   checar("desfazer devolve para a lixeira", !(await f2.ids()).has("10") && (await g2.obter("10")) !== undefined);
 

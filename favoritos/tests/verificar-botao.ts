@@ -4,7 +4,7 @@ import { checar, instalarDom, secao, telaSei, tique } from "./util";
 const url = (c: string) => `chrome-extension://x/${c}`;
 
 export async function verificarBotao(): Promise<void> {
-  secao("botao Favoritos na barra do Controle de Processos");
+  secao("botao Monitorados na barra do Controle de Processos");
   const { doc } = telaSei("sei41/caixa.html");
   let destino: "lateral" | "abaixo" = "abaixo";
   let rolou = 0;
@@ -25,7 +25,7 @@ export async function verificarBotao(): Promise<void> {
   const semBarra = instalarDom("<html><body></body></html>");
   checar("tela sem a barra: nada", instalarBotaoCaixa(semBarra, o) === null);
 
-  secao("botao Favoritos no topo da arvore");
+  secao("botao Monitorados no topo da arvore");
   const arv = instalarDom(
     '<html><body><div id="topmenu"><a target="ifrVisualizacao">50300.000001/2026-01</a><button class="spro-fav-estrela"></button></div></body></html>',
   );
