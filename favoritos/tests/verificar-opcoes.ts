@@ -4,7 +4,7 @@ import { montarOpcoesExibicao } from "../src/opcoes/exibicao";
 import { checar, disparar, instalarDom, secao, tique } from "./util";
 
 export async function verificarOpcoes(): Promise<void> {
-  secao("opcoes: onde mostrar os favoritos");
+  secao("opcoes: onde mostrar os monitorados");
   instalarDom("<html><body></body></html>");
   const sync = areaMemoria({ [CHAVE_PREFERENCIAS]: { exibir: "ambos", perguntarAoFavoritar: false } });
   const el = await montarOpcoesExibicao({ sync, lateralDisponivel: true });
@@ -12,7 +12,7 @@ export async function verificarOpcoes(): Promise<void> {
   const perguntar = el.querySelector('input[type="checkbox"]') as HTMLInputElement;
   checar("tres opcoes com painel lateral", !!radio("abaixo") && !!radio("lateral") && !!radio("ambos"));
   checar("marca a gravada", radio("ambos")!.checked && !radio("abaixo")!.checked);
-  checar("perguntar ao favoritar segue a gravada", perguntar.checked === false);
+  checar("perguntar ao monitorar segue a gravada", perguntar.checked === false);
   radio("lateral")!.checked = true;
   disparar(radio("lateral")!, "change");
   await tique();

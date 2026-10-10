@@ -4,7 +4,7 @@ import { botao, checar, combo, disparar, escolherCombo, instalarDom, secao, tiqu
 
 export async function verificarBalao(): Promise<void> {
   instalarDom();
-  secao("balao ao favoritar");
+  secao("balao ao monitorar");
   const fav: Favorito = { id: "1", protocolo: "1/2026", etiquetas: [], ordem: "a0", criadoEm: 1, atualizadoEm: 1, dispositivo: "D" };
   const pasta: Pasta = { id: "pA", nome: "Contratos", ordem: "a0", atualizadoEm: 1, dispositivo: "D" };
   const et: Etiqueta = { id: "eA", nome: "Urgente", cor: "#ffe0b2", atualizadoEm: 1, dispositivo: "D" };

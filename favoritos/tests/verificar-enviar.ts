@@ -6,7 +6,7 @@ import { checar, disparar, escolher, instalarDom, secao, telaSei, tique } from "
 import { CTX } from "./verificar-modelo";
 
 export async function verificarEnviar(): Promise<void> {
-  secao("Enviar Processo: manter em favoritos");
+  secao("Enviar Processo: manter em monitorados");
   const { doc } = telaSei("sei41/p_procedimento_enviar.html");
   const procs = lerProcessosDoEnvio(doc);
   checar(
@@ -39,7 +39,7 @@ export async function verificarEnviar(): Promise<void> {
   checar("insere o bloco no formulario", !!bloco && doc.querySelector("#frmAtividadeListar")!.contains(bloco));
   checar("nao insere duas vezes", (await instalarManterNoEnvio(doc, deps)) === null);
   const caixa = bloco!.querySelector('input[type="checkbox"]') as HTMLInputElement;
-  checar("desmarcada quando nao e favorito", !caixa.checked);
+  checar("desmarcada quando nao e monitorado", !caixa.checked);
   const opcoes = bloco!.querySelector(".spro-fav-envio-opcoes") as HTMLElement;
   checar("opcoes escondidas sem a caixa", opcoes.hidden);
   caixa.checked = true;
@@ -64,11 +64,11 @@ export async function verificarEnviar(): Promise<void> {
   caixa.checked = false;
   disparar(caixa, "change");
   await tique(20);
-  checar("desmarcar tira dos favoritos", !(await repo.contem("148265")));
+  checar("desmarcar tira dos monitorados", !(await repo.contem("148265")));
 
   const ja = telaSei("sei41/p_procedimento_enviar.html").doc;
   ids.add("148265");
   const bloco2 = await instalarManterNoEnvio(ja, deps);
-  checar("ja favorito: comeca marcada", (bloco2!.querySelector('input[type="checkbox"]') as HTMLInputElement).checked);
+  checar("ja monitorado: comeca marcada", (bloco2!.querySelector('input[type="checkbox"]') as HTMLInputElement).checked);
   checar("tela sem o formulario de envio: nada", (await instalarManterNoEnvio(instalarDom("<html><body></body></html>"), deps)) === null);
 }

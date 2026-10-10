@@ -27,7 +27,7 @@ export async function verificarSincroniaTexto(): Promise<void> {
   const ids = env.escopos[0]!.favoritos.map((f) => f.id)
     .sort()
     .join();
-  checar("leva favoritos e lapides, sem sigiloso", ids === "1,3", ids);
+  checar("leva monitorados e lapides, sem sigiloso", ids === "1,3", ids);
   checar("leva as pastas", env.escopos[0]!.pastas.length === 1);
   checar("um escopo so, o da unidade", env.escopos.length === 1 && env.escopos[0]!.escopo.lista === "unidade");
 

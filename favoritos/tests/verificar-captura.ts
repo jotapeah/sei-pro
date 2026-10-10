@@ -22,7 +22,7 @@ export async function verificarCaptura(): Promise<void> {
   await capturarDaCaixa(caixa, repo, 1000);
   const a1 = (await repo.atuais()).get(idNaCaixa);
   checar(
-    "favorito na caixa: aberto na unidade, com os sinais da linha",
+    "monitorado na caixa: aberto na unidade, com os sinais da linha",
     a1?.abertoNaUnidade === true && a1.fonte === "caixa" && typeof a1.naoVisualizado === "boolean",
     a1,
   );
@@ -58,7 +58,7 @@ export async function verificarCaptura(): Promise<void> {
   );
   checar("abrir o processo marca como visto", (await repo.vistos()).get("148265")?.qtdDocumentos === a2?.qtdDocumentos);
   const nada = await capturarDaArvore(arv, pagina.url, [pessoal], async () => historico.pagina);
-  checar("processo que nao e favorito: nada lido", nada === 0);
+  checar("processo que nao e monitorado: nada lido", nada === 0);
 
   secao("prazo do proximo documento: comeca a contar quando o documento aparece");
   const docs = [

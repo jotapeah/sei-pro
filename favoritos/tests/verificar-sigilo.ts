@@ -57,7 +57,7 @@ export async function verificarSigilo(): Promise<void> {
   await capturarDaCaixa(caixa, r2, 1000);
   const f2 = await r2.obter(id);
   checar(
-    "linha sigilosa na caixa marca o favorito como sigiloso e apaga a especificacao",
+    "linha sigilosa na caixa marca o monitorado como sigiloso e apaga a especificacao",
     f2?.sigiloso === true && !f2.especificacao && !f2.sigiloAConfirmar,
     f2,
   );

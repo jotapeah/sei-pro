@@ -88,7 +88,7 @@ export async function verificarPainel(): Promise<void> {
   const tituloP = docP.querySelector("#favoritesPro .spro-fav-titulo");
   checar(
     "texto do titulo solto no div, como o do Controle de Processos (o SEI encolhe todo span)",
-    !tituloP?.querySelector("span") && (tituloP?.textContent ?? "").trim() === "Favoritos",
+    !tituloP?.querySelector("span") && (tituloP?.textContent ?? "").trim() === "Monitorados",
     tituloP?.innerHTML,
   );
   checar("nao monta duas vezes", montarPainel(docP, { urlApp: "x", recolhido: false, ordem: null, aoRecolher: () => undefined }) === null);
@@ -120,7 +120,7 @@ export async function verificarPainel(): Promise<void> {
   checar("altura minima", iframe.style.height === "80px");
   checar("abre pela linha", (await app.chamar("abrirProcesso", { id: "5", protocolo: "5/2026" })) === "linha");
   const legado = await app.chamar<{ local: { favorites: unknown[] }; arquivo: unknown }>("lerLegado");
-  checar("le os favoritos antigos do localStorage", legado.local.favorites.length === 1 && legado.arquivo === null);
+  checar("le os monitorados antigos do localStorage", legado.local.favorites.length === 1 && legado.arquivo === null);
 
   secao("dialogo do painel embutido no meio da tela (sobreposicao)");
   const docS = instalarDom(
@@ -194,10 +194,10 @@ export async function verificarPainel(): Promise<void> {
     tratadoresDaAba({ doc: docA, ctx: CTX, iframe: null, armazenamento: { getItem: () => null }, avisar: avisoNaPagina(docA, false) }),
   );
   const appA = criarRpc(aApp);
-  const resposta = appA.chamar<boolean>("aviso", { texto: "1 favorito foi para a lixeira.", acao: "Desfazer", ms: 5000 });
+  const resposta = appA.chamar<boolean>("aviso", { texto: "1 monitorado foi para a lixeira.", acao: "Desfazer", ms: 5000 });
   await tique();
   const toast = docA.querySelector(".spro-fav-aviso");
-  checar("mostra o texto na pagina do SEI", (toast?.textContent ?? "").includes("1 favorito foi para a lixeira."));
+  checar("mostra o texto na pagina do SEI", (toast?.textContent ?? "").includes("1 monitorado foi para a lixeira."));
   botao(docA.body, "Desfazer")!.click();
   checar("a acao volta ao app", (await resposta) === true && !docA.querySelector(".spro-fav-aviso"));
   const semAcao = appA.chamar<boolean>("aviso", { texto: "Copiado.", ms: 20 });

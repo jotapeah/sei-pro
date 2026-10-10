@@ -11,7 +11,7 @@ Sabe aquele processo que você abriu ontem e não lembra o número? O SEI Pro gu
 | Onde | O que acontece |
 | ---- | -------------- |
 | **Menu lateral** do SEI › Histórico de Processos Visitados | Abre uma janela no meio da tela, por cima do SEI |
-| **Painel lateral** do navegador › aba **Histórico** | A lista fica ao lado do SEI, junto das abas *Favoritos* e *Agente de IA* |
+| **Painel lateral** do navegador › aba **Histórico** | A lista fica ao lado do SEI, junto das abas *Monitorados* e *Agente de IA* |
 
 Na janela, o botão de painel, ao lado do **⋯**, leva a lista para o painel lateral. Com o painel aberto, cada processo que você abre no SEI aparece no topo da lista na mesma hora.
 
@@ -36,7 +36,7 @@ A busca não diferencia acento nem maiúsculas: *licitacao* acha *Licitação*. 
 | **Unidade** | As unidades onde você abriu cada processo |
 | **Interessado** | Os interessados dos processos |
 | **Assunto** | Os assuntos dos processos |
-| **Situação** | Nos favoritos, Fora dos favoritos, Visitados mais de uma vez, Públicos, Restritos, Sigilosos |
+| **Situação** | Nos monitorados, Fora dos monitorados, Visitados mais de uma vez, Públicos, Restritos, Sigilosos |
 
 Opções marcadas no mesmo filtro somam: *Tipo* "Ofício" e "Licitação" mostra os dois tipos. Filtros diferentes se combinam: *Tipo* "Ofício" com *Período* "Hoje" mostra só os ofícios de hoje. Cada filtro ligado vira uma **ficha** acima da lista. Um clique na ficha tira o filtro.
 
@@ -46,17 +46,17 @@ Opções marcadas no mesmo filtro somam: *Tipo* "Ofício" e "Licitação" mostra
 
 Clique no número. O processo abre na mesma aba do SEI, e a janela do histórico se fecha. Para abrir **em outra aba**, use **Ctrl + clique** (**⌘ + clique** no Mac) ou o **⋯** da linha › *Abrir em outra aba*.
 
-O **⋯** de cada linha também tem *Copiar número*, *Favoritar* e *Remover do histórico*.
+O **⋯** de cada linha também tem *Copiar número*, *Monitorar* e *Remover do histórico*.
 
-### Favoritar sem sair da lista
+### Monitorar sem sair da lista
 
-A **estrela** de cada linha manda o processo para os [Favoritos](../pages/FAVORITOS.md), na lista da unidade em que você está. Um aviso confirma, com o botão **Desfazer**. A estrela acesa mostra os processos que já são favoritos, e o filtro *Situação* separa *Nos favoritos* e *Fora dos favoritos*.
+O **alvo** de cada linha manda o processo para os [Monitorados](../pages/FAVORITOS.md), na lista da unidade em que você está. Um aviso confirma, com o botão **Desfazer**. O alvo ativo mostra os processos que já são monitorados, e o filtro *Situação* separa *Nos monitorados* e *Fora dos monitorados*.
 
 ### Vários de uma vez
 
 Marque as caixas de seleção, ou a caixa acima da lista para marcar todos os visíveis. A barra que aparece permite:
 
-* **Favoritar** os selecionados;
+* **Monitorar** os selecionados;
 * **Copiar números**, um por linha;
 * **Exportar CSV**, para abrir no Excel;
 * **Remover do histórico**.

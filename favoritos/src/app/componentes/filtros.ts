@@ -26,7 +26,7 @@ export const SITUACOES: ReadonlyArray<{ valor: SituacaoFiltro; rotulo: string; i
   { valor: "novidade", rotulo: "Com novidade", icone: "brilho", sempre: true },
   { valor: "lembrete", rotulo: "Lembrete para hoje", icone: "sino", sempre: true },
   { valor: "nota", rotulo: "Com nota", icone: "nota", sempre: true },
-  { valor: "documentos", rotulo: "Com documentos favoritos", icone: "documento" },
+  { valor: "documentos", rotulo: "Com documentos monitorados", icone: "documento" },
   { valor: "local", rotulo: "Com local no mapa", icone: "local" },
   { valor: "fora", rotulo: "Fora da unidade", icone: "saida", sempre: true },
   { valor: "sigiloso", rotulo: "Sigilosos", icone: "cadeado" },
@@ -36,7 +36,7 @@ export const ORDENS: ReadonlyArray<{ valor: ModoOrdem; rotulo: string; icone: No
   { valor: "manual", rotulo: "Minha ordem", icone: "alca", descricao: "Arraste os itens para ordenar" },
   { valor: "prazo", rotulo: "Por prazo", icone: "relogio", descricao: "Os que vencem antes primeiro" },
   { valor: "novidade", rotulo: "Novidades primeiro", icone: "brilho", descricao: "O que mudou desde a última vez" },
-  { valor: "inclusao", rotulo: "Mais recentes", icone: "calendario", descricao: "Os favoritados por último primeiro" },
+  { valor: "inclusao", rotulo: "Mais recentes", icone: "calendario", descricao: "Os monitorados por último primeiro" },
   { valor: "protocolo", rotulo: "Por número", icone: "ordenar", descricao: "Pelo número do processo" },
 ];
 

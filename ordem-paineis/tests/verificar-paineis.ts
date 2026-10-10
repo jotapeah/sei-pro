@@ -11,7 +11,7 @@ export async function verificarPaineis(teste: (nome: string, fn: () => void | Pr
     const d = paginaComPaineis([...IDS, 'novoPainel']);
     const lista = listarPaineis(d);
     assert.deepEqual(lista.map(p => p.id), [...IDS, 'novoPainel']);
-    assert.deepEqual(lista.map(p => p.nome), ['Controle de Processos', 'Favoritos', 'Atividades', 'Painel novoPainel']);
+    assert.deepEqual(lista.map(p => p.nome), ['Controle de Processos', 'Monitorados', 'Atividades', 'Painel novoPainel']);
     assert.ok(lista.every(p => p.oculto === false));
   });
   await teste('listarPaineis: sem contêiner ou fora da tela de caixa devolve lista vazia', () => {

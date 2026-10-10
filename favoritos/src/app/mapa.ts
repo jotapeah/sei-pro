@@ -171,9 +171,9 @@ export function montarMapaGeral(o: { L: LeafletMinimo; pontos: Ponto[]; abrir(id
       ? h(
           "p",
           { class: "fav-dica" },
-          `${o.pontos.length} ${o.pontos.length === 1 ? "favorito com local" : "favoritos com local"} na lista atual (com os filtros aplicados).`,
+          `${o.pontos.length} ${o.pontos.length === 1 ? "monitorado com local" : "monitorados com local"} na lista atual (com os filtros aplicados).`,
         )
-      : h("p", { class: "fav-dica" }, "Nenhum favorito desta lista tem local. Marque pelo menu ⋯ do favorito, em “Local no mapa…”."),
+      : h("p", { class: "fav-dica" }, "Nenhum monitorado desta lista tem local. Marque pelo menu ⋯ do monitorado, em “Local no mapa…”."),
     area,
   );
   const iniciar = () => {

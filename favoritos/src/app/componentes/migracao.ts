@@ -16,7 +16,7 @@ export function montarMigracao(d: DepsMigracao): HTMLElement {
     h(
       "p",
       {},
-      `Encontramos ${d.quantidade} favoritos da versão anterior do SEI Pro neste navegador (por exemplo: ${d.amostra.join(", ")}).`,
+      `Encontramos ${d.quantidade} monitorados da versão anterior do SEI Pro neste navegador (por exemplo: ${d.amostra.join(", ")}).`,
     ),
     h(
       "p",
@@ -26,7 +26,7 @@ export function montarMigracao(d: DepsMigracao): HTMLElement {
     h(
       "p",
       { class: "fav-previa" },
-      "Se preferir deixar para depois, a opção fica no menu de opções dos favoritos, em \u201cTrazer favoritos da versão anterior\u201d, e perguntaremos de novo em 30 dias.",
+      "Se preferir deixar para depois, a opção fica no menu de opções dos monitorados, em \u201cTrazer monitorados da versão anterior\u201d, e perguntaremos de novo em 30 dias.",
     ),
     h(
       "div",

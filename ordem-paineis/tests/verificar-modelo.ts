@@ -54,7 +54,7 @@ export async function verificarModelo(teste: (nome: string, fn: () => void | Pro
     assert.deepEqual(l, ['a', 'b', 'c', 'd']);
   });
   await teste('nomeConhecido: rótulos dos painéis do Pro; desconhecido é null', () => {
-    assert.equal(nomeConhecido('favoritesPro'), 'Favoritos');
+    assert.equal(nomeConhecido('favoritesPro'), 'Monitorados');
     assert.equal(nomeConhecido('processosSEIPro'), 'Controle de Processos');
     assert.equal(nomeConhecido('projetosPro'), 'Projetos');
     assert.equal(nomeConhecido('outro'), null);

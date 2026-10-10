@@ -143,7 +143,7 @@ export function renderItem(f: Favorito, a: ApoioItem, acoes: AcoesItem): HTMLLIE
         {
           type: "button",
           class: "fav-titulo",
-          title: descricao && f.titulo ? `${titulo} — ${descricao}` : "Editar favorito",
+          title: descricao && f.titulo ? `${titulo} — ${descricao}` : "Editar monitorado",
           onclick: () => acoes.editar(f),
         },
         titulo,
@@ -156,7 +156,7 @@ export function renderItem(f: Favorito, a: ApoioItem, acoes: AcoesItem): HTMLLIE
               "summary",
               {},
               icone("documento", 12),
-              ` ${f.documentos.length} ${f.documentos.length === 1 ? "documento favorito" : "documentos favoritos"}`,
+              ` ${f.documentos.length} ${f.documentos.length === 1 ? "documento monitorado" : "documentos monitorados"}`,
               icone("chevron", 12),
             ),
             h(
@@ -182,8 +182,8 @@ export function renderItem(f: Favorito, a: ApoioItem, acoes: AcoesItem): HTMLLIE
                         {
                           type: "button",
                           class: "spro-botao-icone pequeno",
-                          "aria-label": `Tirar ${d.numero} dos documentos favoritos`,
-                          title: "Tirar dos documentos favoritos",
+                          "aria-label": `Tirar ${d.numero} dos documentos monitorados`,
+                          title: "Tirar dos documentos monitorados",
                           onclick: () => acoes.removerDocumento?.(f, d),
                         },
                         icone("fechar", 12),

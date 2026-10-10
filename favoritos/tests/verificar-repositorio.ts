@@ -28,7 +28,7 @@ export async function verificarRepositorio(): Promise<void> {
   checar("removido sai dos ativos e vira lapide", !(await repo.contem("1")) && (await repo.obter("1"))?.removidoEm !== undefined);
   const volta = await repo.adicionar({ id: "1", protocolo: "1/2026" });
   checar(
-    "re-favoritar devolve pasta e nota, no fim da lista",
+    "re-monitorar devolve pasta e nota, no fim da lista",
     volta.pasta === "px" && volta.nota === "lembrar" && volta.removidoEm === undefined && volta.ordem > (p2?.ordem ?? ""),
     volta,
   );
@@ -55,14 +55,14 @@ export async function verificarRepositorio(): Promise<void> {
   await repo.editar("2", { pasta: pasta.id });
   await repo.removerPasta(pasta.id);
   checar(
-    "remover pasta tira a pasta dos favoritos",
+    "remover pasta tira a pasta dos monitorados",
     (await repo.obter("2"))?.pasta === undefined && (await repo.pastasAtivas()).length === 0,
   );
   const et = await repo.criarEtiqueta("Urgente");
   checar("etiqueta nova ganha cor da paleta", PALETA.includes(et.cor));
   await repo.editar("3", { etiquetas: [et.id] });
   await repo.removerEtiqueta(et.id);
-  checar("remover etiqueta tira dos favoritos", (await repo.obter("3"))?.etiquetas.length === 0);
+  checar("remover etiqueta tira dos monitorados", (await repo.obter("3"))?.etiquetas.length === 0);
 
   secao("repositorio: importar mescla");
   const atual3 = (await repo.obter("3"))!;
@@ -123,7 +123,7 @@ export async function verificarRepositorio(): Promise<void> {
   const inst = await repo.instantaneo();
   const separado = { f: (await repo.todos()).length, p: (await repo.pastasAtivas()).length, e: (await repo.etiquetasAtivas()).length };
   checar(
-    "instantaneo traz favoritos (com lapides), pastas e etiquetas ativas",
+    "instantaneo traz monitorados (com lapides), pastas e etiquetas ativas",
     inst.todos.length === separado.f && inst.pastas.length === separado.p && inst.etiquetas.length === separado.e,
     { inst: [inst.todos.length, inst.pastas.length, inst.etiquetas.length], separado },
   );

@@ -164,7 +164,7 @@ export async function verificarBackground(): Promise<void> {
     checar("e na aba Historico", amb.sessao.at(-1)?.painelAba?.aba === "historico");
     amb.ouvintes.mensagem[0]({ tipo: "abrirPainel", aba: "qualquer" }, tab);
     await new Promise((r) => setTimeout(r, 10));
-    checar("aba desconhecida vira favoritos", amb.sessao.at(-1)?.painelAba?.aba === "favoritos");
+    checar("aba desconhecida vira monitorados", amb.sessao.at(-1)?.painelAba?.aba === "favoritos");
     amb.ouvintes.mensagem[0]({ tipo: "abrirPainel", aba: "favoritos" }, {});
     await new Promise((r) => setTimeout(r, 10));
     checar("pedido sem aba de origem e ignorado", amb.paineisAbertos.length === 5);

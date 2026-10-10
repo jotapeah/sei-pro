@@ -2,7 +2,7 @@ import { ondeMostrar, ROTULOS_EXIBIR, temPainelLateral } from "../src/modelo/exi
 import { checar, secao } from "./util";
 
 export function verificarExibicao(): void {
-  secao("exibicao: onde mostrar os favoritos");
+  secao("exibicao: onde mostrar os monitorados");
   checar("Chrome com side_panel tem painel lateral", temPainelLateral({ side_panel: { default_path: "html/painel.html" } }));
   checar("Firefox com sidebar_action tem painel lateral", temPainelLateral({ sidebar_action: {} }));
   checar("pacote sem painel lateral", !temPainelLateral({}));

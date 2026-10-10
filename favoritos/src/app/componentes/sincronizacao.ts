@@ -64,7 +64,7 @@ export async function montarSincronizacao(d: DepsSincronizacao): Promise<HTMLEle
               botao(
                 "Desligar e apagar do SEI",
                 async () => {
-                  if (await d.confirmar(`Apagar do SEI o texto “${tp.nomeTexto}” e desligar? Os favoritos continuam neste navegador.`))
+                  if (await d.confirmar(`Apagar do SEI o texto “${tp.nomeTexto}” e desligar? Os monitorados continuam neste navegador.`))
                     await tp.apagar();
                 },
                 "spro-botao perigo",
@@ -78,7 +78,7 @@ export async function montarSincronizacao(d: DepsSincronizacao): Promise<HTMLEle
               botao(
                 "Apagar o texto do SEI",
                 async () => {
-                  if (await d.confirmar(`Apagar do SEI o texto “${tp.nomeTexto}”, se ele existir? Os favoritos continuam neste navegador.`))
+                  if (await d.confirmar(`Apagar do SEI o texto “${tp.nomeTexto}”, se ele existir? Os monitorados continuam neste navegador.`))
                     await tp.apagar();
                 },
                 "spro-botao perigo",
@@ -142,7 +142,7 @@ export async function montarSincronizacao(d: DepsSincronizacao): Promise<HTMLEle
       h(
         "p",
         { class: "fav-dica" },
-        "Aqui não dá para manter um arquivo ligado (o navegador não permite, ou a lista está embutida na página do SEI). Use “Exportar” e “Importar” no menu, ou abra os favoritos no painel lateral.",
+        "Aqui não dá para manter um arquivo ligado (o navegador não permite, ou a lista está embutida na página do SEI). Use “Exportar” e “Importar” no menu, ou abra os monitorados no painel lateral.",
       ),
     );
   }
@@ -169,7 +169,7 @@ export async function montarSincronizacao(d: DepsSincronizacao): Promise<HTMLEle
                 h(
                   "li",
                   {},
-                  h("span", {}, `${formatarData(x.dia)} — ${x.quantidade} ${x.quantidade === 1 ? "favorito" : "favoritos"}`),
+                  h("span", {}, `${formatarData(x.dia)} — ${x.quantidade} ${x.quantidade === 1 ? "monitorado" : "monitorados"}`),
                   botao("Restaurar", async () => {
                     if (await d.confirmar(`Restaurar a cópia de ${formatarData(x.dia)}?`)) await c.restaurar(x);
                   }),

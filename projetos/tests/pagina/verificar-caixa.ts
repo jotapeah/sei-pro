@@ -131,7 +131,7 @@ async function verificarIcones(): Promise<void> {
     cau.tagName === "BUTTON" && cau.getAttribute("aria-haspopup") === "dialog" && cau.getAttribute("aria-expanded") === "false",
   );
   checar("na coluna dos icones (2a celula)", cau.parentElement === linha(c.doc, "148265").querySelectorAll("td")[1]);
-  checar("logo depois da estrela dos Favoritos", estrela.nextElementSibling?.classList.contains("spro-prj-ic") === true);
+  checar("logo depois da estrela dos Monitorados", estrela.nextElementSibling?.classList.contains("spro-prj-ic") === true);
   const exp = linha(c.doc, "150098").querySelector<HTMLElement>(".spro-prj-ic")!;
   checar(
     "etapa ligada (so eu) sem atraso: sem ponto",

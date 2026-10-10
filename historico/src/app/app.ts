@@ -511,7 +511,7 @@ export class AppHistorico {
       h(
         "div",
         { class: "spro-lista-lote-acoes" },
-        favoritaveis ? botaoLote("estrela", "Favoritar", () => void this.favoritarLote()) : null,
+        favoritaveis ? botaoLote("alvo", "Monitorar", () => void this.favoritarLote()) : null,
         botaoLote("copiar", "Copiar números", () => this.copiarNumeros(this.selecionados())),
         botaoLote("planilha", "Exportar CSV", () => this.baixarCsv(this.selecionados())),
         botaoLote("lixeira", "Remover do histórico", () => void this.removerLote(), "perigo"),
@@ -556,10 +556,10 @@ export class AppHistorico {
     try {
       if (this.favs.has(v.id)) {
         const r = await f.tirar(v.id);
-        if (r) avisar("Tirado dos favoritos", { rotulo: "Desfazer", fazer: () => void r.desfazer().catch((e) => avisar(mensagem(e))) });
+        if (r) avisar("Tirado dos monitorados", { rotulo: "Desfazer", fazer: () => void r.desfazer().catch((e) => avisar(mensagem(e))) });
       } else {
         const r = await f.favoritar(v);
-        avisar(`Favoritado em ${r.lista}`, { rotulo: "Desfazer", fazer: () => void r.desfazer().catch((e) => avisar(mensagem(e))) });
+        avisar(`Monitorado em ${r.lista}`, { rotulo: "Desfazer", fazer: () => void r.desfazer().catch((e) => avisar(mensagem(e))) });
       }
     } catch (e) {
       avisar(mensagem(e));
@@ -591,8 +591,8 @@ export class AppHistorico {
       fazer: () => void Promise.all(feitos.map((x) => x.desfazer())).catch((e) => avisar(mensagem(e))),
     };
     // Um aviso só: o de sucesso não pode esconder a falha no meio do lote.
-    if (erro) avisar(`${feitos.length} de ${alvo.length} favoritados em ${lista}. ${mensagem(erro)}`, desfazer);
-    else avisar(feitos.length === 1 ? `Favoritado em ${lista}` : `${processos(feitos.length)} favoritados em ${lista}`, desfazer);
+    if (erro) avisar(`${feitos.length} de ${alvo.length} monitorados em ${lista}. ${mensagem(erro)}`, desfazer);
+    else avisar(feitos.length === 1 ? `Monitorado em ${lista}` : `${processos(feitos.length)} monitorados em ${lista}`, desfazer);
   }
 
   private copiarNumeros(vs: Visita[]): void {

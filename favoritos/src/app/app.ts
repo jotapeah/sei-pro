@@ -127,7 +127,7 @@ export class AppFavoritos {
       type: "search",
       class: "fav-busca",
       placeholder: "Buscar número, título, tipo, etiqueta ou nota",
-      "aria-label": "Buscar nos favoritos",
+      "aria-label": "Buscar nos monitorados",
       "aria-keyshortcuts": "/",
     });
     let espera: ReturnType<typeof setTimeout> | undefined;
@@ -463,10 +463,10 @@ export class AppFavoritos {
             apoio: apoio(manual),
             acoes,
             reordenar: manual ? (id, antes, depois) => void this.repo.mover(id, antes, depois) : undefined,
-            vazio: temAlgum ? "Nenhum favorito com esses filtros." : "Nenhum favorito nesta lista ainda.",
+            vazio: temAlgum ? "Nenhum monitorado com esses filtros." : "Nenhum monitorado nesta lista ainda.",
             vazioDica: temAlgum
               ? "Tire um filtro ou limpe a busca para ver os outros."
-              : "Clique na estrela ao lado de um processo, no Controle de Processos ou na árvore, para guardá-lo aqui.",
+              : "Clique no alvo ao lado de um processo, no Controle de Processos ou na árvore, para guardá-lo aqui.",
             recolhidos: this.recolhidos,
             alternarGrupo: (id) => {
               if (this.recolhidos.has(id)) this.recolhidos.delete(id);
@@ -482,7 +482,7 @@ export class AppFavoritos {
     const n = this.visao === "lista" ? this.foraDaUnidade() : 0;
     this.el.atualizar.hidden = n === 0;
     this.el.atualizar.setAttribute("aria-label", `Atualizar fora da unidade (${n})`);
-    this.el.atualizar.title = `Ver o que mudou nos ${n} favoritos que não estão na sua caixa`;
+    this.el.atualizar.title = `Ver o que mudou nos ${n} monitorados que não estão na sua caixa`;
     this.el.atualizar.replaceChildren(
       icone("atualizar", 14),
       h("span", { class: "fav-atualizar-texto" }, "Atualizar fora da unidade"),
@@ -550,7 +550,7 @@ export class AppFavoritos {
         "span",
         { class: "fav-total" },
         h("strong", {}, filtrado ? `${visiveis.length} de ${ativos.length}` : String(ativos.length)),
-        ` ${ativos.length === 1 ? "favorito" : "favoritos"}`,
+        ` ${ativos.length === 1 ? "monitorado" : "monitorados"}`,
       ),
       h(
         "span",
@@ -587,7 +587,7 @@ export class AppFavoritos {
       h(
         "p",
         {},
-        "O SEI Pro vai abrir, um de cada vez, os favoritos que estão fora da sua unidade para ver o que mudou (documentos e último andamento). Antes, ele lê a sua caixa inteira e deixa de fora tudo o que está nela: abrir um processo aberto na unidade faria o SEI registrar o recebimento ou marcá-lo como visualizado.",
+        "O SEI Pro vai abrir, um de cada vez, os monitorados que estão fora da sua unidade para ver o que mudou (documentos e último andamento). Antes, ele lê a sua caixa inteira e deixa de fora tudo o que está nela: abrir um processo aberto na unidade faria o SEI registrar o recebimento ou marcá-lo como visualizado.",
       ),
       h("p", { class: "fav-dica" }, "Processos sigilosos ficam de fora. Você pode cancelar a qualquer momento."),
       h(
@@ -666,7 +666,7 @@ export class AppFavoritos {
           type: "button",
           role: "tab",
           "aria-label": `${rotulo} (${n})`,
-          title: lista === "unidade" ? `Favoritos da unidade ${rotulo}` : "Seus favoritos pessoais, em todas as unidades",
+          title: lista === "unidade" ? `Monitorados da unidade ${rotulo}` : "Seus monitorados pessoais, em todas as unidades",
           "aria-selected": String(this.lista === lista && this.visao === "lista"),
           onclick: () => {
             this.lista = lista;
@@ -772,7 +772,7 @@ export class AppFavoritos {
     const repo = this.repo;
     const n = await repo.remover(ids);
     this.selecao.clear();
-    avisar(`${n} ${n === 1 ? "favorito foi" : "favoritos foram"} para a lixeira.`, {
+    avisar(`${n} ${n === 1 ? "monitorado foi" : "monitorados foram"} para a lixeira.`, {
       rotulo: "Desfazer",
       fazer: () => void repo.restaurar(ids),
     });
@@ -817,7 +817,7 @@ export class AppFavoritos {
           .chamar<{ documentos: DocumentoAssinado[] }>("documentosAssinados", { id: f.id, protocolo: f.protocolo, buscar }, 90_000)
           .then((r) => r.documentos),
     });
-    modal = this.d.abrirModal({ titulo: `Favorito ${f.protocolo}`, icone: "estrela", conteudo });
+    modal = this.d.abrirModal({ titulo: `Monitorado ${f.protocolo}`, icone: "alvo", conteudo });
   }
 
   private async abrirGerenciar(): Promise<void> {
@@ -837,7 +837,7 @@ export class AppFavoritos {
 
   private menu(): HTMLElement {
     return criarMenu({
-      rotulo: "Opções dos favoritos",
+      rotulo: "Opções dos monitorados",
       icone: "ajustes",
       classe: "spro-botao-icone fav-menu-opcoes",
       largura: 268,
@@ -845,7 +845,7 @@ export class AppFavoritos {
         const lixo = naLixeira(this.todos, Date.now()).length;
         return [
           { rotulo: "Pastas e etiquetas", icone: "etiqueta", fazer: () => void this.abrirGerenciar() },
-          this.d.carregarMapa ? { rotulo: "Mapa dos favoritos", icone: "mapa", fazer: () => void this.abrirMapaGeral() } : null,
+          this.d.carregarMapa ? { rotulo: "Mapa dos monitorados", icone: "mapa", fazer: () => void this.abrirMapaGeral() } : null,
           {
             rotulo: "Lixeira",
             icone: "lixeira",
@@ -858,7 +858,7 @@ export class AppFavoritos {
           "-",
           { rotulo: "Exportar arquivo (.json)", icone: "baixar", fazer: () => void this.exportar() },
           { rotulo: "Importar arquivo", icone: "subir", fazer: () => void this.importar() },
-          { rotulo: "Trazer favoritos da versão anterior", icone: "historico", fazer: () => void this.oferecerMigracao(true) },
+          { rotulo: "Trazer monitorados da versão anterior", icone: "historico", fazer: () => void this.oferecerMigracao(true) },
           "-",
           { rotulo: "Sincronização…", icone: "nuvem", fazer: () => void this.abrirSincronizacao() },
           { rotulo: "Preferências…", icone: "ajustes", fazer: () => void this.abrirPreferencias() },
@@ -909,7 +909,7 @@ export class AppFavoritos {
             .catch((e: Error) => avisar(e.message));
       },
     });
-    this.d.abrirModal({ titulo: "Mapa dos favoritos", icone: "mapa", conteudo: m.el });
+    this.d.abrirModal({ titulo: "Mapa dos monitorados", icone: "mapa", conteudo: m.el });
     m.iniciar();
   }
 
@@ -935,7 +935,7 @@ export class AppFavoritos {
       h(
         "span",
         {},
-        `Quer ver os favoritos da ${this.sigla} também em outros computadores? O SEI Pro pode guardá-los num Texto Padrão da unidade, sem servidor nenhum.`,
+        `Quer ver os monitorados da ${this.sigla} também em outros computadores? O SEI Pro pode guardá-los num Texto Padrão da unidade, sem servidor nenhum.`,
       ),
       h(
         "button",
@@ -969,7 +969,7 @@ export class AppFavoritos {
       h(
         "p",
         {},
-        `Os favoritos da ${this.sigla} ficam guardados no próprio SEI, num Texto Padrão chamado “${nome}”, e aparecem em qualquer computador em que você usar o SEI Pro. Antes de ligar:`,
+        `Os monitorados da ${this.sigla} ficam guardados no próprio SEI, num Texto Padrão chamado “${nome}”, e aparecem em qualquer computador em que você usar o SEI Pro. Antes de ligar:`,
       ),
       h(
         "ul",
@@ -977,7 +977,7 @@ export class AppFavoritos {
         h("li", {}, `O texto fica visível para toda a unidade: qualquer pessoa da ${this.sigla} pode abri-lo na lista de Textos Padrão.`),
         h("li", {}, "Não use esse texto em documentos e não o edite: o SEI Pro o regrava sozinho."),
         h("li", {}, "Processos sigilosos e a lista Pessoal nunca vão para o SEI."),
-        h("li", {}, "Para desligar, use “Sincronização…” no menu dos favoritos. Lá você também pode apagar o texto do SEI na hora."),
+        h("li", {}, "Para desligar, use “Sincronização…” no menu dos monitorados. Lá você também pode apagar o texto do SEI na hora."),
       ),
       h(
         "div",
@@ -1119,7 +1119,7 @@ export class AppFavoritos {
 
   private async abrirPreferencias(): Promise<void> {
     const conteudo = await montarOpcoesExibicao({ sync: this.d.sync, lateralDisponivel: this.d.lateralDisponivel === true });
-    this.d.abrirModal({ titulo: "Preferências dos favoritos", icone: "ajustes", conteudo });
+    this.d.abrirModal({ titulo: "Preferências dos monitorados", icone: "ajustes", conteudo });
   }
 
   private async exportar(): Promise<void> {
@@ -1153,7 +1153,7 @@ export class AppFavoritos {
       await this.mostrarMigracao([bruto], true);
       return;
     }
-    avisar("Este arquivo não é um arquivo de favoritos do SEI Pro.");
+    avisar("Este arquivo não é um arquivo de monitorados do SEI Pro.");
   }
 
   private async oferecerMigracao(forcar: boolean): Promise<void> {
@@ -1166,7 +1166,7 @@ export class AppFavoritos {
     try {
       fontes = await this.d.rpc.chamar("lerLegado", undefined, 5000);
     } catch {
-      if (forcar) avisar("Não foi possível ler os favoritos antigos nesta tela.");
+      if (forcar) avisar("Não foi possível ler os monitorados antigos nesta tela.");
       return;
     }
     await this.mostrarMigracao([fontes.local, fontes.arquivo], forcar);
@@ -1184,7 +1184,7 @@ export class AppFavoritos {
       return { ...r, favoritos };
     });
     if (!vistos.size) {
-      if (forcar) avisar("Não há favoritos da versão anterior neste navegador.");
+      if (forcar) avisar("Não há monitorados da versão anterior neste navegador.");
       return;
     }
     let modal: { fechar(): void } | null = null;
@@ -1198,14 +1198,14 @@ export class AppFavoritos {
         for (const l of lotes) novos += (await repo.importar(l)).novos;
         await this.d.area.gravar({ [chave]: { em: Date.now(), quantidade: vistos.size, destino } });
         modal?.fechar();
-        avisar(`${novos} favoritos trazidos para ${destino === "unidade" ? this.sigla : "Pessoal"}.`);
+        avisar(`${novos} monitorados trazidos para ${destino === "unidade" ? this.sigla : "Pessoal"}.`);
       },
       adiar: async () => {
         await this.d.area.gravar({ [chave]: { adiadoEm: Date.now() } });
         modal?.fechar();
       },
     });
-    modal = this.d.abrirModal({ titulo: "Favoritos da versão anterior", icone: "historico", conteudo });
+    modal = this.d.abrirModal({ titulo: "Monitorados da versão anterior", icone: "historico", conteudo });
   }
 
   private async verificarFaixaUnidade(): Promise<void> {
@@ -1221,7 +1221,7 @@ export class AppFavoritos {
       h(
         "span",
         {},
-        `Você está na unidade ${u.sigla}: estes são os favoritos desta unidade. Os da ${ultima.sigla ?? "unidade anterior"} continuam guardados, e a lista Pessoal aparece em todas.`,
+        `Você está na unidade ${u.sigla}: estes são os monitorados desta unidade. Os da ${ultima.sigla ?? "unidade anterior"} continuam guardados, e a lista Pessoal aparece em todas.`,
       ),
       h("button", { type: "button", class: "spro-botao", onclick: () => faixa.remove() }, "Entendi"),
       h(

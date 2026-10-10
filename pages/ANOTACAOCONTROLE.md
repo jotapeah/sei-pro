@@ -28,4 +28,4 @@ Depois de habilitar a função, aparece logo abaixo a opção **Mostrar a anota�
 
 ## Próximo item
 
-> [Gerenciar processos favoritos](../pages/FAVORITOS.md)
+> [Gerenciar processos monitorados](../pages/FAVORITOS.md)

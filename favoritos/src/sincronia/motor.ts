@@ -55,7 +55,7 @@ export function adaptadorFavoritos(
     assinatura: assinaturaEnvelope,
     mensagens: {
       maisNovo:
-        "Os favoritos no SEI foram gravados por uma versão mais nova do SEI Pro. Atualize a extensão neste computador; o texto não foi alterado.",
+        "Os monitorados no SEI foram gravados por uma versão mais nova do SEI Pro. Atualize a extensão neste computador; o texto não foi alterado.",
       grandeDemais: (kb, tetoKb) =>
         `A lista ficou grande demais para o Texto Padrão (${kb} KB de ${tetoKb} KB). Use a sincronização por arquivo.`,
       pertoDoTeto: (kb) => `A lista está perto do limite do Texto Padrão (${kb} KB).`,

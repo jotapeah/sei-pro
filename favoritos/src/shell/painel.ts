@@ -66,13 +66,13 @@ export async function montarShell(raiz: HTMLElement, d: DepsShell): Promise<{ mo
       ? [
           {
             id: "favoritos",
-            rotulo: "Favoritos",
-            icone: "estrela",
+            rotulo: "Monitorados",
+            icone: "alvo",
             caminho: "html/favoritos.html#modo=lateral",
-            titulo: "Favoritos do SEI Pro",
+            titulo: "Monitorados do SEI Pro",
             contador: {
               chave: CHAVE_CONTADOR,
-              dica: (n: number) => `${n} ${n === 1 ? "favorito pede" : "favoritos pedem"} atenção (lembrete ou novidade)`,
+              dica: (n: number) => `${n} ${n === 1 ? "monitorado pede" : "monitorados pedem"} atenção (lembrete ou novidade)`,
             },
           } satisfies DefAba,
         ]

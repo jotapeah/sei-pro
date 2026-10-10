@@ -174,7 +174,7 @@ export class RepositorioFavoritos {
 
   async editar(id: string, mudancas: MudancasFavorito): Promise<Favorito> {
     const atual = await this.obter(id);
-    if (!atual) throw new Error(`O favorito ${id} não existe nesta lista.`);
+    if (!atual) throw new Error(`O monitorado ${id} não existe nesta lista.`);
     const m: MudancasFavorito = { ...mudancas };
     if (m.etiquetas) m.etiquetas = [...new Set(m.etiquetas)].slice(0, MAX_ETIQUETAS);
     if (typeof m.nota === "string") m.nota = m.nota.slice(0, MAX_NOTA).trim() ? m.nota.slice(0, MAX_NOTA) : undefined;

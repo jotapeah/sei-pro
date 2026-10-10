@@ -31,14 +31,14 @@ const MAX_ITENS = 300;
 export const TOOL_FAVORITOS = definirTool({
   nome: "favoritos_listar",
   descricao:
-    "Lista os FAVORITOS do usuário no SEI Pro (a lista da unidade da tela e a lista Pessoal): número, título, tipo, pasta, etiquetas, nota pessoal, prazo, lembrete, o que mudou desde a última vez que ele viu e documentos favoritos. Use para 'o que mudou nos meus favoritos', 'quais favoritos têm lembrete', 'meus processos acompanhados'. Não abre processo nenhum no SEI; o que mudou vem do que o SEI Pro já leu. Processos sigilosos ficam de fora.",
+    "Lista os MONITORADOS (antes chamados de favoritos) do usuário no SEI Pro (a lista da unidade da tela e a lista Pessoal): número, título, tipo, pasta, etiquetas, nota pessoal, prazo, lembrete, o que mudou desde a última vez que ele viu e documentos monitorados. Use para 'o que mudou nos meus monitorados', 'quais monitorados têm lembrete', 'meus processos acompanhados'. Não abre processo nenhum no SEI; o que mudou vem do que o SEI Pro já leu. Processos sigilosos ficam de fora.",
   parametros: s.objeto({
     "lista?": s.texto({ enum: ["unidade", "pessoal", "todas"], descricao: "Padrão: todas." }),
     "filtro?": s.texto({ enum: ["todos", "novidades", "lembretes", "prazos"], descricao: "novidades = algo mudou; lembretes = para hoje ou atrasados; prazos = com prazo. Padrão: todos." }),
     "busca?": s.texto({ descricao: "Parte do número, título, tipo, nota ou etiqueta (sem acento/caixa)." }),
   }),
   efeito: "leitura",
-  rotulo: () => "Ler os favoritos",
+  rotulo: () => "Ler os monitorados",
   executar: async (a, ctx) => {
     const e = await ctx.sei<{ host: string; login: string; unidade: { id: string; sigla: string } | null }>("favoritos.escopo");
     const contexto = { host: e.host, login: e.login, nome: "", unidade: e.unidade ? { ...e.unidade, nome: "" } : null, versao: "", temaEscuro: false } satisfies ContextoAba;
