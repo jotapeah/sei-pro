@@ -1,4 +1,5 @@
 import { resumo } from "./util";
+import { verificarArmazenamento } from "./verificar-armazenamento";
 import { verificarBusca } from "./verificar-busca";
 import { verificarConfig } from "./verificar-config";
 import { verificarRender } from "./verificar-render";
@@ -8,4 +9,5 @@ verificarSchema();
 verificarConfig();
 verificarRender();
 verificarBusca();
+await verificarArmazenamento();
 resumo();
