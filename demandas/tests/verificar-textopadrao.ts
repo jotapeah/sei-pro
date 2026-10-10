@@ -105,7 +105,7 @@ export async function verificarTextoPadrao(): Promise<void> {
   const final = (await S.repo.obter(sd.id))!;
   checar("a edicao da Bia chegou", final.titulo === "Editada pela Bia");
   checar("e o numero nao se perdeu", final.processos[0]?.protocolo === "50300.001234/2026-11");
-  checar("a memoria do sigilo lembra o numero", (await S.repo.sigilosConhecidos()).processos.size >= 1);
+  checar("a memoria do sigilo lembra o numero pela chave em digitos", (await S.repo.sigilosConhecidos()).processos.has("50300001234202611"));
 
   secao("Relogio adiantado de um colega nao apaga o trabalho dele");
   const F = repoDeTeste();

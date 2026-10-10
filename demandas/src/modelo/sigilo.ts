@@ -15,16 +15,20 @@ export function cortarSigiloDemandas(
   const raspados = nenhumNumero();
   const saida = demandas.map((d) => {
     let mudou = false;
+    let processoSigiloso = false;
     const processos = d.processos.map((p) => {
       const sigiloso = p.sigiloso === true || (p.protocolo !== "" && conhecidos.processos.has(chaveProtocolo(p.protocolo)));
       if (!sigiloso) return p;
-      if (p.protocolo) raspados.processos.push(p.protocolo);
+      // A memória guarda a chave (so digitos), a mesma que o Projetos grava e que o corte consulta.
+      if (chaveProtocolo(p.protocolo)) raspados.processos.push(chaveProtocolo(p.protocolo));
       mudou = true;
+      processoSigiloso = true;
       return { ...VINCULO_VAZIO };
     });
     let documentoEntregue = d.documentoEntregue;
     const doc = d.documentoEntregue;
-    if (doc && (doc.sigiloso === true || (doc.numero !== "" && conhecidos.documentos.has(chaveDocumento(doc.numero))))) {
+    // O documento entregue de uma demanda com processo sigiloso e sigiloso (como o Projetos deduz pelo processo).
+    if (doc && (processoSigiloso || doc.sigiloso === true || (doc.numero !== "" && conhecidos.documentos.has(chaveDocumento(doc.numero))))) {
       if (doc.numero) raspados.documentos.push(doc.numero);
       documentoEntregue = { ...DOCUMENTO_VAZIO };
       mudou = true;

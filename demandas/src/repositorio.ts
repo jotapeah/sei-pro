@@ -513,7 +513,7 @@ export class RepositorioDemandas {
           processos: d.processos.map((p) => (p.protocolo && chaves.has(chaveProtocolo(p.protocolo)) ? { ...p, sigiloso: true } : p)),
         });
     }
-    await this.lembrarSigilo({ ...nenhumNumero(), processos: [...protocolos] }, "local", { promover: true });
+    await this.lembrarSigilo({ ...nenhumNumero(), processos: [...chaves] }, "local", { promover: true });
     if (marcadas.length) await this.area.gravar(Object.fromEntries(marcadas.map((d) => [this.demandas.chave(d.id), d])));
     return marcadas.length;
   }
@@ -523,9 +523,14 @@ export class RepositorioDemandas {
 export function manterNumerosSigilosos(vencedor: Demanda, local?: Demanda): Demanda {
   if (!local) return vencedor;
   let mudou = false;
-  const processos = vencedor.processos.map((p, i) => {
-    const l = local.processos[i];
-    if (vinculoSemNumero(p) && l?.protocolo) {
+  // Os vinculos em branco do vencedor recebem, EM ORDEM, os sigilosos com numero do local que o vencedor ainda nao
+  // traz; so se esses acabam, entram os do local ainda sem marca (o numero que o colega acabou de marcar sigiloso).
+  const presentes = new Set(vencedor.processos.map((p) => chaveProtocolo(p.protocolo)).filter(Boolean));
+  const livres = local.processos.filter((l) => chaveProtocolo(l.protocolo) && !presentes.has(chaveProtocolo(l.protocolo)));
+  const fila = [...livres.filter((l) => l.sigiloso === true), ...livres.filter((l) => l.sigiloso !== true)];
+  const processos = vencedor.processos.map((p) => {
+    const l = vinculoSemNumero(p) ? fila.shift() : undefined;
+    if (l) {
       mudou = true;
       return { ...l, sigiloso: true as const };
     }

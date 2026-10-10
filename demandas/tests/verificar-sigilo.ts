@@ -17,7 +17,7 @@ export function verificarSigilo(): void {
       r.demandas[0]?.processos[0]?.sigiloso === true &&
       r.demandas[0]?.processos[1]?.protocolo === "50300.000001/2026-01",
   );
-  checar("o numero raspado volta para a memoria", r.raspados.processos.includes("50300.001234/2026-11"));
+  checar("o numero raspado volta para a memoria", r.raspados.processos.includes("50300001234202611"));
   const conhecidos = { processos: new Set([chaveProtocolo("50300.000001/2026-01")]), documentos: new Set<string>() };
   const r2 = cortarSigiloDemandas([demanda({ id: "b", processos: [{ protocolo: "50300.000001/2026-01" }] })], conhecidos);
   checar(
