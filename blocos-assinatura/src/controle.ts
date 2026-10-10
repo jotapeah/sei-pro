@@ -137,7 +137,12 @@ export function iniciar({ doc, url, sei }: Dependencias) {
           status.textContent = 'Bloco retornado no SEI. A tela de inclusão mudou; atualize-a antes de continuar.';
         } else {
           let opcao = [...seletor.options].find(o => o.value === bloco.id);
-          if (!opcao) { opcao = doc.createElement('option'); opcao.value = bloco.id; seletor.append(opcao); }
+          if (!opcao) {
+            opcao = doc.createElement('option'); opcao.value = bloco.id;
+            // O SEI lista os blocos do maior número para o menor: mantém a ordem.
+            const depois = [...seletor.options].find(o => /^\d+$/.test(o.value) && Number(o.value) < Number(bloco.id));
+            seletor.insertBefore(opcao, depois ?? null);
+          }
           opcao.textContent = bloco.rotulo;
           seletor.value = bloco.id;
           // O onchange nativo submete o formulário: só o Chosen é notificado.

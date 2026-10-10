@@ -11,7 +11,7 @@ function tela() {
   const selectProto = Object.getPrototypeOf(doc.createElement('select'));
   Object.defineProperty(selectProto, 'value', { configurable: true,
     get() { return this.querySelector('option[selected]')?.value ?? ''; },
-    set(valor: string) { for (const opcao of this.options) opcao.selected = opcao.value === valor; },
+    set(valor: string) { for (const opcao of this.options) opcao.selected = false; for (const opcao of this.options) if (opcao.value === valor) opcao.selected = true; },
   });
   const inputProto = Object.getPrototypeOf(doc.createElement('input'));
   Object.defineProperty(inputProto, 'checked', { configurable: true,
@@ -53,6 +53,7 @@ escolher(doc);
 clicar(doc, '[data-spro-confirmar]'); clicar(doc, '[data-spro-confirmar]'); await esperar();
 assert.equal(s.estado.posts, 1);
 assert.equal(doc.querySelector('#selBloco option[selected]')!.getAttribute('value'), '11');
+assert.deepEqual([...doc.querySelectorAll('#selBloco option')].map(o => o.getAttribute('value')), ['', '12', '11', '3']);
 assert.equal((doc.querySelector('input[type=checkbox]') as HTMLInputElement).checked, true);
 assert.equal(doc.querySelector<HTMLInputElement>('#hdnDocumentosItensSelecionados')!.value, 'doc1');
 assert.equal(mudancas, 0, 'onchange nativo não deve submeter o formulário');

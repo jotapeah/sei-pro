@@ -9,7 +9,7 @@ export const url = 'https://sei.exemplo.gov.br/sei/controlador.php?acao=bloco_es
 export const criar = (html: string) => parseHTML(`<html><head></head><body>${html}</body></html>`).document as unknown as Document;
 definirAnalisador(criar);
 export const inclusao = `<form id="frmBlocoEscolher"><div id="divInfraBarraComandosSuperior"><button type="submit">Incluir</button></div>
-  <select name="selBloco" id="selBloco" onchange="this.form.submit()"><option value="">Selecione</option><option value="12">222222 - Outro</option></select>
+  <select name="selBloco" id="selBloco" onchange="this.form.submit()"><option value="">Selecione</option><option value="12">222222 - Outro</option><option value="3">3 - Menor</option></select>
   <table id="tblDocumentos"><tr><td><input type="checkbox" name="chkInfraItem0" value="doc1" checked></td></tr></table>
   <input id="hdnDocumentosItensSelecionados" name="hdnDocumentosItensSelecionados" value="doc1">
   <div id="divInfraBarraComandosInferior"><button type="submit">Incluir</button></div></form>`;
