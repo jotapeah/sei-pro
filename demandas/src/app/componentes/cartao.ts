@@ -2,7 +2,7 @@
 
 import type { DataISO } from "@comum/datas/dias";
 import { avatar } from "@comum/ui/avatar";
-import { h } from "@comum/ui/dom";
+import { h, icone } from "@comum/ui/dom";
 import { criarMenu, type EntradaMenu } from "@comum/ui/menu";
 import type { DemandaNaTela } from "../dados";
 import { barraDoChecklist, marcaDePrioridade, pilulaDoPrazo, seloDoEscopo } from "./pilulas";
@@ -47,6 +47,14 @@ export function montarCartao(x: DemandaNaTela, o: OpcoesCartao): HTMLElement {
       "div",
       { class: "dem-cartao-corpo" },
       h("div", { class: "dem-cartao-topo" }, h("span", { class: "dem-cartao-titulo" }, d.titulo), menu),
+      d.etapa
+        ? h(
+            "div",
+            { class: "dem-cartao-etapa", title: `Etapa do projeto: ${d.etapa.rotulo}` },
+            icone("gantt", 12),
+            h("span", {}, d.etapa.rotulo),
+          )
+        : null,
       etiquetas,
       h(
         "div",

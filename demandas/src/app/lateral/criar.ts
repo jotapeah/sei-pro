@@ -17,6 +17,7 @@ import { type AbrirModal, criarConfirmar } from "@comum/ui/dialogo";
 import { h, icone } from "@comum/ui/dom";
 import { criarMenu } from "@comum/ui/menu";
 import type { ProcessoDaCaixa, UsuarioDaUnidade } from "@projetos/ponte/tipos";
+import { etapasAbertasDaUnidade, reposDosProjetos } from "../../integracao/projetos";
 import { escoposDaUnidade } from "../../modelo/escopo";
 import type { Carimbo } from "../../modelo/tipos";
 import type { ContextoDemandas } from "../../ponte/tipos";
@@ -125,8 +126,8 @@ export function criarAppDoLateral(n: NavegadorDoLateral): (ctx: ContextoDemandas
       contexto: ctx,
       usuarios: () => rpc.chamar<UsuarioDaUnidade[]>("usuarios", undefined, 60_000).catch(() => []),
       processosDaCaixa: () => rpc.chamar<ProcessoDaCaixa[]>("processosDaCaixa").catch(() => []),
-      // D15: as etapas do Gestor de Projetos.
-      etapasDoProjetos: async () => [],
+      // Vínculo opcional com as etapas do Gestor de Projetos (somente leitura aqui).
+      etapasDoProjetos: () => etapasAbertasDaUnidade(reposDosProjetos(n.area, ctx, unidade.id, carimbo)),
       tabelas: () => estadoDasTabelas(n.area, [esc.unidade, esc.eu]),
     };
 

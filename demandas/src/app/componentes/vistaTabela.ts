@@ -194,7 +194,15 @@ function linha(x: DemandaNaTela, o: OpcoesTabela): HTMLElement {
       "td",
       { class: "dem-col-titulo" },
       h("div", { class: "dem-titulo-linha" }, seloDoEscopo(x.vis), tituloEl, barraDoChecklist(d)),
-      h("div", { class: "dem-titulo-sub" }, ...processos, etiquetasEl),
+      h(
+        "div",
+        { class: "dem-titulo-sub" },
+        d.etapa
+          ? h("span", { class: "dem-etapa", title: `Etapa do projeto: ${d.etapa.rotulo}` }, icone("gantt", 12), d.etapa.rotulo)
+          : null,
+        ...processos,
+        etiquetasEl,
+      ),
     ),
     h(
       "td",

@@ -28,6 +28,7 @@ import { baixar, criarAbrirModal, criarConfirmar } from "@comum/ui/dialogo";
 import { h } from "@comum/ui/dom";
 import { definirJanelaQueCresce } from "@comum/ui/flutuante";
 import type { ProcessoDaCaixa, UsuarioDaUnidade } from "@projetos/ponte/tipos";
+import { concluirEtapaDaDemanda, etapasAbertasDaUnidade, reposDosProjetos } from "../integracao/projetos";
 import { CHAVE_LATERAL } from "../modelo/constantes";
 import { escoposDaUnidade } from "../modelo/escopo";
 import { lerOpcaoDemandas } from "../pagina/opcao";
@@ -78,6 +79,7 @@ async function ligar(
   const carimbo = () => ({ agora: Date.now(), dispositivo, por: ctx.login, nome: ctx.nome });
   const esc = escoposDaUnidade(ctx.host, ctx.login, unidade.id);
   const repos = { unidade: new RepositorioDemandas(area, esc.unidade, carimbo), eu: new RepositorioDemandas(area, esc.eu, carimbo) };
+  const reposProjetos = reposDosProjetos(area, ctx, unidade.id, carimbo);
   const abrirModal = criarAbrirModal(extras.sobreposicao);
   const confirmar = criarConfirmar(abrirModal);
   const colab = new Colaboracao({
@@ -111,8 +113,9 @@ async function ligar(
       hoje: () => hojeISO(),
       usuarios: () => rpc.chamar<UsuarioDaUnidade[]>("usuarios", undefined, 60_000).catch(() => []),
       processosDaCaixa: () => rpc.chamar<ProcessoDaCaixa[]>("processosDaCaixa").catch(() => []),
-      // D15: as etapas do Gestor de Projetos.
-      etapasDoProjetos: async () => [],
+      // Vínculo opcional com as etapas do Gestor de Projetos (lidas do storage; "Concluir também a etapa?" grava lá).
+      etapasDoProjetos: () => etapasAbertasDaUnidade(reposProjetos),
+      concluirEtapa: (ref) => concluirEtapaDaDemanda(reposProjetos, ref, hojeISO()),
       tabelas: () => estadoDasTabelas(area, [esc.unidade, esc.eu]),
       preferencias: { ler: () => lerPreferencias(area), gravar: (p) => gravarPreferencias(area, p) },
       abrirModal,

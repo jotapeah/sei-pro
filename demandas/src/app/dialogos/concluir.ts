@@ -1,4 +1,7 @@
-/** Concluir: data (padrão hoje, nunca antes da distribuição), tempo gasto, observação e documento entregue (opcional). */
+/**
+ * Concluir: data (padrão hoje, nunca antes da distribuição), tempo gasto, observação e documento entregue (opcional). Com a
+ * demanda ligada a uma etapa ainda aberta do Gestor de Projetos, oferece "Concluir também a etapa?" (desmarcado por padrão).
+ */
 
 import { h } from "@comum/ui/dom";
 import { RE_DOCUMENTO } from "@projetos/modelo/vinculos";
@@ -10,8 +13,11 @@ import type { ContextoDialogo } from "../tipos";
 import { caixaDeErros, campo, linhaDeCampos } from "./campos";
 import { perguntar } from "./janela";
 
-export function abrirDialogoConclusao(c: ContextoDialogo, d: Demanda): Promise<DadosConclusao | null> {
-  return perguntar<DadosConclusao>(c, {
+/** O que o diálogo devolve: os dados da conclusão e, se marcou, o pedido para concluir também a etapa. */
+export type RespostaConclusao = DadosConclusao & { concluirEtapa?: true };
+
+export function abrirDialogoConclusao(c: ContextoDialogo, d: Demanda): Promise<RespostaConclusao | null> {
+  return perguntar<RespostaConclusao>(c, {
     titulo: "Concluir demanda",
     icone: "check",
     montar(responder) {
@@ -33,6 +39,22 @@ export function abrirDialogoConclusao(c: ContextoDialogo, d: Demanda): Promise<D
         placeholder: "Número SEI",
         maxlength: "30",
       });
+      // "Concluir também a etapa?": só se a etapa ligada ainda está aberta no Projetos (a lista só traz as abertas).
+      const marcaEtapa = h("input", { type: "checkbox", name: "concluirEtapa", id: "dem-concluir-etapa" });
+      const linhaEtapa = h(
+        "label",
+        { class: "dem-opcao dem-concluir-etapa", for: "dem-concluir-etapa", hidden: true },
+        marcaEtapa,
+        h("span", {}, h("b", {}, "Concluir também a etapa?"), h("span", {}, ` ${d.etapa?.rotulo ?? ""}`)),
+      );
+      const ligada = d.etapa;
+      if (ligada)
+        void c
+          .etapasDoProjetos()
+          .then((lista) => {
+            if (lista.some((e) => e.projeto === ligada.projeto && e.etapa === ligada.etapa && !e.concluida)) linhaEtapa.hidden = false;
+          })
+          .catch(() => undefined);
       const gravar = () => {
         const m: string[] = [];
         const dia = dataDeFormulario(data.value);
@@ -45,10 +67,11 @@ export function abrirDialogoConclusao(c: ContextoDialogo, d: Demanda): Promise<D
         if (numero && !RE_DOCUMENTO.test(numero)) m.push("Número de documento inválido (só dígitos, até 20).");
         erros.mostrar(m);
         if (m.length || !dia) return;
-        const r: DadosConclusao = { data: dia };
+        const r: RespostaConclusao = { data: dia };
         if (min !== undefined && min !== null) r.tempoGastoMin = min;
         if (observacao.value.trim()) r.observacao = observacao.value.trim();
         if (numero) r.documento = { numero };
+        if (!linhaEtapa.hidden && marcaEtapa.checked) r.concluirEtapa = true;
         responder(r);
       };
       for (const i of [data, tempo, documento])
@@ -68,6 +91,7 @@ export function abrirDialogoConclusao(c: ContextoDialogo, d: Demanda): Promise<D
         ),
         campo("Observação", observacao, { opcional: "(opcional)" }),
         campo("Documento entregue", documento, { opcional: "(opcional)", dica: "Número SEI do documento." }),
+        linhaEtapa,
         erros.el,
         h(
           "div",

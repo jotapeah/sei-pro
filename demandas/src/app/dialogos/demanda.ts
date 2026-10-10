@@ -13,8 +13,9 @@ import { bloqueiaCriacao } from "../../modelo/alertas";
 import { LIMITES } from "../../modelo/constantes";
 import { chaveResponsavel } from "../../modelo/filtro";
 import { prorrogar } from "../../modelo/operacoes";
-import type { Demanda, EtapaRef, ItemChecklist, Prioridade, Vinculo, Vis } from "../../modelo/tipos";
+import type { Demanda, ItemChecklist, Prioridade, Vinculo, Vis } from "../../modelo/tipos";
 import type { MudancasDemanda } from "../../repositorio";
+import { montarCampoEtapa } from "../componentes/campoEtapa";
 import type { DemandaNaTela } from "../dados";
 import { responsaveisUsados } from "../dados";
 import { dataDeFormulario, dataLonga, lerTempo, tempoParaCampo } from "../formato";
@@ -173,21 +174,9 @@ export function abrirDialogoDemanda(c: ContextoDialogo, o: { demanda?: DemandaNa
       value: tempoParaCampo(atual?.tempoEstimadoMin),
     });
 
-    // Etapa do projeto (D15 preenche a lista; sem ela, mantém só a guardada).
-    const etapas = new Map<string, EtapaRef>();
-    const chaveEtapa = (e: Pick<EtapaRef, "projeto" | "etapa">) => `${e.projeto}␟${e.etapa}`;
-    if (atual?.etapa) etapas.set(chaveEtapa(atual.etapa), atual.etapa);
-    const etapa = criarCombo({
-      rotulo: "Etapa do projeto",
-      opcoes: () => [
-        { valor: "", rotulo: "Nenhuma" },
-        ...[...etapas.entries()].map(([valor, e]) => ({ valor, rotulo: e.rotulo, icone: "gantt" as const })),
-      ],
-      valor: [atual?.etapa ? chaveEtapa(atual.etapa) : ""],
-      vazio: "Nenhuma",
-      busca: true,
-      larguraLista: 300,
-    });
+    // Etapa do projeto: a lista vem do Gestor de Projetos (somente leitura); a guardada aparece mesmo sem ele.
+    const campoEtapa = montarCampoEtapa({ ...(atual?.etapa ? { atual: atual.etapa } : {}), carregar: () => c.etapasDoProjetos() });
+    const etapa = campoEtapa.combo;
 
     // Checklist.
     let itens: ItemChecklist[] = (atual?.checklist ?? []).map((i) => ({ ...i }));
@@ -442,16 +431,6 @@ export function abrirDialogoDemanda(c: ContextoDialogo, o: { demanda?: DemandaNa
         etiquetas.atualizar();
       })
       .catch(() => undefined);
-    void c
-      .etapasDoProjetos()
-      .then((lista) => {
-        for (const e of lista)
-          if (!e.concluida || (atual?.etapa && chaveEtapa(atual.etapa) === chaveEtapa(e)))
-            etapas.set(chaveEtapa(e), { projeto: e.projeto, etapa: e.etapa, rotulo: e.rotulo });
-        etapa.atualizar();
-      })
-      .catch(() => undefined);
-
     // ---------- gravar ----------
     const validar = (): string[] => {
       const m: string[] = [];
@@ -492,7 +471,7 @@ export function abrirDialogoDemanda(c: ContextoDialogo, o: { demanda?: DemandaNa
       const destino = edicao ? vis0 : vis();
       const resp = destino === "eu" ? (atual?.responsavel ?? eu) : responsavelEscolhido();
       const min = lerTempo(estimado.value);
-      const etapaEscolhida = etapas.get(etapa.valor()[0] ?? "");
+      const etapaEscolhida = campoEtapa.escolhida();
       ocupado = true;
       gravarBotao.disabled = true;
       try {

@@ -2961,6 +2961,27 @@ html[data-modo="lateral"] #app {
   margin: 0;
 }
 
+/* ---------- Vinculo com a etapa do Gestor de Projetos ---------- */
+.dem-cartao-etapa,
+.dem-etapa {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--spro-suave);
+  font-size: 11.5px;
+}
+.dem-cartao-etapa span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dem-concluir-etapa[hidden] {
+  display: none;
+}
+
 /*
  * Frappe Gantt 1.2.2 (MIT, https://github.com/frappe/gantt): dist/frappe-gantt.css do pacote npm,
  * formatado pelo esbuild. Ajustes do SEI Pro (tokens --spro-*, situacoes, marco, base) no fim.

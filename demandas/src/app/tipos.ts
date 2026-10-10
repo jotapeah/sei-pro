@@ -4,7 +4,8 @@ import type { DataISO } from "@comum/datas/dias";
 import type { AbrirModal } from "@comum/ui/dialogo";
 import type { montarGantt } from "@projetos/gantt/montar";
 import type { ProcessoDaCaixa, UsuarioDaUnidade } from "@projetos/ponte/tipos";
-import type { Vis } from "../modelo/tipos";
+import type { ResultadoEtapa } from "../integracao/projetos";
+import type { EtapaRef, Vis } from "../modelo/tipos";
 import type { PreferenciasDemandas } from "../preferencias";
 import type { RepositorioDemandas } from "../repositorio";
 import type { EstadoTabela } from "../sincronia/orquestrador";
@@ -35,8 +36,10 @@ export interface DepsApp {
   hoje(): DataISO;
   usuarios(): Promise<UsuarioDaUnidade[]>;
   processosDaCaixa(): Promise<ProcessoDaCaixa[]>;
-  /** D15; antes disso: `async () => []`. */
+  /** As etapas abertas dos projetos da unidade (`integracao/projetos.ts`, lidas do storage); sem o Projetos, vazio. */
   etapasDoProjetos(): Promise<EtapaDoProjeto[]>;
+  /** "Concluir também a etapa?": conclui a etapa ligada, se ainda aberta. Ausente: o diálogo não oferece. */
+  concluirEtapa?(etapa: EtapaRef): Promise<ResultadoEtapa>;
   tabelas(): Promise<EstadoTabela[]>;
   preferencias: {
     ler(): Promise<PreferenciasDemandas>;

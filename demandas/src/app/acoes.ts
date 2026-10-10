@@ -7,6 +7,7 @@
 import type { DataISO } from "@comum/datas/dias";
 import { avisar } from "@comum/ui/aviso";
 import type { EntradaMenu } from "@comum/ui/menu";
+import type { ResultadoEtapa } from "../integracao/projetos";
 import { bloqueiaCriacao } from "../modelo/alertas";
 import {
   arquivar,
@@ -23,7 +24,7 @@ import {
 } from "../modelo/operacoes";
 import { planoDoMovimento } from "../modelo/quadro";
 import type { Situacao } from "../modelo/situacao";
-import type { Vis } from "../modelo/tipos";
+import type { EtapaRef, Vis } from "../modelo/tipos";
 import type { DemandaNaTela } from "./dados";
 import { abrirDialogoAvaliacao } from "./dialogos/avaliar";
 import { mensagensDoErro } from "./dialogos/campos";
@@ -162,10 +163,13 @@ export async function moverPara(deps: DepsApp, alvo: DemandaNaTela, destino: Sit
   const repo = deps.repos[alvo.vis];
   const c = contextoDeDialogos(deps);
   let dados: DadosMovimento = {};
+  let concluirEtapa = false;
   if (plano.tipo === "pedir") {
     if (plano.dados === "conclusao") {
-      const conclusao = await abrirDialogoConclusao(c, alvo.demanda);
-      if (!conclusao) return false;
+      const resposta = await abrirDialogoConclusao(c, alvo.demanda);
+      if (!resposta) return false;
+      const { concluirEtapa: marcou, ...conclusao } = resposta;
+      concluirEtapa = marcou === true;
       dados = { conclusao };
     } else {
       const avaliacao = await abrirDialogoAvaliacao(c, alvo.demanda);
@@ -175,10 +179,27 @@ export async function moverPara(deps: DepsApp, alvo: DemandaNaTela, destino: Sit
   }
   try {
     await repo.aplicar(alvo.demanda.id, (d, car) => operacoesMoverPara(d, destino, dados, car));
-    return true;
   } catch (e) {
     avisar(mensagensDoErro(e)[0] ?? "Não foi possível mover a demanda.");
     return false;
+  }
+  // A demanda já está concluída: o resultado da etapa só avisa (nunca desfaz a conclusão da demanda).
+  const etapa = alvo.demanda.etapa;
+  if (concluirEtapa && etapa && deps.concluirEtapa) await concluirEtapaLigada(deps.concluirEtapa, etapa);
+  return true;
+}
+
+const AVISO_ETAPA: Record<ResultadoEtapa, string> = {
+  concluida: "Etapa concluída no Gestor de Projetos.",
+  ja_estava: "A etapa já estava concluída no Gestor de Projetos.",
+  nao_encontrada: "A etapa não foi encontrada no Gestor de Projetos.",
+};
+
+async function concluirEtapaLigada(concluir: NonNullable<DepsApp["concluirEtapa"]>, etapa: EtapaRef): Promise<void> {
+  try {
+    avisar(AVISO_ETAPA[await concluir(etapa)]);
+  } catch (e) {
+    avisar(`A demanda foi concluída, mas a etapa não: ${mensagensDoErro(e)[0] ?? "erro ao gravar no Gestor de Projetos."}`);
   }
 }
 
