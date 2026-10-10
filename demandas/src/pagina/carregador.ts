@@ -1,20 +1,22 @@
 /**
  * O carregador do content script: o `init_demandas.js` roda em TODO frame do SEI, então fica mínimo (a marca do
- * <html> e a decisão pela tela, com guardas baratas: o DOM que já está aí, sem serializar a página). Só a janela de
- * topo com unidade no cabeçalho (o Controle de Processos é uma delas) importa o pacote pesado
- * (`js/demandas/pagina.js`, por `import()` do endereço da extensão). Nos outros frames nada é importado, nem a opção é
- * lida. Não há parte da árvore do processo: o Gestor de Demandas não lê nem busca a árvore.
+ * <html> e a decisão pela tela, com guardas baratas: o DOM que já está aí, sem serializar a página). Só dois casos
+ * importam o pacote pesado (`js/demandas/pagina.js`, por `import()` do endereço da extensão): a janela de topo com
+ * unidade no cabeçalho (o Controle de Processos é uma delas) e o frame da barra de ações do processo (D17: o botão
+ * "Demandas"). Nos outros frames nada é importado, nem a opção é lida. O pacote nunca BUSCA a árvore do processo: só lê
+ * a que o frame vizinho já desenhou.
  */
 
 import { lerContexto } from "@nucleo/sei";
+import { qualTela } from "./tela";
 
 /** O pacote da página (ESM), no `web_accessible_resources` do manifest Lab. */
 export const PACOTE_PAGINA = "js/demandas/pagina.js";
 
-export type Carga = "topo";
+export type Carga = "topo" | "arvore";
 
 /** O que o pacote da página oferece ao carregador (os tipos vêm do próprio módulo: os dois não divergem). */
-export type PacotePagina = Pick<typeof import("./principal"), "principalTopo">;
+export type PacotePagina = Pick<typeof import("./principal"), "principalTopo" | "principalArvore">;
 
 export interface DepsCarregador {
   /** Esta é a janela de topo (`window === window.top`). */
@@ -37,9 +39,9 @@ export function temUnidade(doc: Document, url: string): boolean {
   }
 }
 
-/** Qual parte do pacote esta tela liga: a de topo ou nenhuma. */
+/** Qual parte do pacote esta tela liga: a de topo, a da barra de ações do processo ou nenhuma. */
 export function oQueCarregar(o: { topo: boolean; doc: Document; url: string }): Carga | null {
-  if (!o.topo) return null;
+  if (!o.topo) return qualTela(o.doc) === "arvore" ? "arvore" : null;
   return temUnidade(o.doc, o.url) ? "topo" : null;
 }
 
@@ -49,6 +51,6 @@ export async function carregarDemandas(d: DepsCarregador): Promise<Carga | null>
   if (!carga) return null;
   if (!(await d.opcaoLigada())) return null;
   const pacote = await d.importar(PACOTE_PAGINA);
-  await pacote.principalTopo();
+  await (carga === "arvore" ? pacote.principalArvore() : pacote.principalTopo());
   return carga;
 }

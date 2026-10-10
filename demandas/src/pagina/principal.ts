@@ -1,8 +1,11 @@
 /**
  * O pacote da página (`js/demandas/pagina.js`, ESM): o carregador (`pagina/main.ts` + `pagina/carregador.ts`, o
  * `init_demandas.js` de todo frame) já marcou o <html>, conferiu a opção "Gestor de Demandas" e decidiu pela tela; ele
- * importa este módulo só onde há trabalho e chama `principalTopo`, na janela de topo de qualquer tela do SEI com
- * unidade:
+ * importa este módulo só onde há trabalho e chama um dos dois pontos de entrada:
+ * - `principalArvore` (D17), no frame da barra de ações do processo (`#divArvoreAcoes`): o botão "Demandas", que abre o
+ *   balão (sob demanda, `js/demandas/balao.js`) com as demandas do processo e os formulários já preenchidos com o
+ *   processo e o documento abertos, lidos só da árvore que o frame vizinho já desenhou (pagina/arvore.ts);
+ * - `principalTopo`, na janela de topo de qualquer tela do SEI com unidade:
  * - os repositórios com o dispositivo de verdade e a sincronia dos Textos Padrão da unidade (pagina/sincronia.ts: lê só
  *   no Controle de Processos; nas outras telas só envia o que mudou aqui, porque o app grava no storage);
  * - no Controle de Processos, também o painel embutido (o iframe do app), as pílulas do título (com o contador da aba do
@@ -10,7 +13,7 @@
  * - o lado da aba do painel lateral (pagina/lateral.ts, chave host|login|u:<unidade>), em toda tela de topo.
  *
  * Nada daqui BUSCA a árvore de um processo nem monta link do SEI: a lista de usuários é a parcial
- * (pagina/usuarios.ts), e o armazém dos Textos Padrão usa o link do menu da tela.
+ * (pagina/usuarios.ts), e o armazém dos Textos Padrão e a ida ao painel usam o link do menu da tela.
  */
 
 import { type Area, areaChrome } from "@comum/armazenamento/area";
@@ -21,7 +24,7 @@ import { avisoComAcoesNaPagina, avisoNaPagina } from "@comum/painel/aviso";
 import { ligarPortaDoPainel, type PainelMontado } from "@comum/painel/embutido";
 import type { PortaRpc } from "@comum/ponte/rpc";
 import { linkDoMenu } from "@nucleo/links/links";
-import { paginaDe } from "@nucleo/sessao/pagina";
+import { documentoTopo, paginaDe } from "@nucleo/sessao/pagina";
 import { chaveUsuarios } from "@projetos/modelo/constantes";
 import { gravadorDoContador } from "../app/contador";
 import { carregarDados, responsaveisUsados } from "../app/dados";
@@ -30,15 +33,21 @@ import type { Carimbo, Vis } from "../modelo/tipos";
 import { CANAL_DEMANDAS, CANAL_LATERAL, type ContextoDemandas, chaveDaAba } from "../ponte/tipos";
 import { gravarPreferencias, lerPreferencias } from "../preferencias";
 import { RepositorioDemandas } from "../repositorio";
+import { consentimentoDemandas } from "../sincronia/consentimento";
 import { armazemDoTexto, armazemNaTela } from "./armazem";
+import { instalarNaBarra } from "./arvore";
 import { contextoDemandas } from "./contexto";
 import { tratadoresDemandas } from "./executor";
-import { atenderPedidoDoLateral, focoDaAba, type PainelDaAba } from "./foco";
+import { atenderPedidoDoLateral, focoDaAba, irAoPainel, type PainelDaAba } from "./foco";
 import { ligarLateralDaAba } from "./lateral";
 import { ligarAlertas, montarPainelDemandas, ordemDoPainel } from "./painel";
 import { ligarSincronia, type SincroniaDemandas } from "./sincronia";
+import { abridorDoBalao } from "./sobDemanda";
 import { qualTela } from "./tela";
 import { usuariosDaCaixa, usuariosDaUnidade } from "./usuarios";
+
+/** O balão do processo: o módulo dele (com o `base.css`) só na primeira abertura. */
+const abrirBalao = abridorDoBalao(() => import("./pacoteBalao"));
 
 type Repos = Readonly<Record<Vis, RepositorioDemandas>>;
 
@@ -145,12 +154,96 @@ async function montarNaCaixa(aba: Aba): Promise<PainelDaAba | null> {
   return painel;
 }
 
+/** A lista parcial de usuários da unidade (a do app e a do balão): nunca abre a árvore de um processo. */
+async function listaDeUsuarios(aba: Pick<Aba, "ctx" | "unidade" | "area" | "repos">, doc: Document) {
+  const { ctx, unidade, area, repos } = aba;
+  const dados = await carregarDados(repos, hojeISO()).catch(() => null);
+  return usuariosDaUnidade({
+    area,
+    chave: chaveUsuarios(ctx.host, unidade.id),
+    agora: Date.now(),
+    daCaixa: usuariosDaCaixa(doc),
+    usados: dados ? responsaveisUsados(dados) : [],
+    eu: { login: ctx.login, nome: ctx.nome || ctx.login },
+    // A única lista completa conhecida exige abrir a árvore de um processo (grava "Processo recebido"): nunca.
+    buscarCompleta: null,
+  });
+}
+
+/** Os endereços do visualizador (este frame e os aninhados do SEI 4.1): o `id_documento` quando nenhum nó está selecionado. */
+function urlsDoVisualizador(doc: Document): string[] {
+  const urls = [doc.location?.href ?? ""];
+  for (const f of doc.querySelectorAll("iframe")) {
+    try {
+      const u = (f as HTMLIFrameElement).contentWindow?.location.href;
+      if (u) urls.push(u);
+    } catch {
+      /* outra origem: não interessa */
+    }
+  }
+  return urls;
+}
+
+/**
+ * D17: o frame da barra de ações do processo. O cabeçalho (usuário, unidade) está na janela de topo, da mesma origem; a
+ * gravação do balão chega ao Texto Padrão pela sincronia de lá (que envia o que mudou). Nesta tela não há painel:
+ * "Abrir no painel" vai ao Controle de Processos pelo link do menu e deixa o pedido de foco guardado.
+ */
+export async function principalArvore(): Promise<void> {
+  const topo = documentoTopo();
+  const temaEscuro = temaEscuroLegado(localStorage);
+  const ctx = contextoDemandas(topo, { temaEscuro }, topo.location?.href);
+  if (!ctx?.unidade) return;
+  const unidade = ctx.unidade;
+  const area = areaChrome(chrome.storage.local, "local");
+  const repos = await reposDaUnidade(ctx, unidade, area);
+  const aba = { ctx, unidade, area, repos };
+  const consentimento = consentimentoDemandas(areaChrome(chrome.storage.sync, "sync"), ctx.host, ctx.login, unidade.id, "unidade");
+  const eu = { login: ctx.login, nome: ctx.nome || ctx.login };
+  await instalarNaBarra({
+    doc: document,
+    repos,
+    hoje: () => hojeISO(),
+    docArvore: () => {
+      const f = topo.getElementById("ifrArvore") as HTMLIFrameElement | null;
+      const doc = f?.contentDocument;
+      return doc?.documentElement && f?.contentWindow ? { doc, url: f.contentWindow.location.href } : null;
+    },
+    urls: () => urlsDoVisualizador(document),
+    abrir: (ancora, detectar) => {
+      const x = detectar();
+      if (!x) return;
+      void abrirBalao(ancora, x, {
+        repos,
+        hoje: () => hojeISO(),
+        sigla: unidade.sigla || "unidade",
+        temaEscuro,
+        consentimento,
+        eu,
+        usuarios: () => listaDeUsuarios(aba, document),
+        // Ainda dentro do clique: a ida ao Controle de Processos usa o link do menu da tela.
+        abrirNoPainel: (id) =>
+          void irAoPainel(
+            {
+              area,
+              chave: chaveDaAba(ctx),
+              agora: Date.now(),
+              link: () => linkDoMenu(paginaDe(topo, topo.location?.href), "procedimento_controlar"),
+              ir: (u) => topo.location.assign(u),
+            },
+            id,
+          ).catch((e) => console.warn("[SEI Pro] demandas: abrir no painel", e)),
+      }).catch((e) => console.warn("[SEI Pro] demandas: balão da barra", e));
+    },
+  });
+}
+
 /** O que o app (do painel embutido) pede a esta aba. */
 function tratadores(
   aba: Aba,
   o: { iframe: HTMLIFrameElement | null; montado?: PainelMontado; focarNoPainel?: (id: string) => Promise<"painel" | "navegou"> },
 ) {
-  const { ctx, unidade, area, repos } = aba;
+  const { ctx } = aba;
   return tratadoresDemandas({
     doc: document,
     ctx,
@@ -161,18 +254,6 @@ function tratadores(
     avisarAcoes: o.montado ? avisoComAcoesNaPagina(document, ctx.temaEscuro, "spro-dem") : null,
     sincronia: aba.sincronia,
     focarNoPainel: o.focarNoPainel ?? null,
-    usuarios: async () => {
-      const dados = await carregarDados(repos, hojeISO()).catch(() => null);
-      return usuariosDaUnidade({
-        area,
-        chave: chaveUsuarios(ctx.host, unidade.id),
-        agora: Date.now(),
-        daCaixa: usuariosDaCaixa(document),
-        usados: dados ? responsaveisUsados(dados) : [],
-        eu: { login: ctx.login, nome: ctx.nome || ctx.login },
-        // A única lista completa conhecida exige abrir a árvore de um processo (grava "Processo recebido"): nunca.
-        buscarCompleta: null,
-      });
-    },
+    usuarios: () => listaDeUsuarios(aba, document),
   });
 }
