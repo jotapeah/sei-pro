@@ -613,3 +613,119 @@ html[data-modo="embutido"] body {
 .dem-hist-vazio {
   color: var(--spro-suave);
 }
+
+/* ---------- Vista Quadro ---------- */
+.dem-quadro {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(230px, 1fr);
+  gap: 10px;
+  align-items: start;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.dem-coluna {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+  background: var(--spro-fundo-2);
+  border: 1px solid var(--spro-borda);
+  border-radius: var(--spro-raio-g);
+}
+.dem-coluna > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+.dem-coluna h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--spro-suave);
+}
+.dem-conta {
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--spro-suave);
+  background: var(--spro-fundo-3);
+  border-radius: 999px;
+}
+.dem-coluna-corpo {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 64px;
+  border-radius: var(--spro-raio);
+}
+.dem-sobre {
+  background: var(--spro-destaque-suave);
+  outline: 2px dashed color-mix(in srgb, var(--spro-destaque) 50%, transparent);
+  outline-offset: 2px;
+}
+.dem-coluna-vazia {
+  padding: 14px 8px;
+  font-size: 12px;
+  text-align: center;
+  color: var(--spro-fraco);
+}
+.dem-ver-mais {
+  justify-self: start;
+}
+.dem-cartao {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: grab;
+  background: var(--spro-fundo);
+  border: 1px solid var(--spro-borda);
+  border-radius: var(--spro-raio);
+  box-shadow: var(--spro-sombra-1);
+}
+.dem-cartao:hover {
+  border-color: var(--spro-borda-forte);
+}
+.dem-cartao:focus-visible {
+  outline: none;
+  box-shadow: var(--spro-anel);
+}
+.dem-arrastando {
+  opacity: 0.45;
+}
+.dem-cartao-corpo {
+  display: grid;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+}
+.dem-cartao-topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+}
+.dem-cartao-titulo {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.dem-cartao-etiquetas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.dem-etiqueta-mais {
+  color: var(--spro-suave);
+}
+.dem-cartao-base {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.dem-cartao-resp {
+  margin-left: auto;
+}

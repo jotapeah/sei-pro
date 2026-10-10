@@ -4,7 +4,7 @@ import { type DataISO, diferencaDias } from "@comum/datas/dias";
 import type { DemandaNaTela } from "../app/dados";
 import { dadosQueOMovimentoPede, movimentoPermitido } from "./operacoes";
 import type { Situacao } from "./situacao";
-import { situacaoDe } from "./situacao";
+import { situacaoBase, situacaoDe } from "./situacao";
 import type { Demanda } from "./tipos";
 
 export const COLUNAS_DO_QUADRO: readonly Situacao[] = ["nao_iniciada", "iniciada", "pausada", "concluida", "avaliada"];
@@ -40,6 +40,9 @@ export function planoDoMovimento(d: Demanda, destino: Situacao): PlanoMovimento 
   const de = situacaoDe(d);
   if (de === destino) return { tipo: "recusar", mensagem: "" };
   if (!movimentoPermitido(de, destino)) return { tipo: "recusar", mensagem: "Esse movimento não é permitido. Use o menu da demanda." };
+  // Desarquivar volta ao estado de antes (derivado das datas): a outra coluna nao vale.
+  if (de === "arquivada" && situacaoBase(d) !== destino)
+    return { tipo: "recusar", mensagem: "A demanda volta ao estado de antes de ser arquivada." };
   const dados = dadosQueOMovimentoPede(de, destino);
   return dados ? { tipo: "pedir", dados } : { tipo: "aplicar" };
 }

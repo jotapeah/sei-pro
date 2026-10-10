@@ -1,31 +1,9 @@
 import { ordenarDemandas } from "../src/app/componentes/vistaTabela";
 import type { DemandaNaTela } from "../src/app/dados";
 import { naTela } from "../src/app/dados";
-import { avaliar, concluir, iniciar, pausar } from "../src/modelo/operacoes";
-import type { Vis } from "../src/modelo/tipos";
-import { appDeTeste, digitar, itemDoMenu, itensDoMenu, marcar, tecla, texto } from "./apoioApp";
+import { appDeTeste, digitar, itemDoMenu, itensDoMenu, marcar, nova, type Teste, tecla, texto } from "./apoioApp";
 import { demanda, HOJE } from "./fabrica";
 import { botao, checar, secao, tique } from "./util";
-
-type Teste = ReturnType<typeof appDeTeste>;
-
-async function nova(
-  t: Teste,
-  vis: Vis,
-  titulo: string,
-  estado: "nao_iniciada" | "iniciada" | "pausada" | "concluida" | "avaliada" | "arquivada" = "nao_iniciada",
-  extra: Record<string, unknown> = {},
-): Promise<string> {
-  const repo = t.repos[vis];
-  const d = await repo.criar({ titulo, prazo: "2026-10-20", distribuidaEm: "2026-10-01", ...extra });
-  if (estado !== "nao_iniciada") await repo.aplicar(d.id, iniciar);
-  if (estado === "pausada") await repo.aplicar(d.id, pausar);
-  if (estado === "concluida" || estado === "avaliada" || estado === "arquivada")
-    await repo.aplicar(d.id, (x, c) => concluir(x, { data: "2026-10-10" }, c));
-  if (estado === "avaliada") await repo.aplicar(d.id, (x, c) => avaliar(x, { nota: 4 }, c));
-  if (estado === "arquivada") await repo.aplicar(d.id, (x, c) => ({ demanda: { ...x, arquivadoEm: c.agora }, registros: [] }));
-  return d.id;
-}
 
 const linhas = (t: Teste) => [...t.raiz.querySelectorAll<HTMLElement>("tr.dem-tab-linha")];
 const linhaDe = (t: Teste, id: string) => t.raiz.querySelector<HTMLElement>(`tr.dem-tab-linha[data-id="${id}"]`) as HTMLElement;

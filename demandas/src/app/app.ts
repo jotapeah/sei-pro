@@ -11,18 +11,21 @@ import { fecharOrfaos } from "@comum/ui/flutuante";
 import { criarMenu, type EntradaMenu } from "@comum/ui/menu";
 import type { UsuarioDaUnidade } from "@projetos/ponte/tipos";
 import { chaveResponsavel, type FiltroDemandas, filtrar } from "../modelo/filtro";
+import { COLUNAS_DO_QUADRO, planoDoMovimento } from "../modelo/quadro";
 import type { PreferenciasDemandas } from "../preferencias";
 import type { EstadoTabela } from "../sincronia/orquestrador";
-import { arquivarSelecionadas, contextoDeDialogos, entradasDoMenu, excluirSelecionadas, TEXTO_CRIACAO_BLOQUEADA } from "./acoes";
+import { arquivarSelecionadas, contextoDeDialogos, entradasDoMenu, excluirSelecionadas, moverPara, TEXTO_CRIACAO_BLOQUEADA } from "./acoes";
 import { montarAbas, type Visao } from "./componentes/abas";
 import { type EscopoNaTela, montarCabecalho } from "./componentes/cabecalho";
 import { montarFaixas } from "./componentes/faixas";
 import { type FiltroMontado, montarFiltro } from "./componentes/filtro";
 import { montarNada, montarVazio } from "./componentes/vazio";
+import { montarQuadro } from "./componentes/vistaQuadro";
 import { type ColunaTabela, montarTabelaDemandas } from "./componentes/vistaTabela";
 import { carregarDados, type DemandaNaTela, etiquetasUsadas, responsaveisUsados } from "./dados";
 import { abrirDialogoDemanda } from "./dialogos/demanda";
 import { avisarErro } from "./erros";
+import { rotuloDaColuna } from "./formato";
 import type { AppMontado, DepsApp } from "./tipos";
 
 interface Estado {
@@ -33,6 +36,7 @@ interface Estado {
   tabelas: EstadoTabela[];
   ordenar: { coluna: ColunaTabela; sentido: 1 | -1 };
   selecionadas: Set<string>;
+  concluidasDias: number;
   falhou: boolean;
 }
 
@@ -46,6 +50,7 @@ export async function montarApp(deps: DepsApp): Promise<AppMontado> {
     tabelas: [],
     ordenar: { coluna: "prazo", sentido: 1 },
     selecionadas: new Set(),
+    concluidasDias: prefs?.concluidasNoQuadroDias ?? 30,
     falhou: false,
   };
   let usuarios: UsuarioDaUnidade[] = [];
@@ -111,6 +116,27 @@ export async function montarApp(deps: DepsApp): Promise<AppMontado> {
       avisarErro(e);
     }
   };
+  const reordenar = async (alvo: DemandaNaTela, antesId: string | null, depoisId: string | null) => {
+    try {
+      await deps.repos[alvo.vis].reordenar(alvo.demanda.id, antesId, depoisId);
+      await atualizar();
+    } catch (e) {
+      avisarErro(e);
+    }
+  };
+  const verMais = () => {
+    estado.concluidasDias = estado.concluidasDias < 90 ? 90 : 365;
+    gravarPrefs({ concluidasNoQuadroDias: estado.concluidasDias });
+    pintarVista();
+  };
+  /** A alternativa por teclado do arrastar: "Mover para" só com as colunas que o movimento permite. */
+  const menuDoCartao = (alvo: DemandaNaTela): EntradaMenu[] =>
+    entradasDoMenu(deps, alvo, {
+      aoEditar: (a) => void editar(a),
+      extras: [...COLUNAS_DO_QUADRO, "arquivada" as const]
+        .filter((s) => planoDoMovimento(alvo.demanda, s).tipo !== "recusar")
+        .map((s) => ({ rotulo: `Mover para ${rotuloDaColuna[s]}`, icone: "mover" as const, fazer: () => void moverPara(deps, alvo, s) })),
+    });
   const menuDe = (alvo: DemandaNaTela): EntradaMenu[] => entradasDoMenu(deps, alvo, { aoEditar: (a) => void editar(a) });
 
   const menuAjustes = (): HTMLElement =>
@@ -250,6 +276,20 @@ export async function montarApp(deps: DepsApp): Promise<AppMontado> {
               pintarLote();
             },
             ...(deps.abrirProcesso ? { abrirProcesso: deps.abrirProcesso } : {}),
+          }),
+        );
+        break;
+      case "quadro":
+        vistaEl.replaceChildren(
+          montarQuadro({
+            itens: lista,
+            hoje: deps.hoje(),
+            mostrarArquivadas: !!estado.filtro.mostrarArquivadas,
+            concluidasDias: estado.concluidasDias,
+            aoMover: (alvo, destino) => moverPara(deps, alvo, destino),
+            aoReordenar: reordenar,
+            itensDoMenu: menuDoCartao,
+            aoVerMais: verMais,
           }),
         );
         break;

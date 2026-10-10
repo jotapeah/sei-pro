@@ -9,6 +9,8 @@ import { criarAbrirModal } from "@comum/ui/dialogo";
 import { montarApp } from "../src/app/app";
 import type { DepsApp } from "../src/app/tipos";
 import { escoposDaUnidade } from "../src/modelo/escopo";
+import { avaliar, concluir, iniciar, pausar } from "../src/modelo/operacoes";
+import type { Vis } from "../src/modelo/tipos";
 import { PADRAO } from "../src/preferencias";
 import { RepositorioDemandas } from "../src/repositorio";
 import { T0 } from "./apoioRepositorio";
@@ -222,4 +224,26 @@ export function dialogoAberto(doc: Document): HTMLElement | null {
 /** Fecha o diálogo de cima pelo X (o mesmo caminho do Esc). */
 export function fecharDialogo(doc: Document): void {
   dialogoAberto(doc)?.querySelector<HTMLButtonElement>('button[aria-label="Fechar"]')?.click();
+}
+
+export type Teste = ReturnType<typeof appDeTeste>;
+
+/** Cria uma demanda direto no repositório, já no estado pedido. */
+
+export async function nova(
+  t: Teste,
+  vis: Vis,
+  titulo: string,
+  estado: "nao_iniciada" | "iniciada" | "pausada" | "concluida" | "avaliada" | "arquivada" = "nao_iniciada",
+  extra: Record<string, unknown> = {},
+): Promise<string> {
+  const repo = t.repos[vis];
+  const d = await repo.criar({ titulo, prazo: "2026-10-20", distribuidaEm: "2026-10-01", ...extra });
+  if (estado !== "nao_iniciada") await repo.aplicar(d.id, iniciar);
+  if (estado === "pausada") await repo.aplicar(d.id, pausar);
+  if (estado === "concluida" || estado === "avaliada" || estado === "arquivada")
+    await repo.aplicar(d.id, (x, c) => concluir(x, { data: "2026-10-10" }, c));
+  if (estado === "avaliada") await repo.aplicar(d.id, (x, c) => avaliar(x, { nota: 4 }, c));
+  if (estado === "arquivada") await repo.aplicar(d.id, (x, c) => ({ demanda: { ...x, arquivadoEm: c.agora }, registros: [] }));
+  return d.id;
 }
