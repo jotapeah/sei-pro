@@ -149,18 +149,23 @@ export async function verificarPagina(): Promise<void> {
   };
   checar("topo do Controle de Processos: carrega", decide("caixa.html", true) === "topo");
   checar("topo de outra tela com unidade (Textos Padrao): carrega", decide("texto_padrao_listar.html", true) === "topo");
-  checar("frame da arvore do processo: nada (o Gestor nao le arvore)", decide("arvore.html", false) === null);
+  checar("frame da arvore do processo (sem a barra de acoes): nada", decide("arvore.html", false) === null);
   checar(
-    "outros frames (documento, editor): nada",
-    ["processo_visualizar.html", "editor.html", "pdf_visualizar.html"].every((n) => decide(n, false) === null),
+    "frame da barra de acoes do processo (SEI 4.1: visualizador de fora e com documento): o pacote da pagina (D17)",
+    ["processo_visualizar.html", "doc_arvore_visualizar.html"].every((n) => decide(n, false) === "arvore"),
+  );
+  checar(
+    "outros frames (editor, PDF): nada",
+    ["editor.html", "pdf_visualizar.html", "despacho_visualizar.html"].every((n) => decide(n, false) === null),
   );
   checar("topo sem o cabecalho do SEI (editor em janela propria): nada", decide("editor.html", true) === null);
   checar("topo vazio: nada", oQueCarregar({ topo: true, doc: instalarDom(), url: "https://sei.x.gov.br/sei/" }) === null);
   const caixa = tela("caixa.html");
   checar("temUnidade na caixa", temUnidade(caixa.doc, caixa.pagina.url));
   checar("qualTela: caixa", qualTela(caixa.doc) === "caixa");
+  checar("qualTela: barra de acoes", qualTela(tela("processo_visualizar.html").doc) === "arvore");
 
-  const chamadas = { opcao: 0, importar: [] as string[], principal: 0 };
+  const chamadas = { opcao: 0, importar: [] as string[], principal: 0, arvore: 0 };
   const deps = (o: { topo: boolean; ligada: boolean; doc?: Document; url?: string }): DepsCarregador => ({
     topo: o.topo,
     doc: o.doc ?? caixa.doc,
@@ -174,6 +179,9 @@ export async function verificarPagina(): Promise<void> {
       return {
         principalTopo: async () => {
           chamadas.principal += 1;
+        },
+        principalArvore: async () => {
+          chamadas.arvore += 1;
         },
       };
     },
@@ -195,6 +203,24 @@ export async function verificarPagina(): Promise<void> {
     "frame que nao e de topo: para no carregador (nem le a opcao nem importa)",
     (await carregarDemandas(deps({ topo: false, ligada: true }))) === null && chamadas.opcao === 0 && chamadas.importar.length === 0,
   );
+  const barra = tela("processo_visualizar.html");
+  checar(
+    "frame da barra de acoes, opcao ligada: importa o pacote e liga so a parte da arvore (D17)",
+    (await carregarDemandas(deps({ topo: false, ligada: true, doc: barra.doc, url: barra.pagina.url }))) === "arvore" &&
+      chamadas.importar.join() === PACOTE_PAGINA &&
+      chamadas.arvore === 1 &&
+      chamadas.principal === 1,
+    chamadas,
+  );
+  chamadas.opcao = 0;
+  chamadas.importar.length = 0;
+  checar(
+    "frame da barra de acoes, opcao desligada: le a opcao e nao importa nada",
+    (await carregarDemandas(deps({ topo: false, ligada: false, doc: barra.doc, url: barra.pagina.url }))) === null &&
+      chamadas.opcao === 1 &&
+      chamadas.importar.length === 0,
+  );
+  chamadas.opcao = 0;
   checar(
     "topo sem unidade: nada lido",
     (await carregarDemandas(deps({ topo: true, ligada: true, doc: instalarDom(), url: "https://sei.x.gov.br/sei/" }))) === null &&
@@ -251,7 +277,12 @@ export async function verificarPagina(): Promise<void> {
     /procedimento_visualizar|arvore_montar|procedimento_atribuicao_cadastrar/,
     /controlador\.php/,
   ];
-  const achados = fontes.flatMap(({ f, codigo }) => PROIBIDOS.filter((re) => re.test(codigo)).map((re) => `${f}: ${re}`));
+  // O leitor da arvore JA desenhada (`lerArvore`, so analise de texto) mora em deteccao.ts e so la.
+  const achados = fontes.flatMap(({ f, codigo }) =>
+    PROIBIDOS.filter((re) => re.test(codigo) && !(f === "deteccao.ts" && re.source === "@nucleo\\/dominio\\/arvore")).map(
+      (re) => `${f}: ${re}`,
+    ),
+  );
   checar(
     "content script: sem leitura de arvore, sem formulario de atribuicao, sem URL montada",
     fontes.length >= 10 && achados.length === 0,

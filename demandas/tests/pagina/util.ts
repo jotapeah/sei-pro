@@ -5,4 +5,4 @@
  */
 
 export { combo, telaSei, tique } from "../../../favoritos/tests/util";
-export { botao, checar, disparar, instalarDom, lanca, secao } from "../util";
+export { botao, checar, disparar, escolher, instalarDom, lanca, secao } from "../util";
