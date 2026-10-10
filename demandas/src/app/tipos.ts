@@ -54,6 +54,8 @@ export interface DepsApp {
 export interface AppMontado {
   /** O clique numa pílula do título do painel embutido: mostra na Tabela as minhas atrasadas ou as da semana. */
   aplicarAlerta(tipo: "atrasadas" | "semana"): void;
+  /** O "Abrir no painel" do lateral: abre a demanda para editar; false se ela não está mais na lista. */
+  focarDemanda(id: string): Promise<boolean>;
   atualizar(): Promise<void>;
   destruir(): void;
   aoRedimensionar(): void;

@@ -1130,3 +1130,154 @@ html[data-modo="embutido"] body {
   justify-content: space-between;
   gap: 8px;
 }
+
+/* ---------- Painel lateral: a Agenda ---------- */
+html[data-modo="lateral"] body {
+  background: var(--spro-pagina);
+}
+html[data-modo="lateral"] #app {
+  padding: 10px 12px 16px;
+}
+.dem-erro {
+  margin: 12px 4px;
+  color: var(--spro-perigo);
+}
+/* No lateral mais estreito a sincronia e os botoes descem para a linha de baixo (nada fica cortado). */
+.dem-lat-topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-bottom: 10px;
+  min-width: 0;
+}
+.dem-lat-sigla {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--spro-suave);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dem-lat-dir {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+.dem-lat-agenda,
+.dem-lat-grupos {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+.dem-lat-barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+.dem-lat-filtro {
+  margin-left: auto;
+}
+.dem-lat-grupo {
+  display: grid;
+  gap: 6px;
+}
+.dem-lat-grupo-titulo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 2px 0;
+  color: var(--spro-suave);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.dem-lat-grupo-atrasadas .dem-lat-grupo-titulo {
+  color: var(--spro-perigo);
+}
+.dem-lat-grupo-semana .dem-lat-grupo-titulo {
+  color: var(--spro-aviso);
+}
+.dem-lat-conta {
+  padding: 0 6px;
+  font-weight: 600;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  border-radius: 999px;
+}
+.dem-lat-item {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 9px 11px;
+  color: var(--spro-texto);
+  font: inherit;
+  text-align: left;
+  background: var(--spro-fundo);
+  border: 1px solid var(--spro-borda);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.dem-lat-item:hover {
+  border-color: var(--spro-borda-forte);
+}
+.dem-lat-item:focus-visible {
+  outline: none;
+  box-shadow: var(--spro-anel);
+}
+.dem-lat-titulo {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dem-lat-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--spro-suave);
+  font-size: 12px;
+}
+.dem-lat-quem {
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Depois de .dem-lat-info: a mesma especificidade, e o vermelho do atraso tem de valer na linha da demanda. */
+.dem-lat-perigo {
+  color: var(--spro-perigo);
+}
+.dem-lat-nada {
+  margin: 12px 4px;
+  color: var(--spro-suave);
+  text-align: center;
+}
+.dem-lat-dica {
+  margin: 4px 8px;
+  color: var(--spro-fraco);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+}
+/* Lateral sem aba do SEI (ou sem unidade): o aviso no meio do painel. */
+.dem-lat-sem-aba {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  margin: 40px 16px;
+  color: var(--spro-suave);
+  text-align: center;
+}
+.dem-lat-sem-aba p {
+  margin: 0;
+}

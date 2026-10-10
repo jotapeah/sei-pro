@@ -15,3 +15,9 @@ export const CHAVE_CONTADOR_PROJETOS = "projetos/contadorPainel";
  * entraria nos bundles que importam daqui.
  */
 export const TETO_CONTADOR_PROJETOS = 60000;
+
+/** As demandas ABERTAS E ATRASADAS que são MINHAS na unidade da aba do SEI (demandas: o app do lateral e o Controle de Processos gravam). */
+export const CHAVE_CONTADOR_DEMANDAS = "demandas/contadorPainel";
+
+/** O teto do selo da aba "Demandas": acima disto o valor do storage é torto e a aba fica sem número. Literal, como o dos projetos. */
+export const TETO_CONTADOR_DEMANDAS = 60000;

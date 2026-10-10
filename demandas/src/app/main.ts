@@ -5,7 +5,9 @@
  *   a cada carga do iframe). O app só LÊ e grava no storage.local; o SEI é da aba (a sincronia dos Textos Padrão e o
  *   "Sincronizar agora" passam por RPC). A `Colaboracao` (faixas, "Entendi", diálogos, cópias diárias e o arquivo
  *   ligado onde o navegador deixa) vive aqui. Segue o tema do SEI (data-tema, --spro-cor-sei);
- * - lateral: a aba "Demandas" do painel lateral (D14);
+ * - lateral: a aba "Demandas" do painel lateral, ligada à aba do SEI da frente nesta janela pela unidade
+ *   (host|login|unidade): remonta ao trocar de unidade (`lateral/montagem.ts`) com a Agenda e a mesma colaboração
+ *   (`lateral/criar.ts`). Segue o tema do sistema, como os Favoritos;
  * - pagina: sem aba (provas e abrir em tela cheia): o contexto vem do hash `#modo=pagina&host=...&login=...&unidade=...`
  *   e as chamadas à aba (usuários, processos, sincronizar) não existem.
  */
@@ -13,19 +15,23 @@
 import { areaChrome } from "@comum/armazenamento/area";
 import { idDispositivo } from "@comum/armazenamento/dispositivo";
 import { hojeISO } from "@comum/datas/dias";
+import { novoId } from "@comum/id";
 import { observarAltura } from "@comum/painel/altura";
 import { emissorDeAvisoPelaPagina } from "@comum/painel/aviso";
 import { sobreposicaoNoApp } from "@comum/painel/sobreposicao";
 import { esperarConexaoDaAba } from "@comum/ponte/conexaoDaAba";
-import type { Rpc } from "@comum/ponte/rpc";
+import { PonteLateral } from "@comum/ponte/lateral";
+import type { PortaRpc, Rpc } from "@comum/ponte/rpc";
 import { temSeletorDeArquivo } from "@comum/sincronia/arquivo";
 import { avisar, definirEmissorDeAviso } from "@comum/ui/aviso";
 import { baixar, criarAbrirModal, criarConfirmar } from "@comum/ui/dialogo";
 import { h } from "@comum/ui/dom";
 import { definirJanelaQueCresce } from "@comum/ui/flutuante";
 import type { ProcessoDaCaixa, UsuarioDaUnidade } from "@projetos/ponte/tipos";
+import { CHAVE_LATERAL } from "../modelo/constantes";
 import { escoposDaUnidade } from "../modelo/escopo";
-import { CANAL_DEMANDAS, type ContextoDemandas } from "../ponte/tipos";
+import { lerOpcaoDemandas } from "../pagina/opcao";
+import { CANAL_DEMANDAS, CANAL_LATERAL, type ContextoDemandas } from "../ponte/tipos";
 import { gravarPreferencias, lerPreferencias } from "../preferencias";
 import { RepositorioDemandas } from "../repositorio";
 import { controleArquivo, copiasDasDemandas } from "../sincronia/arquivo";
@@ -33,6 +39,8 @@ import { estadoDasTabelas } from "../sincronia/orquestrador";
 import { montarApp } from "./app";
 import { escolherArquivoLocal } from "./arquivoLocal";
 import { Colaboracao } from "./colaboracao";
+import { criarAppDoLateral } from "./lateral/criar";
+import { MontagemLateral } from "./lateral/montagem";
 import { pedidosDaAba } from "./pedidos";
 import type { AppMontado } from "./tipos";
 
@@ -52,6 +60,7 @@ const erro = (texto: string) => raiz.replaceChildren(h("p", { class: "dem-erro" 
 const mostrarErro = (e: unknown) => erro(`Não foi possível abrir as demandas: ${e instanceof Error ? e.message : String(e)}`);
 
 if (modo === "pagina") void iniciarPagina().catch(mostrarErro);
+else if (modo === "lateral") void iniciarLateral().catch(mostrarErro);
 else if (conexao) void iniciarEmbutido(conexao).catch(mostrarErro);
 else erro("Este modo do painel ainda não está disponível.");
 
@@ -181,4 +190,60 @@ async function iniciarPagina(): Promise<void> {
     },
   };
   await ligar(ctx, semAba, "pagina", {});
+}
+
+async function iniciarLateral(): Promise<void> {
+  // Painel lateral: claro ou escuro conforme o sistema (prefers-color-scheme), sem o `data-tema` do SEI.
+  // Como o content script: a opção "Gestor de Demandas" desligada, nada de demandas (nem anúncio às abas).
+  if (!(await lerOpcaoDemandas())) {
+    erro("O Gestor de Demandas está desligado nas opções do SEI Pro (Gestor de Demandas).");
+    return;
+  }
+  const area = areaChrome(chrome.storage.local, "local");
+  const dispositivo = await idDispositivo(area);
+  let janela = -1;
+  try {
+    janela = (await chrome.windows.getCurrent()).id ?? -1;
+  } catch {
+    /* sidebar do Firefox: sem API de janelas, aceita qualquer aba */
+  }
+  const ponte = new PonteLateral({
+    area,
+    chave: CHAVE_LATERAL,
+    janela,
+    novoId: () => novoId(),
+    ouvirConexoes: (cb) =>
+      chrome.runtime.onConnect.addListener((porta) => {
+        // As portas de outros canais (o painel embutido, os Favoritos, o agente) não são deste painel.
+        if (porta.name === CANAL_LATERAL) cb(porta as unknown as PortaRpc, porta.sender ?? {});
+      }),
+  });
+  const montagem = new MontagemLateral({
+    raiz,
+    ponte,
+    criar: criarAppDoLateral({
+      raiz,
+      area,
+      sync: areaChrome(chrome.storage.sync, "sync"),
+      abrirModal: criarAbrirModal(),
+      baixar,
+      // O próprio arquivo (o tamanho é conferido antes de ler o JSON).
+      escolherArquivo: () => escolherArquivoLocal(),
+      hoje: () => hojeISO(),
+      agora: () => Date.now(),
+      dispositivo,
+      copias: typeof indexedDB === "undefined" ? null : copiasDasDemandas(),
+      // No lateral o seletor de arquivo funciona (no iframe do painel embutido o Chrome pode recusar).
+      arquivo: (ctx, carimbo) =>
+        temSeletorDeArquivo(window) ? controleArquivo(area, { host: ctx.host, login: ctx.login }, carimbo) : null,
+    }),
+  });
+  montagem.iniciar();
+  await ponte.iniciar();
+  addEventListener("pagehide", () => void ponte.encerrar());
+  // O arquivo ligado pode ter sido mudado por outro computador enquanto o painel estava escondido.
+  addEventListener("focus", () => montagem.aoGanharFoco());
+  document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && montagem.aoGanharFoco());
+  // As abas que já estão abertas conectam ao ver o anúncio; se nenhuma vier, avisa.
+  setTimeout(() => void montagem.reagir(), 1500);
 }

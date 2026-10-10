@@ -1,15 +1,18 @@
 /**
- * O que a aba do SEI pede ao app pela porta (RPC aba -> app): a pílula de alerta do título (`alerta {tipo}`). Os
+ * O que a aba do SEI pede ao app pela porta (RPC aba -> app): a pílula de alerta do título (`alerta {tipo}`) e o
+ * "Abrir no painel" do lateral (`focarDemanda {id}`). Os
  * tratadores entram na porta já na carga da página, antes de o app existir: até ele ficar pronto, os pedidos esperam
  * numa fila (com teto) e rodam na ordem em que chegaram. Pedido malformado é recusado (`false`) e não chega ao app.
  */
 
 import type { Tratador } from "@comum/ponte/rpc";
-import type { TipoAlerta } from "../ponte/tipos";
+import { idDeFocoValido, type TipoAlerta } from "../ponte/tipos";
 
 /** O que do app os pedidos usam. */
 export interface AlvoDosPedidos {
   aplicarAlerta(tipo: TipoAlerta): void;
+  /** O "Abrir no painel" do lateral: abre a demanda (o id vem do app do lateral, mas a demanda pode ter vindo de um colega). */
+  focarDemanda(id: string): Promise<boolean>;
 }
 
 export interface PedidosDaAba {
@@ -39,6 +42,12 @@ export function pedidosDaAba(): PedidosDaAba {
         const tipo = (args as { tipo?: unknown } | null)?.tipo;
         if (tipo !== "atrasadas" && tipo !== "semana") return false;
         quandoPronto((a) => a.aplicarAlerta(tipo));
+        return true;
+      },
+      focarDemanda: (args) => {
+        const id = (args as { id?: unknown } | null)?.id;
+        if (!idDeFocoValido(id)) return false;
+        quandoPronto((a) => void a.focarDemanda(id).catch(() => undefined));
         return true;
       },
     },

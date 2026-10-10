@@ -5,7 +5,9 @@
  * unidade:
  * - os repositórios com o dispositivo de verdade e a sincronia dos Textos Padrão da unidade (pagina/sincronia.ts: lê só
  *   no Controle de Processos; nas outras telas só envia o que mudou aqui, porque o app grava no storage);
- * - no Controle de Processos, também o painel embutido (o iframe do app) e as pílulas do título.
+ * - no Controle de Processos, também o painel embutido (o iframe do app), as pílulas do título (com o contador da aba do
+ *   lateral) e o "Abrir no painel" que o lateral deixou;
+ * - o lado da aba do painel lateral (pagina/lateral.ts, chave host|login|u:<unidade>), em toda tela de topo.
  *
  * Nada daqui BUSCA a árvore de um processo nem monta link do SEI: a lista de usuários é a parcial
  * (pagina/usuarios.ts), e o armazém dos Textos Padrão usa o link do menu da tela.
@@ -18,16 +20,21 @@ import { corDoTemaSei, temaEscuroLegado } from "@comum/pagina/tema";
 import { avisoComAcoesNaPagina, avisoNaPagina } from "@comum/painel/aviso";
 import { ligarPortaDoPainel, type PainelMontado } from "@comum/painel/embutido";
 import type { PortaRpc } from "@comum/ponte/rpc";
+import { linkDoMenu } from "@nucleo/links/links";
+import { paginaDe } from "@nucleo/sessao/pagina";
 import { chaveUsuarios } from "@projetos/modelo/constantes";
+import { gravadorDoContador } from "../app/contador";
 import { carregarDados, responsaveisUsados } from "../app/dados";
 import { escoposDaUnidade } from "../modelo/escopo";
 import type { Carimbo, Vis } from "../modelo/tipos";
-import { CANAL_DEMANDAS, type ContextoDemandas } from "../ponte/tipos";
+import { CANAL_DEMANDAS, CANAL_LATERAL, type ContextoDemandas, chaveDaAba } from "../ponte/tipos";
 import { gravarPreferencias, lerPreferencias } from "../preferencias";
 import { RepositorioDemandas } from "../repositorio";
 import { armazemDoTexto, armazemNaTela } from "./armazem";
 import { contextoDemandas } from "./contexto";
 import { tratadoresDemandas } from "./executor";
+import { atenderPedidoDoLateral, focoDaAba, type PainelDaAba } from "./foco";
+import { ligarLateralDaAba } from "./lateral";
 import { ligarAlertas, montarPainelDemandas, ordemDoPainel } from "./painel";
 import { ligarSincronia, type SincroniaDemandas } from "./sincronia";
 import { qualTela } from "./tela";
@@ -79,11 +86,34 @@ export async function principalTopo(): Promise<void> {
     temArmazem: naCaixa ? undefined : () => armazemNaTela(document, location.href),
   });
   const aba: Aba = { ctx, unidade, area, repos, sincronia };
-  if (naCaixa) await montarNaCaixa(aba).catch((e) => console.warn("[SEI Pro] demandas: painel", e));
+  // null: a tela não recebe o painel (as outras telas); rejeitada: a montagem falhou.
+  const painel: Promise<PainelDaAba | null> = naCaixa ? montarNaCaixa(aba) : Promise.resolve(null);
+  painel.catch((e) => console.warn("[SEI Pro] demandas: painel", e));
+  // O lado da aba do lateral já (sem esperar o painel): a página recarregada volta antes do fim da carência.
+  ligarLateralDaAba({
+    doc: document,
+    ctx,
+    area,
+    conectar: () => chrome.runtime.connect({ name: CANAL_LATERAL }) as unknown as PortaRpc,
+    tratadores: tratadores(aba, {
+      iframe: null,
+      focarNoPainel: focoDaAba({
+        painel,
+        area,
+        chave: chaveDaAba(ctx),
+        agora: () => Date.now(),
+        link: () => linkDoMenu(paginaDe(document, location.href), "procedimento_controlar"),
+        ir: (u) => location.assign(u),
+      }),
+    }),
+  });
 }
 
-/** O painel embutido e as pílulas do título. Rejeita se a montagem falhar. */
-async function montarNaCaixa(aba: Aba): Promise<void> {
+/**
+ * O painel embutido, as pílulas (com o contador do lateral) e o "Abrir no painel" que o lateral deixou. null quando
+ * esta lista não recebe o painel (a visão por marcadores, que já tem o seu); rejeita se a montagem falhar.
+ */
+async function montarNaCaixa(aba: Aba): Promise<PainelDaAba | null> {
   const { ctx, area, repos } = aba;
   const prefs = await lerPreferencias(area);
   const montado = montarPainelDemandas(document, {
@@ -93,24 +123,33 @@ async function montarNaCaixa(aba: Aba): Promise<void> {
     ordem: ordemDoPainel(localStorage),
     aoRecolher: (r) => void gravarPreferencias(area, { recolhido: r }).catch(() => undefined),
   });
-  if (!montado) return;
+  if (!montado) return null;
   // A cada carga do iframe, uma porta nova: o app só aceita a porta da própria aba (@comum/ponte/conexaoDaAba).
   const porta = ligarPortaDoPainel(
     montado,
     () => chrome.runtime.connect({ name: CANAL_DEMANDAS }) as unknown as PortaRpc,
     tratadores(aba, { iframe: montado.iframe, montado }),
   );
+  const contar = gravadorDoContador(area);
+  // As pílulas contam as minhas atrasadas: o mesmo contador (e a mesma regra) que o app do lateral grava.
   ligarAlertas(montado, {
     temaEscuro: ctx.temaEscuro,
     repos,
     eu: { login: ctx.login, nome: ctx.nome || ctx.login },
     rpc: porta.rpc,
     hoje: () => hojeISO(),
+    aoContar: (n) => void contar(n),
   });
+  const painel: PainelDaAba = { painel: montado.painel, corpo: montado.corpo, rpc: porta.rpc };
+  void atenderPedidoDoLateral(area, chaveDaAba(ctx), Date.now(), painel).catch(() => undefined);
+  return painel;
 }
 
 /** O que o app (do painel embutido) pede a esta aba. */
-function tratadores(aba: Aba, o: { iframe: HTMLIFrameElement | null; montado?: PainelMontado }) {
+function tratadores(
+  aba: Aba,
+  o: { iframe: HTMLIFrameElement | null; montado?: PainelMontado; focarNoPainel?: (id: string) => Promise<"painel" | "navegou"> },
+) {
   const { ctx, unidade, area, repos } = aba;
   return tratadoresDemandas({
     doc: document,
@@ -121,6 +160,7 @@ function tratadores(aba: Aba, o: { iframe: HTMLIFrameElement | null; montado?: P
     avisar: o.montado ? avisoNaPagina(document, ctx.temaEscuro, "spro-dem") : null,
     avisarAcoes: o.montado ? avisoComAcoesNaPagina(document, ctx.temaEscuro, "spro-dem") : null,
     sincronia: aba.sincronia,
+    focarNoPainel: o.focarNoPainel ?? null,
     usuarios: async () => {
       const dados = await carregarDados(repos, hojeISO()).catch(() => null);
       return usuariosDaUnidade({

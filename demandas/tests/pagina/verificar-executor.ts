@@ -57,8 +57,7 @@ export async function verificarExecutor(): Promise<void> {
       (m) => typeof t[m] === "function",
     ) &&
       !("conferirDocumento" in t) &&
-      !("atividades" in t) &&
-      !("focarNoPainel" in t),
+      !("atividades" in t),
     Object.keys(t),
   );
   checar("contexto devolve o da aba", (await t.contexto?.(undefined)) === CTX);
@@ -86,6 +85,24 @@ export async function verificarExecutor(): Promise<void> {
       (await recusado({ id: {}, protocolo: "1.2" })),
   );
   void aberturas;
+
+  secao("executor: o Abrir no painel do lateral (focarNoPainel)");
+  checar("sem painel nesta aba: SEM_PAINEL", (await codigoDoErro(() => t.focarNoPainel?.({ id: "d1" }))) === "SEM_PAINEL");
+  checar(
+    "id invalido: recusado",
+    (await codigoDoErro(() => t.focarNoPainel?.({ id: "" }))) === "ARGUMENTO_INVALIDO" &&
+      (await codigoDoErro(() => t.focarNoPainel?.({ id: 7 }))) === "ARGUMENTO_INVALIDO" &&
+      (await codigoDoErro(() => t.focarNoPainel?.(null))) === "ARGUMENTO_INVALIDO",
+  );
+  const focados: string[] = [];
+  const comFoco = tratadoresDemandas({
+    ...base,
+    focarNoPainel: async (id) => {
+      focados.push(id);
+      return "navegou" as const;
+    },
+  });
+  checar("com o foco da aba: repassa o id", (await comFoco.focarNoPainel?.({ id: "d1" })) === "navegou" && focados.join() === "d1");
 
   secao("executor: sincronia (SEM_SINCRONIA e a chave da unidade)");
   checar("sincronizarAgora sem sincronia: SEM_SINCRONIA", (await codigoDoErro(() => t.sincronizarAgora?.(undefined))) === "SEM_SINCRONIA");

@@ -172,22 +172,76 @@ export async function verificarShell(): Promise<void> {
     );
   }
 
+  secao("painel lateral: aba Demandas (selo das minhas atrasadas)");
+  {
+    const docD = instalarDom('<html><body><div id="painel"></div></body></html>');
+    const raizD = docD.getElementById("painel")!;
+    const local = areaMemoria({ "demandas/contadorPainel": 3 });
+    const shellD = await montarShell(raizD, {
+      sessao: areaMemoria({ painelAba: "demandas" }),
+      temAgente: true,
+      temProjetos: true,
+      temDemandas: true,
+      url,
+      local,
+    });
+    await tique();
+    const rotulos = [...raizD.querySelectorAll<HTMLButtonElement>('[role="tab"]')].map((b) => b.getAttribute("aria-label"));
+    checar(
+      "ordem Monitorados | Projetos | Demandas | Agente (o historico so com o seu manifest)",
+      JSON.stringify(rotulos) === JSON.stringify(["Monitorados", "Projetos", "Demandas (3)", "Agente de IA"]),
+      rotulos,
+    );
+    checar("abre na aba pedida pelo background", shellD.atual() === "demandas");
+    const f = raizD.querySelector("iframe") as HTMLIFrameElement;
+    checar("iframe do app das demandas em modo lateral", f.src.endsWith("html/demandas.html#modo=lateral"), f.src);
+    checar(
+      "o selo usa o contador das demandas, nao o dos projetos",
+      botao(raizD, "Demandas (3)")?.getAttribute("title") === "3 demandas suas atrasadas na unidade",
+      botao(raizD, "Demandas (3)")?.getAttribute("title"),
+    );
+    await local.gravar({ "demandas/contadorPainel": 1 });
+    await tique();
+    checar("uma so: no singular", botao(raizD, "Demandas (1)")?.getAttribute("title") === "1 demanda sua atrasada na unidade");
+    await local.gravar({ "demandas/contadorPainel": 0 });
+    await tique();
+    checar("sem atraso: sem numero", botao(raizD, "Demandas") !== undefined);
+    await local.gravar({ "demandas/contadorPainel": 1e9, "projetos/contadorPainel": 7 });
+    await tique();
+    checar(
+      "torto: sem numero (o dos projetos nao vaza)",
+      botao(raizD, "Demandas") !== undefined && botao(raizD, "Projetos (7)") !== undefined,
+    );
+    const docE = instalarDom('<html><body><div id="painel"></div></body></html>');
+    const raizE = docE.getElementById("painel")!;
+    const shellE = await montarShell(raizE, { sessao: areaMemoria(), temAgente: true, temDemandas: true, url, abaDoEndereco: "demandas" });
+    checar("#aba=demandas (janela comum do Firefox) abre na aba", shellE.atual() === "demandas");
+    const docS = instalarDom('<html><body><div id="painel"></div></body></html>');
+    const raizS = docS.getElementById("painel")!;
+    await montarShell(raizS, { sessao: areaMemoria({ painelAba: "demandas" }), temAgente: true, url });
+    checar("sem init_demandas no manifest, nao ha aba Demandas", !botao(raizS, "Demandas"));
+  }
+
   secao("painel lateral: as abas saem do manifest do pacote (o oficial ainda nao tem os modulos novos)");
   {
     const lab = JSON.parse(readFileSync(join(AQUI, "..", "..", "dist", "manifest.json"), "utf8")) as ManifestoDoPacote;
     const l = ferramentasDoPacote(lab);
     checar(
-      "Lab (dist/manifest.json): Favoritos, Historico, Projetos e Agente",
-      l.temAgente && l.temFavoritos && l.temHistorico && l.temProjetos,
+      "Lab (dist/manifest.json): Favoritos, Historico, Projetos, Demandas e Agente",
+      l.temAgente && l.temFavoritos && l.temHistorico && l.temProjetos && l.temDemandas,
       l,
     );
     // O oficial (dist/manifest_seipro.json, fora do git) e o manifest do Lab sem estes tres content scripts.
-    const novos = ["js/init_favoritos.js", "js/init_historico.js", "js/init_projetos.js"];
+    const novos = ["js/init_favoritos.js", "js/init_historico.js", "js/init_projetos.js", "js/init_demandas.js"];
     const oficial: ManifestoDoPacote = {
       content_scripts: (lab.content_scripts ?? []).filter((c) => !c.js?.some((j) => novos.includes(j))),
     };
     const o = ferramentasDoPacote(oficial);
-    checar("oficial: so o Agente, sem a aba Projetos", o.temAgente && !o.temFavoritos && !o.temHistorico && !o.temProjetos, o);
+    checar(
+      "oficial: so o Agente, sem as abas Projetos e Demandas",
+      o.temAgente && !o.temFavoritos && !o.temHistorico && !o.temProjetos && !o.temDemandas,
+      o,
+    );
     checar("manifest sem content_scripts: nenhuma ferramenta", !Object.values(ferramentasDoPacote({})).some(Boolean));
     const docO = instalarDom('<html><body><div id="painel"></div></body></html>');
     const raizO = docO.getElementById("painel")!;
@@ -202,6 +256,7 @@ export async function verificarShell(): Promise<void> {
   secao("painel lateral: aba pedida pelo endereco (#aba=..., janela comum do Firefox)");
   checar("#aba=projetos", abaPedidaNoEndereco("#aba=projetos") === "projetos");
   checar("#aba=historico", abaPedidaNoEndereco("#aba=historico") === "historico");
+  checar("#aba=demandas", abaPedidaNoEndereco("#aba=demandas") === "demandas");
   checar("aba desconhecida: nenhuma", abaPedidaNoEndereco("#aba=qualquer") === null);
   checar("nome herdado de objeto nao vale", abaPedidaNoEndereco("#aba=constructor") === null);
   checar("sem endereco: nenhuma", abaPedidaNoEndereco("") === null);

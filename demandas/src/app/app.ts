@@ -447,6 +447,19 @@ export async function montarApp(deps: DepsApp): Promise<AppMontado> {
       pintarAbas();
       pintarVista();
     },
+    async focarDemanda(id) {
+      if (!vivo) return false;
+      // A gravação do colega pode ter chegado depois da última leitura.
+      if (!estado.dados.some((x) => x.demanda.id === id)) await atualizar();
+      const alvo = estado.dados.find((x) => x.demanda.id === id);
+      if (!vivo) return false;
+      if (!alvo) {
+        avisar("Esta demanda não está mais na lista.");
+        return false;
+      }
+      await editar(alvo);
+      return true;
+    },
     atualizar,
     destruir() {
       vivo = false;

@@ -18,7 +18,7 @@ import { lerCaixaDaPagina } from "@nucleo/dominio/caixa";
 import { paginaDe } from "@nucleo/sessao/pagina";
 import { RE_ID_PROCEDIMENTO, RE_PROTOCOLO } from "@projetos/modelo/vinculos";
 import type { ProcessoDaCaixa, UsuarioDaUnidade } from "@projetos/ponte/tipos";
-import { type ContextoDemandas, chaveDaAba } from "../ponte/tipos";
+import { type ContextoDemandas, chaveDaAba, idDeFocoValido } from "../ponte/tipos";
 import type { ResultadoSincronizar } from "./sincronia";
 
 export const MENSAGEM_UNIDADE_MUDOU = "A unidade mudou; recarregue o painel.";
@@ -33,6 +33,8 @@ export interface DepsExecutor {
   usuarios(): Promise<UsuarioDaUnidade[]>;
   /** A sincronia por Texto Padrão desta aba (só na janela de topo, com unidade). */
   sincronia?: { agora(): Promise<ResultadoSincronizar>; apagarPessoal(): Promise<boolean> } | null;
+  /** O "Abrir no painel" do lateral (pagina/foco.ts): rola até o painel ou vai ao Controle de Processos. */
+  focarNoPainel?: ((id: string) => "painel" | Promise<"painel" | "navegou">) | null;
 }
 
 /**
@@ -104,6 +106,13 @@ export function tratadoresDemandas(d: DepsExecutor): Record<string, Tratador> {
       conferirChave(args);
       if (!d.sincronia) throw new ErroRpc("SEM_SINCRONIA", SEM_SINCRONIA);
       return d.sincronia.apagarPessoal();
+    },
+    // O "Abrir no painel" do lateral (o id vem do app, mas a demanda pode ter vindo de um colega).
+    focarNoPainel: (args) => {
+      const id = (args as { id?: unknown } | null)?.id;
+      if (!idDeFocoValido(id)) throw new ErroRpc("ARGUMENTO_INVALIDO", "Demanda inválida.");
+      if (!d.focarNoPainel) throw new ErroRpc("SEM_PAINEL", "Abra o Controle de Processos nesta aba para ver a demanda no painel.");
+      return d.focarNoPainel(id);
     },
   };
 }

@@ -103,7 +103,7 @@ function gravarAbaDoPainel(aba, janela) {
 
 browser.runtime.onMessage.addListener(function (msg, sender) {
   if (!msg || (msg.tipo !== "abrirAgente" && msg.tipo !== "abrirPainel") || !sender || !sender.tab) return;
-  var aba = msg.tipo === "abrirAgente" || msg.aba === "agente" ? "agente" : msg.aba === "historico" ? "historico" : msg.aba === "projetos" ? "projetos" : "favoritos";
+  var aba = msg.tipo === "abrirAgente" || msg.aba === "agente" ? "agente" : msg.aba === "historico" ? "historico" : msg.aba === "projetos" ? "projetos" : msg.aba === "demandas" ? "demandas" : "favoritos";
   if (typeof chrome !== "undefined" && chrome.sidePanel && chrome.sidePanel.open) {
     chrome.sidePanel.open({ tabId: sender.tab.id }).catch(function (e) { console.log(e); });
   } else if (browser.sidebarAction && browser.sidebarAction.open) {
