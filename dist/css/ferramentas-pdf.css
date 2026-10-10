@@ -69,7 +69,7 @@ body.fpdf-body {
 /* Titulo: linha propria, nunca dividida com botoes. */
 .fpdf-cabecalho { padding: 20px 0 8px; }
 .fpdf-cabecalho__in { display: flex; align-items: center; gap: 14px; }
-.fpdf-cabecalho__in > i { font-size: 26px; color: var(--azul); margin: 0; }
+.fpdf-cabecalho__logo { width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0; }
 
 .fpdf-cabecalho h1 {
   margin: 0;
@@ -79,14 +79,19 @@ body.fpdf-body {
   letter-spacing: -0.02em;
 }
 
+.fpdf-titulo__marca,
 .fpdf-titulo__base { white-space: nowrap; }
 .fpdf-titulo__sep { color: var(--cinza-icone); font-weight: 400; margin: 0 4px; }
 .fpdf-titulo__ferramenta { color: var(--azul); }
 
-/* Largura estreita: o nome da ferramenta desce para a linha de baixo, sem o "|" sobrando no fim da primeira. */
+/*
+ * Largura estreita: o produto vira uma linha de apoio sobre o titulo, e o nome da
+ * ferramenta desce para a linha de baixo, sem "|" sobrando no fim de nenhuma.
+ */
 @media (max-width: 640px) {
   .fpdf-cabecalho h1 { font-size: 21px; }
   .fpdf-titulo__sep { display: none; }
+  .fpdf-titulo__marca { display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; color: var(--tinta-3); }
   .fpdf-titulo__ferramenta { display: block; }
 }
 
