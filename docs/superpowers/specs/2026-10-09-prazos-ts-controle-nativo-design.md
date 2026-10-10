@@ -76,8 +76,12 @@ Ciclo completo executado e desfeito (nada ficou gravado). Capturas viraram fixtu
   página do SP) rodou o ciclo inteiro com `criarHttp` do núcleo: ação assinada reaproveitada, data (+10), 2 ids
   em 5 dias úteis, hoje, alterar (mesmo `id_controle_prazo`), data passada (erro lido de `#divInfraMensagens`),
   concluir 2 ids e excluir 4 prazos; a resposta de cada gravação já traz os ícones novos. Nada ficou gravado.
-- **Pendente: SEI 5.0.4.** O MJ de homologação exige 2º fator e não foi possível logar por script; o fonte
-  5.0.0 é a mesma tela. A validação no `hmlsei` fica para a fase 3 (precisa de sessão aberta do usuário).
+- **SEI 5.0.4 validado (10/10/2026, MJ de homologação, unidade TESTE).** Mesmo formato do ícone e do
+  `aria-label`; mesmo `#divInfraMensagens .alert-danger` para o erro de data passada; o módulo (com a extensão
+  carregada) definiu por data, concluiu, removeu, gravou várias linhas em 5 dias úteis, fez o complemento no
+  marcador e limpou tudo. No SEI 5 o `<input>` da caixa fica sob o rótulo (`label.infraCheckboxLabel`): quem
+  testa por automação precisa clicar no rótulo. Dias úteis: o servidor do MJ pulou o feriado de 12/10 (5 úteis a
+  partir de 10/10 = 19/10), prova de que o cálculo com feriados é do SEI.
 
 ## Desenho
 

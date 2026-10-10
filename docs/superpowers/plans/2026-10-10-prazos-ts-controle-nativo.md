@@ -90,7 +90,8 @@ Provadas no SEI SP de treinamento 4.1.5: ciclo nativo pelo código do módulo (f
 carregada (coluna, modal, várias linhas pelo botão da barra, complemento no marcador, concluir, remover, seleção
 desmarcada ao gravar, painel da árvore), tudo desfeito no fim.
 
-Pendente: validar no MJ de homologação (SEI 5.0.4; exige 2º fator, precisa de sessão aberta pelo autor); decidir
-número e data da versão (o `HISTORICO.md` tem um rascunho "Próxima versão"); oficial, Firefox e o esqueleto da coluna
+Validado também no MJ de homologação (SEI 5.0.4, sessão aberta pelo autor por causa do 2º fator).
+
+Pendente: decidir número e data da versão (o `HISTORICO.md` tem um rascunho "Próxima versão"); oficial, Firefox e o esqueleto da coluna
 em TS ficam para etapas próprias. Limitação conhecida do núcleo: em alguns processos (ex.: `034.00000265/2026-31` no SP)
 `Sei.localizar` não acha a árvore e o complemento no marcador falha com mensagem; o vencimento no SEI já foi gravado.
