@@ -1,6 +1,7 @@
 /** Preferências locais do Gestor de Demandas (storage.local, `demandas/preferencias`). */
 
 import type { Area } from "@comum/armazenamento/area";
+import { type Escala, ehEscala } from "@projetos/gantt/escalas";
 import { CHAVE_PREFERENCIAS } from "./modelo/constantes";
 
 export interface PreferenciasDemandas {
@@ -8,6 +9,7 @@ export interface PreferenciasDemandas {
   escopo: "ambos" | "unidade" | "eu";
   concluidasNoQuadroDias: number;
   agrupamentoCronograma: "responsavel" | "situacao";
+  escalaCronograma: Escala;
   periodoPainel: "30" | "90" | "365" | "tudo";
 }
 
@@ -16,6 +18,7 @@ export const PADRAO: PreferenciasDemandas = {
   escopo: "ambos",
   concluidasNoQuadroDias: 30,
   agrupamentoCronograma: "responsavel",
+  escalaCronograma: "Semana",
   periodoPainel: "90",
 };
 
@@ -38,6 +41,7 @@ export function normalizar(bruto: unknown): PreferenciasDemandas {
     agrupamentoCronograma: AGRUPAMENTOS.has(b.agrupamentoCronograma as string)
       ? (b.agrupamentoCronograma as PreferenciasDemandas["agrupamentoCronograma"])
       : PADRAO.agrupamentoCronograma,
+    escalaCronograma: ehEscala(b.escalaCronograma) ? b.escalaCronograma : PADRAO.escalaCronograma,
     periodoPainel: PERIODOS.has(b.periodoPainel as string)
       ? (b.periodoPainel as PreferenciasDemandas["periodoPainel"])
       : PADRAO.periodoPainel,

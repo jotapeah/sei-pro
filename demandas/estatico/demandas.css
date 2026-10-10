@@ -729,3 +729,90 @@ html[data-modo="embutido"] body {
 .dem-cartao-resp {
   margin-left: auto;
 }
+
+/* ---------- Cronograma: lista (290 px) + Gantt do Projetos ---------- */
+.dem-cron-barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.dem-cron {
+  position: relative;
+  display: flex;
+}
+.dem-cron-lista {
+  flex: none;
+  width: 290px;
+  background: var(--spro-fundo);
+  border-right: 1px solid var(--spro-borda);
+}
+.dem-cron-lista-cab {
+  display: flex;
+  align-items: flex-end;
+  box-sizing: border-box;
+  height: 64px;
+  padding: 0 12px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--spro-fraco);
+  border-bottom: 1px solid var(--spro-borda);
+}
+.dem-cron-lista-cab span:last-child {
+  margin-left: auto;
+}
+.dem-cron-lin {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  height: 36px;
+  padding: 0 10px 0 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--spro-borda) 60%, transparent);
+}
+.dem-cron-demanda {
+  cursor: pointer;
+}
+.dem-cron-demanda:hover {
+  background: var(--spro-destaque-suave);
+}
+.dem-cron-demanda:focus-visible {
+  outline: none;
+  box-shadow: inset var(--spro-anel);
+}
+.dem-cron-nome {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dem-cron-fase {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--spro-suave);
+  background: var(--spro-fundo-2);
+}
+.dem-cron-conta {
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--spro-fraco);
+}
+.dem-cron-encerrada .dem-cron-nome {
+  color: var(--spro-suave);
+}
+.dem-cron-av-vazio {
+  flex: none;
+  width: 22px;
+  height: 22px;
+}
+.dem-cron-gantt {
+  flex: 1;
+  min-width: 0;
+}

@@ -5,7 +5,7 @@
  *   dist/js/init_demandas.js   content script (IIFE, mundo isolado)
  *   dist/js/demandas/app.js    app de html/demandas.html (ESM): painel embutido, lateral e pagina
  *   dist/html/demandas.html    copia de estatico/
- *   dist/css/demandas.css      sei-comum/src/ui/base.css + sei-comum/src/ui/lista.css + estatico/demandas.css
+ *   dist/css/demandas.css      sei-comum/src/ui/base.css + sei-comum/src/ui/lista.css + estatico/demandas.css + ../projetos/estatico/gantt.css
  *
  * Portoes (o build grava e depois reprova; confira que a saida nao tem linha "ERRO:"):
  *   - JS so ASCII; CSS e HTML gerados tambem;
@@ -67,6 +67,8 @@ const css = [
     ),
   )),
   await readFile(resolve(AQUI, "estatico/demandas.css"), "utf8"),
+  // O Gantt (Frappe + situacoes) e o do Projetos, sem copia: o escopo e a classe .spro-gantt.
+  await readFile(resolve(AQUI, "../projetos/estatico/gantt.css"), "utf8"),
 ];
 await writeFile(join(DIST, "css", "demandas.css"), `/* GERADO por demandas/build.mjs. NAO EDITE ESTE ARQUIVO. */\n${css.join("\n")}`);
 

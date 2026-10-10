@@ -9,17 +9,28 @@ import { avisar } from "@comum/ui/aviso";
 import { h } from "@comum/ui/dom";
 import { fecharOrfaos } from "@comum/ui/flutuante";
 import { criarMenu, type EntradaMenu } from "@comum/ui/menu";
+import type { Escala } from "@projetos/gantt/escalas";
+import type { ControleGantt } from "@projetos/gantt/montar";
 import type { UsuarioDaUnidade } from "@projetos/ponte/tipos";
 import { chaveResponsavel, type FiltroDemandas, filtrar } from "../modelo/filtro";
 import { COLUNAS_DO_QUADRO, planoDoMovimento } from "../modelo/quadro";
 import type { PreferenciasDemandas } from "../preferencias";
 import type { EstadoTabela } from "../sincronia/orquestrador";
-import { arquivarSelecionadas, contextoDeDialogos, entradasDoMenu, excluirSelecionadas, moverPara, TEXTO_CRIACAO_BLOQUEADA } from "./acoes";
+import {
+  arquivarSelecionadas,
+  contextoDeDialogos,
+  entradasDoMenu,
+  excluirSelecionadas,
+  moverPara,
+  mudarDatas,
+  TEXTO_CRIACAO_BLOQUEADA,
+} from "./acoes";
 import { montarAbas, type Visao } from "./componentes/abas";
 import { type EscopoNaTela, montarCabecalho } from "./componentes/cabecalho";
 import { montarFaixas } from "./componentes/faixas";
 import { type FiltroMontado, montarFiltro } from "./componentes/filtro";
 import { montarNada, montarVazio } from "./componentes/vazio";
+import { montarVistaCronograma } from "./componentes/vistaCronograma";
 import { montarQuadro } from "./componentes/vistaQuadro";
 import { type ColunaTabela, montarTabelaDemandas } from "./componentes/vistaTabela";
 import { carregarDados, type DemandaNaTela, etiquetasUsadas, responsaveisUsados } from "./dados";
@@ -37,6 +48,8 @@ interface Estado {
   ordenar: { coluna: ColunaTabela; sentido: 1 | -1 };
   selecionadas: Set<string>;
   concluidasDias: number;
+  escalaCronograma: Escala;
+  agrupamento: "responsavel" | "situacao";
   falhou: boolean;
 }
 
@@ -51,11 +64,14 @@ export async function montarApp(deps: DepsApp): Promise<AppMontado> {
     ordenar: { coluna: "prazo", sentido: 1 },
     selecionadas: new Set(),
     concluidasDias: prefs?.concluidasNoQuadroDias ?? 30,
+    escalaCronograma: prefs?.escalaCronograma ?? "Semana",
+    agrupamento: prefs?.agrupamentoCronograma ?? "responsavel",
     falhou: false,
   };
   let usuarios: UsuarioDaUnidade[] = [];
   let vivo = true;
   let leitura = 0;
+  let cronograma: ControleGantt | null = null;
 
   const eu = { login: deps.contexto.login, nome: deps.contexto.nome };
   const gravarPrefs = (p: Partial<PreferenciasDemandas>) => void deps.preferencias.gravar(p).catch(() => undefined);
@@ -242,6 +258,8 @@ export async function montarApp(deps: DepsApp): Promise<AppMontado> {
   }
   function pintarVista(): void {
     fecharOrfaos();
+    cronograma?.destruir();
+    cronograma = null;
     const lista = visiveis();
     vistaEl.setAttribute("data-visao", estado.visao);
     if (!estado.dados.length) {
@@ -293,6 +311,41 @@ export async function montarApp(deps: DepsApp): Promise<AppMontado> {
           }),
         );
         break;
+      case "cronograma": {
+        let desenhou = true;
+        cronograma = montarVistaCronograma(vistaEl, {
+          itens: lista,
+          hoje: deps.hoje(),
+          escala: estado.escalaCronograma,
+          agrupar: estado.agrupamento,
+          aoClicar: (alvo) => void editar(alvo),
+          aoMudarDatas: async (alvo, inicio, fim) => {
+            if (!(await mudarDatas(deps, alvo, inicio, fim)) && vivo && estado.visao === "cronograma") pintarVista();
+          },
+          aoEscala: (e) => {
+            estado.escalaCronograma = e;
+            gravarPrefs({ escalaCronograma: e });
+            pintarVista();
+          },
+          aoAgrupar: (a) => {
+            estado.agrupamento = a;
+            gravarPrefs({ agrupamentoCronograma: a });
+            pintarVista();
+          },
+          aoRecusar: (m) => avisar(m),
+          aoFalhar: () => {
+            desenhou = false;
+          },
+          ...(deps.montarGantt ? { montarGantt: deps.montarGantt } : {}),
+        });
+        if (!desenhou) {
+          estado.visao = "tabela";
+          avisar("Não foi possível desenhar o cronograma. Mostrando a Tabela.");
+          pintarAbas();
+          pintarVista();
+        }
+        break;
+      }
       default:
         vistaEl.replaceChildren(montarNada("Esta visão chega nas próximas etapas."));
     }
@@ -353,6 +406,8 @@ export async function montarApp(deps: DepsApp): Promise<AppMontado> {
     atualizar,
     destruir() {
       vivo = false;
+      cronograma?.destruir();
+      cronograma = null;
       if (agendado !== null) clearTimeout(agendado);
       for (const s of soltar) s();
       fecharOrfaos();

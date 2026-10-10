@@ -9,13 +9,14 @@ import type { ContextoDialogo } from "../tipos";
 import { caixaDeErros, campo, linhaDeCampos } from "./campos";
 import { perguntar } from "./janela";
 
-export function abrirDialogoProrrogacao(c: ContextoDialogo, d: Demanda): Promise<DadosProrrogacao | null> {
+/** `sugerido`: o prazo que o campo já traz (o arraste do Cronograma); o texto de "prazo atual" segue o da demanda. */
+export function abrirDialogoProrrogacao(c: ContextoDialogo, d: Demanda, sugerido?: string): Promise<DadosProrrogacao | null> {
   return perguntar<DadosProrrogacao>(c, {
     titulo: "Prorrogar prazo",
     icone: "calendario",
     montar(responder) {
       const erros = caixaDeErros();
-      const prazo = h("input", { type: "date", class: "spro-campo", name: "prazo", value: d.prazo });
+      const prazo = h("input", { type: "date", class: "spro-campo", name: "prazo", value: sugerido ?? d.prazo });
       const motivo = h("input", { type: "text", class: "spro-campo", name: "motivo", maxlength: String(LIMITES.motivo) });
       const gravar = () => {
         const m: string[] = [];

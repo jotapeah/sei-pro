@@ -4,6 +4,7 @@
  * Cancelar um diálogo não grava nada.
  */
 
+import type { DataISO } from "@comum/datas/dias";
 import { avisar } from "@comum/ui/aviso";
 import type { EntradaMenu } from "@comum/ui/menu";
 import { bloqueiaCriacao } from "../modelo/alertas";
@@ -119,8 +120,8 @@ export async function executarOperacao(deps: DepsApp, alvo: DemandaNaTela, op: O
   }
 }
 
-export async function prorrogarDemanda(deps: DepsApp, alvo: DemandaNaTela): Promise<boolean> {
-  const dados = await abrirDialogoProrrogacao(contextoDeDialogos(deps), alvo.demanda);
+export async function prorrogarDemanda(deps: DepsApp, alvo: DemandaNaTela, sugerido?: DataISO): Promise<boolean> {
+  const dados = await abrirDialogoProrrogacao(contextoDeDialogos(deps), alvo.demanda, sugerido);
   if (!dados) return false;
   try {
     await deps.repos[alvo.vis].aplicar(alvo.demanda.id, (d, c) => prorrogar(d, dados, c));
@@ -128,6 +129,23 @@ export async function prorrogarDemanda(deps: DepsApp, alvo: DemandaNaTela): Prom
   } catch (e) {
     avisarErro(e);
     return false;
+  }
+}
+
+/**
+ * O arraste do Cronograma mudou as datas. Distribuição: grava direto. Prazo: abre a prorrogação com o novo prazo já
+ * preenchido (o motivo é obrigatório) e, se o diálogo for fechado, não grava nada (nem a distribuição). Devolve se gravou.
+ */
+export async function mudarDatas(deps: DepsApp, alvo: DemandaNaTela, inicio: DataISO, fim: DataISO): Promise<boolean> {
+  const d = alvo.demanda;
+  if (fim !== d.prazo && !(await prorrogarDemanda(deps, alvo, fim))) return false;
+  if (inicio === d.distribuidaEm) return true;
+  try {
+    await deps.repos[alvo.vis].editar(d.id, { distribuidaEm: inicio });
+    return true;
+  } catch (e) {
+    avisarErro(e);
+    return fim !== d.prazo;
   }
 }
 

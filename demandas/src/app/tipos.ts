@@ -2,6 +2,7 @@
 
 import type { DataISO } from "@comum/datas/dias";
 import type { AbrirModal } from "@comum/ui/dialogo";
+import type { montarGantt } from "@projetos/gantt/montar";
 import type { ProcessoDaCaixa, UsuarioDaUnidade } from "@projetos/ponte/tipos";
 import type { Vis } from "../modelo/tipos";
 import type { PreferenciasDemandas } from "../preferencias";
@@ -51,6 +52,8 @@ export interface DepsApp {
   confirmar(texto: string, rotuloOk?: string): Promise<boolean>;
   abrirProcesso?(protocolo: string, idProcedimento?: string): void;
   colaboracao?: Colaboracao;
+  /** Só as provas trocam (a Frappe de verdade precisa de medidas). */
+  montarGantt?: typeof montarGantt;
 }
 
 export interface AppMontado {
