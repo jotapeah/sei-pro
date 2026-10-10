@@ -2,8 +2,8 @@
  * O mecanismo ANTIGO de sincronização (as opções do SEI Pro), com um
  * navegador de mentira.
  *
- * `dist/html/options.js` e `dist/js/init.js` são JavaScript legado, sem build
- * e sem teste. Três defeitos justificam cobri-los aqui: a confirmação de
+ * `dist/js/init.js` é JavaScript legado, sem build e sem teste (o
+ * `options.js` virou bundle de opcoes-pagina/ e é testado por import). Três defeitos justificam cobri-los aqui: a confirmação de
  * "salvo com sucesso" sem checar o erro do navegador, o descarte silencioso
  * de bases por um campo obrigatório vazio, e as credenciais copiadas para o
  * localStorage do domínio do SEI.
@@ -12,6 +12,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { armazemSync, LIMITE_ITEM_SYNC, medirEspaco, mensagemEstouro } from "../../opcoes-pagina/src/armazenamento";
 import { checar, secao } from "./util";
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
@@ -37,44 +38,49 @@ function carregarJmespath(): { search(dados: unknown, expressao: string): unknow
   return (exports.search ? exports : (exports as { jmespath?: unknown }).jmespath) as { search(dados: unknown, expressao: string): unknown };
 }
 
-const OPTIONS = readFileSync(raiz("dist", "html", "options.js"), "utf8");
 const INIT = readFileSync(raiz("dist", "js", "init.js"), "utf8");
 
-export function verificarOpcoesSync(): void {
+export async function verificarOpcoesSync(): Promise<void> {
+  // Desde a pagina de opcoes nova (opcoes-pagina/, 10/10/2026), options.js e um
+  // bundle gerado: as duas garantias abaixo vivem em opcoes-pagina/src/armazenamento.ts.
   secao("opcoes: aviso antes de estourar o item do sync");
   {
-    const avisos: string[] = [];
-    const checkEspaco = funcaoDoFonte<(t: string) => boolean>(OPTIONS, "checkEspacoSyncPro", {
-      alertaBoxPro: (_s: string, _i: string, texto: string) => void avisos.push(texto),
-      console: { warn: (t: string) => avisos.push(`aviso: ${t}`) },
-      LIMITE_ITEM_SYNC_PRO: 8192,
-      Blob,
-    });
-    checar("configuracao pequena passa", checkEspaco(JSON.stringify({ a: 1 })) === true, avisos);
-    checar("sem aviso nenhum", avisos.length === 0);
+    checar("limite do item e o do navegador", LIMITE_ITEM_SYNC === 8192);
+    checar("configuracao pequena passa", medirEspaco(JSON.stringify({ a: 1 })).estado === "ok");
     const quase = JSON.stringify("x".repeat(7000));
-    checar("a 85% apenas avisa no console, mas deixa salvar", checkEspaco(quase) === true);
-    checar("e o aviso saiu", avisos.some((a) => a.startsWith("aviso:")), avisos);
-    avisos.length = 0;
+    checar("a 85% apenas avisa, mas deixa salvar", medirEspaco(quase).estado === "perto");
     const grande = JSON.stringify("x".repeat(9000));
-    checar("acima do limite do item, NAO deixa salvar", checkEspaco(grande) === false);
-    checar("e explica ao usuario, com o tamanho", /espaço|8192/.test(avisos[0] ?? ""), avisos);
+    const medida = medirEspaco(grande);
+    checar("acima do limite do item, NAO deixa salvar", medida.estado === "estoura");
+    checar("e explica ao usuario, com o tamanho", /espaço/.test(mensagemEstouro(medida.tamanho)) && mensagemEstouro(medida.tamanho).includes("8192"));
   }
 
   secao("opcoes: o erro do navegador nao passa calado");
   {
-    const avisos: string[] = [];
-    const comErro = funcaoDoFonte<() => boolean>(OPTIONS, "checkErroSyncPro", {
-      chrome: { runtime: { lastError: { message: "QUOTA_BYTES quota exceeded" } } },
-      alertaBoxPro: (_s: string, _i: string, texto: string) => void avisos.push(texto),
+    const api = (erro?: string) => ({
+      runtime: erro ? { lastError: { message: erro } } : {},
+      storage: {
+        sync: {
+          get: (_c: Record<string, unknown>, cb: (i: Record<string, unknown>) => void) => cb({}),
+          set: (_i: Record<string, unknown>, cb: () => void) => cb(),
+        },
+      },
     });
-    checar("com erro, devolve true (quem chama para ali)", comErro() === true);
-    checar("e o usuario ve o motivo", /QUOTA_BYTES/.test(avisos[0] ?? ""), avisos);
-    const semErro = funcaoDoFonte<() => boolean>(OPTIONS, "checkErroSyncPro", {
-      chrome: { runtime: {} },
-      alertaBoxPro: () => undefined,
-    });
-    checar("sem erro, devolve false e segue o fluxo", semErro() === false);
+    let motivo = "";
+    try {
+      await armazemSync(api("QUOTA_BYTES quota exceeded")).gravar("x");
+    } catch (e) {
+      motivo = (e as Error).message;
+    }
+    checar("com erro, a gravacao falha (quem chama para ali)", motivo !== "");
+    checar("e o usuario ve o motivo", /QUOTA_BYTES/.test(motivo), motivo);
+    let falhou = false;
+    await armazemSync(api())
+      .gravar("x")
+      .catch(() => {
+        falhou = true;
+      });
+    checar("sem erro, segue o fluxo", !falhou);
   }
 
   secao("opcoes: credenciais fora do localStorage da pagina do SEI");

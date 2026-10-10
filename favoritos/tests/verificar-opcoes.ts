@@ -1,5 +1,6 @@
 import { areaMemoria } from "@comum/armazenamento/area";
 import { CHAVE_PREFERENCIAS } from "../src/modelo/constantes";
+import { encaixar } from "../src/opcoes/encaixe";
 import { montarOpcoesExibicao } from "../src/opcoes/exibicao";
 import { checar, disparar, instalarDom, secao, tique } from "./util";
 
@@ -34,4 +35,20 @@ export async function verificarOpcoes(): Promise<void> {
     "sem painel lateral, so 'abaixo' e explica",
     !so.querySelector('input[value="lateral"]') && /painel lateral/i.test(so.textContent ?? ""),
   );
+
+  secao("opcoes: encaixe na pagina nova");
+  const doc = instalarDom(
+    '<html><body><div class="opcao" data-opcao="gerenciarfavoritos"><input type="checkbox" id="itemConfigGeral_gerenciarfavoritos" data-name="gerenciarfavoritos"></div><div class="opcao" data-opcao="gerenciarprojetos"></div></body></html>',
+  );
+  const chaveDom = doc.getElementById("itemConfigGeral_gerenciarfavoritos") as HTMLInputElement;
+  const conteudo = document.createElement("div");
+  const wrapper = encaixar(chaveDom, conteudo);
+  checar(
+    "o painel entra logo depois da linha da chave",
+    wrapper !== null &&
+      wrapper === doc.querySelector('[data-opcao="gerenciarfavoritos"]')?.nextElementSibling &&
+      wrapper.contains(conteudo),
+  );
+  checar("nao desloca a linha seguinte", wrapper?.nextElementSibling === doc.querySelector('[data-opcao="gerenciarprojetos"]'));
+  checar("chave fora de uma .opcao nao encaixa", encaixar(doc.createElement("input"), conteudo) === null);
 }

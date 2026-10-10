@@ -59,7 +59,7 @@ verificarEspelho();
 await verificarEspelhoSync();
 await verificarEspelhoNosModulos();
 await verificarEspelhoRevisao();
-verificarOpcoesSync();
+await verificarOpcoesSync();
 verificarDiagnosticoDoErro();
 await verificarCartaoDeErro();
 verificarInjecao();
