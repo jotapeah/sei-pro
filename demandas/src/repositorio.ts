@@ -294,6 +294,27 @@ export class RepositorioDemandas {
     return { arquivadas: feitas.length, ignoradas };
   }
 
+  /** Vira lápide, em lote (um gravar só): o descarte do arquivo morto, depois de o usuário guardar o arquivo. */
+  async descartar(ids: readonly string[]): Promise<number> {
+    const c = this.carimbo();
+    const feitas: Demanda[] = [];
+    const regs: RegistroNovo[] = [];
+    for (const id of ids) {
+      const d = await this.obter(id);
+      if (!d) continue;
+      feitas.push({
+        ...d,
+        removidoEm: c.agora,
+        atualizadoEm: c.agora,
+        dispositivo: c.dispositivo,
+        ...(c.por ? { alteradoPor: c.por } : {}),
+      });
+      regs.push({ demanda: id, campo: "exclusao", antes: d.titulo });
+    }
+    if (feitas.length) await this.salvar(feitas, regs, c);
+    return feitas.length;
+  }
+
   async remover(id: string): Promise<void> {
     const d = await this.viva(id);
     const c = this.carimbo();
