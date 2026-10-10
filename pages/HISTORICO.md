@@ -2,6 +2,15 @@
 
 ## ![SEI Pro Histórico de Versões](../img/icon-historico.png) Histórico de versões
 
+### Versão 2.8 (em preparação)
+10/10/2026
+
+Chega o gerenciador de [Demandas](../pages/DEMANDAS.md), primeiro no SEI Pro de teste.
+
+- **Novo (em teste, só no *SEI Pro de teste* para Chrome e Edge) — [Demandas](../pages/DEMANDAS.md).** Crie demandas com responsável, prazo e prioridade, ligue-as a processos e acompanhe em quatro visões: Tabela, Quadro, Cronograma e Painel. Para ligar, marque *Demandas* nas configurações do SEI Pro.
+- **Botão *Demandas* na barra do processo**, com o formulário já preenchido pela tela (processo, título e responsável).
+- **Para toda a unidade ou só seu.** As demandas da unidade ficam em Textos Padrão do SEI (você confirma com *Entendi* na primeira vez); as suas ficam no navegador, com cópias diárias e arquivo para enviar e receber. Número de processo sigiloso nunca vai ao Texto Padrão, mas **não escreva dados sigilosos no título ou na descrição**.
+
 ### Versão 2.7
 09/10/2026
 

@@ -175,7 +175,7 @@ Mesmo desenho da `SincroniaArquivo` do `sei-comum` (File System Access, handle n
 
 Ação **Arquivar concluídas antigas…** (menu de ajustes e faixas de alerta): diálogo com "concluídas há mais de N dias" (30, 60, 90, 180), mostra quantas são e quanto libera, e arquiva em lote (vão da tabela `d` para `a`; não há perda).
 
-Ação **Exportar arquivo morto e limpar…**, quando a tabela `a` também enche: baixa um `.seipro-demandas-arquivo-AAAA-MM.json` com as arquivadas de antes de uma data; **só depois** de o usuário confirmar que o arquivo foi salvo (botão "Já guardei o arquivo") remove essas demandas do Texto Padrão e do local (viram lápides). O arquivo morto pode ser importado de novo a qualquer momento (importação mescla).
+Ação **Exportar arquivo morto e limpar…**, quando a tabela `a` também enche: baixa um `.seipro-demandas-arquivo-AAAA-MM.json` com as arquivadas de antes de uma data; **só depois** de o usuário confirmar que o arquivo foi salvo (botão "Já guardei o arquivo") remove essas demandas do Texto Padrão e do local (viram lápides). Depois do descarte, a lápide vence durante 180 dias (escopo `unidade`) ou 90 dias (escopo `eu`): importar o arquivo morto traz de volta só o que não foi excluído nesse prazo (o diálogo diz isso); passado o prazo, a importação mescla e a demanda volta.
 
 ### 4.6 Privacidade
 
@@ -287,6 +287,7 @@ Conflito: mescla por entidade, vence o carimbo mais recente (empate por disposit
 6. **Projetos em P6**: o vínculo com etapa lê o `RepositorioProjetos`; qualquer mudança no formato da chave do Projetos quebra a leitura. Mitigação: teste de contrato no Demandas que cria uma etapa pelo repositório do Projetos e a lê.
 7. **Responsável sem lista completa.** Ver seção 5.7: a atribuição a colegas depende de a pessoa já ter aparecido na caixa ou numa demanda, ou de texto livre. Se o autor quiser a lista completa, a P6 do Projetos precisa antes achar uma fonte que não grave "Processo recebido".
 8. **Etapa concluída pelo Demandas** muda dado do Projetos: só com clique explícito e registrada no histórico do Projetos.
+9. **Ambiguidade de `manterNumerosSigilosos` com 2 ou mais processos sigilosos locais.** Se uma demanda tem, no computador do dono, dois vínculos sigilosos (`[999 sig, 888 sig]`) e um colega remove um deles, o texto só traz vínculos em branco e não identifica qual saiu: o vazio que sobra recebe o número que o dono tinha primeiro, e o outro número deixa de aparecer neste computador (ele continua só no arquivo do dono). Risco conhecido e aceito: o texto não pode carregar a identidade do vínculo sem expor o número.
 
 ## 11. Fora de escopo desta entrega
 
