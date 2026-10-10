@@ -114,3 +114,6 @@ desktop.ini
 # Cache do Python (ex.: _og/gerar_capas.py)
 __pycache__/
 *.pyc
+
+# Pagina de opcoes: pre-visualizacao local (gerada)
+opcoes-pagina/.preview/

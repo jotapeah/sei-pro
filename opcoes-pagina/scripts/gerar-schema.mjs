@@ -33,7 +33,8 @@ const DEPENDENCIAS = {
 
 // A linha pode estar dentro de uma tabela aninhada cuja <tr> externa e que tem display:none.
 function escondidaPorAncestral(tr) {
-  for (let t = tr; t; t = t.parentElement?.closest("tr")) if ((t.getAttribute("style") ?? "").replace(/\s/g, "").includes("display:none")) return true;
+  for (let t = tr; t; t = t.parentElement?.closest("tr"))
+    if ((t.getAttribute("style") ?? "").replace(/\s/g, "").includes("display:none")) return true;
   return false;
 }
 
@@ -61,7 +62,10 @@ function opcaoDe(ctrl) {
     if (ctrl.getAttribute("maxlength")) o.maxLength = Number(ctrl.getAttribute("maxlength"));
   }
   if (tipo === "selecao") {
-    o.escolhas = [...ctrl.querySelectorAll("option")].map((op) => ({ valor: op.getAttribute("value") ?? "", rotulo: norm(op.textContent) }));
+    o.escolhas = [...ctrl.querySelectorAll("option")].map((op) => ({
+      valor: op.getAttribute("value") ?? "",
+      rotulo: norm(op.textContent),
+    }));
     o.padrao = o.escolhas[0]?.valor ?? "";
   }
   if (DEPENDENCIAS[nome]) o.dependencias = DEPENDENCIAS[nome];
