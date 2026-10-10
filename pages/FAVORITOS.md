@@ -1,10 +1,21 @@
 # [![Home](../img/home.png)](../) |  SEI Pro ![Icone](../img/icon-32.png)
 
-## ![SEI Pro Monitorados](../img/icon-favoritos.png) Gerenciar processos monitorados
+## ![SEI Pro Monitorados](../img/icon-favoritos.png) Gerenciar processos monitorados (antigo Favoritos)
 
 Guarde os processos que você acompanha de perto, inclusive os que já saíram da sua unidade, e veja num relance **o que mudou** em cada um. Cada monitorado pode ter **pasta**, **etiquetas**, **nota**, **prazo**, **lembrete**, **documentos monitorados** e **local no mapa**.
 
-> **Antes chamada de Favoritos.** O nome mudou para não ser confundido com os *Favoritos* do próprio SEI. Seus processos e configurações continuam como estavam.
+> ### Esta função foi renomeada
+>
+> **Processos Favoritos agora se chama Processos Monitorados**, e a **estrela** virou um **alvo**. O SEI tem os seus próprios *Favoritos*; com nomes e ícones diferentes, cada recurso tem o seu e fica claro qual é qual.
+>
+> | Antes | Agora |
+> |---|---|
+> | Processos **Favoritos** | Processos **Monitorados** |
+> | **Estrela** para favoritar | **Alvo** para monitorar |
+> | Favoritar, Remover dos favoritos | **Monitorar**, **Parar de monitorar** |
+> | Documentos favoritos | Documentos monitorados |
+>
+> **Nada mudou no funcionamento.** Seus processos, pastas, etiquetas, notas, prazos, lembretes e configurações continuam exatamente como estavam, e o Agente de IA entende os dois nomes. O que o próprio SEI chama de *Favoritos* segue sendo outra coisa, independente desta função.
 
 > ![Painel Monitorados abaixo da lista de processos](../img/favoritos-painel.png)
 
@@ -21,6 +32,8 @@ Clique no **alvo** ao lado do processo:
 * no alto da **árvore** do processo;
 * nos **blocos**, no **Acompanhamento Especial**, nos **sobrestados** e nos **resultados da Pesquisa**;
 * no **Enviar Processo**, marcando **Manter processo em Monitorados**.
+
+> ![Monitorando um processo: clique no alvo, escolha pasta e etiqueta e veja-o na lista](../img/favoritos-monitorar.gif)
 
 Ao monitorar, um balão deixa escolher na hora a pasta, as etiquetas, a nota e um lembrete, e mudar o processo para a lista **Pessoal**. Cada mudança é gravada na hora; **Pronto** fecha o balão. Para parar de monitorar, clique de novo no alvo.
 
