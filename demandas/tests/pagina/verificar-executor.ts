@@ -105,8 +105,14 @@ export async function verificarExecutor(): Promise<void> {
   checar("com o foco da aba: repassa o id", (await comFoco.focarNoPainel?.({ id: "d1" })) === "navegou" && focados.join() === "d1");
 
   secao("executor: sincronia (SEM_SINCRONIA e a chave da unidade)");
-  checar("sincronizarAgora sem sincronia: SEM_SINCRONIA", (await codigoDoErro(() => t.sincronizarAgora?.(undefined))) === "SEM_SINCRONIA");
-  checar("apagarPessoal sem sincronia: SEM_SINCRONIA", (await codigoDoErro(() => t.apagarPessoal?.(undefined))) === "SEM_SINCRONIA");
+  checar(
+    "sincronizarAgora sem sincronia: SEM_SINCRONIA",
+    (await codigoDoErro(() => t.sincronizarAgora?.({ chave: chaveDaAba(CTX) }))) === "SEM_SINCRONIA",
+  );
+  checar(
+    "apagarPessoal sem sincronia: SEM_SINCRONIA",
+    (await codigoDoErro(() => t.apagarPessoal?.({ chave: chaveDaAba(CTX) }))) === "SEM_SINCRONIA",
+  );
 
   // Uma sincronia falsa que grava num repositorio da unidade DESTA aba: o pedido de outra chave nao pode chegar a ela.
   const area = areaMemoria();
@@ -133,8 +139,18 @@ export async function verificarExecutor(): Promise<void> {
       },
     },
   });
-  checar("sem chave no pedido (o app antigo): roda", (await comSincronia.sincronizarAgora?.(undefined)) === RESULTADO && rodadas === 1);
-  checar("com a chave desta aba: roda", (await comSincronia.sincronizarAgora?.({ chave: chaveDaAba(CTX) })) === RESULTADO && rodadas === 2);
+  const semChave1 = await lanca(async () => comSincronia.sincronizarAgora?.(undefined));
+  const semChave2 = await lanca(async () => comSincronia.sincronizarAgora?.({}));
+  const semChave3 = await lanca(async () => comSincronia.apagarPessoal?.(undefined));
+  checar(
+    "sem a chave da aba: recusado, e nada roda",
+    [semChave1, semChave2, semChave3].every((e) => e instanceof ErroRpc && e.codigo === "UNIDADE_MUDOU") && rodadas === 0 && apagadas === 0,
+  );
+  checar("com a chave desta aba: roda", (await comSincronia.sincronizarAgora?.({ chave: chaveDaAba(CTX) })) === RESULTADO && rodadas === 1);
+  checar(
+    "com a chave desta aba, de novo: roda",
+    (await comSincronia.sincronizarAgora?.({ chave: chaveDaAba(CTX) })) === RESULTADO && rodadas === 2,
+  );
   const antiga = chaveDaAba({ ...CTX, unidade: { id: "999", sigla: "OUTRA", nome: "Outra" } });
   const outroUsuario = chaveDaAba({ ...CTX, login: "ana" });
   const gravadasAntes = (await repo.dados()).length;

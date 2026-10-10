@@ -100,6 +100,7 @@ export async function verificarIntegracaoProjetos(): Promise<void> {
 
   secao("projetos: vincular, trocar e remover no dialogo da demanda");
   {
+    const etW = await p.un.criarEtapa({ projeto: projX.id, nome: "Etapa W", inicio: "2026-10-01", fim: "2026-10-30" });
     const ta = appDeTeste({ etapasDoProjetos: () => etapasAbertasDaUnidade(repos) });
     const d = await ta.repos.unidade.criar({ titulo: "Vinculavel", prazo: "2026-10-20", distribuidaEm: "2026-10-05" });
     const viva = naTela((await ta.repos.unidade.obter(d.id)) as Demanda, "unidade", HOJE);
@@ -123,11 +124,11 @@ export async function verificarIntegracaoProjetos(): Promise<void> {
     );
     void abrirDialogoDemanda(ta.deps, { demanda: naTela(vinculada, "unidade", HOJE) });
     await tique(20);
-    escolherCombo(dlg(ta), "Etapa do projeto", `${projEu.id}${SEP}${etEu.id}`);
+    escolherCombo(dlg(ta), "Etapa do projeto", `${projX.id}${SEP}${etW.id}`);
     botao(dlg(ta), "Gravar")!.click();
     await tique(20);
     const trocada = (await ta.repos.unidade.obter(d.id)) as Demanda;
-    checar("trocar grava a nova", trocada.etapa?.etapa === etEu.id && trocada.etapa.rotulo === "So meu > Minha etapa");
+    checar("trocar grava a nova", trocada.etapa?.etapa === etW.id && trocada.etapa.rotulo === "Projeto X > Etapa W");
     void abrirDialogoDemanda(ta.deps, { demanda: naTela(trocada, "unidade", HOJE) });
     await tique(20);
     escolherCombo(dlg(ta), "Etapa do projeto", "");

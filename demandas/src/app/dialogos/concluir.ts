@@ -45,14 +45,19 @@ export function abrirDialogoConclusao(c: ContextoDialogo, d: Demanda): Promise<R
         "label",
         { class: "dem-opcao dem-concluir-etapa", for: "dem-concluir-etapa", hidden: true },
         marcaEtapa,
-        h("span", {}, h("b", {}, "Concluir também a etapa?"), h("span", {}, ` ${d.etapa?.rotulo ?? ""}`)),
+        h("span", {}, h("b", {}, "Concluir também a etapa?"), h("span", { class: "dem-concluir-etapa-nome" })),
       );
       const ligada = d.etapa;
       if (ligada)
         void c
           .etapasDoProjetos()
           .then((lista) => {
-            if (lista.some((e) => e.projeto === ligada.projeto && e.etapa === ligada.etapa && !e.concluida)) linhaEtapa.hidden = false;
+            // O nome e o escopo vêm do Projetos (agora), nunca do rótulo guardado na demanda (texto de um colega).
+            const atual = lista.find((e) => e.projeto === ligada.projeto && e.etapa === ligada.etapa && !e.concluida);
+            if (!atual) return;
+            const nome = linhaEtapa.querySelector(".dem-concluir-etapa-nome");
+            if (nome) nome.textContent = ` ${atual.rotulo} (${atual.vis === "unidade" ? "projeto de Toda a unidade" : "projeto Só eu"})`;
+            linhaEtapa.hidden = false;
           })
           .catch(() => undefined);
       const gravar = () => {

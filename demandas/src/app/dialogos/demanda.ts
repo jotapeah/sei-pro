@@ -175,7 +175,13 @@ export function abrirDialogoDemanda(c: ContextoDialogo, o: { demanda?: DemandaNa
     });
 
     // Etapa do projeto: a lista vem do Gestor de Projetos (somente leitura); a guardada aparece mesmo sem ele.
-    const campoEtapa = montarCampoEtapa({ ...(atual?.etapa ? { atual: atual.etapa } : {}), carregar: () => c.etapasDoProjetos() });
+    let visAgora = (): Vis => vis0;
+    const campoEtapa = montarCampoEtapa({
+      ...(atual?.etapa ? { atual: atual.etapa } : {}),
+      carregar: () => c.etapasDoProjetos(),
+      // A etapa de um projeto "Só eu" não vai para uma demanda da unidade (o rótulo seria lido por todos).
+      vis: () => visAgora(),
+    });
     const etapa = campoEtapa.combo;
 
     // Checklist.
@@ -339,6 +345,7 @@ export function abrirDialogoDemanda(c: ContextoDialogo, o: { demanda?: DemandaNa
       cartao("eu", vis0 === "eu", edicao, "Só eu", "Aparece só para você, nesta unidade."),
     );
     const vis = (): Vis => (cartoes.querySelector<HTMLInputElement>("input[value='eu']")?.checked ? "eu" : "unidade");
+    visAgora = vis;
 
     const checklistSecao = secao(
       "checklist",
@@ -414,6 +421,10 @@ export function abrirDialogoDemanda(c: ContextoDialogo, o: { demanda?: DemandaNa
       campoResp.hidden = vis() === "eu";
     };
     cartoes.addEventListener("change", atualizarGravar);
+    cartoes.addEventListener("change", () => {
+      if (campoEtapa.aoMudarVis())
+        erros.mostrar(["A etapa de projeto escolhida é só sua e não pode ir para uma demanda da unidade; ela foi retirada."]);
+    });
     void c
       .tabelas()
       .then((ts) => {

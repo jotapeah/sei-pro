@@ -76,10 +76,10 @@ export function processosDaCaixa(doc: Document): ProcessoDaCaixa[] {
 }
 
 export function tratadoresDemandas(d: DepsExecutor): Record<string, Tratador> {
-  /** O pedido de sincronia que traz a chave de OUTRA unidade ou usuário não toca nada. */
+  /** O pedido de sincronia sem a chave desta aba, ou com a de OUTRA unidade ou usuário, não toca nada. */
   const conferirChave = (args: unknown): void => {
     const chave = (args as { chave?: unknown } | null | undefined)?.chave;
-    if (chave === undefined) return;
+    // Sem a chave da aba, o pedido nao diz a que unidade e a que usuario se refere: recusa.
     if (typeof chave !== "string" || chave !== chaveDaAba(d.ctx)) throw new ErroRpc("UNIDADE_MUDOU", MENSAGEM_UNIDADE_MUDOU);
   };
   return {

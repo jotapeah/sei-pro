@@ -26,6 +26,8 @@ export interface EtapaDoProjeto {
   etapa: string;
   rotulo: string;
   concluida: boolean;
+  /** O escopo do projeto: o rótulo de um projeto "Só eu" não vai para os textos da unidade. */
+  vis: Vis;
 }
 
 export interface DepsApp {

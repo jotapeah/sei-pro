@@ -47,7 +47,7 @@ export async function etapasAbertasDaUnidade(repos: ReposProjetos): Promise<Etap
     for (const p of projetos) {
       const doProjeto = dados.etapas.filter((e) => e.projeto === p.id && !e.concluidaEm);
       doProjeto.sort((a, b) => (a.ordem < b.ordem ? -1 : a.ordem > b.ordem ? 1 : a.id < b.id ? -1 : 1));
-      for (const e of doProjeto) saida.push({ projeto: p.id, etapa: e.id, rotulo: `${p.nome} > ${e.nome}`, concluida: false });
+      for (const e of doProjeto) saida.push({ projeto: p.id, etapa: e.id, rotulo: `${p.nome} > ${e.nome}`, concluida: false, vis });
     }
   }
   return saida;
@@ -58,6 +58,8 @@ export async function etapasAbertasDaUnidade(repos: ReposProjetos): Promise<Etap
  * devolve `ja_estava` ou `nao_encontrada` e quem chamou só avisa. Erro de gravação (cota cheia, validação) sobe.
  */
 export async function concluirEtapaDaDemanda(repos: ReposProjetos, ref: EtapaRef, hoje: DataISO): Promise<ResultadoEtapa> {
+  let jaEstava = false;
+  // Mesmo id nos dois escopos nao acontece, mas a etapa que o dialogo mostrou e a ABERTA: uma concluida nao a esconde.
   for (const vis of VISES) {
     const repo = repos[vis];
     let achada: Awaited<ReturnType<RepositorioProjetos["dados"]>>["etapas"][number] | undefined;
@@ -67,10 +69,13 @@ export async function concluirEtapaDaDemanda(repos: ReposProjetos, ref: EtapaRef
       continue;
     }
     if (!achada) continue;
-    if (achada.concluidaEm) return "ja_estava";
+    if (achada.concluidaEm) {
+      jaEstava = true;
+      continue;
+    }
     return (await repo.concluirSeAberta(ref.etapa, hoje)) ? "concluida" : "ja_estava";
   }
-  return "nao_encontrada";
+  return jaEstava ? "ja_estava" : "nao_encontrada";
 }
 
 /** As demandas ligadas a uma etapa (para o futuro balão do Projetos; nada no Projetos muda nesta entrega). */
