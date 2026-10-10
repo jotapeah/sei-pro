@@ -5,6 +5,8 @@
  */
 import { iniciar } from './controle';
 import { CHAVE, type Config, configVazia, deLegado, normalizar } from './modelo';
+import cssBase from '../../sei-comum/src/ui/base.css';
+import cssModal from './modal.css';
 import css from './style.css';
 
 function inicial(): Config {
@@ -20,9 +22,13 @@ function montar() {
   const estilo = document.createElement('style');
   estilo.textContent = css;
   document.head.append(estilo);
-  const controle = iniciar(document, cfg => {
-    chrome.storage.sync.set({ [CHAVE]: cfg }).catch(() => { /* sem sincronização: vale nesta aba até recarregar */ });
-  });
+  const controle = iniciar(
+    document,
+    cfg => {
+      chrome.storage.sync.set({ [CHAVE]: cfg }).catch(() => { /* sem sincronização: vale nesta aba até recarregar */ });
+    },
+    `${cssBase}\n${cssModal}`,
+  );
   let mudou = false;
   chrome.storage.onChanged.addListener((mudancas, area) => {
     if (area !== 'sync' || !(CHAVE in mudancas)) return;

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { type Config, configVazia } from '../src/modelo';
 import { iniciar } from '../src/controle';
-import { ordemCss, paginaComPaineis } from './util';
+import { hostsAbertos, ordemCss, paginaComPaineis, raizModal } from './util';
 
 const IDS = ['processosSEIPro', 'favoritesPro', 'atividadesPro'];
 const cfg = (ordem: string[], ocultos: string[] = []): Config => ({ v: 1, ordem, ocultos });
@@ -70,13 +70,13 @@ export async function verificarControle(teste: (nome: string, fn: () => void | P
     const c = iniciar(d, nova => gravados.push(nova));
     c.configurar(configVazia());
     (botoes(d)[0] as HTMLElement).click();
-    assert.equal(d.querySelectorAll('dialog').length, 1);
-    d.querySelector<HTMLButtonElement>('.spro-pnl-item[data-id="atividadesPro"] .spro-pnl-subir')!.click();
-    d.querySelector<HTMLButtonElement>('.spro-pnl-salvar')!.click();
+    assert.equal(hostsAbertos(d), 1);
+    raizModal(d).querySelector<HTMLButtonElement>('.spro-pnl-item[data-id="atividadesPro"] .spro-pnl-subir')!.click();
+    raizModal(d).querySelector<HTMLButtonElement>('.spro-pnl-salvar')!.click();
     assert.equal(gravados.length, 1);
     assert.deepEqual(gravados[0]!.ordem, ['processosSEIPro', 'atividadesPro', 'favoritesPro']);
     assert.equal(ordemCss(d.getElementById('atividadesPro')!), '1');
-    assert.equal(d.querySelector('dialog'), null);
+    assert.equal(hostsAbertos(d), 0);
     c.encerrar();
   });
   await teste('controle: ocioso, não gera mutações (sem laço de reaplicação)', async () => {
@@ -108,5 +108,17 @@ export async function verificarControle(teste: (nome: string, fn: () => void | P
     c.encerrar();
     c.configurar(cfg(['favoritesPro']));
     assert.equal(ordemCss(d.getElementById('favoritesPro')!), '');
+  });
+  await teste('controle: o modal segue o modo noturno do SEI Pro e recebe o CSS', async () => {
+    const d = comBarra(IDS);
+    d.body.classList.add('dark-mode');
+    const c = iniciar(d, () => {}, '.css-do-modal{}');
+    c.configurar(configVazia());
+    (botoes(d)[0] as HTMLElement).click();
+    const host = d.querySelector('.spro-pnl-host')!;
+    assert.equal(host.getAttribute('data-tema'), 'escuro');
+    assert.equal(host.shadowRoot!.querySelector('style')!.textContent, '.css-do-modal{}');
+    c.encerrar();
+    assert.equal(hostsAbertos(d), 0);
   });
 }

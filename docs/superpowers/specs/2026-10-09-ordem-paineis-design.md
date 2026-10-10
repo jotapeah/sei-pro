@@ -38,7 +38,7 @@ sem depender de nenhum módulo TS: funciona também no oficial, onde só o legad
 - **Reconciliação idempotente** com `MutationObserver` no contêiner: painéis que entram depois
   (cada módulo monta no seu tempo) caem no lugar certo; resolve a corrida do `prepend`.
 - **Botão** (ícone "ordenar") na barra do Controle de Processos, só quando há 2 ou mais painéis.
-  Abre um `<dialog>` com a lista: alça de arrastar, nome, caixa "Mostrar", botões subir/descer
+  Abre o `dialog.spro-dialogo` do desenho compartilhado (base.css do sei-comum, dentro de um Shadow DOM como o balão dos Favoritos, com o tema do SEI) com a lista: alça de arrastar, nome, caixa "Mostrar", botões subir/descer
   (teclado), "Restaurar padrão", Salvar/Cancelar. Salvar grava no sync e aplica na hora; outras abas
   acompanham por `storage.onChanged`.
 - **Aposentadoria do arrastar antigo**: `setSortDivPanel` vira no-op (o `sortable` brigaria com o `order`)

@@ -11,3 +11,10 @@ export function paginaComPaineis(ids: string[], extra = ''): Document {
 }
 
 export const ordemCss = (el: Element) => (el as HTMLElement).style.getPropertyValue('order');
+
+/** A raiz do modal (o Shadow DOM do host); vazia quando o modal não está aberto. */
+export function raizModal(d: Document): ParentNode {
+  const host = d.querySelector('.spro-pnl-host');
+  return (host?.shadowRoot as ParentNode | null | undefined) ?? d.createDocumentFragment();
+}
+export const hostsAbertos = (d: Document) => d.querySelectorAll('.spro-pnl-host').length;

@@ -5,7 +5,7 @@
  * ocioso, o módulo não produz mutação nenhuma.
  */
 import { CLASSE_BOTAO, garantirBotao, removerBotao } from './botao';
-import { abrirModal } from './modal';
+import { abrirModal, CLASSE_HOST, type OpcoesModal } from './modal';
 import { type Config, configVazia } from './modelo';
 import { aplicar, listarPaineis } from './paineis';
 
@@ -21,7 +21,7 @@ function relevante(registros: MutationRecord[]): boolean {
   return registros.some(r => [...r.addedNodes].some(toca) || [...r.removedNodes].some(toca));
 }
 
-export function iniciar(doc: Document, gravar: (cfg: Config) => void) {
+export function iniciar(doc: Document, gravar: (cfg: Config) => void, css = '') {
   const janela = doc.defaultView;
   let cfg = configVazia();
   let encerrado = false;
@@ -29,11 +29,12 @@ export function iniciar(doc: Document, gravar: (cfg: Config) => void) {
   let observador: MutationObserver | undefined;
 
   const abrir = () => {
+    const opcoes: OpcoesModal = { css, escuro: !!doc.body?.classList.contains('dark-mode') };
     abrirModal(doc, listarPaineis(doc), cfg, nova => {
       cfg = nova;
       gravar(nova);
       atualizar();
-    });
+    }, opcoes);
   };
 
   function observar() {
@@ -69,7 +70,7 @@ export function iniciar(doc: Document, gravar: (cfg: Config) => void) {
       observador?.disconnect();
       aplicar(doc, configVazia());
       removerBotao(doc);
-      doc.querySelectorAll('dialog.spro-pnl-dialogo').forEach(d => d.remove());
+      doc.querySelectorAll(`.${CLASSE_HOST}`).forEach(d => d.remove());
     },
   };
 }
