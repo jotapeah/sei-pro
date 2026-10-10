@@ -56,6 +56,15 @@ export async function verificarArmazenamento(): Promise<void> {
       return x.perfis.length === 1 && x.config.length === 0;
     })(),
   );
+  checar(
+    "configGeral malformado: so ficam os itens {name: string, value: boolean|string|number}",
+    (() => {
+      const x = interpretar(
+        '[{"configGeral":[null,{"name":"debugpage","value":true},{"name":5,"value":1},{"name":"a"},"x",{"name":"b","value":null},{"name":"c","value":{"k":1}}]}]',
+      );
+      return x.config.length === 1 && x.config[0].name === "debugpage";
+    })(),
+  );
   checar("item sem baseName nao e perfil", interpretar('[{"outra":1},{"configGeral":[]}]').perfis.length === 0);
 
   secao("armazenamento: limite de 8 KB");

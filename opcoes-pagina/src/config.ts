@@ -15,7 +15,9 @@ export interface ItemConfig {
 }
 export type Controle = HTMLInputElement | HTMLSelectElement;
 
-export const controleDe = (raiz: ParentNode, nome: string): Controle | null => raiz.querySelector<Controle>(`[data-name="${nome}"]`);
+/** Compara o atributo em vez de interpolar o nome num seletor: um `name` gravado com aspas ou colchete nao pode quebrar a busca. */
+export const controleDe = (raiz: ParentNode, nome: string): Controle | null =>
+  [...raiz.querySelectorAll<Controle>("[data-name]")].find((c) => c.getAttribute("data-name") === nome) ?? null;
 
 const tipoDe = (c: Element): string => c.getAttribute("data-tipo") ?? "";
 const nomeDe = (c: Element): string => c.getAttribute("data-name") ?? "";

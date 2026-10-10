@@ -17,6 +17,13 @@ export function serializar(d: Dados): string {
   return JSON.stringify([...d.perfis, { configGeral: d.config }]);
 }
 
+/** Um item de configGeral so vale como {name: string, value: boolean | string | number}; o resto (null, objeto, sem valor) e descartado. */
+function itemValido(i: unknown): i is ItemConfig {
+  if (!i || typeof i !== "object") return false;
+  const { name, value } = i as Record<string, unknown>;
+  return typeof name === "string" && ["boolean", "string", "number"].includes(typeof value);
+}
+
 /** Nunca lanca: dado ausente, corrompido ou de outra forma vira "sem nada gravado". */
 export function interpretar(texto: string): Dados {
   const vazio: Dados = { perfis: [], config: [] };
@@ -31,7 +38,8 @@ export function interpretar(texto: string): Dados {
   const objetos = lista.filter((x): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x));
   const perfis = objetos.filter((x) => !!x.baseName) as Perfil[];
   const comConfig = objetos.find((x) => Array.isArray(x.configGeral));
-  return { perfis, config: (comConfig?.configGeral as ItemConfig[] | undefined) ?? [] };
+  const itens = Array.isArray(comConfig?.configGeral) ? (comConfig.configGeral as unknown[]) : [];
+  return { perfis, config: itens.filter(itemValido) };
 }
 
 export function medirEspaco(texto: string): { tamanho: number; estado: "ok" | "perto" | "estoura" } {

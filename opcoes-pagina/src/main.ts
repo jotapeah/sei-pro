@@ -112,8 +112,13 @@ async function iniciar(): Promise<void> {
 
   const armazem = armazemSync(api as unknown as ApiSync);
   const dados = interpretar(await armazem.obter());
-  restaurarPerfis(lista, dados.perfis);
-  aplicarConfigGeral(painel, dados.config);
+  // Dado gravado fora do formato nao pode deixar a pagina sem botoes: sem Salvar/Carregar o usuario nao teria como se recuperar.
+  try {
+    restaurarPerfis(lista, dados.perfis);
+    aplicarConfigGeral(painel, dados.config);
+  } catch (e) {
+    console.error("SEI Pro: nao foi possivel aplicar as configuracoes gravadas; a pagina abriu com os padroes.", e);
+  }
   atualizar();
 
   /** Grava o que a tela mostra. Devolve o texto gravado, ou null se nao coube/falhou (o aviso ja foi dado). */

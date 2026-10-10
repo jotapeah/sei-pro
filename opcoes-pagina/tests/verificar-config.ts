@@ -133,6 +133,20 @@ export function verificarConfig(): void {
   aplicarConfigGeral(r4, depois);
   checar("coletar -> aplicar -> coletar e estavel", JSON.stringify(coletarConfigGeral(r4)) === JSON.stringify(depois));
 
+  secao("config: nome malformado nao derruba a pagina");
+  const r7 = montarMinimo({ lab: false, foraAntaq: true });
+  let lancou = false;
+  try {
+    aplicarConfigGeral(r7, [
+      { name: 'x"]', value: true },
+      { name: "debugpage", value: true },
+    ]);
+  } catch {
+    lancou = true;
+  }
+  checar("nome com aspas e colchete e ignorado sem lancar", !lancou && controleDe(r7, 'x"]') === null);
+  checar("o item valido seguinte ainda e aplicado", valor(coletarConfigGeral(r7), "debugpage") === true);
+
   secao("config: icones e contagens");
   const ico = (r: ParentNode, n: string) => (r.querySelector(`[data-opcao="${n}"] .ico`) as Element).classList;
   checar(
