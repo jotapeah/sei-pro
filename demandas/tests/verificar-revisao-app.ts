@@ -24,6 +24,7 @@ export async function verificarRevisaoApp(): Promise<void> {
   );
   checar("em tela cheia: abre", recusaDoModo("pagina", true) === null);
   checar("os outros modos nao dependem do topo", recusaDoModo("embutido", false) === null && recusaDoModo("lateral", true) === null);
+  checar("o lateral tambem so abre em tela cheia", recusaDoModo("lateral", false) === MSG_PAGINA_EM_QUADRO);
 
   const t = appDeTeste();
   const esc = escoposProjetos("sei.exemplo.gov.br", "ana", "110000001");
