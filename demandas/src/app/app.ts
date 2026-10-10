@@ -183,6 +183,7 @@ export async function montarApp(deps: DepsApp): Promise<AppMontado> {
         escopo: estado.escopo,
         ...(bloqueada ? { novaDesabilitada: TEXTO_CRIACAO_BLOQUEADA } : {}),
         menu: ajustes,
+        semTitulo: deps.modo === "embutido",
         ...(deps.colaboracao
           ? {
               indicador: deps.colaboracao.estadoDoIndicador(),

@@ -82,8 +82,16 @@ export async function verificarAppBase(): Promise<void> {
   {
     const t = appDeTeste();
     const app = await t.montar();
-    checar("titulo do cabecalho", texto(t.raiz.querySelector(".dem-titulo")) === "Gestor de Demandas");
+    checar("titulo do cabecalho", texto(t.raiz.querySelector(".dem-titulo")) === "Demandas");
     checar("botao Nova demanda", !!botao(t.raiz, "Nova demanda"));
+    for (const modo of ["lateral", "pagina"] as const) {
+      const m = appDeTeste({ modo });
+      await m.montar();
+      checar(`modo ${modo} mantem o titulo`, texto(m.raiz.querySelector(".dem-titulo")) === "Demandas");
+    }
+    const emb = appDeTeste({ modo: "embutido" });
+    await emb.montar();
+    checar("modo embutido nao repete o titulo", !emb.raiz.querySelector(".dem-titulo") && !!botao(emb.raiz, "Nova demanda"));
     const abas = [...t.raiz.querySelectorAll('[role="tab"]')].map((a) => texto(a));
     checar("quatro abas de visao", abas.join() === "Tabela,Quadro,Cronograma,Painel", abas);
     checar(

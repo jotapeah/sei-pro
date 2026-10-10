@@ -29,7 +29,7 @@ export function nomeDoTexto(vis: Vis, login: string, tabela: Tabela): string {
 }
 
 export const descricaoDoTexto = (vis: Vis, tabela: Tabela): string =>
-  `${vis === "unidade" ? "Gestor de Demandas da unidade" : "Gestor de Demandas pessoal"} (SEI Pro): ${NOME_TABELA[tabela]}. Gerado automaticamente; não edite.`;
+  `${vis === "unidade" ? "Demandas da unidade" : "Demandas pessoais"} (SEI Pro): ${NOME_TABELA[tabela]}. Gerado automaticamente; não edite.`;
 
 /** O parágrafo legível que abre o texto. Sem `<` e `>` (o SEI 5 escapa o conteúdo uma vez a mais). */
 export function legivelDemandas(vis: Vis, tabela: Tabela, sigla: string, nomeUsuario: string): string {

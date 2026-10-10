@@ -187,7 +187,7 @@ export async function verificarAppArquivar(): Promise<void> {
     c5.arquivos.push(JSON.stringify({ formato: "outra-coisa" }));
     botao(dlg, "Importar arquivo morto…")?.click();
     await tique(40);
-    checar("arquivo de outro formato", erros(dlg) === "Esse arquivo não é do Gestor de Demandas.");
+    checar("arquivo de outro formato", erros(dlg) === "Esse arquivo não é das Demandas.");
     c5.arquivos.push(JSON.stringify({ formato: FORMATO_ARQUIVO_MORTO, versao: 2, demandas: [], registros: [] }));
     botao(dlg, "Importar arquivo morto…")?.click();
     await tique(40);
@@ -241,7 +241,7 @@ export async function verificarAppArquivar(): Promise<void> {
     c2.arquivos.push("{}");
     itemDoMenu(c2.t.raiz, "Ajustes", "Importar arquivo…");
     await tique(40);
-    checar("arquivo que nao e do Gestor", c2.avisos.at(-1) === "Esse arquivo não é do Gestor de Demandas.");
+    checar("arquivo que nao e do Gestor", c2.avisos.at(-1) === "Esse arquivo não é das Demandas.");
     c2.arquivos.push(JSON.stringify({ formato: "seipro-demandas", versao: 9, tipo: "copia", escopos: [] }));
     itemDoMenu(c2.t.raiz, "Ajustes", "Importar arquivo…");
     await tique(40);

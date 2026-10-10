@@ -192,7 +192,7 @@ async function iniciarPagina(): Promise<void> {
   html.dataset.tema = "claro";
   const semAba: Pick<Rpc, "chamar"> = {
     chamar: async () => {
-      throw new Error("Abra o Gestor de Demandas pelo Controle de Processos do SEI para usar esta função.");
+      throw new Error("Abra as Demandas pelo Controle de Processos do SEI para usar esta função.");
     },
   };
   await ligar(ctx, semAba, "pagina", {});
@@ -202,7 +202,7 @@ async function iniciarLateral(): Promise<void> {
   // Painel lateral: claro ou escuro conforme o sistema (prefers-color-scheme), sem o `data-tema` do SEI.
   // Como o content script: a opção "Gestor de Demandas" desligada, nada de demandas (nem anúncio às abas).
   if (!(await lerOpcaoDemandas())) {
-    erro("O Gestor de Demandas está desligado nas opções do SEI Pro (Gestor de Demandas).");
+    erro("As Demandas estão desligadas nas opções do SEI Pro (Demandas).");
     return;
   }
   const area = areaChrome(chrome.storage.local, "local");

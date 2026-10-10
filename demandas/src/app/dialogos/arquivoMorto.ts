@@ -22,7 +22,7 @@ import type { ContextoDialogo } from "../tipos";
 import { caixaDeErros, campo } from "./campos";
 
 export const MSG_GRANDE_DEMAIS = "Esse arquivo tem itens demais para ser importado de uma vez.";
-export const MSG_NAO_E_DO_GESTOR = "Esse arquivo não é do Gestor de Demandas.";
+export const MSG_NAO_E_DO_GESTOR = "Esse arquivo não é das Demandas.";
 export const MSG_ARQUIVO_MAIS_NOVO =
   "Esse arquivo foi gravado por uma versão mais nova do SEI Pro. Atualize a extensão neste computador e importe de novo.";
 export const MSG_OUTRA_UNIDADE = "Esse arquivo é de outra unidade ou de outro SEI: nada foi importado.";

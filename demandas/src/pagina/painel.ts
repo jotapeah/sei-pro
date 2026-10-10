@@ -54,8 +54,8 @@ export function montarPainelDemandas(doc: Document, o: OpcoesPainelDemandas): Pa
   return montarPainelEmbutido(doc, {
     ...o,
     id: ID_PAINEL,
-    titulo: "Gestor de Demandas",
-    tituloIframe: "Gestor de Demandas do SEI Pro",
+    titulo: "Demandas",
+    tituloIframe: "Demandas do SEI Pro",
     prefixo: PREFIXO,
     rotulos: { mostrar: "Mostrar demandas", recolher: "Recolher demandas" },
     icone: () => {

@@ -114,7 +114,7 @@ export async function montarShell(raiz: HTMLElement, d: DepsShell): Promise<{ mo
             rotulo: "Demandas",
             icone: "demandas",
             caminho: "html/demandas.html#modo=lateral",
-            titulo: "Gestor de Demandas",
+            titulo: "Demandas",
             contador: {
               chave: CHAVE_CONTADOR_DEMANDAS,
               dica: (n: number) => `${n} ${n === 1 ? "demanda sua atrasada" : "demandas suas atrasadas"} na unidade`,

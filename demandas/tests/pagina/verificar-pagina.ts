@@ -218,7 +218,7 @@ export async function verificarPagina(): Promise<void> {
   const titulo = mp.painel.querySelector(".spro-dem-titulo") as HTMLElement;
   checar(
     "titulo Gestor de Demandas com o icone proprio",
-    (titulo.textContent ?? "").includes("Gestor de Demandas") && !!titulo.querySelector("svg rect"),
+    (titulo.textContent ?? "").includes("Demandas") && !!titulo.querySelector("svg rect"),
   );
   checar("iframe do app no modo embutido", mp.iframe.getAttribute("src")?.endsWith("#modo=embutido") === true);
   checar(

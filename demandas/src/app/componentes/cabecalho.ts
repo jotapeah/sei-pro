@@ -14,6 +14,8 @@ export interface OpcoesCabecalho {
   indicador?: Indicador;
   aoIndicador?(): void;
   menu: HTMLElement;
+  /** No painel embutido o título é do painel do SEI: o app não o repete. */
+  semTitulo?: boolean;
   aoEscopo(e: EscopoNaTela): void;
   aoNova(): void;
 }
@@ -28,7 +30,7 @@ export function montarCabecalho(o: OpcoesCabecalho): HTMLElement {
   return h(
     "div",
     { class: "dem-cab" },
-    h("h2", { class: "dem-titulo" }, "Gestor de Demandas"),
+    o.semTitulo ? null : h("h2", { class: "dem-titulo" }, "Demandas"),
     h(
       "div",
       { class: "dem-ctl" },

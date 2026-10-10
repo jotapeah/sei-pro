@@ -466,7 +466,7 @@ export class Colaboracao {
 
   abrirAjuda(): void {
     this.d.abrirModal({
-      titulo: "Ajuda do Gestor de Demandas",
+      titulo: "Ajuda das Demandas",
       icone: "nota",
       conteudo: h(
         "div",
