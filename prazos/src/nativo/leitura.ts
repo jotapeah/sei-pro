@@ -16,9 +16,9 @@ const iso = (d: string, m: string, a: string): DataISO => `${a}-${m}-${d}`;
 
 function estadoDe(parenteses: string): { estado: EstadoNativo; concluidoEm?: DataISO } | null {
   const t = parenteses.trim().toLowerCase();
-  const c = /^conclu[ií]do em (\d{2})\/(\d{2})\/(\d{4})$/.exec(t);
+  const c = /^conclu[i\u00ED]do em (\d{2})\/(\d{2})\/(\d{4})$/.exec(t);
   if (c) return { estado: 'concluido', concluidoEm: iso(c[1]!, c[2]!, c[3]!) };
-  if (/^at[eé] hoje$/.test(t)) return { estado: 'hoje' };
+  if (/^at[e\u00E9] hoje$/.test(t)) return { estado: 'hoje' };
   if (/^atrasado \d+ dias?$/.test(t)) return { estado: 'atrasado' };
   if (/^\d+ dias?$/.test(t)) return { estado: 'noPrazo' };
   return null;

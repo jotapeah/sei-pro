@@ -2440,6 +2440,15 @@ function addAcompanhamentoEspIcon() {
     checkListaAcompanhamentoEspIconPro();
 }
 function addControlePrazo(this_ = false) {
+    // Modulo novo (prazos/ em TS): com a marca no <html> ele desenha a coluna e abre o modal. A ponte entre os
+    // mundos e feita so com strings: o id da linha (ou vazio, para as linhas marcadas) e um CustomEvent.
+    if (document.documentElement.getAttribute('data-spro-prazos') === '1') {
+        var sproRow = this_ ? $(this_).closest('tr[id^="P"], .kanban-item') : [];
+        var sproId = sproRow.length ? (sproRow.attr('data-eid') || String(sproRow.attr('id') || '').replace(/^P/, '')) : '';
+        document.documentElement.setAttribute('data-spro-prazos-alvo', sproId);
+        document.dispatchEvent(new CustomEvent('spro-prazos-abrir'));
+        return false;
+    }
     var dateRef = moment().format('YYYY-MM-DD');
     var timeRef = '23:59';
     var dueSetDate = true;
@@ -3092,6 +3101,8 @@ function setControlePrazo(force = false) {
             $('#tblProcessosRecebidos tbody tr:first, #tblProcessosGerados tbody tr:first, #tblProcessosDetalhado tbody tr:first').not('.tableHeader').append('<th class="tituloControle tablesorter-header prazoBoxDisplay '+(isNewSEI ? 'infraTh' : '')+'" style="width: 140px;min-width: 140px;"> Prazos</th>');
         }
     }
+    // Com o modulo prazos/ ativo as celulas sao dele (so o esqueleto da coluna e do legado).
+    if (document.documentElement.getAttribute('data-spro-prazos') === '1') return;
     tblProcessos.find('tbody tr').each(function(){
         var _tag = $(this).find('a[href*="andamento_marcador_gerenciar"]').attr('onmouseover');
         var _checkbox = $(this).find('input[type="checkbox"]');
@@ -3137,6 +3148,15 @@ function setControlePrazo(force = false) {
                                 '</a>';
             $(this).find('td.prazoBoxDisplay').html(htmlDateAdd);
         }
+    });
+}
+if (!window.__sproPrazosOuvintes) {
+    window.__sproPrazosOuvintes = true;
+    document.addEventListener('spro-prazos-alterado', function(){
+        setTimeout(function(){ if (typeof tableHomeDestroy === 'function') tableHomeDestroy(true); }, 500);
+    });
+    document.addEventListener('spro-prazos-desligado', function(){
+        if (typeof initControlePrazo === 'function') initControlePrazo(true);
     });
 }
 function initControlePrazo(force = false, TimeOut = 9000) {

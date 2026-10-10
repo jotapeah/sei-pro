@@ -9,7 +9,7 @@ import type { DataISO, PrazoMarcador } from './tipos';
 const DATA = /(0[1-9]|[12][0-9]|3[01])\/(0[1-9]|1[0-2])\/(\d{4})/;
 const HORA = /\b([01]?\d|2[0-3]):([0-5]\d)\b/;
 /** "ate"/"até" como palavra inteira (o `\b` do JS não entende letra acentuada). */
-const ATE = /(?<!\p{L})at[eé](?!\p{L})/iu;
+const ATE = /(?<!\p{L})at[e\u00E9](?!\p{L})/iu;
 
 
 /** "31/02/2026" casa com o padrão e não existe: o `Date` rola para março. */
