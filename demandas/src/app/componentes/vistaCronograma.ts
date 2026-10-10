@@ -7,7 +7,7 @@
 import type { DataISO } from "@comum/datas/dias";
 import { avatar } from "@comum/ui/avatar";
 import { h, icone } from "@comum/ui/dom";
-import { ESCALAS, type Escala } from "@projetos/gantt/escalas";
+import { ESCALAS, type Escala, MODOS } from "@projetos/gantt/escalas";
 import type { Linha, LinhaEtapa, LinhaFase } from "@projetos/gantt/linhas";
 import { type ControleGantt, montarGantt } from "@projetos/gantt/montar";
 import type { MudancaDeDatas } from "@projetos/modelo/tipos";
@@ -44,6 +44,41 @@ const ativar = (el: HTMLElement, fazer: () => void): HTMLElement => {
   });
   return el;
 };
+
+/** Teto do esticamento: 8 vezes a coluna original da escala. */
+const FATOR_MAXIMO = 8;
+
+/** O que a Frappe expõe além do tipo do Projetos (`dates` e `render`). */
+interface FrappeLargura {
+  dates?: unknown[];
+  config: { column_width: number };
+  $container: HTMLElement;
+  render?: () => void;
+}
+
+/**
+ * Faz a grade do Gantt ocupar toda a largura útil da área: se `dates * column_width` é menor que o contêiner, escala a
+ * coluna (nunca encolhe) a partir do valor ORIGINAL da escala e redesenha uma vez, preservando a rolagem. É idempotente
+ * (a base vem de `MODOS`, não do valor já esticado) e o `render` não volta a chamá-la. Nunca lança.
+ */
+export function preencherLargura(controle: ControleGantt | null): void {
+  try {
+    const g = controle?.gantt as unknown as FrappeLargura | null | undefined;
+    if (!controle || !g || typeof g.render !== "function") return;
+    const colunas = g.dates?.length ?? 0;
+    const largura = g.$container.clientWidth;
+    const base = MODOS.find((m) => m.name === controle.escala)?.column_width ?? g.config.column_width;
+    if (colunas <= 0 || largura <= 0 || base <= 0) return;
+    const alvo = colunas * base < largura ? Math.min(Math.floor(largura / colunas), base * FATOR_MAXIMO) : base;
+    if (alvo === g.config.column_width) return;
+    const rolagem = g.$container.scrollLeft;
+    g.config.column_width = alvo;
+    g.render();
+    g.$container.scrollLeft = rolagem;
+  } catch {
+    // Só estética: a grade estreita continua utilizável.
+  }
+}
 
 export function montarVistaCronograma(area: HTMLElement, o: OpcoesCronograma): ControleGantt | null {
   const linhas: Linha[] = demandasComoLinhas(o.itens, { hoje: o.hoje, agrupar: o.agrupar });
@@ -144,5 +179,27 @@ export function montarVistaCronograma(area: HTMLElement, o: OpcoesCronograma): C
       o.aoFalhar(erro);
     },
   });
-  return falhou ? null : controle;
+  if (falhou || !controle) return null;
+  const real = controle;
+  preencherLargura(real);
+  // Trocar a escala ou atualizar refaz a Frappe com a coluna original: estica de novo.
+  return {
+    get escala() {
+      return real.escala;
+    },
+    get gantt() {
+      return real.gantt;
+    },
+    trocarEscala(e) {
+      real.trocarEscala(e);
+      preencherLargura(real);
+    },
+    atualizar(l) {
+      real.atualizar(l);
+      preencherLargura(real);
+    },
+    rolarParaHoje: () => real.rolarParaHoje(),
+    realcar: (id, ligado) => real.realcar(id, ligado),
+    destruir: () => real.destruir(),
+  };
 }

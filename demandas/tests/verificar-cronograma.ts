@@ -214,7 +214,77 @@ async function verificarVista(): Promise<void> {
   }
 }
 
+async function verificarLargura(): Promise<void> {
+  secao("cronograma: preencher a largura");
+  {
+    const m = { colunas: 10, largura: 1000 };
+    const g = ganttFalso({ medidas: m });
+    const t = appDeTeste({ montarGantt: g.montar });
+    await nova(t, "unidade", "Alfa");
+    const app = await t.montar();
+    aba(t);
+    await tique(20);
+    checar("grade mais estreita que o conteiner: um unico render", g.a.renders === 1);
+
+    // Troca de escala (o app remonta): Mes = 120 x 10 = 1200 > 1000, nada muda.
+    (t.raiz.querySelector('[data-escala="Mês"]') as HTMLElement).click();
+    await tique(20);
+    checar("grade ja mais larga: sem novo render", g.a.renders === 1);
+
+    // Voltar ao Dia (280 < 1000): calcula de novo a partir do valor original da escala.
+    (t.raiz.querySelector('[data-escala="Dia"]') as HTMLElement).click();
+    await tique(20);
+    checar("trocar a escala recalcula", g.a.renders === 2);
+
+    m.largura = 3000;
+    app.aoRedimensionar();
+    await tique(20);
+    checar("aoRedimensionar recalcula", g.a.renders === 3);
+  }
+  {
+    // Valores exatos pelo modulo, sem o app.
+    const { preencherLargura } = await import("../src/app/componentes/vistaCronograma");
+    const mk = (escala: "Dia" | "Mês", cw: number, colunas: number, larg: number) => {
+      let renders = 0;
+      const g = {
+        dates: new Array(colunas).fill(0),
+        config: { column_width: cw },
+        $container: { clientWidth: larg, scrollLeft: 7 },
+        render: () => (renders += 1),
+      };
+      const c = { escala, gantt: g } as unknown as Parameters<typeof preencherLargura>[0];
+      return { g, c, renders: () => renders };
+    };
+    const a = mk("Dia", 28, 16, 1000);
+    preencherLargura(a.c);
+    checar("coluna escalada (floor(1000/16) = 62)", a.g.config.column_width === 62 && a.renders() === 1 && a.g.$container.scrollLeft === 7);
+    preencherLargura(a.c);
+    checar("idempotente: nada de novo render", a.renders() === 1);
+    a.g.$container.clientWidth = 2000;
+    preencherLargura(a.c);
+    checar("janela maior recalcula do original", a.g.config.column_width === 125 && a.renders() === 2);
+    a.g.$container.clientWidth = 300;
+    preencherLargura(a.c);
+    checar("janela menor volta ao original, nunca abaixo", a.g.config.column_width === 28 && a.renders() === 3);
+    const b = mk("Mês", 120, 16, 1000);
+    preencherLargura(b.c);
+    checar("grade ja larga nao muda", b.g.config.column_width === 120 && b.renders() === 0);
+    const d = mk("Dia", 28, 2, 10000);
+    preencherLargura(d.c);
+    checar("teto de 8x", d.g.config.column_width === 224);
+    let lancou = false;
+    try {
+      preencherLargura({ escala: "Dia", gantt: null } as unknown as Parameters<typeof preencherLargura>[0]);
+      preencherLargura(null);
+    } catch {
+      lancou = true;
+    }
+    checar("sem gantt (falha da Frappe) nao lanca", !lancou);
+  }
+}
+
 export async function verificarCronograma(): Promise<void> {
   verificarLinhas();
   await verificarVista();
+  await verificarLargura();
 }
