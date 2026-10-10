@@ -30,6 +30,7 @@ Loja de extensões bloqueada no computador de trabalho? Veja [como instalar pelo
 - ![Pesquisa rápida](/img/icon-pesquisa.png) [Filtrar e destacar pela pesquisa rápida](./pages/PESQUISARAPIDA.md)
 - ![Anotações no Controle de Processos](/img/icon-notaarvore.png) [Anotações no Controle de Processos](./pages/ANOTACAOCONTROLE.md)
 - ![Controle de Prazos](/img/icon-controleprazo.png) [Controle de Prazos](./pages/PRAZOS.md)
+- ![Demandas](/img/icon-projetos.png) [Demandas (em teste)](./pages/DEMANDAS.md)
 - ![Reabertura programada de processos](/img/icon-reabrirprocessos.png) [Reabertura programada de processos](./pages/REABRIRPROCESSOS.md)
 - ![Agrupar, filtrar e ver os processos em quadro (Kanban)](/img/icon-agruparlista.png) [Agrupar, filtrar e ver os processos em quadro (Kanban)](./pages/AGRUPAR.md)
 - ![Novos botões na barra de ações: abrir em nova aba, trocar tipo e enviar documentos em vários processos](/img/icon-barraacoes.png) [Novos botões na barra de ações: abrir em nova aba, trocar tipo e enviar documentos em vários processos](./pages/BARRAACOES.md)

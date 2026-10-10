@@ -2,14 +2,53 @@
 
 ## ![SEI Pro Histórico de Versões](../img/icon-historico.png) Histórico de versões
 
-### Versão 2.8 (em preparação)
+### Versão 2.8
 10/10/2026
 
-Chega o gerenciador de [Demandas](../pages/DEMANDAS.md), primeiro no SEI Pro de teste.
+Os *Favoritos* do SEI Pro agora se chamam **Monitorados**, e a estrela virou um alvo. Só o nome e o ícone mudaram: o funcionamento e os seus dados continuam iguais. Esta versão também traz a página de configurações e as Ferramentas de PDF com visual novo, para todos, e uma leva de novidades que chega primeiro ao *SEI Pro Lab* (Chrome e Edge): o gerenciador de **Demandas**, o **Controle de Prazos** refeito, o filtro pela pesquisa rápida e o retorno de bloco de assinatura na tela de inclusão.
 
-- **Novo (em teste, só no *SEI Pro de teste* para Chrome e Edge) — [Demandas](../pages/DEMANDAS.md).** Crie demandas com responsável, prazo e prioridade, ligue-as a processos e acompanhe em quatro visões: Tabela, Quadro, Cronograma e Painel. Para ligar, marque *Demandas* nas configurações do SEI Pro.
-- **Botão *Demandas* na barra do processo**, com o formulário já preenchido pela tela (processo, título e responsável).
-- **Para toda a unidade ou só seu.** As demandas da unidade ficam em Textos Padrão do SEI (você confirma com *Entendi* na primeira vez); as suas ficam no navegador, com cópias diárias e arquivo para enviar e receber. Número de processo sigiloso nunca vai ao Texto Padrão, mas **não escreva dados sigilosos no título ou na descrição**.
+**Processos Monitorados (para todos)**
+
+- **Alterado — Processos Favoritos agora é [Processos Monitorados](../pages/FAVORITOS.md).** O SEI passou a ter os seus próprios *Favoritos*, e ter o mesmo nome e a mesma estrela na extensão confundia. Agora cada recurso tem o seu nome e o seu ícone, mais próximos do jeito nativo do SEI. A mudança vale para as listas, o painel lateral, a aba do painel, o histórico de processos, as configurações e o Agente de IA.
+- **A estrela virou um alvo.** Para monitorar um processo, clique no **alvo** ao lado dele, no Controle de Processos, na árvore, nos blocos, no Acompanhamento Especial, nos sobrestados e nos resultados da Pesquisa. O alvo aceso mostra o que já é monitorado. Os botões passam a dizer **Monitorar** e **Parar de monitorar**, e *Manter processo em Monitorados* no Enviar Processo.
+- **Nada muda no que você já tem.** Seus processos, pastas, etiquetas, notas, prazos, lembretes, documentos monitorados e configurações continuam exatamente como estavam, e nenhuma opção precisa ser religada. O que o próprio SEI chama de *Favoritos* segue sendo outra coisa, independente desta função.
+- **Documentação refeita.** A página de [Processos Monitorados](../pages/FAVORITOS.md) ganhou um aviso da renomeação, imagens novas e um GIF do passo a passo de monitorar um processo.
+
+**Demandas (novo, em teste, só no SEI Pro Lab para Chrome e Edge)**
+
+- **Novo — [Demandas](../pages/DEMANDAS.md).** Crie demandas com título, responsável, prazo e prioridade, ligue-as a um ou mais processos e atribua a um colega. Dá para anotar descrição, etiquetas, uma lista de tarefas e o tempo estimado, e cada mudança fica no histórico da demanda. Quem usa a versão da loja ainda não tem esta função. Para ligar, marque *Demandas* nas configurações do SEI Pro (aba *Geral*, seção *Controle de Processos*, logo abaixo de *Gerenciar Projetos*).
+- **Quatro visões:** **Tabela** (lista com filtros e ordenação), **Quadro** (cartões em colunas para arrastar de uma situação para outra, também pelo teclado), **Cronograma** (barras no tempo; arrastar muda as datas e mudar o prazo pede um motivo) e **Painel** (atrasadas, da semana, concluídas, entregas por mês e quem tem mais trabalho).
+- **O ciclo completo da demanda:** iniciar, pausar, concluir registrando o documento entregue, prorrogar com motivo, avaliar e arquivar. A demanda pode também apontar para uma etapa do [gerenciador de Projetos](../pages/PROJETOS.md).
+- **Botão *Demandas* na barra do processo.** Mostra as demandas ligadas ao processo aberto e cria uma nova com o formulário já preenchido pela tela: o processo, o título (com o nome do documento aberto ou o tipo do processo) e você como responsável. Ali mesmo dá para iniciar, *concluir com este documento* e abrir a demanda no painel, sem consultas extras ao SEI e sem marcar o processo como visualizado.
+- **Ícone na grade do Controle de Processos.** Cada processo com demandas ganha um ícone na linha (com um número azul quando são duas ou mais); clicar nele abre o mesmo menu do botão do processo. O painel das Demandas aparece abaixo da lista do Controle de Processos e numa aba do painel lateral, com o número de atrasadas.
+- **Para toda a unidade ou só seu.** As demandas da unidade ficam em Textos Padrão do SEI, uma tabela por texto, e aparecem para os colegas que usam o SEI Pro Lab (você confirma com *Entendi* na primeira vez). As suas ficam no navegador, com cópias diárias, e tudo pode ir para um arquivo no seu computador e voltar dele.
+- **Limites e arquivo morto.** Cada Texto Padrão aceita até 100 KB (cerca de 560 demandas): a partir de 80 KB o painel avisa, e em 100 KB só a criação de novas é bloqueada. *Arquivar concluídas antigas* tira da lista ativa sem apagar nada, e *Exportar arquivo morto e limpar* só tira as arquivadas do Texto Padrão depois que você confirma que guardou o arquivo.
+- **Sigilo.** O número de processo ou de documento sigiloso nunca vai ao Texto Padrão nem ao título sugerido, e o menu do processo sigiloso avisa disso. Mas o que você digita no título e na descrição vai como está: **não escreva dados sigilosos nesses campos**.
+
+**Controle de Prazos refeito (SEI Pro Lab, Chrome e Edge)**
+
+- **Alterado — o [Controle de Prazos](../pages/PRAZOS.md) grava no controle de prazo do próprio SEI (4.1.5 ou superior).** O vencimento não ocupa mais o marcador do processo, quem não usa a extensão enxerga e altera o prazo pelo próprio SEI, e o prazo em **dias úteis** é calculado pelo SEI com os feriados dele. Dá para **concluir** o prazo, que fica listado sem alerta de atraso.
+- **Hora, texto e data inicial continuam no marcador**, só quando você os informa (o controle do SEI guarda apenas a data). Datas já vencidas e SEIs anteriores ao 4.1.5 também gravam no marcador, como antes. Os prazos que já estavam em marcadores continuam na coluna.
+- **Nova janela *Prazo*** no mesmo desenho dos monitorados, do histórico e dos projetos, com o destino do prazo explicado enquanto você preenche, prazo **em N dias** (corridos ou úteis) e gravação para vários processos de uma vez. O painel da árvore mostra o prazo do SEI junto do marcador.
+- **Atenção na unidade:** quem ainda usa uma versão antiga do SEI Pro, ou a versão da loja, não vê na coluna *Prazos* os prazos gravados só no controle do SEI (o ícone do próprio SEI continua aparecendo).
+
+**Configurações e Ferramentas de PDF (para todos)**
+
+- **Alterado — página de [Configurações](../pages/DESATIVARFUNCOES.md) nova.** As opções ficam em seções recolhíveis, com chaves liga/desliga, um campo de **busca** que acha a opção pelo nome (sem se importar com acentos) e a barra *Salvar* logo abaixo do título. O que você já tinha configurado continua igual.
+- ***Gerenciar Projetos* passou para a aba *Geral***, na seção *Controle de Processos*, abaixo de *Processos Monitorados*. As opções **Gerenciar Formulários** e **Pesquisa NatJus** saíram da página.
+- **Configurações mais seguras ao salvar.** Se as configurações passarem do espaço que o navegador reserva para sincronizá-las (8 KB), a página avisa antes, em vez de dizer "salvo" sem ter salvo; um erro do navegador ao gravar também aparece na tela. Um formulário de base de dados em branco não dispara mais o alerta ao salvar, apagar a última base não apaga o resto das configurações, e uma configuração antiga corrompida não deixa mais a página sem botões.
+- **Alterado — [Ferramentas de PDF](../pages/FERRAMENTASPDF.md) com o novo desenho**, as mesmas cores da página de configurações, o modo escuro e o nome do produto no título. O título e a barra de ações (voltar e destino no SEI) ficam em linhas separadas, e a barra fica fixa no alto.
+
+**Controle de Processos**
+
+- **Novo — [Ordem e visibilidade dos painéis](../pages/ORDEMPAINEIS.md) (Chrome e Edge, também na versão da loja).** O botão *Ordenar e ocultar painéis*, na barra de título do Controle de Processos, abre uma janela para arrastar os painéis (Monitorados, Atividades, Projetos e agora Demandas) na ordem que você preferir e esconder os que não usa. A escolha sincroniza entre os seus computadores e vale na hora, sem recarregar. Quem já ordenava arrastando os painéis mantém a ordem; o arrastar antigo foi substituído por esta janela, que é mais estável.
+- **Novo — [anotação em coluna](../pages/ANOTACAOCONTROLE.md).** Com *Mostrar a anotação de cada processo* ligada, aparece a opção de colocar o cartão da anotação numa coluna à esquerda do número do processo, na mesma linha. A ordenação que você salvou na tabela acompanha a troca. A ideia veio de uma proposta de *SEI Pro PRF* ([#177](https://github.com/SEI-Pro/sei-pro/pull/177)).
+- **Novo (SEI Pro Lab) — [filtrar a página pelo campo de pesquisa rápida](../pages/PESQUISARAPIDA.md).** Digite no campo de pesquisa rápida do SEI, sem apertar Enter: no Controle de Processos, a lista mostra só os processos que correspondem ao texto (número, especificação, tipo, atribuição, marcador, anotação); na árvore e no documento aberto, as ocorrências ficam destacadas. Começa com três caracteres, ignora maiúsculas, acentos e pontuação, e o **Enter** mantém a pesquisa normal do SEI. Vem desligada. Proposta de *SEI Pro PRF* ([#179](https://github.com/SEI-Pro/sei-pro/pull/179)).
+- **Correção:** o ícone dos Projetos novos, na árvore do processo, descia alguns pixels em relação aos botões dos Monitorados. Agora fica alinhado.
+
+**Blocos de assinatura (SEI Pro Lab)**
+
+- **Novo — [retornar bloco disponibilizado](../pages/RETORNARBLOCO.md) sem sair da tela.** Na tela *Incluir em Bloco de Assinatura*, o botão **Retornar bloco disponibilizado** lista os blocos que a sua unidade disponibilizou, recolhe o escolhido e já o deixa selecionado no campo *Bloco*, com os documentos marcados preservados. A opção vem ligada e pode ser desligada nas configurações. Proposta de *SEI Pro PRF* ([#176](https://github.com/SEI-Pro/sei-pro/pull/176)).
 
 ### Versão 2.7
 09/10/2026
