@@ -2,6 +2,7 @@
 
 import { h, icone } from "@comum/ui/dom";
 import type { PreferenciasDemandas } from "../../preferencias";
+import type { Indicador } from "../estadoSincronia";
 
 export type EscopoNaTela = PreferenciasDemandas["escopo"];
 
@@ -9,6 +10,9 @@ export interface OpcoesCabecalho {
   escopo: EscopoNaTela;
   /** Texto que explica por que "Nova demanda" está desabilitada; ausente = habilitada. */
   novaDesabilitada?: string;
+  /** O estado da sincronia (com a colaboração ligada): clicar abre o diálogo Sincronização. */
+  indicador?: Indicador;
+  aoIndicador?(): void;
   menu: HTMLElement;
   aoEscopo(e: EscopoNaTela): void;
   aoNova(): void;
@@ -51,6 +55,21 @@ export function montarCabecalho(o: OpcoesCabecalho): HTMLElement {
         icone("mais", 15),
         "Nova demanda",
       ),
+      o.indicador
+        ? h(
+            "button",
+            {
+              type: "button",
+              class: "dem-sinc",
+              "data-tom": o.indicador.tom,
+              title: o.indicador.dica,
+              "aria-label": `Sincronização: ${o.indicador.rotulo}`,
+              onclick: () => o.aoIndicador?.(),
+            },
+            icone("nuvem", 14),
+            h("span", { class: "dem-sinc-rotulo" }, o.indicador.rotulo),
+          )
+        : null,
       o.menu,
     ),
   );

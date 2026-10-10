@@ -1028,3 +1028,105 @@ html[data-modo="embutido"] body {
   text-align: right;
   color: var(--spro-suave);
 }
+
+/* ---------- Colaboracao: indicador, faixas, dialogos de sincronizacao e arquivo ---------- */
+.dem-sinc {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--spro-suave);
+  cursor: pointer;
+  background: var(--spro-fundo-2);
+  border: 1px solid var(--spro-borda);
+  border-radius: 999px;
+}
+.dem-sinc:focus-visible {
+  outline: none;
+  box-shadow: var(--spro-anel);
+}
+.dem-sinc[data-tom="ok"] {
+  color: var(--spro-ok);
+}
+.dem-sinc[data-tom="pendente"] {
+  color: var(--spro-aviso);
+}
+.dem-sinc[data-tom="erro"] {
+  color: var(--spro-perigo);
+  border-color: var(--spro-perigo);
+}
+.dem-faixas-colab {
+  display: grid;
+  gap: 6px;
+}
+.dem-faixas-colab:empty {
+  display: none;
+}
+.dem-sync-secao {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--spro-borda);
+}
+.dem-sync-secao h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.dem-sync-tabelas,
+.dem-copias {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dem-sync-tabela {
+  display: grid;
+  grid-template-columns: 90px 1fr auto;
+  gap: 8px;
+  align-items: baseline;
+}
+.dem-sync-nome {
+  font-weight: 600;
+}
+.dem-sync-estado {
+  min-width: 0;
+  color: var(--spro-suave);
+}
+.dem-sync-ok .dem-sync-estado {
+  color: var(--spro-ok);
+}
+.dem-sync-pendente .dem-sync-estado {
+  color: var(--spro-aviso);
+}
+.dem-sync-erro,
+.dem-sync-tabela.dem-sync-erro .dem-sync-estado {
+  color: var(--spro-perigo);
+}
+.dem-sync-uso {
+  font-size: 12px;
+  color: var(--spro-suave);
+}
+.dem-sync-uso-aviso {
+  color: var(--spro-aviso);
+}
+.dem-sync-uso-bloqueio {
+  color: var(--spro-perigo);
+}
+.dem-sync-acoes,
+.dem-arquivo-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.dem-sync-substituido {
+  grid-column: 1 / -1;
+}
+.dem-copias li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}

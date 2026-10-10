@@ -1,7 +1,9 @@
 import { resumo } from "./util";
 import { verificarAlertas } from "./verificar-alertas";
 import { verificarAndaime } from "./verificar-andaime";
+import { verificarAppArquivar } from "./verificar-app-arquivar";
 import { verificarAppBase } from "./verificar-app-base";
+import { verificarAppColaboracao } from "./verificar-app-colaboracao";
 import { verificarAppDialogos } from "./verificar-app-dialogos";
 import { verificarAppPainel } from "./verificar-app-painel";
 import { verificarAppQuadro } from "./verificar-app-quadro";
@@ -44,4 +46,6 @@ verificarQuadro();
 await verificarAppQuadro();
 await verificarCronograma();
 await verificarAppPainel();
+await verificarAppColaboracao();
+await verificarAppArquivar();
 resumo();

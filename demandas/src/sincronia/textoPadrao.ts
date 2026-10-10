@@ -106,6 +106,9 @@ export interface DepsAdaptador {
 
 export const chaveSubstituido = (e: Escopo, tabela: Tabela): string => `demandas/sync/substituido/${chaveEscopo(e)}/${tabela}`;
 const LIMITE_GUARDADO = 300 * 1024;
+/** O que o motor devolve quando um colega gravou ao mesmo tempo: o app trata como "pendente", não como erro. */
+export const MENSAGEM_MUDOU =
+  "O texto mudou enquanto era gravado (um colega sincronizando ao mesmo tempo). O SEI Pro tenta de novo em instantes.";
 
 export function adaptadorDemandas(d: DepsAdaptador): AdaptadorTexto<EnvelopeDemandas> {
   const escopo = d.repo.escopo;
@@ -151,8 +154,7 @@ export function adaptadorDemandas(d: DepsAdaptador): AdaptadorTexto<EnvelopeDema
       pertoDoTeto: (kb) => `As ${nome} estão perto do limite do Texto Padrão (${kb} KB de ${Math.round(TETO_TEXTO / 1024)} KB).`,
       invalidoRegravado: (motivo) =>
         `O texto das ${nome} no SEI estava inválido (${motivo}) e foi regravado a partir deste computador; o texto antigo ficou guardado neste navegador.`,
-      mudouDuranteGravacao:
-        "O texto mudou enquanto era gravado (um colega sincronizando ao mesmo tempo). O SEI Pro tenta de novo em instantes.",
+      mudouDuranteGravacao: MENSAGEM_MUDOU,
       ...(unidade
         ? {
             soLeitura:

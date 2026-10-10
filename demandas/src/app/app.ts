@@ -122,7 +122,7 @@ export async function montarApp(deps: DepsApp): Promise<AppMontado> {
   };
   const arquivarAntigas = () => {
     const c = deps.colaboracao;
-    if (c?.arquivarAntigas) c.arquivarAntigas();
+    if (c) c.arquivarAntigas();
     else avisar("O arquivamento em massa chega com a colaboração entre computadores.");
   };
   const editarInline = async (alvo: DemandaNaTela, campo: "titulo" | "etiquetas", valor: string) => {
@@ -164,10 +164,13 @@ export async function montarApp(deps: DepsApp): Promise<AppMontado> {
       icone: "ajustes",
       itens: () => {
         const uso = estado.tabelas.find((t) => t.vis === "unidade" && t.tabela === "d" && t.bytes !== undefined);
-        return [
-          uso ? { rotulo: `Uso do Texto Padrão: ${uso.percentual}%`, icone: "nuvem", desativado: true, fazer: () => undefined } : null,
-          { rotulo: "Arquivar concluídas antigas…", icone: "pasta", fazer: arquivarAntigas },
-        ];
+        const usoItem: EntradaMenu | null = uso
+          ? { rotulo: `Uso do Texto Padrão: ${uso.percentual}%`, icone: "nuvem", desativado: true, fazer: () => undefined }
+          : null;
+        const colab = deps.colaboracao;
+        return colab
+          ? [usoItem, ...colab.itensDoMenu()]
+          : [usoItem, { rotulo: "Arquivar concluídas antigas…", icone: "pasta", fazer: arquivarAntigas }];
       },
     });
   const ajustes = menuAjustes();
@@ -180,6 +183,12 @@ export async function montarApp(deps: DepsApp): Promise<AppMontado> {
         escopo: estado.escopo,
         ...(bloqueada ? { novaDesabilitada: TEXTO_CRIACAO_BLOQUEADA } : {}),
         menu: ajustes,
+        ...(deps.colaboracao
+          ? {
+              indicador: deps.colaboracao.estadoDoIndicador(),
+              aoIndicador: () => void deps.colaboracao?.abrirDialogoSincronizacao().catch(avisarErro),
+            }
+          : {}),
         aoEscopo: (e) => {
           estado.escopo = e;
           gravarPrefs({ escopo: e });
@@ -213,7 +222,7 @@ export async function montarApp(deps: DepsApp): Promise<AppMontado> {
           h("button", { type: "button", class: "spro-botao pequeno", onclick: () => void atualizar() }, "Tentar de novo"),
         )
       : null;
-    faixasEl.replaceChildren(...[erro, f].filter((x): x is HTMLElement => !!x));
+    faixasEl.replaceChildren(...[deps.colaboracao?.faixas, erro, f].filter((x): x is HTMLElement => !!x));
   }
   function pintarLote(): void {
     const n = estado.selecionadas.size;
@@ -422,6 +431,8 @@ export async function montarApp(deps: DepsApp): Promise<AppMontado> {
     }, 0);
   };
   const soltar = [deps.repos.unidade.aoMudar(agendar), deps.repos.eu.aoMudar(agendar)];
+  // O status gravado pela aba e o consentimento mudam o indicador, as faixas de limite e o uso do texto.
+  if (deps.colaboracao) soltar.push(deps.colaboracao.aoMudar(agendar));
 
   pintar();
   await atualizar();

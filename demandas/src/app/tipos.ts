@@ -8,6 +8,7 @@ import type { Vis } from "../modelo/tipos";
 import type { PreferenciasDemandas } from "../preferencias";
 import type { RepositorioDemandas } from "../repositorio";
 import type { EstadoTabela } from "../sincronia/orquestrador";
+import type { Colaboracao } from "./colaboracao";
 
 export interface ContextoDemandas {
   host: string;
@@ -24,13 +25,6 @@ export interface EtapaDoProjeto {
   etapa: string;
   rotulo: string;
   concluida: boolean;
-}
-
-/** A colaboração entre computadores (D12); ausente nos testes da D8 a D11. */
-export interface Colaboracao {
-  /** O diálogo "Arquivar concluídas antigas…" (faixa de limite e menu de ajustes). */
-  arquivarAntigas?(): void;
-  readonly [outro: string]: unknown;
 }
 
 export interface DepsApp {
@@ -51,6 +45,7 @@ export interface DepsApp {
   abrirModal: AbrirModal;
   confirmar(texto: string, rotuloOk?: string): Promise<boolean>;
   abrirProcesso?(protocolo: string, idProcedimento?: string): void;
+  /** A sincronização, as faixas de consentimento e os itens do menu (D12); ausente nos testes da D8 a D11. */
   colaboracao?: Colaboracao;
   /** Só as provas trocam (a Frappe de verdade precisa de medidas). */
   montarGantt?: typeof montarGantt;
