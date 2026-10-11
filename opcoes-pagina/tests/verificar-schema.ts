@@ -34,9 +34,9 @@ export function verificarSchema(): void {
     checar(`${n}: adicionada ao schema e ausente do legado`, schema.has(n) && !todosLegados.some((el) => nomeDe(el) === n));
   const demandas = schema.get("gerenciardemandas");
   checar(
-    "gerenciardemandas: chave desligada, logo depois de Gerenciar Projetos, com manual e ajuda",
+    "gerenciardemandas: chave ligada por padrao, logo depois de Gerenciar Projetos, com manual e ajuda",
     demandas?.tipo === "chave" &&
-      demandas.padrao === false &&
+      demandas.padrao === true &&
       demandas.manual === "DEMANDAS" &&
       (demandas.ajuda ?? "").includes("Texto Padrão") &&
       JSON.stringify(SECOES_GERAL[0].opcoes.map((o) => o.nome).slice(1, 3)) === JSON.stringify(["gerenciarprojetos", "gerenciardemandas"]),

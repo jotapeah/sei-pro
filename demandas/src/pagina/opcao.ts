@@ -1,10 +1,10 @@
-/** A opção "Gestor de Demandas" (`gerenciardemandas`) das configurações: DESLIGADA por padrão (é um módulo novo). */
+/** A opção "Demandas" (`gerenciardemandas`) das configurações: LIGADA por padrão (ausente conta como ligada, como no Projetos). */
 
-import { opcaoLegadaMarcada } from "@comum/opcoes/legadas";
+import { opcaoLegadaLigada } from "@comum/opcoes/legadas";
 
 export const OPCAO_DEMANDAS = "gerenciardemandas";
 
 export async function lerOpcaoDemandas(sync: Pick<chrome.storage.StorageArea, "get"> = chrome.storage.sync): Promise<boolean> {
   const itens = (await sync.get("dataValues")) as { dataValues?: unknown };
-  return opcaoLegadaMarcada(itens.dataValues, OPCAO_DEMANDAS);
+  return opcaoLegadaLigada(itens.dataValues, OPCAO_DEMANDAS);
 }

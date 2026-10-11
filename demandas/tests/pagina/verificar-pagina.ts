@@ -132,11 +132,11 @@ export async function verificarPagina(): Promise<void> {
   );
   checar("chave sem unidade e vazia", chaveDaAba({ host: "h", login: "a", unidade: null }) === "");
 
-  secao("pagina: a opcao (desligada por padrao)");
-  checar("sem configuracao: desligada", (await lerOpcaoDemandas({ get: async () => ({}) })) === false);
+  secao("pagina: a opcao (ligada por padrao)");
+  checar("sem configuracao: ligada", (await lerOpcaoDemandas({ get: async () => ({}) })) === true);
   checar(
-    "opcao ausente da lista: desligada",
-    (await lerOpcaoDemandas({ get: async () => ({ dataValues: '[{"configGeral":[]}]' }) })) === false,
+    "opcao ausente da lista: ligada (quem salvou as configuracoes antes de existir a opcao nao a perde)",
+    (await lerOpcaoDemandas({ get: async () => ({ dataValues: '[{"configGeral":[]}]' }) })) === true,
   );
   checar("falsa: desligada", (await lerOpcaoDemandas(dadosDaOpcao(false))) === false);
   checar("marcada: ligada", (await lerOpcaoDemandas(dadosDaOpcao(true))) === true);

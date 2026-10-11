@@ -2,13 +2,13 @@
 
 ## ![SEI Pro Demandas](../img/icon-projetos.png) Demandas
 
-> Disponível no **Chrome** e no **Edge**; no Firefox ainda não. A função vem **desligada**: veja [Como ligar](#como-ligar).
+> Disponível no **Chrome** e no **Edge**; no Firefox ainda não. A função vem **ligada**: veja [Como desligar ou ligar](#como-desligar-ou-ligar).
 
 As Demandas ajudam você e sua equipe a controlar o que precisa ser feito no SEI: cada demanda tem um **título**, um **responsável**, um **prazo** e, se quiser, um ou mais **processos** ligados a ela. Tudo fica dentro do próprio SEI Pro, sem planilha e sem serviço de fora.
 
-### Como ligar
+### Como desligar ou ligar
 
-Abra as [Configurações do SEI Pro](../pages/DESATIVARFUNCOES.md), aba **Geral**, seção **Controle de Processos**, e ligue **Demandas** (logo abaixo de *Gerenciar Projetos*). Clique em **Salvar** e recarregue a página do SEI. O painel das Demandas aparece abaixo da lista do Controle de Processos, e também na aba **Demandas** do painel lateral do SEI Pro (o mesmo dos [Monitorados](../pages/FAVORITOS.md)), com o número de demandas atrasadas.
+As Demandas já vêm ligadas. Para desligar (ou ligar de novo), abra as [Configurações do SEI Pro](../pages/DESATIVARFUNCOES.md), aba **Geral**, seção **Controle de Processos**, e marque ou desmarque **Demandas** (logo abaixo de *Gerenciar Projetos*). Clique em **Salvar** e recarregue a página do SEI. O painel das Demandas aparece abaixo da lista do Controle de Processos, e também na aba **Demandas** do painel lateral do SEI Pro (o mesmo dos [Monitorados](../pages/FAVORITOS.md)), com o número de demandas atrasadas.
 
 > ![Aba Demandas do painel lateral, com as atrasadas e as da semana](../img/demandas-lateral.png)
 

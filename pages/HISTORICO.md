@@ -33,7 +33,7 @@ A versão da loja, no Chrome e no Edge, recebe tudo o que o *SEI Pro Lab* vinha 
 
 **Demandas (novo)**
 
-- **Novo — [Demandas](../pages/DEMANDAS.md).** Demandas com título, responsável, prazo e prioridade, ligadas a processos, em tabela, quadro, cronograma e painel, com um botão na barra do processo. As da unidade ficam em Textos Padrão do SEI, e as suas, no navegador. Vem **desligada**: para ligar, marque *Demandas* nas configurações (aba *Geral*, seção *Controle de Processos*).
+- **Novo — [Demandas](../pages/DEMANDAS.md).** Demandas com título, responsável, prazo e prioridade, ligadas a processos, em tabela, quadro, cronograma e painel, com um botão na barra do processo. As da unidade ficam em Textos Padrão do SEI, e as suas, no navegador. Vem **ligada**, e nada é gravado no Texto Padrão da unidade antes de você confirmar o aviso (*Entendi*) na primeira vez. Para desligar, desmarque *Demandas* nas configurações (aba *Geral*, seção *Controle de Processos*) ou esconda o painel pela [Ordem e visibilidade dos painéis](../pages/ORDEMPAINEIS.md).
 
 **Pesquisa rápida e blocos de assinatura**
 

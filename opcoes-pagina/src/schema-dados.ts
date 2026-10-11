@@ -34,7 +34,7 @@ export const SECOES_GERAL: Secao[] = [
         tipo: "chave",
         icone: "fas fa-clipboard-list",
         manual: "DEMANDAS",
-        padrao: false,
+        padrao: true,
       },
       {
         nome: "gerenciarprazos",
