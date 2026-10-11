@@ -44,6 +44,11 @@ A versão da loja, no Chrome e no Edge, recebe tudo o que o *SEI Pro Lab* vinha 
 
 - **Alterado — o painel lateral do navegador** deixa de ter só o Agente de IA e passa a ter as abas **Monitorados**, **Histórico**, **Projetos**, **Demandas** e **Agente de IA**.
 
+**O que você vai notar ao atualizar**
+
+- **Dois painéis novos aparecem logo abaixo da lista do Controle de Processos: *Projetos* e *Demandas*.** Eles vêm vazios, com um botão para criar o primeiro projeto ou a primeira demanda, porque as duas funções vêm ligadas. Se não quiser vê-los, desligue *Gerenciar Projetos* e *Demandas* nas [Configurações](../pages/DESATIVARFUNCOES.md) ou esconda os painéis pela [Ordem e visibilidade dos painéis](../pages/ORDEMPAINEIS.md). Nada é gravado no Texto Padrão da unidade enquanto você não confirmar o aviso *Entendi*.
+- **Na primeira vez que abrir os Monitorados**, o SEI Pro pergunta se quer trazer os que você já tinha (veja acima). O histórico antigo vem sozinho.
+
 **O que fica igual**
 
 - **Nada precisa ser religado.** As suas configurações continuam como estavam. Quem não quiser alguma destas funções pode desligá-la nas [Configurações](../pages/DESATIVARFUNCOES.md), aba *Geral*, seção *Controle de Processos*: *Processos Monitorados*, *Gerenciar Projetos*, *Demandas*, *Controlar Prazos*, *Histórico de processos visitados*, *Filtrar a página pelo campo de pesquisa rápida* e *Retornar bloco de assinatura disponibilizado na tela de inclusão*.
