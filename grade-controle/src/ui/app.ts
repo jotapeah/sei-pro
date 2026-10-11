@@ -27,6 +27,7 @@ import type { Armazem } from '../persistencia/armazem';
 import { desenharQuadro } from './quadro';
 import { iconeGrade } from './icones';
 import { assinaturaIcones, criarClonador, estilosDosModulos } from './iconesNativos';
+import { editarAnotacao, editarMarcadores, editarResponsavel, type DepsEdicao } from './edicoes';
 import { criarTabela, type PropsTabela } from './tabela';
 
 export interface DepsApp {
@@ -49,8 +50,7 @@ export interface DepsApp {
   editarEspecificacao(protocolo: string, texto: string): Promise<void>;
   /** Pede ao modulo de prazos que abra o menu do prazo do processo. */
   abrirPrazo(id: string): void;
-  /** Clica o icone de anotacao da linha nativa; falso se a linha nao tem. */
-  abrirAnotacao(id: string): boolean;
+  anotar(protocolo: string, a: { texto: string; prioridade: boolean }): Promise<void>;
   /** Para os testes: não reagir ao relógio. */
   semDebounce?: boolean;
 }
@@ -198,9 +198,43 @@ export function criarApp(d: DepsApp) {
   }
 
   // ---------- movimentos do quadro ----------
+  // O que a grade mudou por conta propria (otimista ou ja gravado) e a linha nativa ainda nao mostra: a sincronia
+  // reaplica por cima da leitura nativa ate a linha nativa concordar (ou a pagina ser recarregada).
+  const locais = new Map<string, Record<string, unknown>>();
   function substituir(id: string, novo: Processo) {
+    const antigo = todos.find((p) => p.id === id);
+    if (antigo) {
+      const reg = locais.get(id) ?? {};
+      for (const k of new Set([...Object.keys(antigo), ...Object.keys(novo)])) {
+        if (JSON.stringify((antigo as unknown as Record<string, unknown>)[k]) !== JSON.stringify((novo as unknown as Record<string, unknown>)[k])) reg[k] = (novo as unknown as Record<string, unknown>)[k];
+      }
+      locais.set(id, reg);
+    }
     todos = todos.map((p) => (p.id === id ? novo : p));
   }
+  let serie: Promise<unknown> = Promise.resolve();
+  function gravarEmSerie<T>(fn: () => Promise<T>): Promise<T> {
+    emVoo += 1;
+    const r = serie.then(fn, fn);
+    serie = r.catch(() => undefined).finally(() => { emVoo -= 1; });
+    return r;
+  }
+  let extrasPromessa: Promise<ExtrasQuadro> | null = null;
+  const carregarExtras = (): Promise<ExtrasQuadro> => {
+    extrasPromessa ??= (d.extras ? d.extras().then((e) => { extras = e; return e; }) : Promise.resolve({})).catch((e) => { extrasPromessa = null; throw e; });
+    return extrasPromessa;
+  };
+  const edicao: DepsEdicao = {
+    raiz: sombra, extras: carregarExtras, todos: () => todos, selecionados: () => selecionados,
+    corDoMarcador: (nome) => todos.flatMap((p) => p.marcadores).find((m) => m.nome === nome)?.cor ?? '',
+    autor: d.eu ?? '',
+    aplicarLocal: (id, novo) => { substituir(id, novo); render(); },
+    gravar: gravarEmSerie,
+    atribuir: (prot, sigla) => d.mover.atribuir(prot, sigla),
+    marcar: (prot, m) => d.mover.marcador(prot, m),
+    anotar: (prot, a) => d.anotar(prot, a),
+    aviso: (t) => aviso(t),
+  };
   async function mover(id: string, de: string, para: string) {
     const original = todos.find((p) => p.id === id);
     if (!original) return;
@@ -252,7 +286,7 @@ export function criarApp(d: DepsApp) {
     aoCancelarEspec: () => { editando = null; renderConteudo(); },
     aoSalvarEspec: (id) => void salvarEspec(id),
     aoAbrirPrazo: (id) => d.abrirPrazo(id),
-    aoAbrirAnotacao: (id) => { if (!d.abrirAnotacao(id)) aviso('Este processo não tem o ícone de anotação na tela do SEI (está em outra página). Use o botão Anotações da barra.'); },
+    aoEditar: (id, que) => { const p = todos.find((x) => x.id === id); if (!p) return; if (que === 'responsavel') editarResponsavel(edicao, p); else if (que === 'anotacao') editarAnotacao(edicao, p); else editarMarcadores(edicao, p); },
   });
   const tabela = criarTabela(propsDaTabela([]));
 
@@ -462,12 +496,21 @@ export function criarApp(d: DepsApp) {
       if (!p.naPaginaAtual) return p;
       const n = novos.get(p.id);
       if (!n) return p;
+      const local = locais.get(p.id);
       const assinatura = assinaturaIcones(doc, p.id);
-      const igual = JSON.stringify(n) === JSON.stringify(p) && assinaturas.get(p.id) === assinatura;
+      const assinaturaAntes = assinaturas.get(p.id);
       assinaturas.set(p.id, assinatura);
-      if (igual) return p;
+      let resultado = n;
+      if (local) {
+        // A linha nativa ja concorda com o que a grade mudou? Entao o registro local cumpriu o papel.
+        for (const k of Object.keys(local)) if (JSON.stringify((n as unknown as Record<string, unknown>)[k]) === JSON.stringify(local[k])) delete local[k];
+        if (!Object.keys(local).length) locais.delete(p.id);
+        else resultado = { ...n, ...local } as Processo;
+      }
+      const mesmoModelo = JSON.stringify(resultado) === JSON.stringify(p);
+      if (mesmoModelo && assinaturaAntes === assinatura) return p;
       mudou = true;
-      return n;
+      return mesmoModelo ? p : resultado;
     });
     if (mudou) { atualizarEstilosModulos(); render(); }
   }

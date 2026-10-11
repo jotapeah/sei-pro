@@ -14,6 +14,7 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
 
 const salvos: Array<[string, string]> = [];
 const prazosAbertos: string[] = [];
+const anotados: Array<[string, string, boolean]> = [];
 async function montar(extra: Partial<DepsApp> = {}, nome = 'caixa_prazos.html') {
   const doc = ativarToggle(docFixture(nome));
   (globalThis as unknown as { document: Document }).document = doc;
@@ -31,7 +32,7 @@ async function montar(extra: Partial<DepsApp> = {}, nome = 'caixa_prazos.html') 
     aoVoltarNativa: () => undefined,
     editarEspecificacao: async (p, t) => void salvos.push([p, t]),
     abrirPrazo: (id) => void prazosAbertos.push(id),
-    abrirAnotacao: (id) => !!doc.querySelector(`tr#P${id} a[href*="acao=anotacao_registrar"]`),
+    anotar: async (p, a) => void anotados.push([p, a.texto, a.prioridade]),
     ...extra,
   });
   doc.body.append(app.host);
@@ -276,7 +277,7 @@ async function montarCom(doc: Document, extra: Partial<DepsApp> = {}) {
   const inicial = lerTabelas(doc);
   const app = criarApp({ doc, inicial, agora: () => Date.UTC(2026, 9, 11, 12), hoje: () => '2026-10-11', eu: 'teste01', armazem: criarArmazem({ local: areaMemoria(), sync: areaMemoria() }, 'u'), fonte: null,
     mover: { marcador: async () => undefined, atribuir: async () => undefined }, acoes: () => acoesDaBarra(doc), css: '', escuro: false, baixar: () => undefined, novoId: () => 'id1', semDebounce: true,
-    aoVoltarNativa: () => undefined, editarEspecificacao: async (p, t) => void salvos.push([p, t]), abrirPrazo: (id) => void prazosAbertos.push(id), abrirAnotacao: (id) => !!doc.querySelector(`tr#P${id} a[href*="acao=anotacao_registrar"]`), ...extra });
+    aoVoltarNativa: () => undefined, editarEspecificacao: async (p, t) => void salvos.push([p, t]), abrirPrazo: (id) => void prazosAbertos.push(id), anotar: async (p, a) => void anotados.push([p, a.texto, a.prioridade]), ...extra });
   doc.body.append(app.host);
   await app.iniciar();
   await tick();
@@ -338,16 +339,6 @@ await teste('app: sem prazo ainda ha botao "definir prazo" (a celula vazia tambe
   assert.ok(l.querySelector('.spro-prazo-b .spro-prazo-vazio') || l.querySelector('.spro-prazo-b'));
   app.fechar();
 });
-await teste('app: a anotacao tem lapis que aciona o link nativo da linha', async () => {
-  const { app, doc } = await montar();
-  let cliques = 0;
-  doc.querySelector('tr#P148265 a[href*="acao=anotacao_registrar"]')!.addEventListener('click', () => cliques++);
-  const w = doc as any;
-  void w;
-  qa(app, '.spro-linha').find((l) => l.getAttribute('data-id') === '148265')!.querySelector<HTMLElement>('.spro-c-anotacao .spro-lapis')!.click();
-  assert.equal(app.estado().todos.length > 0, true);
-  app.fechar();
-});
 await teste('app: sincroniza com a linha nativa — a estrela clicada em outro modulo aparece na grade', async () => {
   const doc = ativarToggle(docFixture('caixa_prazos.html'));
   (globalThis as unknown as { document: Document }).document = doc;
@@ -401,5 +392,143 @@ await teste('app: o icone clonado e o MESMO elemento ao redesenhar (o balao de u
   const depois = pegar();
   assert.equal(antes, depois);
   assert.equal(depois.getAttribute('aria-pressed'), 'false');
+  app.fechar();
+});
+
+// ---------------- edicoes dinamicas (modais) ----------------
+const extrasEdicao = async () => ({ responsaveis: [{ sigla: 'ana', nome: 'Ana Souza' }, { sigla: 'beto', nome: 'Beto Lima' }], marcadores: ['Urgente', 'Para assinar', 'teste'] });
+const dialogo = (app: { host: HTMLElement }) => app.host.shadowRoot!.querySelector<HTMLElement>('dialog.spro-dialogo-grade');
+const linhaDe = (app: { host: HTMLElement }, id: string) => qa(app, '.spro-linha').find((l) => l.getAttribute('data-id') === id)!;
+function escolherNoCombo(app: { host: HTMLElement }, dlg: HTMLElement, rotulo: string, texto: string) {
+  dlg.querySelector<HTMLElement>('button.spro-combo')!.click();
+  const op = [...app.host.shadowRoot!.querySelectorAll<HTMLElement>('[role=option]')].find((o) => o.textContent!.includes(texto));
+  assert.ok(op, `${rotulo}: sem a opcao ${texto}`);
+  op!.click();
+}
+await teste('edicao: responsavel — modal com busca, grava a atribuicao e muda a celula na hora', async () => {
+  const chamadas: string[] = [];
+  const { app } = await montar({ extras: extrasEdicao, mover: { marcador: async () => undefined, atribuir: async (p, u) => void chamadas.push(`${p} @${u}`) } });
+  await tick();
+  linhaDe(app, '148265').querySelector<HTMLElement>('.spro-c-responsavel .spro-lapis')!.click();
+  await tick();
+  const dlg = dialogo(app)!;
+  assert.ok(dlg, 'abriu o modal');
+  assert.equal(dlg.querySelector<HTMLButtonElement>('.spro-botao.primario')!.disabled, true, 'sem mudanca nao salva');
+  escolherNoCombo(app, dlg, 'resp', 'Beto');
+  const salvar = dlg.querySelector<HTMLButtonElement>('.spro-botao.primario')!;
+  assert.equal(salvar.disabled, false);
+  salvar.click();
+  await tick(); await tick();
+  assert.deepEqual(chamadas, ['99906.713-630.000032/2025-82 @beto']);
+  assert.equal(linhaDe(app, '148265').querySelector('.spro-c-responsavel .spro-corta')!.textContent, 'beto');
+  assert.equal(dialogo(app), null, 'o modal fechou');
+  app.fechar();
+});
+await teste('edicao: responsavel aplica tambem aos selecionados quando a caixa e marcada', async () => {
+  const chamadas: string[] = [];
+  const { app, doc } = await montar({ extras: extrasEdicao, mover: { marcador: async () => undefined, atribuir: async (p, u) => void chamadas.push(`${p}:${u}`) } });
+  for (const id of ['150098', '21831']) { const cb = linhaDe(app, id).querySelector<HTMLInputElement>('input[type=checkbox]')!; cb.checked = true; cb.dispatchEvent(new (doc.defaultView as any).Event('change')); }
+  void doc;
+  await tick();
+  linhaDe(app, '148265').querySelector<HTMLElement>('.spro-c-responsavel .spro-lapis')!.click();
+  await tick();
+  const dlg = dialogo(app)!;
+  const caixa = dlg.querySelector<HTMLInputElement>('.spro-estender input')!;
+  assert.ok(caixa, 'ha a opcao de estender');
+  assert.match(dlg.querySelector('.spro-estender')!.textContent!, /2 outros selecionados/);
+  escolherNoCombo(app, dlg, 'resp', 'Ana');
+  caixa.checked = true;
+  dlg.querySelector<HTMLButtonElement>('.spro-botao.primario')!.click();
+  await tick(); await tick(); await tick();
+  assert.equal(chamadas.length, 3);
+  assert.ok(chamadas.every((c) => c.endsWith(':ana')));
+  app.fechar();
+});
+await teste('edicao: responsavel — a falha do SEI desfaz na tela e avisa', async () => {
+  const { app } = await montar({ extras: extrasEdicao, mover: { marcador: async () => undefined, atribuir: async () => { throw new Error('sem permissão'); } } });
+  await tick();
+  const antes = linhaDe(app, '148265').querySelector('.spro-c-responsavel')!.textContent;
+  linhaDe(app, '148265').querySelector<HTMLElement>('.spro-c-responsavel .spro-lapis')!.click();
+  await tick();
+  const dlg = dialogo(app)!;
+  escolherNoCombo(app, dlg, 'resp', 'Ana');
+  dlg.querySelector<HTMLButtonElement>('.spro-botao.primario')!.click();
+  await tick(); await tick();
+  assert.equal(linhaDe(app, '148265').querySelector('.spro-c-responsavel')!.textContent, antes);
+  assert.match(q(app, '.spro-aviso').textContent!, /sem permissão/);
+  app.fechar();
+});
+await teste('edicao: anotacao — editar, prioridade, contador e remover', async () => {
+  anotados.length = 0;
+  const { app } = await montar();
+  linhaDe(app, '148265').querySelector<HTMLElement>('.spro-c-anotacao .spro-lapis')!.click();
+  await tick();
+  const dlg = dialogo(app)!;
+  const area = dlg.querySelector<HTMLTextAreaElement>('textarea')!;
+  assert.equal(area.value, 'teste');
+  const w = area.ownerDocument.defaultView as any;
+  area.value = 'ligar para o fornecedor';
+  area.dispatchEvent(new w.Event('input'));
+  assert.match(dlg.querySelector('.spro-contador')!.textContent!, /23\/500/);
+  const prio = dlg.querySelector<HTMLInputElement>('input[type=checkbox]')!;
+  prio.checked = true;
+  prio.dispatchEvent(new w.Event('change'));
+  dlg.querySelector<HTMLButtonElement>('.spro-botao.primario')!.click();
+  await tick(); await tick();
+  assert.deepEqual(anotados, [['99906.713-630.000032/2025-82', 'ligar para o fornecedor', true]]);
+  assert.equal(linhaDe(app, '148265').querySelector('.spro-c-anotacao .spro-corta')!.textContent, 'ligar para o fornecedor');
+  assert.ok(linhaDe(app, '148265').querySelector('.spro-c-anotacao .spro-prio'));
+  // remover
+  linhaDe(app, '148265').querySelector<HTMLElement>('.spro-c-anotacao .spro-lapis')!.click();
+  await tick();
+  dialogo(app)!.querySelector<HTMLButtonElement>('.spro-botao.perigo')!.click();
+  await tick(); await tick();
+  assert.deepEqual(anotados.at(-1), ['99906.713-630.000032/2025-82', '', false]);
+  assert.equal(linhaDe(app, '148265').querySelector('.spro-c-anotacao .spro-corta'), null);
+  app.fechar();
+});
+await teste('edicao: anotacao — sem texto nao salva; sigiloso nao tem lapis de anotacao nem de marcador', async () => {
+  const { app } = await montar();
+  const sig = linhaDe(app, '157584');
+  assert.equal(sig.querySelector('.spro-c-anotacao .spro-lapis'), null);
+  assert.equal(sig.querySelector('.spro-c-marcadores .spro-lapis'), null);
+  assert.ok(sig.querySelector('.spro-c-responsavel .spro-lapis'), 'responsavel de sigiloso pode');
+  linhaDe(app, '150098').querySelector<HTMLElement>('.spro-c-anotacao .spro-lapis')!.click();
+  await tick();
+  assert.equal(dialogo(app)!.querySelector<HTMLButtonElement>('.spro-botao.primario')!.disabled, true);
+  app.fechar();
+});
+await teste('edicao: marcadores — remove, acrescenta com texto e grava na ordem remover -> adicionar', async () => {
+  const chamadas: string[] = [];
+  const { app } = await montar({ extras: extrasEdicao, mover: { marcador: async (p, m) => void chamadas.push(`${m.remover ? '-' : '+'}${m.marcador}${m.texto ? `(${m.texto})` : ''}`), atribuir: async () => undefined } });
+  await tick();
+  linhaDe(app, '148265').querySelector<HTMLElement>('.spro-c-marcadores .spro-lapis')!.click();
+  await tick();
+  const dlg = dialogo(app)!;
+  assert.equal(dlg.querySelectorAll('.spro-marcador-linha').length, 2);
+  dlg.querySelector<HTMLElement>('.spro-marcador-linha button')!.click(); // remove o 1o (Para Pessoa assinar)
+  escolherNoCombo(app, dlg, 'marc', 'Urgente');
+  const entrada = dlg.querySelectorAll<HTMLInputElement>('.spro-marcador-linha input')[1]!;
+  entrada.value = 'ate sexta';
+  entrada.dispatchEvent(new (entrada.ownerDocument.defaultView as any).Event('input'));
+  dlg.querySelector<HTMLButtonElement>('.spro-botao.primario')!.click();
+  await tick(); await tick(); await tick();
+  assert.deepEqual(chamadas, ['-Para Pessoa assinar', '+Urgente(ate sexta)']);
+  const nomes = [...linhaDe(app, '148265').querySelectorAll('.spro-c-marcadores .spro-marcador')].map((m) => m.textContent);
+  assert.deepEqual(nomes, ['teste', 'Urgente']);
+  app.fechar();
+});
+await teste('edicao: o que a grade gravou nao e desfeito quando a linha nativa (ainda velha) muda por outro motivo', async () => {
+  const { app, doc } = await montar({ extras: extrasEdicao });
+  await tick();
+  linhaDe(app, '148265').querySelector<HTMLElement>('.spro-c-responsavel .spro-lapis')!.click();
+  await tick();
+  escolherNoCombo(app, dialogo(app)!, 'resp', 'Ana');
+  dialogo(app)!.querySelector<HTMLButtonElement>('.spro-botao.primario')!.click();
+  await tick(); await tick();
+  doc.querySelector('tr#P148265 a[href*="acao=controle_prazo_definir"]')!.setAttribute('aria-label', 'Controle de Prazo / usuario02 30/10/2026 (19 dias)');
+  app.sincronizar();
+  assert.equal(linhaDe(app, '148265').querySelector('.spro-c-responsavel .spro-corta')!.textContent, 'ana');
+  assert.match(linhaDe(app, '148265').querySelector('.spro-c-prazo .spro-prazo')!.textContent!, /19 dias/);
   app.fechar();
 });

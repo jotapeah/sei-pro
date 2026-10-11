@@ -27,7 +27,8 @@ export function garantirBotao(doc: Document, ativo: boolean, alternar: () => voi
     if (referencia) referencia.before(botao);
     else barra.append(botao);
   }
-  botao.title = rotulo;
+  botao.setAttribute('data-tip', rotulo);
+  botao.removeAttribute('title');
   botao.setAttribute('aria-label', rotulo);
   botao.setAttribute('aria-pressed', String(ativo));
   return true;

@@ -102,7 +102,8 @@ await teste('botão: entra ao lado da seta de recolher, sem rótulo e com toolti
   assert.equal(b.nextElementSibling!.className, 'spro-fav-recolher');
   assert.equal(b.textContent!.trim(), '');
   const parar = ligarCliqueDoBotao(doc, () => n++);
-  assert.match(b.title, /visão nova/);
+  assert.match(b.getAttribute('data-tip')!, /visão nova/);
+  assert.equal(b.hasAttribute('title'), false, 'sem o title nativo');
   assert.equal(b.getAttribute('aria-pressed'), 'false');
   b.click();
   assert.equal(n, 1);
@@ -113,7 +114,7 @@ await teste('botão: entra ao lado da seta de recolher, sem rótulo e com toolti
   assert.equal(n, 2);
   parar();
   garantirBotao(doc, true, () => n++);
-  assert.match(clone.title, /nativa/);
+  assert.match(clone.getAttribute('data-tip')!, /nativa/);
   assert.equal(clone.getAttribute('aria-pressed'), 'true');
   assert.equal(doc.querySelectorAll(`.${CLASSE_BOTAO}`).length, 1);
   removerBotao(doc);

@@ -15,10 +15,11 @@ import cssBase from '../../sei-comum/src/ui/base.css';
 import { baixar } from '../../sei-comum/src/ui/dialogo';
 import { listarOpcoes } from '../../sei-nucleo/src/dominio/opcoes';
 import { alterarProcesso } from '../../sei-nucleo/src/dominio/processo';
-import { atribuirProcesso, definirMarcador } from '../../sei-nucleo/src/dominio/acoesProcesso';
+import { atribuirProcesso, definirAnotacao, definirMarcador } from '../../sei-nucleo/src/dominio/acoesProcesso';
 import { Sei, lerContexto } from '../../sei-nucleo/src/sei';
 import { paginaDe } from '../../sei-nucleo/src/sessao/pagina';
 import { acoesDaBarra } from './leitura/barra';
+import { instalarDicas } from './ui/dica';
 import { ativarCedo, desativar, estaAtiva, gravarDica, lerDica, marcarPronta, vigiar } from './ativacao/inicio';
 import { ligarCliqueDoBotao, manterBotao } from './ativacao/botao';
 import { lerTabelas, SELETOR_TABELAS } from './leitura/tabela';
@@ -80,7 +81,7 @@ function montar() {
   }
   const alvo = ancora();
   if (!alvo) return voltarNativa('sem ponto de encaixe');
-  const primeiro = inicial.processos[0]?.id ?? '';
+  const candidatos = inicial.processos.filter((p) => !p.sigiloso && p.naPaginaAtual).slice(0, 6).map((p) => p.protocolo);
   app = criarApp({
     doc: document,
     inicial,
@@ -98,9 +99,22 @@ function montar() {
     escuro: escuro(),
     baixar: (n, c, t) => baixar(n, c, t),
     novoId: () => novoId(),
-    extras: primeiro
+    extras: candidatos.length
       ? async () => {
-          const [m, u] = await Promise.all([listarOpcoes(sei, 'marcadores', primeiro), listarOpcoes(sei, 'usuarios', primeiro)]);
+          // Cada lista e lida de um processo ABERTO na unidade; o primeiro pode ser sigiloso ou estar so em outra unidade.
+          const ler = async (lista: 'marcadores' | 'usuarios') => {
+            let ultimo: unknown;
+            for (const ref of candidatos) {
+              try {
+                return await listarOpcoes(sei, lista, ref);
+              } catch (e) {
+                ultimo = e;
+              }
+            }
+            console.warn(`[SEI Pro] Grade: nao foi possivel ler a lista de ${lista}`, ultimo instanceof Error ? ultimo.message : ultimo);
+            return [];
+          };
+          const [m, u] = await Promise.all([ler('marcadores'), ler('usuarios')]);
           return { marcadores: m.map((x) => x.nome), responsaveis: u.map((x) => { const [sigla, ...resto] = x.nome.split(' - '); return { sigla: sigla!.trim(), nome: resto.join(' - ').trim() || sigla!.trim() }; }) };
         }
       : undefined,
@@ -111,11 +125,7 @@ function montar() {
       document.documentElement.setAttribute('data-spro-prazos-alvo', id);
       document.dispatchEvent(new CustomEvent('spro-prazos-abrir'));
     },
-    abrirAnotacao: (id) => {
-      const a = document.querySelector<HTMLElement>(`tr#P${id} a[href*="acao=anotacao_registrar"]`);
-      a?.click();
-      return !!a;
-    },
+    anotar: async (protocolo, a) => void (await definirAnotacao(sei, protocolo, a, { aplicar: true })),
   });
   app.definirNomesCompletos(nomesCompletos);
   alvo.before(app.host);
@@ -199,6 +209,7 @@ function partir() {
     vigia = vigiar(voltarNativa);
   }
   ligarCliqueDoBotao(document, alternar);
+  instalarDicas(document, escuro); // so age em elementos da grade; o resto do SEI mantem as suas dicas
   const aoDom = () => {
     domPronto = true;
     if (ligada) {

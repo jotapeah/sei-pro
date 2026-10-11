@@ -321,3 +321,47 @@ await teste('busca: parado (última movimentação), prioridade, interessado; or
   assert.ok(casaCom('prio:alta', velho) && casaCom('interessado:maria', velho) && casaCom('joao', velho));
   assert.deepEqual(ordenar([novo, proc(), velho], [{ campo: 'parado', decrescente: true }], CTX).map((p) => p.ultimaMov), ['2026-08-01', '2026-10-10', undefined]);
 });
+
+// ---------------- edicoes dinamicas ----------------
+import { alvosDaEdicao, aplicarAnotacao, aplicarMarcadores, aplicarResponsavel, planoMarcadores, textoAnotacao, MAX_ANOTACAO } from '../src/modelo/edicoes';
+await teste('edicoes: plano de marcadores — remove, acrescenta, muda texto; nada a fazer quando igual', () => {
+  const atuais = [mk('A', 'x'), mk('B'), mk('C', 'velho')];
+  const ops = planoMarcadores(atuais, [{ nome: 'a', texto: 'x' }, { nome: 'C', texto: 'novo' }, { nome: 'D', texto: '  t  ' }]);
+  assert.deepEqual(ops, [{ tipo: 'remover', nome: 'B' }, { tipo: 'adicionar', nome: 'D', texto: 't' }, { tipo: 'texto', nome: 'C', texto: 'novo' }]);
+  assert.deepEqual(planoMarcadores(atuais, atuais.map((m) => ({ nome: m.nome, texto: m.texto }))), []);
+  assert.deepEqual(planoMarcadores([], [{ nome: ' ', texto: 'x' }, { nome: 'A', texto: '' }, { nome: 'a', texto: '' }]), [{ tipo: 'adicionar', nome: 'A', texto: '' }]);
+  assert.equal(planoMarcadores([], [{ nome: 'A', texto: 'z'.repeat(400) }])[0]!.tipo, 'adicionar');
+  assert.equal((planoMarcadores([], [{ nome: 'A', texto: 'z'.repeat(400) }])[0] as { texto: string }).texto.length, 250);
+});
+await teste('edicoes: aplicar marcadores nao muta e leva a cor conhecida', () => {
+  const p = proc({ marcadores: [mk('A', 't1'), mk('B')] });
+  const novo = aplicarMarcadores(p, [{ tipo: 'remover', nome: 'B' }, { tipo: 'adicionar', nome: 'Z', texto: 'q' }, { tipo: 'texto', nome: 'A', texto: 'T2' }], (n) => (n === 'Z' ? 'verde' : ''));
+  assert.deepEqual(novo.marcadores, [{ nome: 'A', cor: 'preto', texto: 'T2' }, { nome: 'Z', cor: 'verde', texto: 'q' }]);
+  assert.equal(p.marcadores.length, 2);
+});
+await teste('edicoes: anotacao — limite, vazio remove, prioridade cai junto', () => {
+  assert.equal(textoAnotacao('  a\r\nb  '), 'a\nb');
+  assert.equal(textoAnotacao('x'.repeat(900)).length, MAX_ANOTACAO);
+  const p = proc({ anotacao: { texto: 'velha', autor: 'ana', prioridade: true } });
+  assert.equal(aplicarAnotacao(p, '   ', true).anotacao, undefined);
+  const n = aplicarAnotacao(p, 'nova', false);
+  assert.deepEqual(n.anotacao, { texto: 'nova', autor: 'ana', prioridade: false });
+  assert.deepEqual(aplicarAnotacao(proc(), 'primeira', true, 'eu').anotacao, { texto: 'primeira', autor: 'eu', prioridade: true });
+});
+await teste('edicoes: responsavel e alvos (clicado + selecionados, so os permitidos)', () => {
+  const p = proc({ atribuicao: ana });
+  assert.equal(aplicarResponsavel(p, null).atribuicao, undefined);
+  assert.equal(aplicarResponsavel(p, beto).atribuicao!.sigla, 'beto');
+  const a = proc(); const b = proc(); const c = proc({ sigiloso: true });
+  const todos = [a, b, c];
+  assert.deepEqual(alvosDaEdicao(a, new Set([b.id, c.id]), todos, false, () => true).map((x) => x.id), [a.id]);
+  assert.deepEqual(alvosDaEdicao(a, new Set([b.id, c.id]), todos, true, () => true).map((x) => x.id), [a.id, b.id, c.id]);
+  assert.deepEqual(alvosDaEdicao(a, new Set([b.id, c.id]), todos, true, (x) => !x.sigiloso).map((x) => x.id), [a.id, b.id]);
+});
+await teste('edicoes: as mesmas operacoes valem para outro processo so onde fazem sentido', async () => {
+  const { opsParaProcesso } = await import('../src/modelo/edicoes');
+  const ops = [{ tipo: 'remover' as const, nome: 'B' }, { tipo: 'adicionar' as const, nome: 'D', texto: '' }, { tipo: 'texto' as const, nome: 'C', texto: 'n' }];
+  const outro = proc({ marcadores: [mk('b'), mk('D')] });
+  assert.deepEqual(opsParaProcesso(ops, outro), [{ tipo: 'remover', nome: 'B' }]);
+  assert.deepEqual(opsParaProcesso(ops, proc()).map((o) => o.tipo), ['adicionar']);
+});

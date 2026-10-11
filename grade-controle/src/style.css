@@ -150,3 +150,16 @@ kbd { padding: 0 5px; font: 12px var(--spro-mono); background: var(--spro-fundo-
 .spro-linha:hover .spro-prazo-vazio, .spro-prazo-b:focus-visible .spro-prazo-vazio { opacity: 1; }
 .spro-prazo-b:hover .spro-prazo, .spro-prazo-b:hover .spro-prazo-vazio { outline: 2px solid color-mix(in srgb, var(--spro-destaque) 40%, transparent); }
 .spro-corta { flex: 1; min-width: 0; }
+
+/* ---- Modais de edicao (responsavel, anotacao, marcadores) ---- */
+.spro-form { display: flex; flex-direction: column; gap: 12px; min-width: min(420px, 80vw); }
+.spro-campo-rotulo { display: flex; flex-direction: column; gap: 6px; font-weight: 600; }
+.spro-area { width: 100%; min-height: 120px; padding: 8px 10px; resize: vertical; font: inherit; }
+.spro-contador { margin-left: auto; font-size: 12px; }
+.spro-estender { padding: 8px 10px; background: var(--spro-fundo-2); border-radius: var(--spro-raio); }
+.spro-dialogo-sub { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--spro-suave); }
+.spro-marcadores-lista { display: flex; flex-direction: column; gap: 8px; }
+.spro-marcador-linha { display: grid; grid-template-columns: minmax(120px, 190px) 1fr auto; gap: 8px; align-items: center; }
+.spro-vazio-edicao { opacity: 0; font-size: 11px; }
+.spro-editavel-quebra { flex-wrap: wrap; }
+.spro-linha:hover .spro-vazio-edicao { opacity: 1; }

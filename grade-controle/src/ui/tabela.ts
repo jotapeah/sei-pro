@@ -50,7 +50,7 @@ export interface PropsTabela {
   aoSalvarEspec(id: string): void;
   aoCancelarEspec(): void;
   aoAbrirPrazo(id: string): void;
-  aoAbrirAnotacao(id: string): void;
+  aoEditar(id: string, que: 'responsavel' | 'anotacao' | 'marcadores'): void;
 }
 
 /** "Maria da Silva Souza" -> "Maria Souza" (a mesma regra do legado). */
@@ -111,15 +111,22 @@ function celula(p: Processo, c: Coluna, ctx: Ctx, props: PropsTabela): HTMLEleme
       break;
     }
     case 'responsavel':
+      td.classList.add('spro-editavel');
       if (p.atribuicao) {
         td.append(el('span', 'spro-corta', props.nomesCompletos ? nomeCurto(p.atribuicao.nome) : p.atribuicao.sigla));
         td.title = props.nomesCompletos ? p.atribuicao.sigla : p.atribuicao.nome;
-      }
+      } else td.append(h('span', { class: 'spro-prazo-vazio spro-vazio-edicao' }, 'atribuir'));
+      td.append(botaoLapis(p.atribuicao ? 'Mudar o responsável' : 'Atribuir a alguém', () => props.aoEditar(p.id, 'responsavel')));
       break;
     case 'marcadores':
+      td.classList.add('spro-editavel', 'spro-editavel-quebra');
       for (const m of p.marcadores) {
         const pil = h('span', { class: 'spro-marcador', title: m.texto ? `${m.nome}: ${m.texto}` : m.nome }, h('i', { style: `background:${corDoMarcador(m.cor)}` }), m.nome);
         td.append(pil);
+      }
+      if (!p.sigiloso) {
+        if (!p.marcadores.length) td.append(h('span', { class: 'spro-prazo-vazio spro-vazio-edicao' }, 'marcar'));
+        td.append(botaoLapis(p.marcadores.length ? 'Editar os marcadores' : 'Adicionar marcador', () => props.aoEditar(p.id, 'marcadores')));
       }
       break;
     case 'prazo': {
@@ -132,12 +139,12 @@ function celula(p: Processo, c: Coluna, ctx: Ctx, props: PropsTabela): HTMLEleme
       break;
     }
     case 'anotacao':
+      td.classList.add('spro-editavel');
       if (p.anotacao) {
-        td.classList.add('spro-editavel');
         td.append(el('span', `spro-corta${p.anotacao.prioridade ? ' spro-prio' : ''}`, p.anotacao.texto.replace(/\s*\n\s*/g, ' / ')));
         td.title = `${p.anotacao.texto}\n${p.anotacao.autor}`;
-        td.append(botaoLapis('Editar a anotação', () => props.aoAbrirAnotacao(p.id)));
-      }
+      } else if (!p.sigiloso) td.append(h('span', { class: 'spro-prazo-vazio spro-vazio-edicao' }, 'anotar'));
+      if (!p.sigiloso) td.append(botaoLapis(p.anotacao ? 'Editar a anotação' : 'Adicionar anotação', () => props.aoEditar(p.id, 'anotacao')));
       break;
     case 'caixa': {
       const t = rotuloIdade(diasNaCaixa(p, ctx));
