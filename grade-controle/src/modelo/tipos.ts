@@ -2,6 +2,7 @@
  * Modelo da grade: dados puros extraídos da tela nativa. Nada aqui toca o DOM.
  * A grade só LÊ este modelo; quem muda o SEI são as ações (`acoes/`).
  */
+import type { DataISO } from '../../../sei-comum/src/datas/dias';
 import type { PrazoProcesso } from '../../../prazos/src/modelo/tipos';
 
 export type Grupo = 'recebidos' | 'gerados';
@@ -40,6 +41,8 @@ export interface Processo {
   naoVisualizado: boolean;
   /** Sigla e nome de quem recebeu a atribuição. */
   atribuicao?: { sigla: string; nome: string };
+  /** Endereço (relativo ao SEI, assinado) que abre o processo. */
+  link?: string;
   marcadores: MarcadorLinha[];
   anotacao?: AnotacaoLinha;
   prazo?: PrazoProcesso;
@@ -52,6 +55,11 @@ export interface Processo {
   naPaginaAtual: boolean;
   /** Instante (ms) em que o SEI Pro viu o processo pela primeira vez nesta unidade. */
   vistoEm?: number;
+  /** Da coluna "Última Mov." da visão detalhada do SEI (só existe nela). */
+  ultimaMov?: DataISO;
+  prioridade?: string;
+  interessados?: string;
+  observacao?: string;
 }
 
 export interface LeituraTabela {
@@ -63,7 +71,7 @@ export interface LeituraTabela {
   visao: 'resumida' | 'detalhada';
 }
 
-export const COLUNAS = ['processo', 'tipo', 'especificacao', 'responsavel', 'marcadores', 'prazo', 'anotacao', 'caixa', 'sinais'] as const;
+export const COLUNAS = ['processo', 'tipo', 'especificacao', 'responsavel', 'marcadores', 'prazo', 'anotacao', 'caixa', 'parado', 'sinais'] as const;
 export type Coluna = (typeof COLUNAS)[number];
 
 export const ROTULO_COLUNA: Record<Coluna, string> = {
@@ -75,10 +83,11 @@ export const ROTULO_COLUNA: Record<Coluna, string> = {
   prazo: 'Prazo',
   anotacao: 'Anotação',
   caixa: 'Na caixa',
+  parado: 'Parado há',
   sinais: 'Sinais',
 };
 
-export type CampoOrdem = 'protocolo' | 'tipo' | 'responsavel' | 'marcador' | 'prazo' | 'caixa' | 'novo';
+export type CampoOrdem = 'protocolo' | 'tipo' | 'responsavel' | 'marcador' | 'prazo' | 'caixa' | 'parado' | 'novo';
 export interface CriterioOrdem {
   campo: CampoOrdem;
   decrescente: boolean;

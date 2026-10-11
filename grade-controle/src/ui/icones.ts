@@ -1,0 +1,58 @@
+/** Ícones da grade que o conjunto comum não tem. Mesma convenção do `icone()` do sei-comum (traço, currentColor). */
+const NS = 'http://www.w3.org/2000/svg';
+type Forma = [string, Record<string, string>];
+
+const FORMAS = {
+  /** Tabela com cabeçalho: a visão nova. */
+  grade: [
+    ['rect', { x: '3.5', y: '4.5', width: '17', height: '15', rx: '2' }],
+    ['path', { d: 'M3.5 9.5h17M9 9.5v10M3.5 14.5h17' }],
+  ],
+  /** Três colunas: o quadro. */
+  quadro: [
+    ['rect', { x: '3.5', y: '4.5', width: '4.6', height: '15', rx: '1.2' }],
+    ['rect', { x: '9.7', y: '4.5', width: '4.6', height: '9', rx: '1.2' }],
+    ['rect', { x: '15.9', y: '4.5', width: '4.6', height: '12', rx: '1.2' }],
+  ],
+  lista: [['path', { d: 'M8 6.5h12M8 12h12M8 17.5h12M4 6.5h.01M4 12h.01M4 17.5h.01' }]],
+  agrupar: [
+    ['path', { d: 'M4 6h16M4 12h10M4 18h13' }],
+    ['path', { d: 'M18 10l3 2-3 2' }],
+  ],
+  colunas: [
+    ['rect', { x: '3.5', y: '4.5', width: '17', height: '15', rx: '2' }],
+    ['path', { d: 'M9.2 4.5v15M14.8 4.5v15' }],
+  ],
+  disquete: [
+    ['path', { d: 'M5 4.5h11l3.5 3.5v11a1.5 1.5 0 0 1-1.5 1.5H6.5A1.5 1.5 0 0 1 5 19z' }],
+    ['path', { d: 'M8 4.5v5h7v-5M8 20v-6h8v6' }],
+  ],
+  seta: [['path', { d: 'M6 9l6 6 6-6' }]],
+  setaDireita: [['path', { d: 'M9 6l6 6-6 6' }]],
+  desfazer: [['path', { d: 'M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3' }]],
+  bloquear: [
+    ['circle', { cx: '12', cy: '12', r: '8.5' }],
+    ['path', { d: 'M6 6l12 12' }],
+  ],
+  informacao: [
+    ['circle', { cx: '12', cy: '12', r: '8.5' }],
+    ['path', { d: 'M12 11v5M12 8h.01' }],
+  ],
+} satisfies Record<string, Forma[]>;
+
+export type NomeIconeGrade = keyof typeof FORMAS;
+
+export function iconeGrade(nome: NomeIconeGrade, tamanho = 16, doc: Document = document): SVGSVGElement {
+  const svg = doc.createElementNS(NS, 'svg');
+  const base: Record<string, string> = {
+    viewBox: '0 0 24 24', width: String(tamanho), height: String(tamanho), fill: 'none', stroke: 'currentColor',
+    'stroke-width': '1.8', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true', focusable: 'false', class: 'spro-icone',
+  };
+  for (const [k, v] of Object.entries(base)) svg.setAttribute(k, v);
+  for (const [tag, attrs] of FORMAS[nome] as Forma[]) {
+    const el = doc.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+    svg.append(el);
+  }
+  return svg;
+}

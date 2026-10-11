@@ -80,3 +80,15 @@ await teste('barra: ações nativas com ícone e rótulo do próprio SEI', () =>
   assert.deepEqual(a.slice(0, 3).map((x) => x.acao), ['procedimento_enviar', 'procedimento_atualizar_andamento', 'procedimento_atribuicao_cadastrar']);
   assert.equal(a[0]!.rotulo, 'Enviar Processo');
 });
+await teste('leitura: detalhada traz última movimentação, prioridade, interessados e observação', () => {
+  const html = `<body><table id="tblProcessosDetalhado"><caption>Detalhada (1 registro):</caption>
+  <tr><th></th><th></th><th>Processo</th><th>Prioridade</th><th>Interessados</th><th>Observação</th><th>Última&nbsp;Mov.</th></tr>
+  <tr id="P7"><td><input type="checkbox" name="chkDetalhadoItem0" title="1/2026-1" value="7" aria-label="Tipo Ofício / Especificação X"></td><td></td>
+  <td><a class="processoVisualizado" href="controlador.php?acao=procedimento_trabalhar&id_procedimento=7">1/2026-1</a></td><td>Alta</td><td><div>Maria; João</div></td><td>ver contrato</td><td>03/10/2026</td></tr></table></body>`;
+  const p = lerTabelas(docDe(html)).processos[0]!;
+  assert.deepEqual([p.prioridade, p.interessados, p.observacao, p.ultimaMov], ['Alta', 'Maria; João', 'ver contrato', '2026-10-03']);
+});
+await teste('leitura: link do processo vem do próprio SEI (assinado), sem inventar', () => {
+  const p = lerTabelas(docFixture('caixa_prazos.html')).processos.find((x) => x.id === '148265')!;
+  assert.match(p.link!, /^controlador\.php\?acao=procedimento_trabalhar&acao_origem=procedimento_controlar.*id_procedimento=148265/);
+});

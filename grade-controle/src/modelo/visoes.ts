@@ -23,7 +23,7 @@ export function visaoPadrao(): Visao {
 }
 
 const AGRUPAR: Visao['agrupar'][] = ['nenhum', 'responsavel', 'tipo', 'marcador', 'prazo', 'situacao', 'grupo', 'anotacao', 'acompanhamento', 'retorno', 'caixa'];
-const CAMPOS: CriterioOrdem['campo'][] = ['protocolo', 'tipo', 'responsavel', 'marcador', 'prazo', 'caixa', 'novo'];
+const CAMPOS: CriterioOrdem['campo'][] = ['protocolo', 'tipo', 'responsavel', 'marcador', 'prazo', 'caixa', 'parado', 'novo'];
 const COLUNAS_QUADRO: ConfigQuadro['colunas'][] = ['marcador', 'responsavel', 'prazo', 'tipo'];
 
 /** Aceita qualquer coisa vinda do storage (ou de outra versão) e devolve uma visão válida. */

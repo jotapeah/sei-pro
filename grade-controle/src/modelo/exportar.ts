@@ -1,7 +1,7 @@
 /** Linhas do CSV da visão atual. A neutralização de fórmulas é do `gerarCsv` (sei-comum). */
 import { formatarData } from '../../../sei-comum/src/datas/dias';
 import type { Ctx } from './contexto';
-import { diasNaCaixa, resumoDoPrazo } from './derivados';
+import { diasNaCaixa, diasParado, resumoDoPrazo } from './derivados';
 import { rotuloIdade } from './idade';
 import { type Coluna, type Processo, ROTULO_COLUNA } from './tipos';
 
@@ -40,6 +40,8 @@ const celula = (p: Processo, c: Coluna, ctx: Ctx): string => {
       return p.anotacao?.texto.replace(/\s*\n\s*/g, ' / ') ?? '';
     case 'caixa':
       return rotuloIdade(diasNaCaixa(p, ctx));
+    case 'parado':
+      return rotuloIdade(diasParado(p, ctx));
     case 'sinais':
       return sinaisDe(p).join('; ');
   }

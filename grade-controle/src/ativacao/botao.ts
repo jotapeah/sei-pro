@@ -1,0 +1,67 @@
+/**
+ * O botão alternador, sem rótulo e com tooltip, na barra de título do Controle de Processos: ao lado da seta de
+ * recolher do legado (`.spro-fav-recolher`) e do botão de ordenar painéis (`.spro-pnl-botao`). O legado monta a
+ * barra DEPOIS do carregamento, então esperamos por ela e a reencontramos se for refeita.
+ */
+import { iconeGrade } from '../ui/icones';
+
+export const CLASSE_BOTAO = 'spro-grade-botao';
+const BARRA = '#processosSEIPro .titlePanelHome, #processosSEIPro #divInfraBarraLocalizacao, #divInfraBarraLocalizacao.titlePanelHome, #divInfraBarraLocalizacao';
+const ROTULO_LIGAR = 'Usar a visão nova do controle de processos';
+const ROTULO_DESLIGAR = 'Voltar à visão nativa do SEI';
+
+/** Põe (ou atualiza) o botão. Devolve `false` se a barra ainda não existe. */
+export function garantirBotao(doc: Document, ativo: boolean, alternar: () => void): boolean {
+  const barra = doc.querySelector<HTMLElement>(BARRA);
+  if (!barra) return false;
+  const rotulo = ativo ? ROTULO_DESLIGAR : ROTULO_LIGAR;
+  let botao = barra.querySelector<HTMLButtonElement>(`.${CLASSE_BOTAO}`);
+  if (!botao) {
+    botao = doc.createElement('button');
+    botao.type = 'button';
+    botao.className = CLASSE_BOTAO;
+    botao.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      alternar();
+    });
+    botao.append(iconeGrade('grade', 18, doc));
+    const referencia = barra.querySelector('.spro-fav-recolher');
+    if (referencia) referencia.before(botao);
+    else barra.append(botao);
+  }
+  botao.title = rotulo;
+  botao.setAttribute('aria-label', rotulo);
+  botao.setAttribute('aria-pressed', String(ativo));
+  return true;
+}
+
+export const removerBotao = (doc: Document): void => {
+  for (const b of doc.querySelectorAll(`.${CLASSE_BOTAO}`)) b.remove();
+};
+
+/** Mantém o botão no lugar enquanto a opção estiver ligada. Devolve a função que para de vigiar. */
+export function manterBotao(doc: Document, estado: () => boolean, alternar: () => void): () => void {
+  const aplicar = () => garantirBotao(doc, estado(), alternar);
+  aplicar();
+  const Obs = doc.defaultView?.MutationObserver;
+  if (!Obs || !doc.body) return () => removerBotao(doc);
+  let agendado = false;
+  const mo = new Obs(() => {
+    if (agendado) return;
+    agendado = true;
+    queueMicrotask(() => {
+      agendado = false;
+      mo.disconnect();
+      aplicar();
+      mo.observe(doc.body, { childList: true, subtree: true });
+    });
+  });
+  mo.observe(doc.body, { childList: true, subtree: true });
+  return () => {
+    mo.disconnect();
+    removerBotao(doc);
+  };
+}
+
+export const atualizarBotao = (doc: Document, ativo: boolean, alternar: () => void): void => void garantirBotao(doc, ativo, alternar);

@@ -84,6 +84,8 @@ export function lerProcessoDaLinha(tr: Element, ctx: ContextoLinha): Processo | 
     pagina: ctx.pagina,
     naPaginaAtual: ctx.naPaginaAtual,
   };
+  const href = tr.querySelector('a[href*="acao=procedimento_trabalhar"]')?.getAttribute('href');
+  if (href) processo.link = decodificarEntidades(href);
   const atribuicao = lerAtribuicao(tr);
   if (atribuicao) processo.atribuicao = atribuicao;
   if (!base.sigiloso) {

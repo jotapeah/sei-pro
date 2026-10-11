@@ -312,3 +312,12 @@ await teste('janela: só as linhas visíveis mais a sobra; espaçadores somam o 
   assert.ok(calcularJanela(100, 40, 0, 0).fim > 0, 'sem layout ainda desenha um bloco');
   assert.equal(calcularJanela(10, 40, 99999, 800).inicio, 10);
 });
+
+await teste('busca: parado (última movimentação), prioridade, interessado; ordem por parado', () => {
+  const velho = proc({ ultimaMov: '2026-08-01', prioridade: 'Alta', interessados: 'Maria Silva; João' });
+  const novo = proc({ ultimaMov: '2026-10-10' });
+  assert.ok(casaCom('parado:>30d', velho) && !casaCom('parado:>30d', novo));
+  assert.ok(casaCom('parado:<3d', novo) && !casaCom('parado:<3d', proc()));
+  assert.ok(casaCom('prio:alta', velho) && casaCom('interessado:maria', velho) && casaCom('joao', velho));
+  assert.deepEqual(ordenar([novo, proc(), velho], [{ campo: 'parado', decrescente: true }], CTX).map((p) => p.ultimaMov), ['2026-08-01', '2026-10-10', undefined]);
+});

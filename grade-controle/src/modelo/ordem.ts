@@ -1,6 +1,6 @@
 /** Ordenação multi-critério e estável. Sem valor, vai sempre para o fim (qualquer sentido). */
 import type { Ctx } from './contexto';
-import { diasNaCaixa, resumoDoPrazo } from './derivados';
+import { diasNaCaixa, diasParado, resumoDoPrazo } from './derivados';
 import type { CampoOrdem, CriterioOrdem, Processo } from './tipos';
 
 const colador = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base' });
@@ -38,6 +38,8 @@ function valorDe(p: Processo, campo: Exclude<CampoOrdem, 'protocolo'>, ctx: Ctx)
     case 'caixa':
       // Mais antigo = mais dias; ordem crescente por "tempo na caixa" põe os recentes primeiro.
       return diasNaCaixa(p, ctx);
+    case 'parado':
+      return diasParado(p, ctx);
     case 'novo':
       return p.naoVisualizado ? 0 : 1;
   }

@@ -12,12 +12,16 @@ export const SELETOR_TABELAS = '#tblProcessosRecebidos, #tblProcessosGerados, #t
 
 const ID_TABELA: Record<Grupo, string> = { recebidos: 'tblProcessosRecebidos', gerados: 'tblProcessosGerados' };
 
-type CampoCelula = 'tipo' | 'especificacao' | 'atribuicao' | 'marcador';
+type CampoCelula = 'tipo' | 'especificacao' | 'atribuicao' | 'marcador' | 'prioridade' | 'interessados' | 'observacao' | 'ultimaMov';
 const ROTULOS: Array<[RegExp, CampoCelula]> = [
   [/^tipo( do processo)?$/, 'tipo'],
   [/^especificacao$/, 'especificacao'],
   [/^(atribuicao|atribuido( para)?|responsavel)$/, 'atribuicao'],
   [/^marcador(es)?$/, 'marcador'],
+  [/^prioridade$/, 'prioridade'],
+  [/^interessados?$/, 'interessados'],
+  [/^observacao$/, 'observacao'],
+  [/^ultima mov/, 'ultimaMov'],
 ];
 
 function mapearCabecalho(tabela: Element): Map<number, CampoCelula> {
@@ -50,6 +54,14 @@ function completarDaDetalhada(p: Processo, tr: Element, mapa: Map<number, CampoC
       const sigla = texto.replace(/^\(|\)$/g, '');
       p.atribuicao = { sigla, nome: sigla };
     } else if (campo === 'marcador' && !p.marcadores.length && !p.sigiloso) p.marcadores = [{ nome: texto, cor: '', texto: '' }];
+    else if (p.sigiloso && (campo === 'interessados' || campo === 'observacao')) continue;
+    else if (campo === 'prioridade') p.prioridade = texto;
+    else if (campo === 'interessados') p.interessados = texto;
+    else if (campo === 'observacao') p.observacao = texto;
+    else if (campo === 'ultimaMov') {
+      const d = /(\d{2})\/(\d{2})\/(\d{4})/.exec(texto);
+      if (d) p.ultimaMov = `${d[3]}-${d[2]}-${d[1]}`;
+    }
   }
 }
 

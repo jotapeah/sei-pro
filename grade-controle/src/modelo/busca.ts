@@ -7,10 +7,10 @@
  */
 import { normalizarTexto } from '../../../sei-comum/src/texto';
 import type { Ctx } from './contexto';
-import { diasNaCaixa, diasParaVencer, novoDesdeUltimaVisita, resumoDoPrazo } from './derivados';
+import { diasNaCaixa, diasParado, diasParaVencer, novoDesdeUltimaVisita, resumoDoPrazo } from './derivados';
 import type { Processo } from './tipos';
 
-export const CAMPOS = ['resp', 'tipo', 'marcador', 'espec', 'anot', 'prazo', 'caixa', 'novo', 'sigilo', 'grupo', 'retorno', 'protocolo'] as const;
+export const CAMPOS = ['resp', 'tipo', 'marcador', 'espec', 'anot', 'prazo', 'caixa', 'novo', 'sigilo', 'grupo', 'retorno', 'protocolo', 'parado', 'prio', 'interessado'] as const;
 export type CampoBusca = (typeof CAMPOS)[number];
 
 const ALIAS: Record<string, CampoBusca> = {
@@ -26,6 +26,9 @@ const ALIAS: Record<string, CampoBusca> = {
   grupo: 'grupo',
   retorno: 'retorno',
   protocolo: 'protocolo', proc: 'protocolo', processo: 'protocolo',
+  parado: 'parado', mov: 'parado',
+  prio: 'prio', prioridade: 'prio',
+  interessado: 'interessado', interessados: 'interessado',
 };
 
 export type Comparador = '<' | '>' | '=';
@@ -111,6 +114,9 @@ const textoLivre = (p: Processo): string =>
       ...p.marcadores.flatMap((m) => [m.nome, m.texto]),
       p.anotacao?.texto,
       p.prazo?.texto,
+      p.prioridade,
+      p.interessados,
+      p.observacao,
     ]
       .filter(Boolean)
       .join(' '),
@@ -194,6 +200,15 @@ function casaCampo(p: Processo, t: Termo, ctx: Ctx): boolean {
       if (v === 'aguardando') return p.retornos.some((r) => r.tipo === 'aguardando');
       if (v === 'programado') return p.retornos.some((r) => r.tipo === 'programado');
       return p.retornos.length > 0;
+    case 'parado': {
+      const n = numeroDeDias(v);
+      if (n === null) return false;
+      return comparar(diasParado(p, ctx), t.comparador === '=' ? '>' : t.comparador, n);
+    }
+    case 'prio':
+      return contem(p.prioridade, v);
+    case 'interessado':
+      return contem(p.interessados, v);
     case 'protocolo':
       return normalizarTexto(p.protocolo).includes(v) || p.protocolo.replace(/\D/g, '').includes(v.replace(/\D/g, '') || '\u0000');
     default:
