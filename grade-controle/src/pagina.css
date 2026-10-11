@@ -1,0 +1,7 @@
+/* Na página do SEI (fora do Shadow DOM): o botão alternador e o espaço da grade. */
+.spro-grade-botao { display: inline-flex; align-items: center; margin-left: 4px; padding: 2px; line-height: 0; color: inherit; cursor: pointer; background: none; border: 0; border-radius: 6px; }
+.spro-grade-botao:hover { background: color-mix(in srgb, currentColor 14%, transparent); }
+.spro-grade-botao[aria-pressed="true"] { color: #1f5fbf; }
+.spro-grade-botao:focus-visible { outline: 2px solid #1f5fbf; outline-offset: 1px; }
+#spro-grade { display: block; width: 100%; flex: 0 0 100%; }
+#spro-grade[hidden] { display: none; }

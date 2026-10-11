@@ -159,3 +159,18 @@ grade-controle/
 Agrupamentos por datas que exigem abrir cada processo; Firefox e oficial; unificar com o modelo de prazo de
 Favoritos/Projetos; remoção do código legado (só é desligado por aviso; a remoção é etapa própria depois de
 validado em campo).
+
+## Estado da implementação (11/10/2026)
+
+Implementado em `grade-controle/` (branch `feat/grade-controle`), bundle em `dist/js/init_grade_controle.js`, registrado
+no `dist/manifest.json` (`document_start`), opção `gradecontrole` na página de opções (desligada por padrão) e porta no
+legado (`sei-pro.js`: `insertGroupTable`, `initProcessoPaginacao`, `initAddKanbanProc`, `addKanbanProc` retornam com
+`data-spro-grade`).
+
+Provas: 100+ testes (`npm run verificar`), tipos limpos, e Chrome real servindo a fixture do SEI 4.1.5: tabela nativa
+oculta já no primeiro quadro (13 ms), grade pronta em ~30-50 ms, sem piscar; 3 000 processos carregados em ~0,5 s com 21
+linhas no DOM; filtro e rolagem em milissegundos; fallback devolve a nativa em ~1,5 s quando a grade trava.
+
+Pendências que dependem de SEI real: gravação do quadro (mover marcador/atribuir), visão detalhada e SEI 5.0.4 com
+fixtures reais, e a posição exata do botão ao lado do chevron. Ao voltar à visão nativa na mesma sessão o legado
+(que não rodou) só reaparece ao recarregar a página.

@@ -52,7 +52,7 @@ function lerAtribuicao(tr: Element): Processo['atribuicao'] {
   const a = tr.querySelector('a[href*="acao=procedimento_atribuicao_listar"], a.ancoraSigla');
   const sigla = a?.textContent?.trim();
   if (!a || !sigla) return undefined;
-  const nome = decodificarEntidades(a.getAttribute('title') ?? '').replace(/^Atribu[ií]do para\s+/i, '').trim();
+  const nome = decodificarEntidades(a.getAttribute('title') ?? '').replace(/^Atribu[i\u00ED]do para\s+/i, '').trim();
   return { sigla, nome: nome || sigla };
 }
 

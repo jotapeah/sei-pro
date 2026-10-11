@@ -80,7 +80,7 @@ export function interpretar(entrada: string): Consulta {
       resto = resto.slice(1);
     }
     let campo: CampoBusca | undefined;
-    const m = /^([a-zA-ZÀ-ſ]+):(.*)$/.exec(resto);
+    const m = /^([a-zA-Z\u00C0-\u017F]+):(.*)$/.exec(resto);
     if (m) {
       const alvo = ALIAS[normalizarTexto(m[1]!)];
       if (alvo) {

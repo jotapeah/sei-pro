@@ -27,6 +27,7 @@ const FORMAS = {
     ['path', { d: 'M5 4.5h11l3.5 3.5v11a1.5 1.5 0 0 1-1.5 1.5H6.5A1.5 1.5 0 0 1 5 19z' }],
     ['path', { d: 'M8 4.5v5h7v-5M8 20v-6h8v6' }],
   ],
+  densidade: [['path', { d: 'M4 6h16M4 10h16M4 14h16M4 18h16' }]],
   seta: [['path', { d: 'M6 9l6 6 6-6' }]],
   setaDireita: [['path', { d: 'M9 6l6 6-6 6' }]],
   desfazer: [['path', { d: 'M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3' }]],

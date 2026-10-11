@@ -635,6 +635,7 @@ function storeGroupTablePro() {
     }
 }
 function insertGroupTable(TimeOut = 9000) {
+    if (document.documentElement.hasAttribute('data-spro-grade')) return; // visao nova do controle (grade-controle) assume filtro, agrupamento e quadro
     if (TimeOut <= 0) { return; }
     if (typeof checkConfigValue !== 'undefined' && (checkConfigValue('agruparlista') || verifyConfigValue('removepaginacao')) ) {
         if (checkConfigValue('agruparlista')) { 
@@ -1002,6 +1003,7 @@ function checkProcessoPaginacao(this_, tipo) {
     }
 }
 function initProcessoPaginacao(this_) {
+    if (document.documentElement.hasAttribute('data-spro-grade')) return; // visao nova do controle (grade-controle) assume filtro, agrupamento e quadro
     if ($('.infraAreaPaginacao a').is(':visible')) {
         if ($('#divRecebidosAreaPaginacaoSuperior a').is(':visible')) {
             checkProcessoPaginacao(this_, 'Recebidos');
@@ -2016,6 +2018,7 @@ function getPanelProc(this_) {
     setOptionsPro('panelProcessosView', mode);
 }
 function initAddKanbanProc(type = storeGroupTablePro(), loop = 3, TimeOut = 9000) {
+    if (document.documentElement.hasAttribute('data-spro-grade')) return; // visao nova do controle (grade-controle) assume filtro, agrupamento e quadro
     if (TimeOut <= 0) { return; }
     if (typeof jKanban !== 'undefined') { 
         addKanbanProc(type, loop);
@@ -2028,6 +2031,7 @@ function initAddKanbanProc(type = storeGroupTablePro(), loop = 3, TimeOut = 9000
     }
 }
 function addKanbanProc(type = storeGroupTablePro(), loop = 3) {
+    if (document.documentElement.hasAttribute('data-spro-grade')) return; // visao nova do controle (grade-controle) assume filtro, agrupamento e quadro
     if (typeof jKanban === 'undefined') $.getScript(URL_SPRO+"js/lib/jkanban.min.js");
     if (!type || type == 'all' || type == '') {
         setOptionsPro('panelProcessosView', 'Tabela');

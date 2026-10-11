@@ -12,7 +12,7 @@ const nomeDe = (el: Element) => el.getAttribute("data-name") ?? "";
 /** Opcoes que existiam na pagina legada e foram removidas de proposito (pedido do usuario em 10/10/2026). */
 export const REMOVIDAS = ["gerenciarformularios", "natjus"];
 /** Opcoes novas, que nao existiam na pagina legada (Demandas, versao 2.8). */
-export const ADICIONADAS = ["gerenciardemandas"];
+export const ADICIONADAS = ["gerenciardemandas", "gradecontrole"];
 
 export function verificarSchema(): void {
   secao("schema: paridade com a pagina de opcoes legada");
@@ -22,8 +22,8 @@ export function verificarSchema(): void {
   const schema = new Map(todasAsOpcoes().map((o) => [o.nome, o]));
 
   checar(
-    "73 no legado; 72 no schema (menos as 2 removidas, mais a 1 adicionada)",
-    todosLegados.length === 73 && legados.length === 71 && schema.size === 72 && todasAsOpcoes().length === 72,
+    "73 no legado; 73 no schema (menos as 2 removidas, mais as 2 adicionadas)",
+    todosLegados.length === 73 && legados.length === 71 && schema.size === 73 && todasAsOpcoes().length === 73,
     {
       legado: todosLegados.length,
       schema: schema.size,
