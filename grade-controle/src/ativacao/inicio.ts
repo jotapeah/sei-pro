@@ -21,7 +21,10 @@ export function cssPrimeiraPintura(): string {
   const tabelas = TABELAS_NATIVAS.split(', ').map((t) => `html[${ATRIBUTO}] ${t}`).join(',\n');
   const esqueleto = `html[${ATRIBUTO}]:not([${PRONTA}]) #divTabelaProcesso::before,
 html[${ATRIBUTO}]:not([${PRONTA}]) #frmProcedimentoControlar:not(:has(#divTabelaProcesso))::before`;
+  // Controles da visao antiga (links nativos "Ver por...", seletores e Tabela/Quadro do legado): a grade os substitui.
+  const antigos = ['#divFiltro', '#newFiltro', '#processosProActions'].map((t) => `html[${ATRIBUTO}] ${t}`).join(',\n');
   return `${tabelas} { display: none !important; }
+${antigos} { display: none !important; }
 html[${ATRIBUTO}] #divRecebidosAreaPaginacaoSuperior, html[${ATRIBUTO}] #divRecebidosAreaPaginacaoInferior,
 html[${ATRIBUTO}] #divGeradosAreaPaginacaoSuperior, html[${ATRIBUTO}] #divGeradosAreaPaginacaoInferior { display: none !important; }
 ${esqueleto} {

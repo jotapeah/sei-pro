@@ -123,8 +123,6 @@ export function criarApp(d: DepsApp) {
   const btnVisoes = btn('disquete', 'Visões', () => abrirPainel('visoes'));
   const btnCsv = btn('lista', 'Exportar CSV', () => exportar());
   const btnAjuda = h('button', { type: 'button', class: 'spro-bt spro-bt-icone', title: 'Atalhos de teclado (?)', 'aria-label': 'Atalhos de teclado', onclick: () => { ajuda.hidden = !ajuda.hidden; } }, '?');
-  const btnNativa = btn('setaDireita', 'Visão nativa', () => d.aoVoltarNativa());
-  btnNativa.title = 'Voltar à visão nativa do SEI';
   const btnDensidade = btn('densidade', 'Densidade', () => alterar({ densidade: visao.densidade === 'compacta' ? 'confortavel' : 'compacta' }));
   const opcoesQuadro = h('div', { class: 'spro-quadro-cfg', hidden: true });
 
@@ -133,7 +131,7 @@ export function criarApp(d: DepsApp) {
       segmentado,
       h('div', { class: 'spro-busca-caixa' }, busca),
       selAgrupar, selOrdem,
-      btnColunas, btnDensidade, btnVisoes, btnCsv, btnAjuda, btnNativa),
+      btnColunas, btnDensidade, btnVisoes, btnCsv, btnAjuda),
     chips,
     h('div', { class: 'spro-faixa' }, rapidos, fResp, fTipo, fMarc),
     opcoesQuadro, ajuda, painel, status, lote, conteudo, avisos);
