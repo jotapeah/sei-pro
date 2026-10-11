@@ -2,6 +2,14 @@
 
 ## ![SEI Pro Histórico de Versões](../img/icon-historico.png) Histórico de versões
 
+### Versão 2.8.1
+10/10/2026
+
+Correção da aba lateral das Demandas, que não abria na 2.8, e de um detalhe no título sugerido para a nova demanda.
+
+- **Correção — a aba *Demandas* do painel lateral abria só com o aviso "Este modo só abre em tela cheia".** Ela volta a mostrar a *Agenda* das demandas (atrasadas, da semana e sem responsável) e o botão de nova demanda. Isso vale só para o *SEI Pro Lab* (Chrome e Edge), que é onde as [Demandas](../pages/DEMANDAS.md) existem.
+- **Correção — o título sugerido ao criar uma demanda pelo botão do processo repetia o número do documento** (por exemplo, *Despacho 0104018 0104018*). Agora o número aparece uma vez só.
+
 ### Versão 2.8
 10/10/2026
 
