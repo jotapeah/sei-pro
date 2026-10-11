@@ -30,7 +30,7 @@ export const SECOES_GERAL: Secao[] = [
         nome: "gerenciardemandas",
         rotulo: "Demandas",
         ajuda:
-          "Demandas com responsável, prazo, quadro, cronograma e painel, guardadas no Texto Padrão do SEI e em arquivo. Disponível só no SEI Pro de teste.",
+          "Demandas com responsável, prazo, quadro, cronograma e painel, guardadas no Texto Padrão do SEI e em arquivo. Disponível no Chrome e no Edge.",
         tipo: "chave",
         icone: "fas fa-clipboard-list",
         manual: "DEMANDAS",
