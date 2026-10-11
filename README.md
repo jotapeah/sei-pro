@@ -150,7 +150,7 @@ Loja de extensões bloqueada no computador de trabalho? Veja [como instalar pelo
 - ![Desativar consultas adicionais](/img/icon-desativaconsultas.png) [Desativar consultas adicionais](./pages/DESATIVACONSULTAS.md)
 - ![Ativar debug (diagnóstico de problemas)](/img/icon-debugpage.png) [Ativar debug (diagnóstico de problemas)](./pages/DEBUGPAGE.md)
 - ![Gerenciar Prescrições Processuais (institucional)](/img/icon-prescricoes.png) [Gerenciar Prescrições Processuais (institucional)](./pages/PRESCRICOES.md)
-- ![Gerenciar projetos (descontinuada)](/img/icon-projetos.png) [Gerenciar projetos (descontinuada)](./pages/PROJETOS.md)
+- ![Gerenciar projetos](/img/icon-projetos.png) [Gerenciar projetos](./pages/PROJETOS.md)
 
 Você ainda pode [ligar e desligar as funções da extensão](./pages/DESATIVARFUNCOES.md) nas configurações do SEI Pro.
 

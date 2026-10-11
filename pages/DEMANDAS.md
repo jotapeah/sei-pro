@@ -10,6 +10,8 @@ As Demandas ajudam você e sua equipe a controlar o que precisa ser feito no SEI
 
 Abra as [Configurações do SEI Pro](../pages/DESATIVARFUNCOES.md), aba **Geral**, seção **Controle de Processos**, e ligue **Demandas** (logo abaixo de *Gerenciar Projetos*). Clique em **Salvar** e recarregue a página do SEI. O painel das Demandas aparece abaixo da lista do Controle de Processos, e também na aba **Demandas** do painel lateral do SEI Pro (o mesmo dos [Monitorados](../pages/FAVORITOS.md)), com o número de demandas atrasadas.
 
+> ![Aba Demandas do painel lateral, com as atrasadas e as da semana](../img/demandas-lateral.png)
+
 Para mudar a posição do painel na página, ou escondê-lo, use a [Ordem e visibilidade dos painéis](../pages/ORDEMPAINEIS.md).
 
 ### Criar e atribuir

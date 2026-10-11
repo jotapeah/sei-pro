@@ -4,6 +4,8 @@
 
 No SEI, a anotação de um processo só aparece quando você passa o mouse sobre o ícone amarelo. Com esta função, o texto da anotação fica **à vista na própria lista**, logo abaixo do número do processo, nas tabelas de **Recebidos** e **Gerados**.
 
+> ![Cartão da anotação abaixo do número do processo, com prioridade e checklist](../img/anotacao-controle.png)
+
 ### Como funciona
 
 * A anotação aparece em um cartão **âmbar**, com o ícone de nota. Se ela foi marcada como **prioridade** no SEI, o cartão fica **vermelho** e ganha a etiqueta **Prioridade**.
@@ -19,6 +21,8 @@ No SEI, a anotação de um processo só aparece quando você passa o mouse sobre
 A função vem **desligada** de fábrica. Para ligar, abra as [Configurações do SEI Pro](../pages/DESATIVARFUNCOES.md), aba **Geral**, seção **Controle de Processos**, e marque **Mostrar a anotação de cada processo na tela de controle de processos**. Clique em **Salvar**: a tela de controle já aberta passa a mostrar os cartões, sem precisar recarregar.
 
 Depois de habilitar a função, aparece logo abaixo a opção **Mostrar a anotação em uma coluna à esquerda do número do processo**. Marque-a e salve para colocar os cartões entre os símbolos e o número do processo, na mesma linha. Desmarque-a para voltar a mostrar os cartões abaixo do número.
+
+> ![Anotação em coluna à esquerda do número do processo](../img/anotacao-coluna.png)
 
 ### Bom saber
 

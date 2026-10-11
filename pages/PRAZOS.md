@@ -4,7 +4,9 @@
 
 Acrescenta à tela **Controle de Processos** uma coluna **Prazos**, que mostra quanto falta para vencer — ou há quanto tempo o processo está parado — em cada processo. Você define o prazo em poucos cliques, para um ou vários processos de uma vez.
 
-> ![Tela Controle de Prazos](../img/tela-controleprazo.gif)
+> **Em teste:** a janela **Prazo** nova e a gravação no controle de prazo do SEI estão disponíveis só no **SEI Pro Lab** (Chrome e Edge, [como instalar](../pages/INSTALACAO.md)). Na versão da loja, o prazo continua gravado no marcador, como antes.
+
+> ![Janela Prazo: Em N dias úteis, gravação e coluna Prazos preenchida](../img/prazo-janela.gif)
 
 ### Como adicionar um prazo
 
@@ -14,13 +16,13 @@ Acrescenta à tela **Controle de Processos** uma coluna **Prazos**, que mostra q
 
 | Campo | O que informar |
 | ----- | -------------- |
-| **Controlar vencimento?** | Ligado: você informa o **vencimento** e a coluna mostra quanto falta ("vence em 12 dias"). Desligado: você informa uma **data inicial** e a coluna mostra há quanto tempo o processo está parado ("há 5 dias") |
-| **Data** ou **Em N dias** | A data do vencimento, ou o número de dias a partir de hoje (corridos ou **úteis**: o SEI conta os feriados) |
+| **Controlar vencimento** | Ligado: você informa o **vencimento** e a coluna mostra quanto falta ("vence em 12 dias"). Desligado: você informa uma **data inicial** e a coluna mostra há quanto tempo o processo está parado ("há 5 dias") |
+| **Vencimento: Data** ou **Em N dias** | Escolha **Data** para informar o dia do vencimento, ou **Em N dias** para informar quantos dias a partir de hoje, marcando **úteis** se quiser contar só os dias úteis (o SEI desconta os feriados) |
 | **Hora** | Opcional. O controle de prazo do SEI só guarda a data; a hora fica no marcador |
 | **Marcador** | Opcional. O marcador do SEI em que a hora, o texto ou a data inicial serão gravados |
 | **Texto** | Uma descrição curta, opcional — por exemplo, *Responder ofício* |
 
-4. Clique em **Salvar**. A janela diz, enquanto você preenche, onde o prazo será gravado.
+4. Clique em **Salvar**. A janela diz, enquanto você preenche, onde o prazo será gravado (por exemplo, *Será gravado no controle de prazo do SEI*).
 
 Em alguns segundos a coluna **Prazos** mostra o tempo restante. Clique sobre ele para alterar a data.
 
@@ -46,15 +48,17 @@ O texto do marcador tem o formato *"Até 25/09/2026 14:00 Responder ofício"*. O
 
 > **Atenção, para a unidade:** quem ainda usa uma versão antiga do SEI Pro não vê, na coluna *Prazos*, os prazos gravados só no controle do SEI (o ícone do próprio SEI continua aparecendo). Peça aos colegas para atualizarem a extensão.
 
+### O relógio do próprio SEI
+
+Como o prazo fica no controle do SEI, ele aparece também onde o SEI mostra prazos: o **relógio** na linha do processo e a coluna **Prazos** (*vence em 13 dias*).
+
+> ![Relógio do SEI e coluna Prazos no Controle de Processos](../img/prazo-nativo.png)
+
 ### Também dentro do processo
 
 Na árvore do processo, o painel de informações ([Informações adicionais na árvore](../pages/INFOARVORE.md)) mostra o prazo do controle do SEI (*"Prazo: 20/10/2026 (10 dias)"*) junto do marcador, e ao editar o marcador pelo painel os mesmos campos de prazo aparecem.
 
-> ![Tela Prazo em lote](../img/tela-controleprazo1.gif)
-
-> ![Tela Prazo no processo](../img/tela-controleprazo2.gif)
-
-> **Em teste:** a nova janela e a gravação no controle de prazo do SEI chegam primeiro ao **SEI Pro Lab** (Chrome e Edge). Na versão da loja, o prazo continua gravado no marcador, como antes.
+> ![Prazo do controle do SEI no painel da árvore do processo](../img/prazo-arvore.png)
 
 ### Como ativar
 
