@@ -2,6 +2,53 @@
 
 ## ![SEI Pro Histórico de Versões](../img/icon-historico.png) Histórico de versões
 
+### Versão 2.9
+11/10/2026
+
+A versão da loja, no Chrome e no Edge, recebe tudo o que o *SEI Pro Lab* vinha testando desde a 2.4: os Processos Monitorados e o Histórico de processos refeitos, os Projetos novos, o Controle de Prazos que grava no próprio SEI, as Demandas, o filtro pela pesquisa rápida e o retorno de bloco de assinatura. O painel lateral passa a ter abas. A partir daqui, a versão da loja e o *SEI Pro Lab* têm as mesmas funções; o Lab continua sendo o canal de testes. **No Firefox nada muda nesta versão.**
+
+**Processos Monitorados refeitos**
+
+- **Novo — [Processos Monitorados](../pages/FAVORITOS.md) num aplicativo novo.** Os monitorados passam a ficar guardados **na própria extensão**, e limpar o cache do navegador não os apaga mais. São duas listas: a da **unidade** e a **Pessoal**, que aparece em todas as unidades. Cada processo pode ter pasta, etiquetas coloridas, nota, prazo, lembrete, documentos monitorados e local no mapa.
+- **Veja o que mudou sem abrir o processo.** Um selo avisa o que mudou desde a última vez (*2 documentos novos*, *saiu da sua unidade*…), lido da sua caixa e da árvore que você abre. Lembretes vencidos sobem para **Para hoje**, e você pode fixar no topo os processos que quer sempre à vista. A lista tem busca sem acento, filtros com várias escolhas e uma lixeira com os removidos nos últimos 30 dias.
+- **Para levar a outro computador**, em *Sincronização…*: um Texto Padrão da unidade (só com o seu consentimento, porque ele fica visível para a unidade; a lista Pessoal e os sigilosos nunca vão para lá), um arquivo numa pasta da nuvem ou as cópias diárias que o SEI Pro guarda neste navegador.
+- **O que acontece com os monitorados que você já tinha.** Eles **não são trazidos sozinhos**: na primeira vez que a lista nova abre, o SEI Pro mostra quantos encontrou neste navegador e pergunta se você quer trazê-los para a lista da unidade ou para a Pessoal. Vêm o processo, o tipo, a especificação, a categoria (que vira pasta), as etiquetas com as suas cores, o prazo e o local no mapa. **Nada é apagado**: os dados antigos continuam guardados. Se escolher *Agora não*, a lista nova começa vazia e a pergunta volta em 30 dias; dá para trazer a qualquer momento pelo menu ⚙ → *Trazer monitorados da versão anterior*. A pergunta é feita uma vez para cada SEI e cada usuário.
+
+**Histórico de processos refeito**
+
+- **Novo — o [Histórico de processos visitados](../pages/HISTORICOPROC.md) abre numa janela no meio da tela** e ganha uma aba no painel lateral, que mostra no topo, na mesma hora, cada processo que você abre. A busca acha o processo pelo número (com ou sem pontuação), pelo tipo, pela especificação, pelo interessado ou pelo assunto, e há filtros de período, tipo, unidade, interessado, assunto e situação.
+- **Cada pessoa tem o seu histórico**, guardado na própria extensão. Você pode pausar o registro, apagar o que viu na última hora, hoje, nos últimos 7 ou 30 dias ou tudo, e escolher quantos processos guardar. De processo sigiloso, o histórico guarda só o número e o tipo.
+- **O histórico que você já tinha vem sozinho**, sem perguntar, na primeira vez que você usa o SEI com esta versão, e o antigo não é apagado. Como o histórico antigo era um só para todos os logins do mesmo SEI neste navegador, ele vai inteiro para o primeiro login que abrir o SEI. Com o registro pausado, a cópia espera até você retomar.
+
+**Projetos novos**
+
+- **Novo — [gerenciador de Projetos](../pages/PROJETOS.md) reescrito, sem planilha do Google.** Projetos com fases, etapas, marcos e dependências, em Gantt ou em lista, no Controle de Processos, no painel lateral (com a *Agenda* das etapas atrasadas e da semana) e na árvore do processo, onde dá para concluir a etapa escolhendo um documento. O projeto da unidade fica num Texto Padrão do SEI; o seu, no navegador, com cópias diárias e arquivo. A opção é **Gerenciar Projetos**, na aba *Geral* das configurações.
+- **Fim do gerenciador antigo.** A ferramenta que usava uma planilha do Google já não funcionava, porque a API do Google que ela usava foi desativada, e deixa de aparecer no Chrome e no Edge. **Os projetos da planilha não são trazidos** para o gerenciador novo. Quem usa o servidor do Atividades continua vendo o painel antigo, com o nome *Projetos (Atividades)*, e pode trazer esses projetos pelo menu de ajustes, em *Importar do servidor do Atividades…*.
+
+**Controle de Prazos refeito**
+
+- **Alterado — o [Controle de Prazos](../pages/PRAZOS.md) grava no controle de prazo do próprio SEI (4.1.5 ou superior).** O vencimento não ocupa mais o marcador, quem não usa a extensão enxerga e altera o prazo pelo próprio SEI, e o prazo em dias úteis é calculado pelo SEI com os feriados dele. Dá para concluir o prazo, que fica listado sem alerta de atraso. A janela *Prazo* é nova e grava para vários processos de uma vez.
+- **Hora, texto e data inicial continuam no marcador**, só quando você os informa. Datas já vencidas e SEIs anteriores ao 4.1.5 também gravam no marcador, como antes. **Os prazos que já estavam em marcadores continuam na coluna.**
+- **Atenção na unidade:** quem ainda usa uma versão antiga do SEI Pro, ou o SEI Pro no Firefox, não vê na coluna *Prazos* os prazos gravados só no controle do SEI (o ícone do próprio SEI continua aparecendo).
+
+**Demandas (novo)**
+
+- **Novo — [Demandas](../pages/DEMANDAS.md).** Demandas com título, responsável, prazo e prioridade, ligadas a processos, em tabela, quadro, cronograma e painel, com um botão na barra do processo. As da unidade ficam em Textos Padrão do SEI, e as suas, no navegador. Vem **desligada**: para ligar, marque *Demandas* nas configurações (aba *Geral*, seção *Controle de Processos*).
+
+**Pesquisa rápida e blocos de assinatura**
+
+- **Novo — [filtrar a página pelo campo de pesquisa rápida](../pages/PESQUISARAPIDA.md).** Digite no campo de pesquisa do topo do SEI, sem apertar Enter: o Controle de Processos mostra só os processos que correspondem, e a árvore e o documento aberto destacam as ocorrências. Vem **desligada**: ligue a opção *Filtrar a página pelo campo de pesquisa rápida* nas configurações.
+- **Novo — [retornar bloco disponibilizado](../pages/RETORNARBLOCO.md)** na tela *Incluir em Bloco de Assinatura*, sem sair dela. Vem ligado.
+
+**Painel lateral com abas**
+
+- **Alterado — o painel lateral do navegador** deixa de ter só o Agente de IA e passa a ter as abas **Monitorados**, **Histórico**, **Projetos**, **Demandas** e **Agente de IA**.
+
+**O que fica igual**
+
+- **Nada precisa ser religado.** As suas configurações continuam como estavam. Quem não quiser alguma destas funções pode desligá-la nas [Configurações](../pages/DESATIVARFUNCOES.md), aba *Geral*, seção *Controle de Processos*: *Processos Monitorados*, *Gerenciar Projetos*, *Demandas*, *Controlar Prazos*, *Histórico de processos visitados*, *Filtrar a página pelo campo de pesquisa rápida* e *Retornar bloco de assinatura disponibilizado na tela de inclusão*.
+- **No Firefox**, o SEI Pro continua com os monitorados, o histórico e o controle de prazos anteriores; só o número da versão muda.
+
 ### Versão 2.8.1
 10/10/2026
 

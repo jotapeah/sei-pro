@@ -4,7 +4,7 @@
 
 Acrescenta à tela **Controle de Processos** uma coluna **Prazos**, que mostra quanto falta para vencer — ou há quanto tempo o processo está parado — em cada processo. Você define o prazo em poucos cliques, para um ou vários processos de uma vez.
 
-> **Em teste:** a janela **Prazo** nova e a gravação no controle de prazo do SEI estão disponíveis só no **SEI Pro Lab** (Chrome e Edge, [como instalar](../pages/INSTALACAO.md)). Na versão da loja, o prazo continua gravado no marcador, como antes.
+> A janela **Prazo** e a gravação no controle de prazo do SEI estão disponíveis no **Chrome** e no **Edge**. No Firefox, o prazo continua gravado no marcador, como antes.
 
 > ![Janela Prazo: Em N dias úteis, gravação e coluna Prazos preenchida](../img/prazo-janela.gif)
 
@@ -46,7 +46,7 @@ O prazo vai para o **marcador**, como era antes, quando:
 
 O texto do marcador tem o formato *"Até 25/09/2026 14:00 Responder ofício"*. Os prazos que já estavam em marcadores continuam aparecendo na coluna.
 
-> **Atenção, para a unidade:** quem ainda usa uma versão antiga do SEI Pro não vê, na coluna *Prazos*, os prazos gravados só no controle do SEI (o ícone do próprio SEI continua aparecendo). Peça aos colegas para atualizarem a extensão.
+> **Atenção, para a unidade:** quem ainda usa uma versão antiga do SEI Pro (anterior à 2.9), ou o SEI Pro no Firefox, não vê, na coluna *Prazos*, os prazos gravados só no controle do SEI (o ícone do próprio SEI continua aparecendo). Peça aos colegas para atualizarem a extensão.
 
 ### O relógio do próprio SEI
 

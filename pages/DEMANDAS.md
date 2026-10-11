@@ -2,7 +2,7 @@
 
 ## ![SEI Pro Demandas](../img/icon-projetos.png) Demandas
 
-> **Em teste.** As Demandas estão disponíveis só no **SEI Pro Lab**, para **Chrome** e **Edge** ([como instalar](../pages/INSTALACAO.md)). A versão da loja ainda não tem esta função.
+> Disponível no **Chrome** e no **Edge**; no Firefox ainda não. A função vem **desligada**: veja [Como ligar](#como-ligar).
 
 As Demandas ajudam você e sua equipe a controlar o que precisa ser feito no SEI: cada demanda tem um **título**, um **responsável**, um **prazo** e, se quiser, um ou mais **processos** ligados a ela. Tudo fica dentro do próprio SEI Pro, sem planilha e sem serviço de fora.
 
@@ -20,7 +20,7 @@ Clique em **Nova demanda** e preencha o título e o prazo. Escolha o **responsá
 
 > ![Criar uma nova demanda](../img/demandas-criar.gif)
 
-* **Toda a unidade:** os colegas da sua unidade que usam o SEI Pro Lab veem e podem editar a demanda.
+* **Toda a unidade:** os colegas da sua unidade que usam o SEI Pro (versão 2.9 ou mais nova, no Chrome ou no Edge, com as Demandas ligadas) veem e podem editar a demanda.
 * **Só eu:** a demanda é só sua.
 
 A demanda também pode apontar para uma etapa do [gerenciador de Projetos](../pages/PROJETOS.md). Cada mudança fica no **histórico** da demanda.
@@ -85,7 +85,7 @@ Se as arquivadas também encherem, use **Exportar arquivo morto e limpar**. O SE
 ### Limitações
 
 * **A lista de responsáveis é parcial.** Ela mostra quem já apareceu na caixa de processos, em alguma demanda, ou o nome que você digitar. O SEI Pro não busca a lista completa da unidade para não marcar processos como visualizados.
-* **Só no SEI Pro Lab**, para Chrome e Edge. Ainda não há no Firefox nem na versão da loja.
+* **Só no Chrome e no Edge.** Ainda não há no Firefox.
 * **Sem e-mail:** a função não avisa ninguém por e-mail.
 * **Sem recorrência:** não há demanda que se repete sozinha. Para repetir, use **Duplicar**.
 

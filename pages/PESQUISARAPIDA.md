@@ -2,7 +2,7 @@
 
 ## ![SEI Pro Pesquisa rápida](../img/icon-pesquisa.png) Filtrar a página pelo campo de pesquisa rápida
 
-> **Em teste.** Esta função está disponível só no **SEI Pro Lab**, para **Chrome** e **Edge** ([como instalar](../pages/INSTALACAO.md)).
+> Disponível no **Chrome** e no **Edge**; no Firefox ainda não.
 
 Com esta opção ligada, você digita no campo **Pesquisar** do topo do SEI, **sem apertar Enter**, e a página responde na hora:
 

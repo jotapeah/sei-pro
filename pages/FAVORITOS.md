@@ -144,8 +144,6 @@ Os monitorados ficam guardados **na própria extensão**, e não mais no armazen
 
 > ![Sincronização dos monitorados](../img/favoritos-sincronizacao.png)
 
-No Firefox, use **Exportar arquivo** e **Importar arquivo**.
-
 ### Monitorados da versão anterior
 
 Na primeira vez, o SEI Pro oferece trazer os monitorados da versão anterior para a lista da unidade ou para a Pessoal. **Nada é apagado**: os antigos continuam guardados. Se você deixar para depois, a oferta volta mais tarde, e também dá para pedir pelo menu ⚙ → **Trazer monitorados da versão anterior**.
@@ -163,6 +161,7 @@ A função vem **ligada** de fábrica. Ela fica nas [Configurações do SEI Pro]
 * **Processo sigiloso pode ser monitorado**, mas o SEI Pro guarda só o número. Ele não vai para o Texto Padrão da unidade nem para o Agente de IA.
 * Os diálogos dos monitorados abrem **no meio da parte visível da tela**, mesmo com a página rolada até o fim.
 * O recurso de favoritos próprio do SEI (menu **Favoritos** do SEI) é independente deste: um não aparece no outro.
+* Esta versão dos monitorados está disponível no **Chrome** e no **Edge**. No Firefox, o SEI Pro continua com a versão anterior.
 
 ## Próximo item
 

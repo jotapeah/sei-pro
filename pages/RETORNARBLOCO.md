@@ -2,7 +2,7 @@
 
 ## ![SEI Pro Retornar bloco](../img/icon-acoeslote.png) Retornar bloco de assinatura disponibilizado
 
-> **Em teste.** Esta função está disponível só no **SEI Pro Lab**, para **Chrome** e **Edge** ([como instalar](../pages/INSTALACAO.md)).
+> Disponível no **Chrome** e no **Edge**; no Firefox ainda não.
 
 Na tela **Incluir em Bloco de Assinatura**, o botão **Retornar bloco disponibilizado** permite recolher um bloco para incluir novos documentos, sem sair da tela.
 

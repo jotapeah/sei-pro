@@ -98,6 +98,7 @@ A função vem **ligada** de fábrica. Ela fica nas [Configurações do SEI Pro]
 * **Fica guardado na própria extensão, neste navegador.** Limpar o cache ou os dados de navegação não apaga o histórico, mas desinstalar o SEI Pro apaga. A lista não vai para outro computador, e o SEI Pro não a envia a servidor nenhum. Só o Agente de IA a consulta, e só quando você pergunta.
 * **Entra quando você abre o processo.** Reabrir o mesmo processo em menos de 30 minutos não conta como nova visita. Para completar especificação, interessados e assuntos, o SEI Pro lê a tela *Consultar/Alterar Processo* no máximo uma vez a cada 12 horas por processo, e nunca em processo sigiloso.
 * **O histórico da versão anterior não se perde.** Na primeira vez, os processos que você já tinha visitado são trazidos para a lista nova.
+* Esta versão do histórico está disponível no **Chrome** e no **Edge**. No Firefox, o SEI Pro continua com o histórico anterior.
 
 ## Próximo item
 

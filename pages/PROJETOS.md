@@ -2,7 +2,7 @@
 
 ## ![SEI Pro Projetos](../img/icon-projetos.png) Gerenciar projetos
 
-> **Em teste.** O gerenciador de Projetos novo está disponível só no **SEI Pro Lab**, para **Chrome** e **Edge** ([como instalar](../pages/INSTALACAO.md)). A versão da loja ainda tem o gerenciador antigo. Para ligar, marque **Gerenciar Projetos** nas [Configurações do SEI Pro](../pages/DESATIVARFUNCOES.md), aba **Geral**, seção **Controle de Processos**, salve e recarregue o SEI.
+> Disponível no **Chrome** e no **Edge**; no Firefox ainda não. Para ligar, marque **Gerenciar Projetos** nas [Configurações do SEI Pro](../pages/DESATIVARFUNCOES.md), aba **Geral**, seção **Controle de Processos**, salve e recarregue o SEI.
 
 Acompanhe um trabalho do começo ao fim — uma revisão de norma, uma contratação, um plano anual —
 dividido em **etapas** com datas, numa linha do tempo (o **Gantt**). Você vê de longe o que está

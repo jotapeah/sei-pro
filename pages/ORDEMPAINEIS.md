@@ -19,7 +19,7 @@ Na tela de **Controle de Processos**, o SEI Pro pode mostrar vários painéis al
 * Painéis ocultos continuam na lista do modal, para você poder mostrá-los de novo quando quiser.
 * Se um painel ainda não está ativo (por exemplo, o módulo de Atividades desligado), a sua posição fica guardada e volta a valer quando ele aparecer.
 * Quem já ordenava os painéis arrastando, na versão antiga, **mantém essa ordem** como ponto de partida. O arrastar antigo foi substituído por este modal, que é mais estável: ele não move os painéis na página, então nada recarrega ao reordenar.
-* Disponível no **Chrome** e no **Edge**, também na versão da loja. Os painéis de Projetos e Demandas só aparecem no **SEI Pro Lab**, onde essas funções existem.
+* Disponível no **Chrome** e no **Edge**; no Firefox ainda não.
 
 ## Próximo item
 
