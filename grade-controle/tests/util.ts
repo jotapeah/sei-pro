@@ -47,3 +47,15 @@ export function proc(o: Partial<Processo> = {}): Processo {
   };
 }
 export const prazoEm = (id: string, vencimento: string, extra: object = {}): Processo['prazo'] => ({ idProcedimento: id, origem: 'nativo', vencimento, ...extra });
+
+/**
+ * O linkedom não tem o comportamento padrão do clique (alternar o checkbox). O navegador alterna ANTES de
+ * despachar o evento; aqui alternamos durante o despacho, o que basta porque quem lê o estado o faz depois.
+ */
+export function ativarToggle<D extends Document>(doc: D): D {
+  doc.addEventListener('click', (e) => {
+    const alvo = e.target as HTMLInputElement | null;
+    if (alvo?.tagName === 'INPUT' && alvo.type === 'checkbox' && !alvo.disabled) alvo.checked = !alvo.checked; // linkedom começa com undefined: !undefined já é true
+  });
+  return doc;
+}
