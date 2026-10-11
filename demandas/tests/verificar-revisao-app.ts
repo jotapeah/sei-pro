@@ -5,7 +5,7 @@ import { RepositorioProjetos } from "@projetos/repositorio";
 import { naTela } from "../src/app/dados";
 import { abrirDialogoConclusao } from "../src/app/dialogos/concluir";
 import { abrirDialogoDemanda } from "../src/app/dialogos/demanda";
-import { MSG_PAGINA_EM_QUADRO, recusaDoModo } from "../src/app/modo";
+import { ancestraisDaExtensao, MSG_PAGINA_EM_QUADRO, recusaDoModo } from "../src/app/modo";
 import { etapasAbertasDaUnidade } from "../src/integracao/projetos";
 import { iniciar } from "../src/modelo/operacoes";
 import type { Demanda, EtapaRef } from "../src/modelo/tipos";
@@ -18,13 +18,23 @@ const dlg = (t: ReturnType<typeof appDeTeste>) => dialogoAberto(t.doc) as HTMLEl
 
 export async function verificarRevisaoApp(): Promise<void> {
   secao("Revisao: o modo pagina recusa abrir dentro de um quadro");
+  const topo = { noTopo: true, ancestraisSaoDaExtensao: false };
+  const quadroExt = { noTopo: false, ancestraisSaoDaExtensao: true };
+  const quadroFora = { noTopo: false, ancestraisSaoDaExtensao: false };
   checar(
-    "em quadro: recusa com mensagem curta",
-    recusaDoModo("pagina", false) === MSG_PAGINA_EM_QUADRO && MSG_PAGINA_EM_QUADRO.length < 60,
+    "pagina em quadro: recusa com mensagem curta",
+    recusaDoModo("pagina", quadroFora) === MSG_PAGINA_EM_QUADRO && MSG_PAGINA_EM_QUADRO.length < 60,
   );
-  checar("em tela cheia: abre", recusaDoModo("pagina", true) === null);
-  checar("os outros modos nao dependem do topo", recusaDoModo("embutido", false) === null && recusaDoModo("lateral", true) === null);
-  checar("o lateral tambem so abre em tela cheia", recusaDoModo("lateral", false) === MSG_PAGINA_EM_QUADRO);
+  checar("pagina em quadro da propria extensao: recusa", recusaDoModo("pagina", quadroExt) === MSG_PAGINA_EM_QUADRO);
+  checar("pagina em tela cheia: abre", recusaDoModo("pagina", topo) === null);
+  checar("lateral no topo: abre", recusaDoModo("lateral", topo) === null);
+  checar("lateral em quadro com ancestrais so da extensao: abre", recusaDoModo("lateral", quadroExt) === null);
+  checar("lateral com ancestral de outra origem: recusa", recusaDoModo("lateral", quadroFora) === MSG_PAGINA_EM_QUADRO);
+  checar("embutido e livre", recusaDoModo("embutido", quadroFora) === null && recusaDoModo("embutido", topo) === null);
+  const O = "chrome-extension://abc";
+  checar("ancestorOrigins: so a extensao", ancestraisDaExtensao({ origin: O, ancestorOrigins: [O, O] }));
+  checar("ancestorOrigins: um de fora", !ancestraisDaExtensao({ origin: O, ancestorOrigins: [O, "https://sei.exemplo.gov.br"] }));
+  checar("sem ancestorOrigins: nao permitido", !ancestraisDaExtensao({ origin: O }));
 
   const t = appDeTeste();
   const esc = escoposProjetos("sei.exemplo.gov.br", "ana", "110000001");

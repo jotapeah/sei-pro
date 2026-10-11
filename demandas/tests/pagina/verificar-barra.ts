@@ -190,6 +190,17 @@ function verificarDeteccao(): void {
         "Despacho" &&
       tituloSugerido({ protocolo: CAU, sigiloso: false }, { numero: "0103984", titulo: "Despacho", sigiloso: true }) === "",
   );
+  checar(
+    "titulo sugerido: o numero aparece uma vez so, nos dois formatos de no da arvore",
+    tituloSugerido({ protocolo: CAU, sigiloso: false }, { numero: "0104018", titulo: "Despacho 0104018 (0104018)", sigiloso: false }) ===
+      "Despacho 0104018" &&
+      tituloSugerido({ protocolo: CAU, sigiloso: false }, { numero: "0104018", titulo: "Despacho 0104018", sigiloso: false }) ===
+        "Despacho 0104018" &&
+      tituloSugerido({ protocolo: CAU, sigiloso: false }, { numero: "0104018", titulo: "Despacho (0104018)", sigiloso: false }) ===
+        "Despacho 0104018" &&
+      tituloSugerido({ protocolo: CAU, sigiloso: true }, { numero: "0104018", titulo: "Despacho 0104018 (0104018)", sigiloso: false }) ===
+        "Despacho",
+  );
 }
 
 async function verificarBotao(): Promise<void> {

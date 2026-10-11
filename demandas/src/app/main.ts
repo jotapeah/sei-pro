@@ -42,7 +42,7 @@ import { escolherArquivoLocal } from "./arquivoLocal";
 import { Colaboracao } from "./colaboracao";
 import { criarAppDoLateral } from "./lateral/criar";
 import { MontagemLateral } from "./lateral/montagem";
-import { recusaDoModo } from "./modo";
+import { ancestraisDaExtensao, recusaDoModo } from "./modo";
 import { pedidosDaAba } from "./pedidos";
 import type { AppMontado } from "./tipos";
 
@@ -61,7 +61,7 @@ const conexao = modo === "embutido" ? esperarConexaoDaAba(CANAL_DEMANDAS, pedido
 const erro = (texto: string) => raiz.replaceChildren(h("p", { class: "dem-erro" }, texto));
 const mostrarErro = (e: unknown) => erro(`Não foi possível abrir as demandas: ${e instanceof Error ? e.message : String(e)}`);
 
-const recusa = recusaDoModo(modo, window.top === window);
+const recusa = recusaDoModo(modo, { noTopo: window.top === window, ancestraisSaoDaExtensao: ancestraisDaExtensao(location) });
 if (recusa) erro(recusa);
 else if (modo === "pagina") void iniciarPagina().catch(mostrarErro);
 else if (modo === "lateral") void iniciarLateral().catch(mostrarErro);

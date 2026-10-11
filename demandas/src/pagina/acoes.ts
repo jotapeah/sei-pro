@@ -52,14 +52,23 @@ export function vinculoDaTela(p: ProcessoNaTela): Vinculo {
   return v;
 }
 
+/** O nome do documento sem o número: tira "(0104018)" e o número solto no fim ("Despacho 0104018"), qualquer que seja o formato do nó. */
+export function tipoSemNumero(titulo: string, numero: string): string {
+  let t = (titulo ?? "").replace(/\s*\(\d{5,20}\)\s*$/, "").trim();
+  if (numero && t.endsWith(numero) && (t.length === numero.length || /\s/.test(t[t.length - numero.length - 1] ?? "")))
+    t = t.slice(0, t.length - numero.length).trim();
+  return t;
+}
+
 /**
  * O título sugerido: "<nome do documento> <nº SEI>" com documento aberto; senão o texto do nó do processo. Documento
  * sigiloso: vazio. Processo sigiloso: só o tipo do documento, sem o número (o título nunca passa pelo corte do sigilo).
  */
 export function tituloSugerido(processo: ProcessoNaTela, documento: DocumentoAberto | null): string {
   if (documento?.sigiloso) return "";
-  if (processo.sigiloso) return (documento?.titulo ?? "").trim().slice(0, LIMITES.titulo);
-  const t = documento ? `${documento.titulo} ${documento.numero}`.trim() : (processo.tipo ?? "").trim();
+  const nome = documento ? tipoSemNumero(documento.titulo, documento.numero) : "";
+  if (processo.sigiloso) return nome.slice(0, LIMITES.titulo);
+  const t = documento ? `${nome} ${documento.numero}`.trim() : (processo.tipo ?? "").trim();
   return t.slice(0, LIMITES.titulo);
 }
 
