@@ -1,5 +1,5 @@
 /** A tabela: cabeçalho ordenável, grupos recolhíveis e linhas virtualizadas (só as visíveis existem no DOM). */
-import { h } from '../../../sei-comum/src/ui/dom';
+import { h, icone } from '../../../sei-comum/src/ui/dom';
 import type { Ctx } from '../modelo/contexto';
 import { diasNaCaixa, diasParado, resumoDoPrazo } from '../modelo/derivados';
 import { sinaisDe, textoPrazo } from '../modelo/exportar';
@@ -12,9 +12,9 @@ import { iconeGrade } from './icones';
 
 export const ALTURA: Record<Densidade, number> = { compacta: 34, confortavel: 48 };
 const LARGURA: Record<Coluna, string> = {
-  processo: 'minmax(220px, 240px)',
+  processo: 'minmax(300px, 330px)',
   tipo: 'minmax(120px, 1.2fr)',
-  especificacao: 'minmax(140px, 1.6fr)',
+  especificacao: 'minmax(200px, 2fr)',
   responsavel: 'minmax(90px, 130px)',
   marcadores: 'minmax(120px, 1.3fr)',
   prazo: 'minmax(120px, 150px)',
@@ -39,31 +39,81 @@ export interface PropsTabela {
   aoSelecionar(id: string, marcado: boolean): void;
   aoGrupo(chave: string): void;
   aoMarcarGrupo(ids: string[], marcado: boolean): void;
+  /** Clones dos icones dos outros modulos (monitorado, projeto, demanda) da linha nativa. */
+  icones(id: string): HTMLElement[];
+  nomesCompletos: boolean;
+  /** Processo cuja especificacao esta em edicao, e o texto que o usuario ja digitou. */
+  editando: string | null;
+  rascunho: string;
+  aoEditarEspec(id: string): void;
+  aoDigitarEspec(texto: string): void;
+  aoSalvarEspec(id: string): void;
+  aoCancelarEspec(): void;
+  aoAbrirPrazo(id: string): void;
+  aoAbrirAnotacao(id: string): void;
+}
+
+/** "Maria da Silva Souza" -> "Maria Souza" (a mesma regra do legado). */
+export function nomeCurto(nome: string): string {
+  const partes = nome.trim().split(/\s+/);
+  return partes.length > 2 ? `${partes[0]} ${partes[partes.length - 1]}` : nome;
+}
+
+function botaoLapis(rotulo: string, fn: () => void): HTMLElement {
+  return h('button', { type: 'button', class: 'spro-lapis', title: rotulo, 'aria-label': rotulo, onclick: (ev: Event) => { ev.preventDefault(); ev.stopPropagation(); fn(); } }, icone('lapis', 13));
 }
 
 const el = (tag: 'div' | 'span', classe: string, texto?: string) => h(tag, { class: classe }, texto);
 
-function celula(p: Processo, c: Coluna, ctx: Ctx): HTMLElement {
+function celula(p: Processo, c: Coluna, ctx: Ctx, props: PropsTabela): HTMLElement {
   const td = el('div', `spro-c spro-c-${c}`);
   switch (c) {
     case 'processo': {
+      // Quatro lugares fixos (monitorado, projeto, demanda, acompanhamento): o numero do processo alinha em todas as linhas.
+      const clones = props.icones(p.id);
+      const slot = (classe: string) => clones.find((c) => c.classList.contains(classe)) ?? h('span', { class: 'spro-slot' });
+      const acomp = p.acompanhamentoEspecial
+        ? h('span', { class: 'spro-acomp', title: p.acompanhamentoGrupo ? `Acompanhamento especial: ${p.acompanhamentoGrupo}` : 'Acompanhamento especial' }, icone('olho', 15))
+        : h('span', { class: 'spro-slot' });
+      td.append(h('span', { class: 'spro-icones' }, slot('spro-fav-estrela'), slot('spro-prj-ic'), slot('spro-dem-cx'), acomp));
       const a = h('a', { class: `spro-proc${p.naoVisualizado ? ' spro-novo' : ''}`, href: p.link ?? '#', title: 'Abrir o processo' }, p.protocolo);
       td.append(a);
       if (p.sigiloso) td.append(h('span', { class: 'spro-sigilo', title: 'Processo sigiloso' }, 'sigiloso'));
+      if (p.urgente) td.append(h('span', { class: 'spro-urgente', title: 'Marcado como urgente' }, 'urgente'));
+      if (p.trancado) td.append(h('span', { class: 'spro-sigilo', title: 'Processo trancado' }, 'trancado'));
       break;
     }
     case 'tipo':
       td.append(el('span', 'spro-corta', p.tipo));
       td.title = p.tipo;
       break;
-    case 'especificacao':
+    case 'especificacao': {
+      td.classList.add('spro-editavel');
+      if (props.editando === p.id) {
+        const entrada = h('input', { type: 'text', class: 'spro-espec-input', maxlength: '100', value: props.rascunho, 'aria-label': 'Especificação do processo' });
+        entrada.addEventListener('input', () => props.aoDigitarEspec(entrada.value));
+        entrada.addEventListener('keydown', (ev) => {
+          ev.stopPropagation();
+          if (ev.key === 'Enter') props.aoSalvarEspec(p.id);
+          else if (ev.key === 'Escape') props.aoCancelarEspec();
+        });
+        const manter = (ev: Event) => ev.preventDefault();
+        const ok = h('button', { type: 'button', class: 'spro-lapis spro-lapis-ok', title: 'Salvar (Enter)', 'aria-label': 'Salvar', onclick: () => props.aoSalvarEspec(p.id) }, icone('check', 14));
+        const nao = h('button', { type: 'button', class: 'spro-lapis', title: 'Cancelar (Esc)', 'aria-label': 'Cancelar', onclick: () => props.aoCancelarEspec() }, icone('fechar', 14));
+        ok.addEventListener('pointerdown', manter);
+        nao.addEventListener('pointerdown', manter);
+        td.append(h('span', { class: 'spro-edicao' }, entrada, ok, nao));
+        break;
+      }
       td.append(el('span', 'spro-corta', p.especificacao));
       td.title = p.especificacao;
+      if (!p.sigiloso) td.append(botaoLapis('Editar a especificação', () => props.aoEditarEspec(p.id)));
       break;
+    }
     case 'responsavel':
       if (p.atribuicao) {
-        td.append(el('span', 'spro-corta', p.atribuicao.sigla));
-        td.title = p.atribuicao.nome;
+        td.append(el('span', 'spro-corta', props.nomesCompletos ? nomeCurto(p.atribuicao.nome) : p.atribuicao.sigla));
+        td.title = props.nomesCompletos ? p.atribuicao.sigla : p.atribuicao.nome;
       }
       break;
     case 'marcadores':
@@ -74,16 +124,19 @@ function celula(p: Processo, c: Coluna, ctx: Ctx): HTMLElement {
       break;
     case 'prazo': {
       const r = resumoDoPrazo(p, ctx);
-      if (r) {
-        td.append(el('span', `spro-prazo spro-prazo-${r.situacao}`, r.texto));
-        td.title = `${textoPrazo(p, ctx)}\n${r.dica}`;
-      }
+      td.classList.add('spro-editavel');
+      const rotulo = r ? 'Editar o prazo' : 'Definir um prazo';
+      const b = h('button', { type: 'button', class: 'spro-prazo-b', title: r ? `${textoPrazo(p, ctx)}\n${r.dica}\n\n${rotulo}` : rotulo, 'aria-label': rotulo, onclick: (ev: Event) => { ev.preventDefault(); ev.stopPropagation(); props.aoAbrirPrazo(p.id); } },
+        r ? el('span', `spro-prazo spro-prazo-${r.situacao}`, r.texto) : el('span', 'spro-prazo-vazio', 'definir'));
+      td.append(b, h('span', { class: 'spro-lapis spro-lapis-fixo', 'aria-hidden': 'true' }, icone('lapis', 13)));
       break;
     }
     case 'anotacao':
       if (p.anotacao) {
+        td.classList.add('spro-editavel');
         td.append(el('span', `spro-corta${p.anotacao.prioridade ? ' spro-prio' : ''}`, p.anotacao.texto.replace(/\s*\n\s*/g, ' / ')));
         td.title = `${p.anotacao.texto}\n${p.anotacao.autor}`;
+        td.append(botaoLapis('Editar a anotação', () => props.aoAbrirAnotacao(p.id)));
       }
       break;
     case 'caixa': {
@@ -112,6 +165,8 @@ export function criarTabela(inicial: PropsTabela) {
   const rolagem = h('div', { class: 'spro-rolagem', tabindex: '-1' }, corpo);
   const raiz = h('div', { class: 'spro-tabela', role: 'table' }, cabecalho, rolagem);
   let ultimaChave = '';
+  let focarEdicao = false;
+  let focoNaEdicao = false;
 
   const modelo = () => `36px ${p.colunas.map((c) => LARGURA[c]).join(' ')}`;
 
@@ -144,12 +199,12 @@ export function criarTabela(inicial: PropsTabela) {
     const cb = h('input', { type: 'checkbox', class: 'spro-cb', 'aria-label': `Marcar ${proc.protocolo}`, disabled: !proc.naPaginaAtual, title: proc.naPaginaAtual ? undefined : 'Este processo está em outra página do SEI; abra-o ou use o quadro para mover.' });
     cb.checked = sel;
     cb.addEventListener('change', () => p.aoSelecionar(proc.id, cb.checked));
-    const tr = h('div', { class: `spro-linha${sel ? ' spro-sel' : ''}${p.foco === proc.id ? ' spro-foco' : ''}`, role: 'row', 'data-id': proc.id, 'data-grupo': grupo });
+    const tr = h('div', { class: `spro-linha${sel ? ' spro-sel' : ''}${p.foco === proc.id ? ' spro-foco' : ''}${proc.urgente ? ' spro-linha-urgente' : ''}`, role: 'row', 'data-id': proc.id, 'data-grupo': grupo });
     tr.style.gridTemplateColumns = modelo();
     tr.style.height = `${ALTURA[p.densidade]}px`;
     const caixa = el('div', 'spro-c spro-c-cb');
     caixa.append(cb);
-    tr.append(caixa, ...p.colunas.map((c) => celula(proc, c, p.ctx)));
+    tr.append(caixa, ...p.colunas.map((c) => celula(proc, c, p.ctx, p)));
     return tr;
   }
 
@@ -174,6 +229,12 @@ export function criarTabela(inicial: PropsTabela) {
     corpo.style.paddingTop = `${j.antes}px`;
     corpo.style.paddingBottom = `${j.depois}px`;
     corpo.replaceChildren(...p.linhas.slice(j.inicio, j.fim).map((l) => (l.tipo === 'grupo' ? linhaGrupo(l) : linhaProcesso(l.processo, l.grupo))));
+    const entrada = corpo.querySelector<HTMLInputElement>('.spro-espec-input');
+    if (entrada && focarEdicao) {
+      focarEdicao = false;
+      entrada.focus();
+      entrada.setSelectionRange?.(entrada.value.length, entrada.value.length);
+    } else if (entrada && entrada.getRootNode() instanceof ShadowRoot && (entrada.getRootNode() as ShadowRoot).activeElement !== entrada && focoNaEdicao) entrada.focus();
   }
 
   let quadro = 0;
@@ -189,6 +250,8 @@ export function criarTabela(inicial: PropsTabela) {
 
   function atualizar(novo: PropsTabela) {
     const mudouEstrutura = novo.colunas.join() !== p.colunas.join() || novo.ordem !== p.ordem || novo.selecionados !== p.selecionados;
+    if (novo.editando && novo.editando !== p.editando) focarEdicao = true;
+    focoNaEdicao = !!novo.editando;
     p = novo;
     const chave = `${p.colunas.join()}|${p.densidade}`;
     if (mudouEstrutura || chave !== ultimaChave) {

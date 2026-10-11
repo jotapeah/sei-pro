@@ -26,7 +26,9 @@ export function delegarEstrelas(doc: Document, servico: ServicoFavoritosPagina, 
   doc.addEventListener(
     "click",
     (ev) => {
-      const estrela = (ev.target as Element | null)?.closest?.(".spro-fav-estrela") as HTMLButtonElement | null;
+      // composedPath: a grade nova do controle (Shadow DOM) tem estrelas proprias, e o alvo retargetado seria o host.
+      const alvo = (ev.composedPath?.()[0] ?? ev.target) as Element | null;
+      const estrela = alvo?.closest?.(".spro-fav-estrela") as HTMLButtonElement | null;
       if (!estrela) return;
       ev.preventDefault();
       ev.stopPropagation();

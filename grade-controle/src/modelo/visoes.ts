@@ -6,7 +6,8 @@ export const MAX_NOME = 40;
 
 export const quadroPadrao = (): ConfigQuadro => ({ colunas: 'marcador', limite: 0, raiasPorResponsavel: false });
 
-export const COLUNAS_PADRAO: Coluna[] = ['processo', 'tipo', 'responsavel', 'marcadores', 'prazo', 'anotacao'];
+export const COLUNAS_PADRAO: Coluna[] = ['processo', 'especificacao', 'tipo', 'responsavel', 'marcadores', 'prazo', 'anotacao'];
+export const VERSAO_COLUNAS = 2;
 
 export function visaoPadrao(): Visao {
   return {
@@ -16,6 +17,7 @@ export function visaoPadrao(): Visao {
     ordem: [],
     agrupar: 'nenhum',
     modo: 'tabela',
+    colv: VERSAO_COLUNAS,
     colunas: [...COLUNAS_PADRAO],
     densidade: 'confortavel',
     quadro: quadroPadrao(),
@@ -37,10 +39,16 @@ export function normalizarVisao(bruto: unknown): Visao {
         .slice(0, 4)
         .map((c) => ({ campo: c.campo, decrescente: c.decrescente === true }))
     : [];
-  const colunas = Array.isArray(b.colunas) ? [...new Set(b.colunas.filter((c): c is Coluna => COLUNAS.includes(c as Coluna)))] : [];
+  let colunas = Array.isArray(b.colunas) ? [...new Set(b.colunas.filter((c): c is Coluna => COLUNAS.includes(c as Coluna)))] : [];
+  // Visao salva antes da coluna Especificacao existir: ela entra logo depois do Processo (o usuario pode desligar de novo).
+  if (colunas.includes('processo') && b.colv !== VERSAO_COLUNAS && !colunas.includes('especificacao')) {
+    const i = colunas.indexOf('processo');
+    colunas = [...colunas.slice(0, i + 1), 'especificacao', ...colunas.slice(i + 1)];
+  }
   const q = (b.quadro && typeof b.quadro === 'object' ? b.quadro : {}) as Record<string, unknown>;
   return {
     id: typeof b.id === 'string' ? b.id : '',
+    colv: VERSAO_COLUNAS,
     nome: typeof b.nome === 'string' && b.nome.trim() ? b.nome.trim().slice(0, MAX_NOME) : base.nome,
     busca: typeof b.busca === 'string' ? b.busca.slice(0, 500) : '',
     ordem,

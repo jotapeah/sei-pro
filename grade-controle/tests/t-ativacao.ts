@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { areaMemoria } from '../../sei-comum/src/armazenamento/area';
 import { ATRIBUTO, ativarCedo, CHAVE_DICA, cssPrimeiraPintura, desativar, ESCURO, estaAtiva, gravarDica, ID_ESTILO, lerDica, marcarPronta, PRAZO_MS, PRONTA, TETO_MS, vigiar } from '../src/ativacao/inicio';
-import { CLASSE_BOTAO, garantirBotao, manterBotao, removerBotao } from '../src/ativacao/botao';
+import { CLASSE_BOTAO, garantirBotao, ligarCliqueDoBotao, manterBotao, removerBotao } from '../src/ativacao/botao';
 import { chaveVisao, criarArmazem, estadoUnidadeVazio } from '../src/persistencia/armazem';
 import { visaoPadrao } from '../src/modelo/visoes';
 import { docDe, teste } from './util';
@@ -101,13 +101,20 @@ await teste('botão: entra ao lado da seta de recolher, sem rótulo e com toolti
   const b = doc.querySelector<HTMLButtonElement>(`.${CLASSE_BOTAO}`)!;
   assert.equal(b.nextElementSibling!.className, 'spro-fav-recolher');
   assert.equal(b.textContent!.trim(), '');
+  const parar = ligarCliqueDoBotao(doc, () => n++);
   assert.match(b.title, /visão nova/);
   assert.equal(b.getAttribute('aria-pressed'), 'false');
   b.click();
   assert.equal(n, 1);
+  // O legado clona a barra de titulo e o clone perde os ouvintes: o clique delegado ao documento ainda funciona.
+  const clone = b.cloneNode(true) as HTMLElement;
+  b.replaceWith(clone);
+  clone.click();
+  assert.equal(n, 2);
+  parar();
   garantirBotao(doc, true, () => n++);
-  assert.match(b.title, /nativa/);
-  assert.equal(b.getAttribute('aria-pressed'), 'true');
+  assert.match(clone.title, /nativa/);
+  assert.equal(clone.getAttribute('aria-pressed'), 'true');
   assert.equal(doc.querySelectorAll(`.${CLASSE_BOTAO}`).length, 1);
   removerBotao(doc);
   assert.equal(doc.querySelector(`.${CLASSE_BOTAO}`), null);

@@ -48,6 +48,11 @@ export interface Processo {
   prazo?: PrazoProcesso;
   retornos: RetornoLinha[];
   acompanhamentoEspecial: boolean;
+  /** Grupo do acompanhamento especial, quando o icone da linha o informa. */
+  acompanhamentoGrupo?: string;
+  /** O SEI marca no tooltip do link: "(URGENTE)" e "(TRANCADO)". */
+  urgente?: boolean;
+  trancado?: boolean;
   documentoNovo: boolean;
   /** Número da página do SEI (0 = a que o usuário está vendo). */
   pagina: number;
@@ -71,7 +76,7 @@ export interface LeituraTabela {
   visao: 'resumida' | 'detalhada';
 }
 
-export const COLUNAS = ['processo', 'tipo', 'especificacao', 'responsavel', 'marcadores', 'prazo', 'anotacao', 'caixa', 'parado', 'sinais'] as const;
+export const COLUNAS = ['processo', 'especificacao', 'tipo', 'responsavel', 'marcadores', 'prazo', 'anotacao', 'caixa', 'parado', 'sinais'] as const;
 export type Coluna = (typeof COLUNAS)[number];
 
 export const ROTULO_COLUNA: Record<Coluna, string> = {
@@ -120,6 +125,8 @@ export interface ConfigQuadro {
 export interface Visao {
   /** Vazio na visão corrente ainda não salva. */
   id: string;
+  /** Versao do conjunto de colunas (2 = com Especificacao). */
+  colv?: number;
   nome: string;
   busca: string;
   ordem: CriterioOrdem[];

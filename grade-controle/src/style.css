@@ -123,3 +123,30 @@ kbd { padding: 0 5px; font: 12px var(--spro-mono); background: var(--spro-fundo-
 .spro-aviso { display: flex; gap: 10px; align-items: center; max-width: 420px; padding: 10px 12px; color: var(--spro-texto); background: var(--spro-fundo); border: 1px solid var(--spro-borda-forte); border-radius: var(--spro-raio); box-shadow: var(--spro-sombra-3); }
 @media (max-width: 760px) { .spro-seg-b span, .spro-bt span { display: none; } .spro-col { flex-basis: 240px; } }
 @media (prefers-reduced-motion: reduce) { .spro-grupo-seta { transition: none; } }
+
+/* ---- Icones dos outros modulos, edicao inline ---- */
+.spro-icones { display: inline-flex; gap: 2px; align-items: center; margin-right: 6px; vertical-align: middle; }
+.spro-icones > * { flex: none; width: 22px; height: 24px; }
+.spro-slot { display: inline-block; }
+.spro-acomp { align-items: center; justify-content: center; }
+.spro-icones button { display: inline-flex; align-items: center; justify-content: center; padding: 2px; cursor: pointer; background: none; border: 0; border-radius: 6px; color: var(--spro-suave); position: relative; }
+.spro-icones button:hover { background: var(--spro-fundo-3); }
+.spro-icones .spro-fav-estrela[aria-pressed="true"] { color: var(--spro-estrela); }
+.spro-acomp { display: inline-flex; color: var(--spro-destaque); }
+.spro-urgente { margin-left: 6px; padding: 0 6px; font-size: 11px; font-weight: 700; color: #fff; background: var(--spro-perigo); border-radius: 99px; }
+.spro-linha-urgente { box-shadow: inset 3px 0 0 var(--spro-perigo); }
+.spro-c-processo { display: flex; align-items: center; min-width: 0; }
+.spro-c-processo .spro-proc { flex: none; }
+.spro-editavel { position: relative; display: flex; align-items: center; gap: 4px; }
+.spro-lapis { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; cursor: pointer; color: var(--spro-suave); background: none; border: 0; border-radius: 6px; opacity: 0; transition: opacity var(--spro-dur); }
+.spro-linha:hover .spro-lapis, .spro-lapis:focus-visible, .spro-edicao .spro-lapis { opacity: 1; }
+.spro-lapis:hover { color: var(--spro-destaque); background: var(--spro-fundo-3); }
+.spro-lapis-ok { color: var(--spro-ok); }
+.spro-lapis-fixo { cursor: default; pointer-events: none; }
+.spro-edicao { display: flex; flex: 1; gap: 2px; align-items: center; min-width: 0; }
+.spro-espec-input { flex: 1; min-width: 0; height: 28px; padding: 0 8px; background: var(--spro-fundo); border: 1px solid var(--spro-destaque); border-radius: var(--spro-raio-p); }
+.spro-prazo-b { display: inline-flex; padding: 0; cursor: pointer; background: none; border: 0; text-align: left; }
+.spro-prazo-vazio { padding: 1px 8px; font-size: 12px; color: var(--spro-fraco); border: 1px dashed var(--spro-borda-forte); border-radius: 99px; opacity: 0; }
+.spro-linha:hover .spro-prazo-vazio, .spro-prazo-b:focus-visible .spro-prazo-vazio { opacity: 1; }
+.spro-prazo-b:hover .spro-prazo, .spro-prazo-b:hover .spro-prazo-vazio { outline: 2px solid color-mix(in srgb, var(--spro-destaque) 40%, transparent); }
+.spro-corta { flex: 1; min-width: 0; }

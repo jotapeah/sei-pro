@@ -20,11 +20,8 @@ export function garantirBotao(doc: Document, ativo: boolean, alternar: () => voi
     botao = doc.createElement('button');
     botao.type = 'button';
     botao.className = CLASSE_BOTAO;
-    botao.addEventListener('click', (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      alternar();
-    });
+    // Sem ouvinte proprio: o legado CLONA a barra de titulo (`$.fn.moveTo`) e o clone perde os ouvintes. O clique e
+    // delegado ao documento em `ligarCliqueDoBotao` e funciona em qualquer copia do botao.
     botao.append(iconeGrade('grade', 18, doc));
     const referencia = barra.querySelector('.spro-fav-recolher');
     if (referencia) referencia.before(botao);
@@ -34,6 +31,19 @@ export function garantirBotao(doc: Document, ativo: boolean, alternar: () => voi
   botao.setAttribute('aria-label', rotulo);
   botao.setAttribute('aria-pressed', String(ativo));
   return true;
+}
+
+/** Um ouvinte so, no documento (captura): vale para o botao original e para qualquer clone dele. */
+export function ligarCliqueDoBotao(doc: Document, alternar: () => void): () => void {
+  const ouvinte = (ev: Event) => {
+    const alvo = (ev.composedPath?.()[0] ?? ev.target) as Element | null;
+    if (!alvo?.closest?.(`.${CLASSE_BOTAO}`)) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    alternar();
+  };
+  doc.addEventListener('click', ouvinte, true);
+  return () => doc.removeEventListener('click', ouvinte, true);
 }
 
 export const removerBotao = (doc: Document): void => {

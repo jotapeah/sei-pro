@@ -79,11 +79,19 @@ export function lerProcessoDaLinha(tr: Element, ctx: ContextoLinha): Processo | 
     naoVisualizado: base.novo,
     marcadores: base.sigiloso ? [] : marcadores,
     retornos: base.sigiloso ? [] : lerRetornos(tr),
-    acompanhamentoEspecial: !base.sigiloso && !!tr.querySelector('a[href*="acao=acompanhamento"] , img[src*="acompanhamento_especial"]'),
+    acompanhamentoEspecial: !base.sigiloso && !!tr.querySelector('a[href*="acao=acompanhamento"] , img[src*="acompanhamento_especial"], .acompanhamentoesp_icon'),
     documentoNovo: base.documentoNovo,
     pagina: ctx.pagina,
     naPaginaAtual: ctx.naPaginaAtual,
   };
+  const marca = tr.querySelector('a[href*="acao=procedimento_trabalhar"]')?.getAttribute('onmouseover') ?? '';
+  if (/\(URGENTE\)/.test(marca)) processo.urgente = true;
+  if (/\(TRANCADO\)/.test(marca)) processo.trancado = true;
+  const acomp = tr.querySelector('.acompanhamentoesp_icon');
+  if (acomp) {
+    const args = chamadas(acomp.getAttribute('onmouseover') ?? '', 'infraTooltipMostrar')[0];
+    if (typeof args?.[1] === 'string' && args[1]) processo.acompanhamentoGrupo = texto(args[1]);
+  }
   const href = tr.querySelector('a[href*="acao=procedimento_trabalhar"]')?.getAttribute('href');
   if (href) processo.link = decodificarEntidades(href);
   const atribuicao = lerAtribuicao(tr);

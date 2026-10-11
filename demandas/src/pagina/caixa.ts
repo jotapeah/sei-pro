@@ -226,7 +226,9 @@ export function instalarIconesCaixa(d: DepsCaixa): { atualizar(): Promise<void>;
 
   // Captura no documento: o ícone responde antes de qualquer ouvinte da linha do SEI (e o clone também).
   const clique = (ev: Event) => {
-    const b = (ev.target as Element | null)?.closest?.(`.${ICONE_CAIXA}[data-spro-dem-caixa]`) as HTMLElement | null;
+    // composedPath: a grade nova do controle (Shadow DOM) clona o icone; o alvo retargetado seria o host.
+    const alvo = (ev.composedPath?.()[0] ?? ev.target) as Element | null;
+    const b = alvo?.closest?.(`.${ICONE_CAIXA}[data-spro-dem-caixa]`) as HTMLElement | null;
     if (!b) return;
     ev.preventDefault();
     ev.stopPropagation();
@@ -235,7 +237,7 @@ export function instalarIconesCaixa(d: DepsCaixa): { atualizar(): Promise<void>;
       aberto.fechar();
       return;
     }
-    const tr = b.closest(LINHAS);
+    const tr = b.closest(LINHAS) ?? d.doc.getElementById(`P${b.getAttribute("data-spro-id") ?? ""}`);
     const p = tr ? processoDaLinha(tr) : null;
     if (p) d.abrir(b, p);
   };

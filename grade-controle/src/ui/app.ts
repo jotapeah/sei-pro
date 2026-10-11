@@ -9,13 +9,14 @@ import { aplicarSelecao, lerSelecao, observarSelecao } from '../acoes/selecao';
 import { executarAcaoNativa } from '../acoes/barra';
 import { criarFila, type DepsMover } from '../acoes/mover';
 import type { AcaoNativa } from '../leitura/barra';
+import { lerTabelas } from '../leitura/tabela';
 import { acrescentar, interpretar, filtrarPorBusca, remover } from '../modelo/busca';
 import type { Ctx } from '../modelo/contexto';
 import { facetasDe } from '../modelo/facetas';
 import { linhasCsv, nomeArquivo } from '../modelo/exportar';
 import { agrupar, ROTULO_AGRUPAR } from '../modelo/grupos';
 import { abrirVisita, comIdade, type EstadoIdade, registrarVistos } from '../modelo/idade';
-import { achatar } from '../modelo/linhas';
+import { achatar, type LinhaLista } from '../modelo/linhas';
 import { alternarOrdem, ordenar } from '../modelo/ordem';
 import { aplicarMovimento, type ExtrasQuadro, planejarMovimento } from '../modelo/quadro';
 import { type AgruparPor, type CampoOrdem, COLUNAS, type Coluna, type LeituraTabela, type Processo, ROTULO_COLUNA, type Visao } from '../modelo/tipos';
@@ -25,7 +26,8 @@ import { carregarRestante } from '../paginas/carregar';
 import type { Armazem } from '../persistencia/armazem';
 import { desenharQuadro } from './quadro';
 import { iconeGrade } from './icones';
-import { criarTabela } from './tabela';
+import { assinaturaIcones, criarClonador, estilosDosModulos } from './iconesNativos';
+import { criarTabela, type PropsTabela } from './tabela';
 
 export interface DepsApp {
   doc: Document;
@@ -44,6 +46,11 @@ export interface DepsApp {
   /** Marcadores e usuários da unidade, para o quadro mostrar colunas vazias. Falha = só o que está carregado. */
   extras?(): Promise<ExtrasQuadro>;
   aoVoltarNativa(): void;
+  editarEspecificacao(protocolo: string, texto: string): Promise<void>;
+  /** Pede ao modulo de prazos que abra o menu do prazo do processo. */
+  abrirPrazo(id: string): void;
+  /** Clica o icone de anotacao da linha nativa; falso se a linha nao tem. */
+  abrirAnotacao(id: string): boolean;
   /** Para os testes: não reagir ao relógio. */
   semDebounce?: boolean;
 }
@@ -97,7 +104,8 @@ export function criarApp(d: DepsApp) {
   const estilo = doc.createElement('style');
   estilo.textContent = d.css;
   const raiz = h('div', { class: `spro-app${d.escuro ? ' spro-escuro' : ''}` });
-  sombra.append(estilo, raiz);
+  const estiloModulos = doc.createElement('style');
+  sombra.append(estilo, estiloModulos, raiz);
 
   const busca = h('input', { type: 'search', class: 'spro-busca', placeholder: 'Buscar: texto, resp:ana, prazo:<7d, marcador:urgente...', 'aria-label': 'Buscar processos', spellcheck: 'false', autocomplete: 'off' });
   const chips = h('div', { class: 'spro-chips' });
@@ -201,7 +209,8 @@ export function criarApp(d: DepsApp) {
     const nomes = Object.fromEntries((extras.responsaveis ?? []).map((u) => [u.sigla, u.nome]));
     substituir(id, aplicarMovimento(original, plano.movimento, nomes));
     render();
-    const r = await fila.mover(plano.movimento);
+    emVoo += 1;
+    const r = await fila.mover(plano.movimento).finally(() => { emVoo -= 1; });
     if (encerrado) return;
     if (!r.ok) {
       substituir(id, original);
@@ -225,13 +234,48 @@ export function criarApp(d: DepsApp) {
   }
 
   // ---------- render ----------
-  const tabela = criarTabela({
-    linhas: [], colunas: visao.colunas, densidade: visao.densidade, ctx: ctx(), ordem: visao.ordem, selecionados, foco,
+  const clonarIcones = criarClonador();
+  let emVoo = 0;
+  let editando: string | null = null;
+  let rascunho = '';
+  let nomesCompletos = false;
+  const propsDaTabela = (linhas: LinhaLista[]): PropsTabela => ({
+    linhas, colunas: visao.colunas, densidade: visao.densidade, ctx: ctx(), ordem: visao.ordem, selecionados, foco,
+    icones: (id) => clonarIcones(doc, id),
+    nomesCompletos, editando, rascunho,
     aoOrdenar: (campo, mais) => alterar({ ordem: alternarOrdem(visao.ordem, campo, mais) }),
     aoSelecionar: (id, m) => selecionar([id], m),
     aoGrupo: (chave) => { const n = new Set(recolhidos); n.has(chave) ? n.delete(chave) : n.add(chave); recolhidos = n; void d.armazem.gravarRecolhidos([...n]).catch(() => undefined); renderConteudo(); },
     aoMarcarGrupo: (ids, m) => selecionar(ids, m),
+    aoEditarEspec: (id) => { editando = id; rascunho = todos.find((x) => x.id === id)?.especificacao ?? ''; renderConteudo(); },
+    aoDigitarEspec: (t) => { rascunho = t; },
+    aoCancelarEspec: () => { editando = null; renderConteudo(); },
+    aoSalvarEspec: (id) => void salvarEspec(id),
+    aoAbrirPrazo: (id) => d.abrirPrazo(id),
+    aoAbrirAnotacao: (id) => { if (!d.abrirAnotacao(id)) aviso('Este processo não tem o ícone de anotação na tela do SEI (está em outra página). Use o botão Anotações da barra.'); },
   });
+  const tabela = criarTabela(propsDaTabela([]));
+
+  async function salvarEspec(id: string) {
+    const original = todos.find((p) => p.id === id);
+    const texto = rascunho.trim();
+    editando = null;
+    if (!original || texto === original.especificacao.trim()) return renderConteudo();
+    if (!texto) { aviso('A especificação não pode ficar vazia.'); return renderConteudo(); }
+    substituir(id, { ...original, especificacao: texto });
+    render();
+    emVoo += 1;
+    try {
+      await d.editarEspecificacao(original.protocolo, texto);
+      aviso(`Especificação de ${original.protocolo} salva.`);
+    } catch (e) {
+      substituir(id, original);
+      render();
+      aviso(`Não foi possível salvar a especificação: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      emVoo -= 1;
+    }
+  }
 
   function renderConteudo() {
     const lista = ordenados();
@@ -240,13 +284,7 @@ export function criarApp(d: DepsApp) {
       return;
     }
     const grupos = agrupar(lista, visao.agrupar, ctx());
-    tabela.atualizar({
-      linhas: achatar(grupos, recolhidos, visao.agrupar !== 'nenhum'), colunas: visao.colunas, densidade: visao.densidade, ctx: ctx(), ordem: visao.ordem, selecionados, foco,
-      aoOrdenar: (campo, mais) => alterar({ ordem: alternarOrdem(visao.ordem, campo, mais) }),
-      aoSelecionar: (id, m) => selecionar([id], m),
-      aoGrupo: (chave) => { const n = new Set(recolhidos); n.has(chave) ? n.delete(chave) : n.add(chave); recolhidos = n; void d.armazem.gravarRecolhidos([...n]).catch(() => undefined); renderConteudo(); },
-      aoMarcarGrupo: (ids, m) => selecionar(ids, m),
-    });
+    tabela.atualizar(propsDaTabela(achatar(grupos, recolhidos, visao.agrupar !== 'nenhum')));
     if (conteudo.firstElementChild !== tabela.el) conteudo.replaceChildren(tabela.el);
   }
 
@@ -410,6 +448,39 @@ export function criarApp(d: DepsApp) {
   const pararSelecao = observarSelecao(doc, (ids) => { selecionados = ids; renderLote(); renderConteudo(); });
   const pararVisoes = d.armazem.aoMudarVisoes(() => void d.armazem.lerVisoes().then((v) => { salvas = v; }).catch(() => undefined));
 
+  // ---------- sincronia com a linha nativa ----------
+  // A linha nativa (oculta) continua sendo a fonte da verdade: os outros modulos e o proprio SEI a atualizam
+  // (estrela, prazo, anotacao, icones), e a grade relê o que mudou. Enquanto ha escrita em andamento, nao relê
+  // (a atualizacao otimista ainda nao chegou ao SEI e seria desfeita).
+  const assinaturas = new Map<string, string>();
+  function sincronizar() {
+    if (encerrado || emVoo > 0) return;
+    const leitura = lerTabelas(doc);
+    const novos = new Map(leitura.processos.map((p) => [p.id, p]));
+    let mudou = false;
+    todos = todos.map((p) => {
+      if (!p.naPaginaAtual) return p;
+      const n = novos.get(p.id);
+      if (!n) return p;
+      const assinatura = assinaturaIcones(doc, p.id);
+      const igual = JSON.stringify(n) === JSON.stringify(p) && assinaturas.get(p.id) === assinatura;
+      assinaturas.set(p.id, assinatura);
+      if (igual) return p;
+      mudou = true;
+      return n;
+    });
+    if (mudou) { atualizarEstilosModulos(); render(); }
+  }
+  let sincTimer: ReturnType<typeof setTimeout> | undefined;
+  const Obs = doc.defaultView?.MutationObserver;
+  const observadorNativo = Obs ? new Obs(() => { clearTimeout(sincTimer); sincTimer = setTimeout(sincronizar, d.semDebounce ? 0 : 150); }) : null;
+  const alvoNativo = doc.querySelector('#frmProcedimentoControlar') ?? doc.body;
+  if (observadorNativo && alvoNativo) observadorNativo.observe(alvoNativo, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-pressed', 'aria-label', 'onmouseover', 'src', 'href', 'class'] });
+  function atualizarEstilosModulos() {
+    const css = estilosDosModulos(doc);
+    if (estiloModulos.textContent !== css) estiloModulos.textContent = css;
+  }
+
   // ---------- partida ----------
   async function carregarTudo() {
     if (!d.fonte) { completo = true; return finalizarCarga(true); }
@@ -444,8 +515,11 @@ export function criarApp(d: DepsApp) {
     } catch { /* sem preferências legíveis: segue com o padrão */ }
     idade = registrarVistos(idade, todos.map((p) => p.id), d.agora(), false);
     busca.value = visao.busca;
+    atualizarEstilosModulos();
+    for (const [id] of todos.map((p) => [p.id])) assinaturas.set(id!, assinaturaIcones(doc, id!));
     render();
     void carregarTudo();
+    for (const ms of [1200, 3500]) { const t = setTimeout(() => { atualizarEstilosModulos(); sincronizar(); }, ms); (t as unknown as { unref?: () => void }).unref?.(); }
   }
 
   return {
@@ -457,12 +531,15 @@ export function criarApp(d: DepsApp) {
     fechar() {
       encerrado = true;
       ctl.abort();
-      clearTimeout(buscaTimer); clearTimeout(gravarTimer);
+      clearTimeout(buscaTimer); clearTimeout(gravarTimer); clearTimeout(sincTimer);
+      observadorNativo?.disconnect();
       doc.removeEventListener('keydown', aoTeclar);
       pararSelecao(); pararVisoes();
       host.remove();
     },
     mostrar: (v: boolean) => { host.hidden = !v; },
+    definirNomesCompletos: (v: boolean) => { nomesCompletos = v; render(); },
+    sincronizar,
   };
 }
 

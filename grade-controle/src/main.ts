@@ -14,12 +14,13 @@ import { novoId } from '../../sei-comum/src/id';
 import cssBase from '../../sei-comum/src/ui/base.css';
 import { baixar } from '../../sei-comum/src/ui/dialogo';
 import { listarOpcoes } from '../../sei-nucleo/src/dominio/opcoes';
+import { alterarProcesso } from '../../sei-nucleo/src/dominio/processo';
 import { atribuirProcesso, definirMarcador } from '../../sei-nucleo/src/dominio/acoesProcesso';
 import { Sei, lerContexto } from '../../sei-nucleo/src/sei';
 import { paginaDe } from '../../sei-nucleo/src/sessao/pagina';
 import { acoesDaBarra } from './leitura/barra';
 import { ativarCedo, desativar, estaAtiva, gravarDica, lerDica, marcarPronta, vigiar } from './ativacao/inicio';
-import { manterBotao } from './ativacao/botao';
+import { ligarCliqueDoBotao, manterBotao } from './ativacao/botao';
 import { lerTabelas, SELETOR_TABELAS } from './leitura/tabela';
 import { criarFonteSei } from './paginas/carregar';
 import { criarArmazem } from './persistencia/armazem';
@@ -40,6 +41,7 @@ let app: App | null = null;
 let vigia: ReturnType<typeof vigiar> | null = null;
 let pararBotao: (() => void) | null = null;
 let remontagens = 0;
+let nomesCompletos = false;
 let vigiaHost: MutationObserver | null = null;
 let domPronto = document.readyState !== 'loading';
 
@@ -103,7 +105,19 @@ function montar() {
         }
       : undefined,
     aoVoltarNativa: () => alternar(),
+    editarEspecificacao: async (protocolo, texto) => void (await alterarProcesso(sei, protocolo, { especificacao: texto }, { aplicar: true })),
+    abrirPrazo: (id) => {
+      // O modulo de Prazos escuta este evento (o mesmo que o legado dispara) e abre o menu do prazo do processo.
+      document.documentElement.setAttribute('data-spro-prazos-alvo', id);
+      document.dispatchEvent(new CustomEvent('spro-prazos-abrir'));
+    },
+    abrirAnotacao: (id) => {
+      const a = document.querySelector<HTMLElement>(`tr#P${id} a[href*="acao=anotacao_registrar"]`);
+      a?.click();
+      return !!a;
+    },
   });
+  app.definirNomesCompletos(nomesCompletos);
   alvo.before(app.host);
   guardarHost();
   void app.iniciar().then(() => {
@@ -184,6 +198,7 @@ function partir() {
     ativarCedo(document, escuro());
     vigia = vigiar(voltarNativa);
   }
+  ligarCliqueDoBotao(document, alternar);
   const aoDom = () => {
     domPronto = true;
     if (ligada) {
@@ -195,7 +210,11 @@ function partir() {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', aoDom, { once: true });
   else aoDom();
 
-  const ler = (dataValues: unknown) => configurar(opcaoLegadaMarcada(dataValues, OPCAO));
+  const ler = (dataValues: unknown) => {
+    nomesCompletos = opcaoLegadaMarcada(dataValues, 'nomesusuarios');
+    app?.definirNomesCompletos(nomesCompletos);
+    configurar(opcaoLegadaMarcada(dataValues, OPCAO));
+  };
   let mudou = false;
   chrome.storage.onChanged.addListener((m, area) => {
     if (area !== 'sync' || !('dataValues' in m)) return;

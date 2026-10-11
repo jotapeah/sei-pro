@@ -30,7 +30,8 @@ function dadosDaLinhaCaixa(tr: Element): DadosProcesso | null {
 export function instalarEstrelasCaixa(doc: Document, servico: ServicoFavoritosPagina): { atualizar(): void; desligar(): void } {
   instalarEstilo(doc);
   delegarEstrelas(doc, servico, (estrela) => {
-    const tr = estrela.closest(LINHAS);
+    // Estrela da grade nova (Shadow DOM): a linha nativa, oculta, e a fonte dos dados.
+    const tr = estrela.closest(LINHAS) ?? doc.getElementById(`P${estrela.getAttribute("data-spro-id") ?? ""}`);
     return tr ? dadosDaLinhaCaixa(tr) : null;
   });
   const atualizar = () => {

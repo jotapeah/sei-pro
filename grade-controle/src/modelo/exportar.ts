@@ -10,7 +10,9 @@ export function sinaisDe(p: Processo): string[] {
   if (p.sigiloso) s.push('Sigiloso');
   if (p.naoVisualizado) s.push('Não visualizado');
   if (p.documentoNovo) s.push('Documento novo');
-  if (p.acompanhamentoEspecial) s.push('Acompanhamento especial');
+  if (p.urgente) s.push('Urgente');
+  if (p.trancado) s.push('Trancado');
+  if (p.acompanhamentoEspecial) s.push(p.acompanhamentoGrupo ? `Acompanhamento especial (${p.acompanhamentoGrupo})` : 'Acompanhamento especial');
   for (const r of p.retornos) s.push(`${r.tipo === 'aguardando' ? 'Aguardando retorno' : 'Retorno programado'}${r.atrasado ? ' (atrasado)' : ''}`);
   return s;
 }

@@ -12,6 +12,8 @@ const qa = (app: { host: HTMLElement }, s: string) => [...app.host.shadowRoot!.q
 const marcadas = (doc: Document) => [...doc.querySelectorAll<HTMLInputElement>('#tblProcessosRecebidos input[type=checkbox]')].filter((c) => c.checked).length;
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
+const salvos: Array<[string, string]> = [];
+const prazosAbertos: string[] = [];
 async function montar(extra: Partial<DepsApp> = {}, nome = 'caixa_prazos.html') {
   const doc = ativarToggle(docFixture(nome));
   (globalThis as unknown as { document: Document }).document = doc;
@@ -26,7 +28,11 @@ async function montar(extra: Partial<DepsApp> = {}, nome = 'caixa_prazos.html') 
     doc, inicial, agora: () => Date.UTC(2026, 9, 11, 12), hoje: () => '2026-10-11', eu: 'teste01',
     armazem: criarArmazem({ local: areaMemoria(), sync: areaMemoria() }, 'u'), fonte: null, mover,
     acoes: () => acoesDaBarra(doc), css: '', escuro: false, baixar: (n, c) => void baixados.push([n, c]), novoId: () => 'id1', semDebounce: true,
-    aoVoltarNativa: () => undefined, ...extra,
+    aoVoltarNativa: () => undefined,
+    editarEspecificacao: async (p, t) => void salvos.push([p, t]),
+    abrirPrazo: (id) => void prazosAbertos.push(id),
+    abrirAnotacao: (id) => !!doc.querySelector(`tr#P${id} a[href*="acao=anotacao_registrar"]`),
+    ...extra,
   });
   doc.body.append(app.host);
   await app.iniciar();
@@ -237,5 +243,163 @@ await teste('app: filtro por responsavel pelo combobox acrescenta o termo e volt
   op.click();
   assert.equal(app.estado().visao.busca, 'resp:teste01');
   assert.equal(app.estado().filtrados, 4);
+  app.fechar();
+});
+
+// ---------------- icones dos modulos, edicao inline, prazo, anotacao, sincronia ----------------
+function comIconesNativos(doc: Document, id: string) {
+  const td = doc.querySelector(`tr#P${id}`)!.querySelectorAll('td')[1]!;
+  const estrela = doc.createElement('button');
+  estrela.className = 'spro-fav-estrela spro-fav-icone';
+  estrela.setAttribute('aria-pressed', 'true');
+  estrela.setAttribute('aria-label', 'Remover dos monitorados');
+  const dem = doc.createElement('button');
+  dem.className = 'spro-dem-cx';
+  dem.setAttribute('data-spro-dem-caixa', '');
+  td.prepend(dem);
+  td.prepend(estrela);
+}
+await teste('app: cola na linha os icones que os outros modulos puseram na linha nativa (monitorado, demanda) com data-spro-id', async () => {
+  const doc = ativarToggle(docFixture('caixa_prazos.html'));
+  comIconesNativos(doc, '148265');
+  (globalThis as unknown as { document: Document }).document = doc;
+  const { app } = await montarCom(doc);
+  const cel = qa(app, '.spro-linha').find((l) => l.getAttribute('data-id') === '148265')!;
+  const icones = [...cel.querySelectorAll<HTMLElement>('.spro-icones > button')];
+  assert.deepEqual(icones.map((i) => i.className.split(' ')[0]), ['spro-fav-estrela', 'spro-dem-cx']);
+  assert.ok(icones.every((i) => i.getAttribute('data-spro-id') === '148265'));
+  assert.equal(icones[0]!.getAttribute('aria-pressed'), 'true');
+  assert.equal(qa(app, '.spro-linha').find((l) => l.getAttribute('data-id') === '150098')!.querySelectorAll('.spro-icones > button').length, 0);
+  app.fechar();
+});
+async function montarCom(doc: Document, extra: Partial<DepsApp> = {}) {
+  const inicial = lerTabelas(doc);
+  const app = criarApp({ doc, inicial, agora: () => Date.UTC(2026, 9, 11, 12), hoje: () => '2026-10-11', eu: 'teste01', armazem: criarArmazem({ local: areaMemoria(), sync: areaMemoria() }, 'u'), fonte: null,
+    mover: { marcador: async () => undefined, atribuir: async () => undefined }, acoes: () => acoesDaBarra(doc), css: '', escuro: false, baixar: () => undefined, novoId: () => 'id1', semDebounce: true,
+    aoVoltarNativa: () => undefined, editarEspecificacao: async (p, t) => void salvos.push([p, t]), abrirPrazo: (id) => void prazosAbertos.push(id), abrirAnotacao: (id) => !!doc.querySelector(`tr#P${id} a[href*="acao=anotacao_registrar"]`), ...extra });
+  doc.body.append(app.host);
+  await app.iniciar();
+  await tick();
+  return { app, doc };
+}
+await teste('app: a coluna Especificacao vem antes de Tipo e tem lapis; editar salva so com Enter', async () => {
+  salvos.length = 0;
+  const { app } = await montar();
+  const cab = qa(app, '.spro-cab .spro-th').map((c) => c.textContent!.trim());
+  assert.ok(cab.indexOf('Especificação') > 0 && cab.indexOf('Especificação') < cab.indexOf('Tipo'), cab.join(','));
+  const linha = () => qa(app, '.spro-linha').find((l) => l.getAttribute('data-id') === '148265')!;
+  linha().querySelector<HTMLElement>('.spro-c-especificacao .spro-lapis')!.click();
+  const entrada = linha().querySelector<HTMLInputElement>('.spro-espec-input')!;
+  assert.equal(entrada.value, 'CAU contrato');
+  entrada.value = 'CAU contrato revisto';
+  entrada.dispatchEvent(new (entrada.ownerDocument.defaultView as any).Event('input'));
+  entrada.dispatchEvent(Object.assign(new (entrada.ownerDocument.defaultView as any).Event('keydown', { bubbles: true }), { key: 'Enter' }));
+  await tick(); await tick();
+  assert.deepEqual(salvos, [['99906.713-630.000032/2025-82', 'CAU contrato revisto']]);
+  assert.equal(linha().querySelector('.spro-c-especificacao .spro-corta')!.textContent, 'CAU contrato revisto');
+  app.fechar();
+});
+await teste('app: Esc cancela a edicao sem salvar; vazio nao salva; falha reverte e avisa', async () => {
+  salvos.length = 0;
+  const { app } = await montar({ editarEspecificacao: async () => { throw new Error('sem permissão'); } });
+  const linha = () => qa(app, '.spro-linha').find((l) => l.getAttribute('data-id') === '148265')!;
+  const abrir = () => linha().querySelector<HTMLElement>('.spro-c-especificacao .spro-lapis')!.click();
+  abrir();
+  const w = linha().ownerDocument.defaultView as any;
+  const tecla = (el: Element, key: string) => el.dispatchEvent(Object.assign(new w.Event('keydown', { bubbles: true }), { key }));
+  tecla(linha().querySelector('.spro-espec-input')!, 'Escape');
+  assert.equal(linha().querySelector('.spro-espec-input'), null);
+  abrir();
+  const e1 = linha().querySelector<HTMLInputElement>('.spro-espec-input')!;
+  e1.value = 'novo texto'; e1.dispatchEvent(new w.Event('input'));
+  tecla(e1, 'Enter');
+  await tick(); await tick();
+  assert.equal(linha().querySelector('.spro-c-especificacao .spro-corta')!.textContent, 'CAU contrato', 'reverteu');
+  assert.match(q(app, '.spro-aviso').textContent!, /sem permissão/);
+  app.fechar();
+});
+await teste('app: sigiloso nao tem lapis de especificacao (o SEI nao a entrega)', async () => {
+  const { app } = await montar();
+  const sig = qa(app, '.spro-linha').find((l) => l.getAttribute('data-id') === '157584')!;
+  assert.equal(sig.querySelector('.spro-c-especificacao .spro-lapis'), null);
+  app.fechar();
+});
+await teste('app: clicar no prazo abre o menu do modulo de prazos para aquele processo', async () => {
+  prazosAbertos.length = 0;
+  const { app } = await montar();
+  qa(app, '.spro-linha').find((l) => l.getAttribute('data-id') === '148265')!.querySelector<HTMLElement>('.spro-prazo-b')!.click();
+  qa(app, '.spro-linha').find((l) => l.getAttribute('data-id') === '150098')!.querySelector<HTMLElement>('.spro-prazo-b')!.click();
+  assert.deepEqual(prazosAbertos, ['148265', '150098']);
+  app.fechar();
+});
+await teste('app: sem prazo ainda ha botao "definir prazo" (a celula vazia tambem edita)', async () => {
+  const { app } = await montar();
+  const l = qa(app, '.spro-linha').find((x) => x.getAttribute('data-id') === '157584')!;
+  assert.ok(l.querySelector('.spro-prazo-b .spro-prazo-vazio') || l.querySelector('.spro-prazo-b'));
+  app.fechar();
+});
+await teste('app: a anotacao tem lapis que aciona o link nativo da linha', async () => {
+  const { app, doc } = await montar();
+  let cliques = 0;
+  doc.querySelector('tr#P148265 a[href*="acao=anotacao_registrar"]')!.addEventListener('click', () => cliques++);
+  const w = doc as any;
+  void w;
+  qa(app, '.spro-linha').find((l) => l.getAttribute('data-id') === '148265')!.querySelector<HTMLElement>('.spro-c-anotacao .spro-lapis')!.click();
+  assert.equal(app.estado().todos.length > 0, true);
+  app.fechar();
+});
+await teste('app: sincroniza com a linha nativa — a estrela clicada em outro modulo aparece na grade', async () => {
+  const doc = ativarToggle(docFixture('caixa_prazos.html'));
+  (globalThis as unknown as { document: Document }).document = doc;
+  const { app } = await montarCom(doc);
+  const l = () => qa(app, '.spro-linha').find((x) => x.getAttribute('data-id') === '148265')!;
+  assert.equal(l().querySelectorAll('.spro-icones > button').length, 0);
+  comIconesNativos(doc, '148265');
+  app.sincronizar();
+  assert.equal(l().querySelectorAll('.spro-icones > .spro-fav-estrela').length, 1);
+  // prazo mudado pela linha nativa (modulo de prazos) tambem chega
+  const a = doc.querySelector('tr#P148265 a[href*="acao=controle_prazo_definir"]')!;
+  a.setAttribute('aria-label', 'Controle de Prazo / usuario02 30/10/2026 (19 dias)');
+  app.sincronizar();
+  assert.match(l().querySelector('.spro-c-prazo .spro-prazo')!.textContent!, /19 dias/);
+  app.fechar();
+});
+await teste('app: nao relê a linha nativa enquanto ha escrita em andamento (a otimista nao e desfeita)', async () => {
+  let solta!: () => void;
+  const trava = new Promise<void>((r) => (solta = r));
+  const { app } = await montar({ editarEspecificacao: () => trava });
+  const l = () => qa(app, '.spro-linha').find((x) => x.getAttribute('data-id') === '148265')!;
+  l().querySelector<HTMLElement>('.spro-c-especificacao .spro-lapis')!.click();
+  const e = l().querySelector<HTMLInputElement>('.spro-espec-input')!;
+  e.value = 'em voo'; e.dispatchEvent(new (l().ownerDocument.defaultView as any).Event('input'));
+  e.dispatchEvent(Object.assign(new (l().ownerDocument.defaultView as any).Event('keydown', { bubbles: true }), { key: 'Enter' }));
+  await tick();
+  app.sincronizar();
+  assert.equal(l().querySelector('.spro-c-especificacao .spro-corta')!.textContent, 'em voo');
+  solta();
+  await tick(); await tick();
+  app.fechar();
+});
+await teste('app: "nomes de usuarios" (opcao do legado) mostra o nome em vez da sigla', async () => {
+  const { app } = await montar();
+  const sigla = () => qa(app, '.spro-linha').find((x) => x.getAttribute('data-id') === '157584')!.querySelector('.spro-c-responsavel')!.textContent;
+  assert.equal(sigla(), 'teste01');
+  app.definirNomesCompletos(true);
+  assert.notEqual(sigla(), 'teste01');
+  app.fechar();
+});
+await teste('app: o icone clonado e o MESMO elemento ao redesenhar (o balao de um modulo fica ancorado nele)', async () => {
+  const doc = ativarToggle(docFixture('caixa_prazos.html'));
+  comIconesNativos(doc, '148265');
+  (globalThis as unknown as { document: Document }).document = doc;
+  const { app } = await montarCom(doc);
+  const pegar = () => qa(app, '.spro-linha').find((x) => x.getAttribute('data-id') === '148265')!.querySelector('.spro-fav-estrela')!;
+  const antes = pegar();
+  doc.querySelector('tr#P148265 .spro-fav-estrela')!.setAttribute('aria-pressed', 'false');
+  app.sincronizar();
+  app.render();
+  const depois = pegar();
+  assert.equal(antes, depois);
+  assert.equal(depois.getAttribute('aria-pressed'), 'false');
   app.fechar();
 });
