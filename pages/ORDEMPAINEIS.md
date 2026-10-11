@@ -2,7 +2,9 @@
 
 ## ![SEI Pro Ordem dos painéis](../img/icon-notaarvore.png) Ordem e visibilidade dos painéis
 
-Na tela de **Controle de Processos**, o SEI Pro pode mostrar vários painéis além da lista de processos: **Monitorados**, **Atividades**, **Projetos**. Com esta função, **você decide a ordem deles** e **quais ficam visíveis**, sem precisar recarregar a página.
+Na tela de **Controle de Processos**, o SEI Pro pode mostrar vários painéis além da lista de processos: **[Monitorados](../pages/FAVORITOS.md)**, **Atividades**, **[Projetos](../pages/PROJETOS.md)** e **[Demandas](../pages/DEMANDAS.md)**. Com esta função, **você decide a ordem deles** e **quais ficam visíveis**, sem precisar recarregar a página.
+
+> ![Ordenar e ocultar os painéis do Controle de Processos](../img/ordem-paineis.gif)
 
 ### Como usar
 
@@ -17,7 +19,7 @@ Na tela de **Controle de Processos**, o SEI Pro pode mostrar vários painéis al
 * Painéis ocultos continuam na lista do modal, para você poder mostrá-los de novo quando quiser.
 * Se um painel ainda não está ativo (por exemplo, o módulo de Atividades desligado), a sua posição fica guardada e volta a valer quando ele aparecer.
 * Quem já ordenava os painéis arrastando, na versão antiga, **mantém essa ordem** como ponto de partida. O arrastar antigo foi substituído por este modal, que é mais estável: ele não move os painéis na página, então nada recarrega ao reordenar.
-* Disponível no **Chrome** e no **Edge**.
+* Disponível no **Chrome** e no **Edge**, também na versão da loja. Os painéis de Projetos e Demandas só aparecem no **SEI Pro Lab**, onde essas funções existem.
 
 ## Próximo item
 
