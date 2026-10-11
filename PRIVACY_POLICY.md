@@ -1,8 +1,8 @@
 # Política de Privacidade — SEI Pro ![SEI Pro](/img/icon-32.png)
 
-**Versão:** 3.3  
-**Data de Vigência:** 4 de outubro de 2026  
-**Última Atualização:** 4 de outubro de 2026
+**Versão:** 3.4  
+**Data de Vigência:** 10 de outubro de 2026  
+**Última Atualização:** 10 de outubro de 2026
 
 ---
 
@@ -82,13 +82,15 @@ O SEI Pro guarda configurações e dados de trabalho **no dispositivo do usuári
 
 - **Local Storage e Session Storage:** preferências e dados temporários de uso nas páginas do SEI;
 - **Storage API do navegador (`storage.local`, `storage.sync` e `storage.session`):** configurações da extensão. O `storage.sync` é sincronizado entre os dispositivos do usuário pela conta do navegador (Google, Microsoft ou Mozilla), se a sincronização estiver ativada;
-- **IndexedDB:** dados estruturados, como o histórico de processos visitados e as conversas do Agente de IA.
+- **IndexedDB:** dados estruturados, como o histórico de processos visitados, as conversas do Agente de IA e as cópias automáticas diárias (as 14 mais recentes) dos Processos Monitorados, dos Projetos e das Demandas, que o usuário pode restaurar;
+- **Textos Padrão do SEI (opcional, para compartilhar com a unidade):** os Processos Monitorados, os Projetos e as Demandas podem guardar a lista **da unidade** em Textos Padrão do próprio SEI, para que os colegas que usam a extensão vejam os mesmos dados. Esse caso tem regras próprias e está descrito na seção 3.5;
+- **Arquivo escolhido pelo usuário (opcional):** os mesmos módulos podem gravar uma cópia num arquivo do computador, na pasta que o usuário escolher (seção 3.5).
 
 #### O que é sincronizado entre dispositivos
 
 Quando a sincronização do navegador está ativada, acompanham a conta do usuário:
 
-- as **opções do SEI Pro** marcadas na página de configurações, inclusive os dados de conexão da função **Base de Dados** — endereço, identificador de cliente e chave de API do serviço que o próprio usuário indicou (seção 4.3);
+- as **opções do SEI Pro** marcadas na página de configurações, a ordem e a visibilidade dos painéis do Controle de Processos, inclusive os dados de conexão da função **Base de Dados** — endereço, identificador de cliente e chave de API do serviço que o próprio usuário indicou (seção 4.3);
 - a **configuração do Agente de IA**: serviço escolhido, modelo, ajustes, instruções adicionais, limites de gasto, regras da unidade, memória da unidade, rotinas, fluxos, coleções de skills e, das skills, apenas nome, atalho e o endereço do arquivo de origem;
 - os **conectores (servidores MCP)** cadastrados: nome, endereço, situação e a permissão dada a cada ferramenta.
 
@@ -106,7 +108,10 @@ Esses dados trafegam pela infraestrutura do fabricante do navegador, nunca por s
 | Tipo de dado | Finalidade | Onde fica |
 |---|---|---|
 | Configurações e preferências | Personalizar a extensão | Navegador; sincronizadas pela conta do navegador, se ativado |
-| Processos favoritos, marcadores e valores padrão | Organização e agilidade no SEI | Navegador |
+| Processos Monitorados (antes chamados Favoritos), marcadores e valores padrão | Organização e agilidade no SEI | Navegador; a lista da unidade, só se o usuário confirmar, também em Texto Padrão do SEI (seção 3.5) |
+| Projetos (nome, fases, etapas, responsáveis, prazos, processos vinculados e histórico de alterações) | Acompanhar projetos | Navegador; os da unidade, só se o usuário confirmar, também em Texto Padrão do SEI (seção 3.5) |
+| Demandas (título, descrição, responsável, prazo, etiquetas, lista de tarefas, tempos, avaliação, processos vinculados e histórico) | Distribuir e acompanhar o trabalho | Navegador; as da unidade, só se o usuário confirmar, também em Texto Padrão do SEI (seção 3.5); arquivo local opcional |
+| Prazos do Controle de Prazos | Acompanhar vencimentos de processos | No próprio SEI: controle de prazo do processo e marcador do processo (seção 3.5) |
 | Histórico de processos visitados | Navegação entre processos recentes | Navegador |
 | Endereço e chave do servidor de Atividades (seção 4.3) | Conectar ao servidor do órgão | Navegador; sincronizados pela conta do navegador, se ativado |
 | Chave de API do serviço de IA | Usar o Agente de IA | Somente neste navegador (não é sincronizada) |
@@ -129,6 +134,20 @@ Os dados guardados no navegador **não são criptografados pela extensão**. A s
 - aplicar criptografia de disco;
 - bloquear a sessão automaticamente;
 - restringir o acesso físico aos equipamentos.
+
+### 3.5. Dados que o usuário escolhe compartilhar com a unidade
+
+Alguns módulos permitem trabalhar em equipe sem servidor do SEI Pro. Para isso usam recursos do próprio SEI e do computador do usuário:
+
+- **Textos Padrão do SEI.** Os Processos Monitorados, os Projetos e as Demandas podem gravar a lista **da unidade** em Textos Padrão do SEI, cujos nomes começam por `[_SEIPRO_`. O SEI Pro cria, lê e atualiza esses textos sozinho, com a sessão do próprio usuário. **Eles ficam no SEI do órgão, e não em servidor do SEI Pro.** Por serem Textos Padrão da unidade, **podem ser vistos e alterados por quem tem acesso aos Textos Padrão daquela unidade**, inclusive pela tela do SEI, e ocupam espaço (cada texto aceita até 100 KB).
+- **Quando isso acontece.** A gravação em Texto Padrão só começa depois que o usuário confirma o aviso ("Entendi"), na primeira vez, em cada unidade. Ler os textos que os colegas gravaram não altera nada no SEI. O que o usuário marca como "só meu" fica no navegador. As Demandas e os Projetos têm uma opção de guardar também os dados "só meus" em Texto Padrão; ela vem **desligada** e só se liga por escolha do usuário, e esse texto, por estar no SEI, também é visível a quem acessa os Textos Padrão da unidade. Os Processos Monitorados nunca enviam a lista pessoal.
+- **O que vai.** Processos Monitorados: os processos da lista da unidade e os dados de organização associados. Projetos: nomes, fases, etapas, responsáveis, datas, números de processos vinculados e o histórico de alterações. Demandas: título, descrição, responsável, datas, etiquetas, lista de tarefas, tempos, avaliação, processos vinculados e o histórico de alterações. **O que o usuário digita em títulos, descrições e observações vai exatamente como foi escrito:** não se deve incluir dados sigilosos ou pessoais desnecessários nesses campos.
+- **Processos sigilosos.** O número de processo ou de documento sigiloso não é gravado nos Textos Padrão pelos Projetos e pelas Demandas, e os Processos Monitorados guardam desses processos apenas um aviso, sem número nem anotações. O número continua só no navegador do próprio usuário.
+- **Arquivo no computador.** O usuário pode escolher um arquivo, por exemplo numa pasta sincronizada pela nuvem corporativa do órgão, para guardar uma cópia desses dados e levá-la a outro computador. A extensão apenas lê e grava esse arquivo, nunca o envia a servidor do SEI Pro; o conteúdo, inclusive os números de processos sigilosos do próprio usuário, fica sob a guarda de quem escolhe a pasta.
+- **Controle de Prazos.** O prazo informado é gravado no controle de prazo do próprio SEI (a partir do 4.1.5) e, quando o usuário informa hora, texto ou data inicial, também no marcador do processo. Ficam visíveis a quem acessa o processo, como qualquer prazo ou marcador do SEI.
+- **Como parar.** Basta desligar o módulo na página de configurações. Os textos já gravados permanecem no SEI até serem excluídos em Textos Padrão, pelo próprio SEI.
+
+Os módulos de Projetos e de Demandas descritos aqui **não** usam o servidor do órgão da seção 4.3.
 
 ---
 
@@ -189,6 +208,7 @@ Os dados guardados no navegador **não são criptografados pela extensão**. A s
 
 ### 4.3. Gestão de Atividades, Projetos e Prescrições
 
+- **Escopo:** esta seção trata do gerenciador de **Atividades** (e de Prescrições) que usa servidor do órgão. Os gerenciadores novos de Projetos e de Demandas não usam servidor: veja a seção 3.5.
 - **Natureza:** o módulo não é um serviço público do SEI Pro. Ele depende de um **servidor mantido pelo órgão** que o adota. O endereço e a chave de acesso são fornecidos pela área responsável do órgão. Sem essa configuração, o módulo não envia dados.
 - **Destinatário:** exclusivamente o servidor do órgão, que é quem controla esses dados.
 - **Onde ficam as credenciais:** o endereço, o identificador de cliente e a chave de API ficam no navegador e, com a sincronização ativada, **acompanham a conta do navegador do usuário**, como as demais opções do SEI Pro (seção 3.1).
@@ -208,7 +228,7 @@ Os dados guardados no navegador **não são criptografados pela extensão**. A s
 | **Equações (LaTeX)** | Ao gerar uma equação no editor | CodeCogs (`latex.codecogs.com`) | O texto da fórmula. A imagem gerada fica gravada no documento |
 | **Link curto** | Ao pedir um link curto no editor | TinyURL (`tinyurl.com`) | O endereço a encurtar |
 | **Importar Google Docs ou Planilhas** | Ao importar um documento publicado | Google (`docs.google.com`) | O pedido do documento cujo link o usuário informou. Nada do SEI é enviado |
-| **Mapa dos favoritos** | Ao abrir o mapa ou pesquisar um endereço | OpenStreetMap (`tile.openstreetmap.org`, `nominatim.openstreetmap.org`) | A área exibida no mapa e o endereço digitado. Dados do processo não são enviados, e a localização do dispositivo não é solicitada |
+| **Mapa dos Monitorados** | Ao abrir o mapa ou pesquisar um endereço | OpenStreetMap (`tile.openstreetmap.org`, `nominatim.openstreetmap.org`) | A área exibida no mapa e o endereço digitado. Dados do processo não são enviados, e a localização do dispositivo não é solicitada |
 | **Ditado por voz** | Ao ditar texto no editor | Serviço de reconhecimento de voz do navegador (Google no Chrome, Microsoft no Edge) | O áudio ditado, para transcrição. O SEI Pro não recebe nem guarda o áudio |
 | **Estúdio de Fluxo** | Ao importar coleções de fluxos ou usar "Aprender de processo modelo" | GitHub e o serviço de IA configurado no Agente | O endereço da coleção. No aprendizado: títulos de documentos, unidades e descrições de andamentos do processo modelo |
 | **Aviso de novidades** | Ao instalar ou atualizar a extensão | Site do SEI Pro (`seipro.app`) | Abre uma aba com a página de novidades, como uma visita comum ao site |
@@ -361,6 +381,7 @@ As alterações relevantes são comunicadas:
 
 | Versão | Data | Principais alterações |
 |---|---|---|
+| 3.4 | 10/10/2026 | Nova seção 3.5: dados que o usuário escolhe compartilhar com a unidade (Textos Padrão do SEI dos Processos Monitorados, Projetos e Demandas, arquivo no computador e prazos gravados no SEI); inventário em 3.1 e 3.2 atualizado (cópias diárias, ordem dos painéis, Projetos, Demandas, Prazos); Favoritos passa a se chamar Monitorados; a seção 4.3 esclarece que trata só do servidor do órgão |
 | 3.3 | 04/10/2026 | Busca de normas passa a usar a API de legislação (`legis.seipro.app`); a extensão deixou de contatar `seipro.io`. A API não registra os termos pesquisados e recebe as consultas por meio da Cloudflare; a política passa a descrever os registros técnicos de acesso mantidos pela hospedagem (o que é registrado, por quem e por quanto tempo) |
 | 3.2 | 01/10/2026 | Lista de novidades por e-mail (seção 2.5): inscrição opcional no site com confirmação por e-mail, dados guardados, operador (Resend) e cancelamento |
 | 3.1 | 01/10/2026 | Conectores (servidores MCP) configurados pelo usuário; sincronização da configuração do Agente de IA entre dispositivos, com a lista do que viaja e do que fica no aparelho; declaração de que as credenciais da função Base de Dados acompanham a conta do navegador; verificação local do conteúdo dos documentos contra instruções dirigidas a sistemas de IA; rotinas do Agente de IA; permissões `alarms` e `notifications` |
