@@ -13,6 +13,8 @@ export interface Fonte {
   pagina(grupo: Grupo, n: number, sinal?: AbortSignal): Promise<Document>;
   /** Volta a página do usuário para a primeira. */
   restaurar(sinal?: AbortSignal): Promise<void>;
+  /** Quando a aba fecha ou navega no meio da carga: pedido que sobrevive a descarga da pagina (keepalive). */
+  restaurarAoSair?(): void;
 }
 
 export interface Progresso {
@@ -110,6 +112,14 @@ export function criarFonteSei(http: Http, viva: Pagina): Fonte {
     },
     async restaurar(sinal) {
       await Formulario.de(viva, seletor, http).definir(base()).enviar({ sinal, aceitarValidacao: true });
+    },
+    restaurarAoSair() {
+      try {
+        const f = Formulario.de(viva, seletor, http);
+        void fetch(http.absoluta(f.action), { method: 'POST', keepalive: true, credentials: 'include', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(f.definir(base()).pares()).toString() }).catch(() => undefined);
+      } catch {
+        /* sem formulario: nada a restaurar */
+      }
     },
   };
 }

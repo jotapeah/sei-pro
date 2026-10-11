@@ -3,7 +3,7 @@
  * intenções; quem fala com o SEI são as dependências recebidas (`DepsApp`), que os testes substituem.
  */
 import { gerarCsv } from '../../../sei-comum/src/csv';
-import { h } from '../../../sei-comum/src/ui/dom';
+import { h, icone as iconeComum, type NomeIcone } from '../../../sei-comum/src/ui/dom';
 import { aplicarSelecao, lerSelecao, observarSelecao } from '../acoes/selecao';
 import { executarAcaoNativa } from '../acoes/barra';
 import { criarFila, type DepsMover } from '../acoes/mover';
@@ -51,7 +51,16 @@ const ATALHOS: Array<[string, string]> = [
   ['/', 'Buscar'], ['j / k', 'Linha seguinte / anterior'], ['x', 'Marcar a linha'], ['Enter', 'Abrir o processo'],
   ['g t', 'Ver a tabela'], ['g q', 'Ver o quadro'], ['Esc', 'Limpar a busca ou a seleção'], ['?', 'Esta ajuda'],
 ];
-const FILTROS_RAPIDOS: Array<[string, string]> = [['Meus', 'resp:eu'], ['Atrasados', 'prazo:atrasado'], ['Vencem na semana', 'prazo:semana'], ['Sem responsável', 'resp:sem'], ['Não visualizados', 'novo:sim'], ['Novos desde a última visita', 'novo:visita'], ['Parados há +30 dias', 'parado:>30d']];
+type IconeRapido = { comum: NomeIcone } | { grade: Parameters<typeof iconeGrade>[0] };
+const FILTROS_RAPIDOS: Array<[string, string, IconeRapido, string]> = [
+  ['Meus', 'resp:eu', { comum: 'pessoa' }, ''],
+  ['Atrasados', 'prazo:atrasado', { comum: 'alerta' }, 'perigo'],
+  ['Vencem na semana', 'prazo:semana', { comum: 'calendario' }, 'aviso'],
+  ['Sem responsável', 'resp:sem', { grade: 'semPessoa' }, ''],
+  ['Não visualizados', 'novo:sim', { grade: 'olhoFechado' }, ''],
+  ['Novos desde a última visita', 'novo:visita', { comum: 'brilho' }, 'novo'],
+  ['Parados há +30 dias', 'parado:>30d', { comum: 'historico' }, ''],
+];
 
 /** `select.value = x` não existe em todo DOM (os testes usam linkedom); marcar a opção funciona em todos. */
 function escolher(sel: HTMLSelectElement, valor: string) {
@@ -267,7 +276,7 @@ export function criarApp(d: DepsApp) {
     chips.replaceChildren(...c.tokens.map((t) => h('span', { class: `spro-chip${t.termo.negado ? ' spro-chip-neg' : ''}` }, t.texto, h('button', { type: 'button', 'aria-label': `Remover ${t.texto}`, onclick: () => { alterar({ busca: remover(visao.busca, t.texto) }); busca.value = visao.busca; } }, '×'))));
     chips.hidden = !c.tokens.length;
     const ativos = new Set(c.tokens.map((t) => t.texto));
-    rapidos.replaceChildren(...FILTROS_RAPIDOS.map(([rotulo, termo]) => h('button', { type: 'button', class: `spro-rapido${ativos.has(termo) ? ' spro-rapido-on' : ''}`, 'aria-pressed': String(ativos.has(termo)), onclick: () => { alterar({ busca: ativos.has(termo) ? remover(visao.busca, termo) : `${visao.busca} ${termo}`.trim() }); busca.value = visao.busca; } }, rotulo)));
+    rapidos.replaceChildren(...FILTROS_RAPIDOS.map(([rotulo, termo, ic, tom]) => h('button', { type: 'button', title: `Filtrar: ${termo}`, class: `spro-rapido${tom ? ` spro-rapido-${tom}` : ''}${ativos.has(termo) ? ' spro-rapido-on' : ''}`, 'aria-pressed': String(ativos.has(termo)), onclick: () => { alterar({ busca: ativos.has(termo) ? remover(visao.busca, termo) : `${visao.busca} ${termo}`.trim() }); busca.value = visao.busca; } }, 'comum' in ic ? iconeComum(ic.comum, 14, doc) : iconeGrade(ic.grade, 14, doc), rotulo)));
   }
 
   function preencherFiltro(sel: HTMLSelectElement, titulo: string, campo: 'resp' | 'tipo' | 'marcador', itens: Array<{ valor: string; rotulo: string; n: number }>) {
@@ -416,11 +425,14 @@ export function criarApp(d: DepsApp) {
     if (!d.fonte) { completo = true; return finalizarCarga(true); }
     carregando = true;
     render();
+    const aoSair = () => d.fonte?.restaurarAoSair?.();
+    doc.defaultView?.addEventListener('pagehide', aoSair);
     const r = await carregarRestante(d.inicial, d.fonte, {
       sinal: ctl.signal,
       aoProgresso: (p) => { progresso = p; renderStatus(filtrados().length); },
       aoPagina: (novos) => { todos = [...todos, ...novos]; render(); },
     });
+    doc.defaultView?.removeEventListener('pagehide', aoSair);
     carregando = false;
     completo = r.completo;
     if (r.erro) erroCarga = r.erro;

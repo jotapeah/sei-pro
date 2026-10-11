@@ -38,6 +38,11 @@ a:hover { text-decoration: underline; }
 .spro-chip button:hover, .spro-aviso-x:hover { background: color-mix(in srgb, currentColor 16%, transparent); }
 .spro-faixa { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
 .spro-rapido { height: 26px; padding: 0 10px; cursor: pointer; background: var(--spro-fundo); border: 1px solid var(--spro-borda-forte); border-radius: 99px; font-size: 12px; }
+.spro-rapido { display: inline-flex; gap: 5px; align-items: center; }
+.spro-rapido-perigo .spro-icone { color: var(--spro-perigo); }
+.spro-rapido-aviso .spro-icone { color: var(--spro-aviso); }
+.spro-rapido-novo .spro-icone { color: var(--spro-novidade); }
+.spro-rapido-on .spro-icone { color: inherit; }
 .spro-rapido-on { color: var(--spro-destaque-texto); background: var(--spro-destaque); border-color: var(--spro-destaque); }
 .spro-faixa .spro-sel-campo { height: 28px; font-size: 12px; }
 .spro-quadro-cfg { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 8px; }

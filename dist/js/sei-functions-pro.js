@@ -13725,7 +13725,17 @@ function initToolbarOnTop() {
         var topWindow = isNewSEI ? 80 : 200;
         var topElement = toolbar.offset().top;
             topElement = topElement-topWindow;
+        // SEI 4/5: a barra passa a fixa quando a posicao REAL dela dentro da area que rola chega ao topo (medida a cada
+        // rolagem: a visao nova do controle de processos e o legado mudam o espaco acima dela, e 80 fixo ficava
+        // errado). A barra que fica no fluxo e a original (sem .fixed) ou o clone que a substitui.
+        var limiteBarraPro = function (rolador) {
+            var naFila = $(divComandos).not('.fixed').first();
+            if (!isNewSEI || !naFila.length || !rolador || !rolador.getBoundingClientRect) return topWindow;
+            var distancia = naFila[0].getBoundingClientRect().top - rolador.getBoundingClientRect().top + rolador.scrollTop;
+            return Math.max(20, Math.round(distancia) - 6);
+        };
         $(isNewSEI ? '#divInfraAreaTelaD' : window).scroll(function(){
+            topWindow = isNewSEI ? limiteBarraPro(this) : topWindow;
             if ($(this).scrollTop() > topWindow) {
                 delayCrash = true;
                 setTimeout(function(){ delayCrash = false }, 300);

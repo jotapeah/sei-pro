@@ -61,6 +61,15 @@ function montar() {
   const contexto = lerContexto(paginaDe(document, location.href));
   const unidade = contexto.unidade.id;
   const armazem = criarArmazem({ local: areaChrome(chrome.storage.local, 'local'), sync: areaChrome(chrome.storage.sync, 'sync') }, String(unidade));
+  // Uma carga interrompida (aba fechada no meio) pode ter deixado o SEI numa pagina que nao e a primeira: a tela
+  // mostraria so um trecho. Volta para a primeira e recarrega uma unica vez.
+  const fora = ['hdnRecebidosPaginaAtual', 'hdnGeradosPaginaAtual'].some((id) => (document.getElementById(id) as HTMLInputElement | null)?.value && (document.getElementById(id) as HTMLInputElement).value !== '0');
+  if (fora && !sessionStorage.getItem('spro_grade_reset')) {
+    try { sessionStorage.setItem('spro_grade_reset', '1'); } catch { /* segue */ }
+    void criarFonteSei(sei.http, paginaDe(document, location.href)).restaurar().then(() => location.reload()).catch(() => voltarNativa('pagina intermediaria'));
+    return;
+  }
+  try { sessionStorage.removeItem('spro_grade_reset'); } catch { /* segue */ }
   const inicial = lerTabelas(document);
   if (!inicial.processos.length && !inicial.totais.recebidos && !inicial.totais.gerados) {
     // Caixa vazia: nada a projetar; a tela nativa já diz "nenhum processo".
