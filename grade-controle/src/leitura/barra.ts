@@ -12,7 +12,8 @@ export interface AcaoNativa {
   elemento: HTMLElement;
 }
 
-const BARRAS = '#divInfraBarraComandosSuperior a[onclick], #divInfraBarraComandosInferior a[onclick]';
+// SEI 3/4.0 usam #divInfraBarraComandosSuperior; o 4.1+ usa #divBotoesControleProcessos. O onclick e o que une todos.
+const BARRAS = 'a[onclick*="acaoControleProcessos"]';
 
 export function acoesDaBarra(doc: Document): AcaoNativa[] {
   const vistos = new Set<string>();

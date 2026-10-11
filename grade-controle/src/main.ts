@@ -39,6 +39,8 @@ let ligada = false;
 let app: App | null = null;
 let vigia: ReturnType<typeof vigiar> | null = null;
 let pararBotao: (() => void) | null = null;
+let remontagens = 0;
+let vigiaHost: MutationObserver | null = null;
 let domPronto = document.readyState !== 'loading';
 
 function ancora(): Element | null {
@@ -94,10 +96,38 @@ function montar() {
     aoVoltarNativa: () => alternar(),
   });
   alvo.before(app.host);
+  guardarHost();
   void app.iniciar().then(() => {
     vigia?.pronta();
     if (estaAtiva(document)) marcarPronta(document);
   }).catch((e) => voltarNativa(String(e)));
+}
+
+/**
+ * O legado reorganiza a tela depois do carregamento (`$.fn.moveTo` CLONA o formulario inteiro): o clone leva o host
+ * sem o Shadow DOM e sem os ouvintes, e o original some. Quando isso acontece, refazemos a grade a partir da tabela
+ * que sobrou (a nativa tambem foi clonada, entao a leitura continua valida).
+ */
+function guardarHost() {
+  vigiaHost?.disconnect();
+  const Obs = window.MutationObserver;
+  let agendado = false;
+  vigiaHost = new Obs(() => {
+    if (agendado) return;
+    agendado = true;
+    setTimeout(() => {
+      agendado = false;
+      if (!app || !ligada) return;
+      const sadio = app.host.isConnected && !!app.host.shadowRoot && document.querySelectorAll('#spro-grade').length === 1;
+      if (sadio || remontagens >= 6) return;
+      remontagens += 1;
+      app.fechar();
+      app = null;
+      for (const h of document.querySelectorAll('#spro-grade')) h.remove();
+      if (estaAtiva(document) || ligada) montar();
+    }, 150);
+  });
+  vigiaHost.observe(document.body ?? document.documentElement, { childList: true, subtree: true });
 }
 
 /** O botão: troca entre a visão nova e a nativa só nesta página. */
@@ -127,6 +157,7 @@ function configurar(valor: boolean) {
     pararBotao = manterBotao(document, () => estaAtiva(document), alternar);
   } else {
     pararBotao?.(); pararBotao = null;
+    vigiaHost?.disconnect();
     app?.fechar(); app = null;
     vigia?.pronta();
     desativar(document);
