@@ -217,3 +217,25 @@ await teste('app: fechar remove o host e para de ouvir o teclado', async () => {
   app.fechar();
   assert.equal(doc.getElementById('spro-grade'), null);
 });
+await teste('app: agrupar e filtrar usam o seletor pesquisavel (combobox), nao <select> nativo', async () => {
+  const { app } = await montar();
+  assert.equal(app.host.shadowRoot!.querySelectorAll('select').length, 0);
+  const combos = qa(app, 'button.spro-combo');
+  assert.ok(combos.length >= 5, String(combos.length));
+  const agrupar = combos.find((c) => c.getAttribute('aria-label') === 'Agrupar por')!;
+  agrupar.click();
+  const opcao = [...app.host.shadowRoot!.querySelectorAll<HTMLElement>('[role=option]')].find((o) => o.textContent!.includes('Prazo'))!;
+  opcao.click();
+  assert.equal(app.estado().visao.agrupar, 'prazo');
+  app.fechar();
+});
+await teste('app: filtro por responsavel pelo combobox acrescenta o termo e volta ao vazio', async () => {
+  const { app } = await montar();
+  const resp = qa(app, 'button.spro-combo').find((c) => c.getAttribute('aria-label') === 'Filtrar por responsável')!;
+  resp.click();
+  const op = [...app.host.shadowRoot!.querySelectorAll<HTMLElement>('[role=option]')].find((o) => o.textContent!.includes('teste01'))!;
+  op.click();
+  assert.equal(app.estado().visao.busca, 'resp:teste01');
+  assert.equal(app.estado().filtrados, 4);
+  app.fechar();
+});

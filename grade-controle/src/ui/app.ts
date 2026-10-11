@@ -3,6 +3,7 @@
  * intenções; quem fala com o SEI são as dependências recebidas (`DepsApp`), que os testes substituem.
  */
 import { gerarCsv } from '../../../sei-comum/src/csv';
+import { type Combo, criarCombo } from '../../../sei-comum/src/ui/combobox';
 import { h, icone as iconeComum, type NomeIcone } from '../../../sei-comum/src/ui/dom';
 import { aplicarSelecao, lerSelecao, observarSelecao } from '../acoes/selecao';
 import { executarAcaoNativa } from '../acoes/barra';
@@ -62,15 +63,6 @@ const FILTROS_RAPIDOS: Array<[string, string, IconeRapido, string]> = [
   ['Parados há +30 dias', 'parado:>30d', { comum: 'historico' }, ''],
 ];
 
-/** `select.value = x` não existe em todo DOM (os testes usam linkedom); marcar a opção funciona em todos. */
-function escolher(sel: HTMLSelectElement, valor: string) {
-  for (const o of sel.querySelectorAll('option')) {
-    if (o.getAttribute('value') === valor) o.setAttribute('selected', '');
-    else o.removeAttribute('selected');
-    (o as HTMLOptionElement).selected = o.getAttribute('value') === valor;
-  }
-}
-
 export function criarApp(d: DepsApp) {
   const { doc } = d;
   let todos: Processo[] = d.inicial.processos;
@@ -117,13 +109,29 @@ export function criarApp(d: DepsApp) {
   const avisos = h('div', { class: 'spro-avisos', 'aria-live': 'polite' });
   const ajuda = h('div', { class: 'spro-ajuda-atalhos', hidden: true }, h('strong', {}, 'Atalhos'), ...ATALHOS.map(([k, t]) => h('div', {}, h('kbd', {}, k), ` ${t}`)));
 
-  const selAgrupar = h('select', { class: 'spro-sel-campo', 'aria-label': 'Agrupar por' }, ...(Object.keys(ROTULO_AGRUPAR) as AgruparPor[]).map((k) => h('option', { value: k }, k === 'nenhum' ? 'Sem agrupamento' : `Agrupar: ${ROTULO_AGRUPAR[k]}`)));
-  const selOrdem = h('select', { class: 'spro-sel-campo', 'aria-label': 'Ordenar por' },
-    h('option', { value: '' }, 'Ordem do SEI'),
-    ...([['protocolo', 'Número do processo'], ['prazo', 'Prazo'], ['tipo', 'Tipo'], ['responsavel', 'Responsável'], ['marcador', 'Marcador'], ['caixa', 'Tempo na caixa'], ['parado', 'Parado há'], ['novo', 'Não visualizados']] as Array<[CampoOrdem, string]>).flatMap(([k, t]) => [h('option', { value: `${k}:a` }, `${t} ↑`), h('option', { value: `${k}:d` }, `${t} ↓`)]));
-  const fResp = h('select', { class: 'spro-sel-campo', 'aria-label': 'Filtrar por responsável' });
-  const fTipo = h('select', { class: 'spro-sel-campo', 'aria-label': 'Filtrar por tipo' });
-  const fMarc = h('select', { class: 'spro-sel-campo', 'aria-label': 'Filtrar por marcador' });
+  const ORDENS: Array<[CampoOrdem, string]> = [['protocolo', 'Número do processo'], ['prazo', 'Prazo'], ['tipo', 'Tipo'], ['responsavel', 'Responsável'], ['marcador', 'Marcador'], ['caixa', 'Tempo na caixa'], ['parado', 'Parado há'], ['novo', 'Não visualizados']];
+  const comboAgrupar = criarCombo({
+    rotulo: 'Agrupar por', icone: 'camadas', classe: 'spro-combo-compacto', busca: false, vazio: 'Sem agrupamento',
+    opcoes: (Object.keys(ROTULO_AGRUPAR) as AgruparPor[]).map((k) => ({ valor: k, rotulo: k === 'nenhum' ? 'Sem agrupamento' : `Agrupar: ${ROTULO_AGRUPAR[k]}` })),
+    valor: ['nenhum'], aoMudar: ([v]) => alterar({ agrupar: (v ?? 'nenhum') as AgruparPor }),
+  });
+  const comboOrdem = criarCombo({
+    rotulo: 'Ordenar por', icone: 'ordenar', classe: 'spro-combo-compacto', busca: false, vazio: 'Ordem do SEI',
+    opcoes: [{ valor: '', rotulo: 'Ordem do SEI' }, ...ORDENS.flatMap(([k, t]) => [{ valor: `${k}:a`, rotulo: `${t} \u2191`, descricao: 'Crescente' }, { valor: `${k}:d`, rotulo: `${t} \u2193`, descricao: 'Decrescente' }])],
+    valor: [''], aoMudar: ([v]) => { const [campo, sentido] = (v ?? '').split(':'); alterar({ ordem: campo ? [{ campo: campo as CampoOrdem, decrescente: sentido === 'd' }] : [] }); },
+  });
+  let facetas = facetasDe([], ctx());
+  const comboFiltro = (rotulo: string, vazio: string, campo: 'resp' | 'tipo' | 'marcador', icone: NomeIcone, pegar: () => Array<{ valor: string; rotulo: string; n: number }>) => {
+    const c: Combo = criarCombo({
+      rotulo, vazio, icone, classe: 'spro-combo-compacto', busca: true, larguraLista: 260,
+      opcoes: () => pegar().map((f) => ({ valor: f.valor, rotulo: f.rotulo, contagem: f.n })),
+      aoMudar: ([v]) => { if (!v) return; alterar({ busca: acrescentar(visao.busca, campo, v) }); busca.value = visao.busca; c.definir([], false); },
+    });
+    return c;
+  };
+  const fResp = comboFiltro('Filtrar por responsável', 'Responsável…', 'resp', 'pessoa', () => facetas.responsaveis);
+  const fTipo = comboFiltro('Filtrar por tipo', 'Tipo…', 'tipo', 'documento', () => facetas.tipos);
+  const fMarc = comboFiltro('Filtrar por marcador', 'Marcador…', 'marcador', 'etiqueta', () => facetas.marcadores);
 
   const botaoModo = (m: 'tabela' | 'quadro', rotulo: string) => h('button', { type: 'button', class: 'spro-seg-b', 'data-modo': m, title: rotulo, onclick: () => alterar({ modo: m }) }, iconeGrade(m === 'tabela' ? 'lista' : 'quadro', 16), h('span', {}, rotulo));
   const segmentado = h('div', { class: 'spro-seg', role: 'group', 'aria-label': 'Modo de exibição' }, botaoModo('tabela', 'Tabela'), botaoModo('quadro', 'Quadro'));
@@ -139,17 +147,11 @@ export function criarApp(d: DepsApp) {
     h('div', { class: 'spro-barra' },
       segmentado,
       h('div', { class: 'spro-busca-caixa' }, busca),
-      selAgrupar, selOrdem,
+      comboAgrupar.el, comboOrdem.el,
       btnColunas, btnDensidade, btnVisoes, btnCsv, btnAjuda),
     chips,
-    h('div', { class: 'spro-faixa' }, rapidos, fResp, fTipo, fMarc),
+    h('div', { class: 'spro-faixa' }, rapidos, fResp.el, fTipo.el, fMarc.el),
     opcoesQuadro, ajuda, painel, status, lote, conteudo, avisos);
-
-  selAgrupar.addEventListener('change', () => alterar({ agrupar: selAgrupar.value as AgruparPor }));
-  selOrdem.addEventListener('change', () => {
-    const [campo, sentido] = selOrdem.value.split(':');
-    alterar({ ordem: campo ? [{ campo: campo as CampoOrdem, decrescente: sentido === 'd' }] : [] });
-  });
 
   // ---------- estado ----------
   const comId = (): Processo[] => comIdade(todos, idade);
@@ -279,28 +281,14 @@ export function criarApp(d: DepsApp) {
     rapidos.replaceChildren(...FILTROS_RAPIDOS.map(([rotulo, termo, ic, tom]) => h('button', { type: 'button', title: `Filtrar: ${termo}`, class: `spro-rapido${tom ? ` spro-rapido-${tom}` : ''}${ativos.has(termo) ? ' spro-rapido-on' : ''}`, 'aria-pressed': String(ativos.has(termo)), onclick: () => { alterar({ busca: ativos.has(termo) ? remover(visao.busca, termo) : `${visao.busca} ${termo}`.trim() }); busca.value = visao.busca; } }, 'comum' in ic ? iconeComum(ic.comum, 14, doc) : iconeGrade(ic.grade, 14, doc), rotulo)));
   }
 
-  function preencherFiltro(sel: HTMLSelectElement, titulo: string, campo: 'resp' | 'tipo' | 'marcador', itens: Array<{ valor: string; rotulo: string; n: number }>) {
-    const atual = sel.querySelector('option[selected]')?.getAttribute('value') ?? '';
-    sel.replaceChildren(h('option', { value: '' }, titulo), ...itens.map((f) => h('option', { value: f.valor }, `${f.rotulo} (${f.n})`)));
-    escolher(sel, itens.some((f) => f.valor === atual) ? atual : '');
-    sel.onchange = () => {
-      const v = sel.value;
-      if (!v) return;
-      alterar({ busca: acrescentar(visao.busca, campo, v) });
-      busca.value = visao.busca;
-      escolher(sel, '');
-    };
-  }
-
   function render() {
     if (encerrado) return;
     const f = facetasDe(comId(), ctx());
-    preencherFiltro(fResp, 'Responsável…', 'resp', f.responsaveis);
-    preencherFiltro(fTipo, 'Tipo…', 'tipo', f.tipos);
-    preencherFiltro(fMarc, 'Marcador…', 'marcador', f.marcadores);
-    escolher(selAgrupar, visao.agrupar);
-    selAgrupar.disabled = visao.modo === 'quadro';
-    escolher(selOrdem, visao.ordem[0] ? `${visao.ordem[0].campo}:${visao.ordem[0].decrescente ? 'd' : 'a'}` : '');
+    facetas = f;
+    for (const c of [fResp, fTipo, fMarc]) c.atualizar();
+    comboAgrupar.definir([visao.agrupar], false);
+    comboAgrupar.el.disabled = visao.modo === 'quadro';
+    comboOrdem.definir([visao.ordem[0] ? `${visao.ordem[0].campo}:${visao.ordem[0].decrescente ? 'd' : 'a'}` : ''], false);
     for (const b of segmentado.querySelectorAll<HTMLElement>('[data-modo]')) b.setAttribute('aria-pressed', String(b.getAttribute('data-modo') === visao.modo));
     btnDensidade.title = visao.densidade === 'compacta' ? 'Linhas confortáveis' : 'Linhas compactas';
     btnColunas.hidden = visao.modo === 'quadro';
@@ -319,13 +307,15 @@ export function criarApp(d: DepsApp) {
     opcoesQuadro.hidden = visao.modo !== 'quadro';
     if (opcoesQuadro.hidden) return;
     const q = visao.quadro;
-    const sel = h('select', { class: 'spro-sel-campo', 'aria-label': 'Colunas do quadro', onchange: (ev: Event) => { extrasPedido = false; alterar({ quadro: { ...q, colunas: (ev.target as HTMLSelectElement).value as typeof q.colunas } }); } },
-      ...([['marcador', 'Colunas: marcador'], ['responsavel', 'Colunas: responsável'], ['prazo', 'Colunas: prazo (leitura)'], ['tipo', 'Colunas: tipo (leitura)']] as const).map(([v, t]) => h('option', { value: v }, t)));
-    escolher(sel, q.colunas);
+    const sel = criarCombo({
+      rotulo: 'Colunas do quadro', icone: 'mapa', classe: 'spro-combo-compacto', busca: false,
+      opcoes: [{ valor: 'marcador', rotulo: 'Colunas: marcador' }, { valor: 'responsavel', rotulo: 'Colunas: responsável' }, { valor: 'prazo', rotulo: 'Colunas: prazo (leitura)' }, { valor: 'tipo', rotulo: 'Colunas: tipo (leitura)' }],
+      valor: [q.colunas], aoMudar: ([v]) => { extrasPedido = false; alterar({ quadro: { ...q, colunas: (v ?? 'marcador') as typeof q.colunas } }); },
+    });
     const lim = h('input', { type: 'number', min: '0', max: '99', class: 'spro-num', value: String(q.limite), 'aria-label': 'Limite de cartões por coluna (0 = sem limite)', title: 'Limite de cartões por coluna (0 = sem limite)', onchange: (ev: Event) => alterar({ quadro: { ...q, limite: Math.max(0, Math.min(99, Number((ev.target as HTMLInputElement).value) || 0)) } }) });
     const raia = h('input', { type: 'checkbox', onchange: (ev: Event) => alterar({ quadro: { ...q, raiasPorResponsavel: (ev.target as HTMLInputElement).checked } }) });
     raia.checked = q.raiasPorResponsavel;
-    opcoesQuadro.replaceChildren(sel, h('label', { class: 'spro-rotulo-inline' }, 'Limite ', lim), h('label', { class: 'spro-rotulo-inline' }, raia, ' Raias por responsável'),
+    opcoesQuadro.replaceChildren(sel.el, h('label', { class: 'spro-rotulo-inline' }, 'Limite ', lim), h('label', { class: 'spro-rotulo-inline' }, raia, ' Raias por responsável'),
       h('span', { class: 'spro-suave' }, q.colunas === 'marcador' || q.colunas === 'responsavel' ? 'Arraste os cartões entre as colunas.' : 'Esta divisão é só de leitura.'));
   }
 

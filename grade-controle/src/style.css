@@ -13,6 +13,8 @@ a:hover { text-decoration: underline; }
 .spro-busca-caixa { flex: 1 1 260px; min-width: 200px; }
 .spro-busca { width: 100%; height: 34px; padding: 0 12px; background: var(--spro-fundo); border: 1px solid var(--spro-borda-forte); border-radius: var(--spro-raio); }
 .spro-busca:focus { border-color: var(--spro-destaque); }
+.spro-combo-compacto { height: 34px; min-width: 150px; max-width: 220px; }
+.spro-faixa .spro-combo-compacto { height: 28px; font-size: 12px; min-width: 130px; }
 .spro-sel-campo, .spro-nome, .spro-num { height: 34px; max-width: 190px; padding: 0 8px; background: var(--spro-fundo); border: 1px solid var(--spro-borda-forte); border-radius: var(--spro-raio); }
 .spro-num { width: 64px; }
 .spro-nome { max-width: none; flex: 1; }
