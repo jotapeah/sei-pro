@@ -7,6 +7,7 @@ import { DICA_IDADE, rotuloIdade } from '../modelo/idade';
 import type { LinhaLista } from '../modelo/linhas';
 import { calcularJanela } from '../modelo/janela';
 import { type Coluna, type CampoOrdem, type CriterioOrdem, type Densidade, type Processo, ROTULO_COLUNA } from '../modelo/tipos';
+import { resumoDaNota } from '../modelo/checklist';
 import { corDoMarcador } from './cores';
 import { iconeGrade } from './icones';
 
@@ -144,7 +145,7 @@ function celula(p: Processo, c: Coluna, ctx: Ctx, props: PropsTabela): HTMLEleme
     case 'anotacao':
       td.classList.add('spro-editavel');
       if (p.anotacao) {
-        td.append(el('span', `spro-corta${p.anotacao.prioridade ? ' spro-prio' : ''}`, p.anotacao.texto.replace(/\s*\n\s*/g, ' / ')));
+        td.append(el('span', `spro-corta${p.anotacao.prioridade ? ' spro-prio' : ''}`, resumoDaNota(p.anotacao.texto)));
         td.title = `${p.anotacao.texto}\n${p.anotacao.autor}`;
       } else if (!p.sigiloso) td.append(h('span', { class: 'spro-prazo-vazio spro-vazio-edicao' }, 'anotar'));
       if (!p.sigiloso) td.append(botaoLapis(p.anotacao ? 'Editar a anotação' : 'Adicionar anotação', () => props.aoEditar(p.id, 'anotacao')));

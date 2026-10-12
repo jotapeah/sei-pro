@@ -9,13 +9,15 @@ export interface OpcoesModalGrade {
   subtitulo?: string;
   icone?: NomeIcone;
   conteudo: HTMLElement;
+  /** Modal mais largo (anotacao). */
+  largo?: boolean;
   aoFechar?: () => void;
 }
 
 export function abrirModalGrade(raiz: ShadowRoot | HTMLElement, o: OpcoesModalGrade): { fechar(): void; dlg: HTMLDialogElement } {
   const doc = raiz.ownerDocument ?? document;
   for (const antigo of Array.from(raiz.querySelectorAll('dialog.spro-dialogo-grade'))) antigo.remove();
-  const dlg = h('dialog', { class: 'spro-dialogo spro-dialogo-grade', 'aria-label': o.titulo });
+  const dlg = h('dialog', { class: `spro-dialogo spro-dialogo-grade${o.largo ? ' spro-dialogo-largo' : ''}`, 'aria-label': o.titulo });
   const fechar = () => {
     if (dlg.open) dlg.close();
     else dlg.remove();

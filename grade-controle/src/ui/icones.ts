@@ -52,6 +52,10 @@ const FORMAS = {
     ['path', { d: 'M14 4.5h5.5V10M19.5 4.5L11 13' }],
     ['path', { d: 'M17.5 14v4a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 18V8A1.5 1.5 0 0 1 6 6.5h4' }],
   ],
+  prioridade: [
+    ['circle', { cx: '12', cy: '12', r: '8.5' }],
+    ['path', { d: 'M12 7.5v5.5M12 16.4h.01' }],
+  ],
   seta: [['path', { d: 'M6 9l6 6 6-6' }]],
   setaDireita: [['path', { d: 'M9 6l6 6-6 6' }]],
   desfazer: [['path', { d: 'M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3' }]],

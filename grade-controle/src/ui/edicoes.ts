@@ -9,6 +9,7 @@ import { alvosDaEdicao, aplicarAnotacao, aplicarMarcadores, aplicarResponsavel, 
 import type { ExtrasQuadro } from '../modelo/quadro';
 import type { Processo } from '../modelo/tipos';
 import { abrirModalGrade } from './modal';
+import { criarPostit } from './postit';
 import { corDoMarcador } from './cores';
 
 export interface DepsEdicao {
@@ -105,30 +106,27 @@ export function editarResponsavel(d: DepsEdicao, p: Processo): void {
 
 // ---------------------------------------------------------------- anotacao
 export function editarAnotacao(d: DepsEdicao, p: Processo): void {
-  const area = h('textarea', { class: 'spro-campo spro-area', rows: '6', maxlength: String(MAX_ANOTACAO), placeholder: 'Escreva a anotação deste processo…', 'aria-label': 'Anotação', value: p.anotacao?.texto ?? '' });
-  const prio = h('input', { type: 'checkbox' });
-  prio.checked = p.anotacao?.prioridade ?? false;
-  const contador = h('span', { class: 'spro-suave spro-contador' });
+  const postit = criarPostit({ texto: p.anotacao?.texto ?? '', prioridade: p.anotacao?.prioridade ?? false }, d.raiz);
   const salvar = salvarBotao();
   const remover = p.anotacao ? h('button', { type: 'button', class: 'spro-botao perigo' }, icone('lixeira', 15), 'Remover anotação') : null;
   const atualizar = () => {
-    const t = textoAnotacao(area.value);
-    contador.textContent = `${area.value.length}/${MAX_ANOTACAO}`;
-    salvar.disabled = !t || (t === (p.anotacao?.texto ?? '') && prio.checked === (p.anotacao?.prioridade ?? false));
+    const t = textoAnotacao(postit.texto());
+    const estourou = postit.texto().length > MAX_ANOTACAO;
+    salvar.disabled = !t || estourou || (t === (p.anotacao?.texto ?? '') && postit.prioridade() === (p.anotacao?.prioridade ?? false));
   };
-  area.addEventListener('input', atualizar);
-  prio.addEventListener('change', atualizar);
+  postit.aoMudar(atualizar);
   const modal = abrirModalGrade(d.raiz, {
-    titulo: 'Anotação', subtitulo: p.protocolo, icone: 'nota',
-    conteudo: h('div', { class: 'spro-form' }, area, h('div', { class: 'spro-linha-form' }, h('label', { class: 'spro-rotulo-linha' }, prio, ' Prioridade'), contador),
+    titulo: 'Anotação', subtitulo: p.protocolo, icone: 'nota', largo: true,
+    conteudo: h('div', { class: 'spro-form' }, postit.el,
       p.anotacao?.autor ? h('p', { class: 'spro-suave' }, `Última edição: ${p.anotacao.autor}`) : null, rodape(remover, salvar)),
   });
+  postit.foco();
   atualizar();
   const gravar = async (texto: string, prioridade: boolean, oque: string) => {
     modal.fechar();
     resumo(d, await aplicarEm(d, [p], (x) => aplicarAnotacao(x, texto, prioridade, d.autor), (x) => d.anotar(x.protocolo, { texto, prioridade })), oque);
   };
-  salvar.addEventListener('click', () => void gravar(textoAnotacao(area.value), prio.checked, 'Anotação salva'));
+  salvar.addEventListener('click', () => void gravar(textoAnotacao(postit.texto()), postit.prioridade(), 'Anotação salva'));
   remover?.addEventListener('click', () => void gravar('', false, 'Anotação removida'));
 }
 

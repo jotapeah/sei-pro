@@ -365,3 +365,30 @@ await teste('edicoes: as mesmas operacoes valem para outro processo so onde faze
   assert.deepEqual(opsParaProcesso(ops, outro), [{ tipo: 'remover', nome: 'B' }]);
   assert.deepEqual(opsParaProcesso(ops, proc()).map((o) => o.tipo), ['adicionar']);
 });
+
+// ---------------- lista de tarefas na anotacao ----------------
+import { alternarFeito, alternarLista, contarTarefas, escreverNota, lerNota, resumoDaNota } from '../src/modelo/checklist';
+await teste('checklist: ler e escrever o formato [ ] / [X] sem perder nada', () => {
+  const txt = 'Aguardando parecer.\n\n[X] Minuta pronta\n[ ] Parecer juridico\n[x] minusculo';
+  const l = lerNota(txt);
+  assert.deepEqual(l.map((x) => x.marca), [null, null, true, false, true]);
+  assert.equal(l[3]!.texto, 'Parecer juridico');
+  assert.equal(escreverNota(l), 'Aguardando parecer.\n\n[X] Minuta pronta\n[ ] Parecer juridico\n[X] minusculo');
+  assert.equal(escreverNota(lerNota('so texto\r\noutra')), 'so texto\noutra');
+});
+await teste('checklist: alternar lista liga nas linhas, desliga se todas ja eram tarefas', () => {
+  const base = lerNota('a\nb\n[ ] c');
+  const ligou = alternarLista(base, [0, 1]);
+  assert.deepEqual(ligou.map((x) => x.marca), [false, false, false]);
+  assert.deepEqual(alternarLista(ligou, [0, 1]).map((x) => x.marca), [null, null, false]);
+  assert.deepEqual(alternarLista(base, [1, 2]).map((x) => x.marca), [null, false, false], 'mistura: liga todas');
+  assert.deepEqual(alternarLista(base, []), base);
+  assert.deepEqual(alternarLista(base, [9]), base);
+});
+await teste('checklist: marcar feito so em tarefa; contagem; resumo da celula', () => {
+  const l = lerNota('x\n[ ] a\n[X] b');
+  assert.equal(alternarFeito(l, 0)[0]!.marca, null);
+  assert.equal(alternarFeito(l, 1)[1]!.marca, true);
+  assert.deepEqual(contarTarefas(l), { feitas: 1, total: 2 });
+  assert.equal(resumoDaNota('Nota\n\n[X] ok\n[ ] falta'), 'Nota / ☑ ok / ☐ falta');
+});

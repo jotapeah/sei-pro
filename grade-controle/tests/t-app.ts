@@ -460,33 +460,49 @@ await teste('edicao: responsavel — a falha do SEI desfaz na tela e avisa', asy
   assert.match(q(app, '.spro-aviso').textContent!, /sem permissão/);
   app.fechar();
 });
-await teste('edicao: anotacao — editar, prioridade, contador e remover', async () => {
+await teste('edicao: anotacao em post-it — texto, lista de tarefas, prioridade, contador e remover', async () => {
   anotados.length = 0;
   const { app } = await montar();
   linhaDe(app, '148265').querySelector<HTMLElement>('.spro-c-anotacao .spro-lapis')!.click();
   await tick();
   const dlg = dialogo(app)!;
-  const area = dlg.querySelector<HTMLTextAreaElement>('textarea')!;
-  assert.equal(area.value, 'teste');
-  const w = area.ownerDocument.defaultView as any;
-  area.value = 'ligar para o fornecedor';
-  area.dispatchEvent(new w.Event('input'));
-  assert.match(dlg.querySelector('.spro-contador')!.textContent!, /23\/500/);
-  const prio = dlg.querySelector<HTMLInputElement>('input[type=checkbox]')!;
-  prio.checked = true;
-  prio.dispatchEvent(new w.Event('change'));
+  const editor = dlg.querySelector<HTMLElement>('.spro-pi-editor')!;
+  assert.ok(editor, 'editor post-it');
+  assert.equal(editor.textContent, 'teste');
+  // escreve duas linhas, uma delas ja como tarefa feita
+  editor.replaceChildren(...['ligar para o fornecedor', 'minuta pronta'].map((t, i) => { const d = editor.ownerDocument.createElement('div'); d.className = 'spro-pi-linha'; if (i === 1) d.setAttribute('data-tarefa', 'x'); d.textContent = t; return d; }));
+  const w = editor.ownerDocument.defaultView as any;
+  editor.dispatchEvent(new w.Event('input'));
+  assert.match(dlg.querySelector('.spro-pi-contador')!.textContent!, /^\d+\/500$/);
+  dlg.querySelector<HTMLElement>('.spro-pi-bt[aria-label="Prioridade"]')!.click();
+  assert.ok(dlg.querySelector('.spro-pi-prio'));
   dlg.querySelector<HTMLButtonElement>('.spro-botao.primario')!.click();
   await tick(); await tick();
-  assert.deepEqual(anotados, [['99906.713-630.000032/2025-82', 'ligar para o fornecedor', true]]);
-  assert.equal(linhaDe(app, '148265').querySelector('.spro-c-anotacao .spro-corta')!.textContent, 'ligar para o fornecedor');
-  assert.ok(linhaDe(app, '148265').querySelector('.spro-c-anotacao .spro-prio'));
-  // remover
+  assert.deepEqual(anotados, [['99906.713-630.000032/2025-82', 'ligar para o fornecedor\n[X] minuta pronta', true]]);
+  assert.match(linhaDe(app, '148265').querySelector('.spro-c-anotacao .spro-corta')!.textContent!, /ligar para o fornecedor \/ \u2611 minuta pronta/);
   linhaDe(app, '148265').querySelector<HTMLElement>('.spro-c-anotacao .spro-lapis')!.click();
   await tick();
   dialogo(app)!.querySelector<HTMLButtonElement>('.spro-botao.perigo')!.click();
   await tick(); await tick();
   assert.deepEqual(anotados.at(-1), ['99906.713-630.000032/2025-82', '', false]);
-  assert.equal(linhaDe(app, '148265').querySelector('.spro-c-anotacao .spro-corta'), null);
+  app.fechar();
+});
+await teste('edicao: anotacao — botao de lista liga a tarefa na linha e o clique na caixa marca como feita', async () => {
+  anotados.length = 0;
+  const { app } = await montar();
+  linhaDe(app, '150098').querySelector<HTMLElement>('.spro-c-anotacao .spro-lapis')!.click();
+  await tick();
+  const dlg = dialogo(app)!;
+  const editor = dlg.querySelector<HTMLElement>('.spro-pi-editor')!;
+  const w = editor.ownerDocument.defaultView as any;
+  const linha = editor.ownerDocument.createElement('div'); linha.className = 'spro-pi-linha'; linha.textContent = 'revisar contrato';
+  editor.replaceChildren(linha);
+  editor.dispatchEvent(new w.Event('input'));
+  dlg.querySelector<HTMLElement>('.spro-pi-bt[aria-label="Lista de tarefas"]')!.click();
+  assert.equal(editor.querySelector('.spro-pi-linha')!.getAttribute('data-tarefa'), 'o', 'sem selecao: a ultima linha vira tarefa');
+  dlg.querySelector<HTMLButtonElement>('.spro-botao.primario')!.click();
+  await tick(); await tick();
+  assert.equal(anotados.at(-1)![1], '[ ] revisar contrato');
   app.fechar();
 });
 await teste('edicao: anotacao — sem texto nao salva; sigiloso nao tem lapis de anotacao nem de marcador', async () => {
@@ -564,5 +580,26 @@ await teste('app: icone de origem (recebido/gerado) com dica e icone para abrir 
   assert.equal(nova.getAttribute('rel'), 'noopener');
   assert.equal(nova.getAttribute('href'), g.querySelector('.spro-proc')!.getAttribute('href'));
   assert.equal(nova.previousElementSibling, g.querySelector('.spro-proc'), 'logo depois do numero');
+  app.fechar();
+});
+await teste('app: filtros Recebidos e Gerados na faixa dos rapidos, na ordem pedida, e um desliga o outro', async () => {
+  const doc = ativarToggle(docFixture('caixa_prazos.html'));
+  const l = lerTabelas(doc);
+  l.processos[0]!.grupo = 'gerados';
+  l.processos[1]!.grupo = 'gerados';
+  (globalThis as unknown as { document: Document }).document = doc;
+  const { app } = await montarCom(doc, { inicial: l });
+  const rot = () => qa(app, '.spro-rapido').map((b) => b.textContent!.trim());
+  assert.deepEqual(rot().slice(0, 4), ['Meus', 'Recebidos', 'Gerados', 'Atrasados']);
+  const clicar = (nome: string) => qa(app, '.spro-rapido').find((b) => b.textContent!.trim() === nome)!.click();
+  clicar('Gerados');
+  assert.equal(app.estado().visao.busca, 'grupo:gerados');
+  const ng = l.processos.filter((x) => x.grupo === 'gerados').length;
+  assert.equal(app.estado().filtrados, ng);
+  clicar('Recebidos');
+  assert.equal(app.estado().visao.busca, 'grupo:recebidos', 'ligar um desliga o outro');
+  assert.equal(app.estado().filtrados, l.processos.length - ng);
+  clicar('Recebidos');
+  assert.equal(app.estado().visao.busca, '');
   app.fechar();
 });

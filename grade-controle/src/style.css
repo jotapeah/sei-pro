@@ -180,3 +180,23 @@ kbd { padding: 0 5px; font: 12px var(--spro-mono); background: var(--spro-fundo-
 .spro-nova-guia { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 22px; height: 22px; margin-left: 4px; color: var(--spro-suave); border-radius: 6px; opacity: 0; transition: opacity var(--spro-dur); }
 .spro-linha:hover .spro-nova-guia, .spro-nova-guia:focus-visible { opacity: 1; }
 .spro-nova-guia:hover { color: var(--spro-destaque); background: var(--spro-fundo-3); text-decoration: none; }
+
+/* ---- Anotacao em post-it com lista de tarefas ---- */
+.spro-dialogo-largo { width: min(640px, 94vw); }
+.spro-dialogo-largo .spro-form { min-width: 0; }
+.spro-pi { position: relative; display: flex; flex-direction: column; border-radius: 3px; background: linear-gradient(rgb(249, 239, 175), rgb(247, 233, 141)); box-shadow: rgb(0 0 0 / 14%) 0 4px 8px; transition: background 300ms linear; }
+.spro-pi-prio { background: linear-gradient(rgb(253, 221, 221), rgb(250, 194, 195)); }
+.spro-pi-prio::after { content: "!"; position: absolute; top: 6px; right: 20px; font: 700 54px/1 var(--spro-fonte); color: #e46f642d; pointer-events: none; }
+.spro-pi-editor { min-height: 170px; max-height: 46vh; padding: 20px 34px 16px; overflow-y: auto; outline: none; font-size: 14.5px; line-height: 1.55; color: rgb(97, 97, 97); word-break: break-word; white-space: pre-wrap; }
+.spro-pi-linha { position: relative; min-height: 1.55em; }
+.spro-pi-linha[data-tarefa] { padding-left: 30px; }
+.spro-pi-linha[data-tarefa]::before { content: ""; position: absolute; left: 2px; top: 0.28em; width: 16px; height: 16px; box-sizing: border-box; cursor: pointer; border: 1.8px solid rgb(120, 110, 60); border-radius: 4px; background: rgb(255 255 255 / 55%); }
+.spro-pi-linha[data-tarefa="x"] { text-decoration: line-through; opacity: 0.8; }
+.spro-pi-linha[data-tarefa="x"]::before { content: "\2713"; text-align: center; font: 700 13px/13px system-ui; color: #fff; background: #4a8f5a; border-color: #4a8f5a; }
+.spro-pi-barra { display: flex; gap: 4px; align-items: center; padding: 6px 12px 10px 28px; }
+.spro-pi-bt { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; cursor: pointer; color: #4285f4; background: none; border: 0; border-radius: 6px; }
+.spro-pi-bt:hover { background: rgb(0 0 0 / 7%); }
+.spro-pi-bt[aria-pressed="true"] { color: #e46e64; background: rgb(228 110 100 / 14%); }
+.spro-pi-contador { margin-left: auto; font-size: 11px; color: #666; }
+.spro-pi-estouro { color: var(--spro-perigo); font-weight: 700; }
+.spro-escuro .spro-pi-editor { color: #4b4b4b; }

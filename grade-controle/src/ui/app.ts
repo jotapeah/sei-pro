@@ -61,8 +61,12 @@ const ATALHOS: Array<[string, string]> = [
   ['g t', 'Ver a tabela'], ['g q', 'Ver o quadro'], ['Esc', 'Limpar a busca ou a seleção'], ['?', 'Esta ajuda'],
 ];
 type IconeRapido = { comum: NomeIcone } | { grade: Parameters<typeof iconeGrade>[0] };
+/** Recebidos e Gerados se excluem: ligar um desliga o outro (os dois juntos nunca achariam nada). */
+const termoExcludente = (t: string): string | null => (t === 'grupo:recebidos' ? 'grupo:gerados' : t === 'grupo:gerados' ? 'grupo:recebidos' : null);
 const FILTROS_RAPIDOS: Array<[string, string, IconeRapido, string]> = [
   ['Meus', 'resp:eu', { comum: 'pessoa' }, ''],
+  ['Recebidos', 'grupo:recebidos', { grade: 'recebido' }, ''],
+  ['Gerados', 'grupo:gerados', { grade: 'gerado' }, ''],
   ['Atrasados', 'prazo:atrasado', { comum: 'alerta' }, 'perigo'],
   ['Vencem na semana', 'prazo:semana', { comum: 'calendario' }, 'aviso'],
   ['Sem responsável', 'resp:sem', { grade: 'semPessoa' }, ''],
@@ -352,7 +356,7 @@ export function criarApp(d: DepsApp) {
     chips.replaceChildren(...c.tokens.map((t) => h('span', { class: `spro-chip${t.termo.negado ? ' spro-chip-neg' : ''}` }, t.texto, h('button', { type: 'button', 'aria-label': `Remover ${t.texto}`, onclick: () => { alterar({ busca: remover(visao.busca, t.texto) }); busca.value = visao.busca; } }, '×'))));
     chips.hidden = !c.tokens.length;
     const ativos = new Set(c.tokens.map((t) => t.texto));
-    rapidos.replaceChildren(...FILTROS_RAPIDOS.map(([rotulo, termo, ic, tom]) => h('button', { type: 'button', title: `${rotulo}\nFiltro: ${termo}`, 'aria-label': rotulo, class: `spro-rapido${tom ? ` spro-rapido-${tom}` : ''}${ativos.has(termo) ? ' spro-rapido-on' : ''}`, 'aria-pressed': String(ativos.has(termo)), onclick: () => { alterar({ busca: ativos.has(termo) ? remover(visao.busca, termo) : `${visao.busca} ${termo}`.trim() }); busca.value = visao.busca; } }, 'comum' in ic ? iconeComum(ic.comum, 14, doc) : iconeGrade(ic.grade, 14, doc), h('span', { class: 'spro-rapido-rotulo' }, rotulo))));
+    rapidos.replaceChildren(...FILTROS_RAPIDOS.map(([rotulo, termo, ic, tom]) => h('button', { type: 'button', title: `${rotulo}\nFiltro: ${termo}`, 'aria-label': rotulo, class: `spro-rapido${tom ? ` spro-rapido-${tom}` : ''}${ativos.has(termo) ? ' spro-rapido-on' : ''}`, 'aria-pressed': String(ativos.has(termo)), onclick: () => { alterar({ busca: ativos.has(termo) ? remover(visao.busca, termo) : `${termoExcludente(termo) ? remover(visao.busca, termoExcludente(termo)!) : visao.busca} ${termo}`.trim() }); busca.value = visao.busca; } }, 'comum' in ic ? iconeComum(ic.comum, 14, doc) : iconeGrade(ic.grade, 14, doc), h('span', { class: 'spro-rapido-rotulo' }, rotulo))));
     ajustarFaixa();
   }
 
