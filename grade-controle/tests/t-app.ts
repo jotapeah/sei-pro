@@ -611,3 +611,13 @@ await teste('app: os 3 primeiros filtros rapidos (Meus, Recebidos, Gerados) nunc
   assert.deepEqual(qa(app, '.spro-rapido').slice(0, 3).map((b) => b.textContent!.trim()), ['Meus', 'Recebidos', 'Gerados']);
   app.fechar();
 });
+await teste('app: cada filtro rapido tem dica (data-tip) com o nome, o que faz e o termo de busca', async () => {
+  const { app } = await montar();
+  for (const b of qa(app, '.spro-rapido')) {
+    const t = b.getAttribute('data-tip')!;
+    assert.ok(t && t.split('\n').length >= 3, `${b.getAttribute('aria-label')}: ${t}`);
+    assert.equal(b.hasAttribute('title'), false);
+  }
+  assert.match(qa(app, '.spro-rapido')[0]!.getAttribute('data-tip')!, /Meus\nProcessos atribuídos a você\nBusca: resp:eu/);
+  app.fechar();
+});
