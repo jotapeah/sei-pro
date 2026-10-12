@@ -120,12 +120,7 @@ function base64ParaBytes(b64: string): Uint8Array {
 }
 
 export function toolsBaixar(o: OpcoesBaixar): DefTool[] {
-  /**
-   * Destino que o usuário viu no cartão, por documento. A gravação só acontece
-   * se o arquivo que chega for o que foi aprovado; cada aprovação vale uma vez.
-   */
-  const aprovados = new Map<string, string>();
-  const chaveDe = (numero: string) => numero.replace(/\D/g, "") || numero;
+  const CAMPO_DESTINO = "Salvar em";
 
   const baixar = definirTool({
     nome: "documento_baixar",
@@ -137,17 +132,15 @@ export function toolsBaixar(o: OpcoesBaixar): DefTool[] {
     previsualizar: async (a, ctx: ContextoTool): Promise<PreviaItem[]> => {
       const m = await ctx.sei<Meta>("documento.baixar", { numero: String(a.documento), somenteMetadados: true });
       const alvo = `${m.titulo} (SEI ${m.numero})`;
-      aprovados.delete(chaveDe(String(a.documento)));
       if (!m.baixavel) return [{ alvo, mudancas: [], resumo: "", erro: NATIVO(m.numero) }];
       const d = destinoDe(m);
       if (d.erro) return [{ alvo, mudancas: [], resumo: "", erro: d.erro }];
-      aprovados.set(chaveDe(String(a.documento)), d.destino);
       return [
         {
           alvo,
           resumo: "Salvar uma cópia no computador",
           mudancas: [
-            { campo: "Salvar em", antes: "", depois: `Downloads/${d.destino}` },
+            { campo: CAMPO_DESTINO, antes: "", depois: `Downloads/${d.destino}` },
             ...(m.arquivo ? [{ campo: "Arquivo", antes: "", depois: `${m.arquivo.tipo || "tipo não informado"}, ${Math.max(1, Math.round(m.arquivo.tamanho / 1024))} KB` }] : []),
             ...(m.nivel && m.nivel !== "publico" ? [{ campo: "Nível de acesso no SEI", antes: "", depois: m.nivel }] : []),
             { campo: "Atenção", antes: "", depois: "a cópia sai do SEI com os dados pessoais reais, sem máscara, e fica no seu computador até você apagar" },
@@ -156,15 +149,15 @@ export function toolsBaixar(o: OpcoesBaixar): DefTool[] {
       ];
     },
     executar: async (a, ctx: ContextoTool) => {
-      const chave = chaveDe(String(a.documento));
-      const aprovado = aprovados.get(chave);
-      aprovados.delete(chave);
       const r = await ctx.sei<Meta & { arquivo: { base64: string; tipo: string; nome: string; tamanho: number } }>("documento.baixar", { numero: String(a.documento) });
       const { nome, destino, erro } = destinoDe(r);
       if (erro) throw new Error(erro);
-      // O arquivo pode ter sido trocado no SEI entre o cartão e este momento,
-      // ou a chamada pode ter vindo sem cartão: o que não foi visto não é gravado.
-      if (!aprovado || aprovado !== destino) {
+      // Vale o que o usuário viu NO CARTÃO DESTE PASSO (a prévia que o motor
+      // entrega junto com a execução), e não uma lembrança guardada aqui: um
+      // cartão recusado antes não autoriza nada, e passo sem prévia não grava.
+      // Cobre também o arquivo trocado no SEI entre o cartão e este momento.
+      const visto = (ctx.previa ?? []).some((item) => !item.erro && item.mudancas.some((x) => x.campo === CAMPO_DESTINO && x.depois === `Downloads/${destino}`));
+      if (!visto) {
         throw new Error(`O arquivo do documento ${r.numero} não é o que foi aprovado no cartão (o documento mudou no SEI, ou o download não passou pela aprovação). Nada foi gravado: chame documento_baixar de novo, sozinho, para o usuário aprovar.`);
       }
       const salvo = await o.salvar({ destino, bytes: base64ParaBytes(r.arquivo.base64), tipo: r.arquivo.tipo || "application/octet-stream" });

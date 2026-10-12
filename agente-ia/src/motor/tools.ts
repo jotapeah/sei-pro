@@ -49,6 +49,13 @@ export interface ContextoTool {
    * Se a passada falhar, nada do resultado vai ao modelo.
    */
   aoModelo?(passada: (texto: string) => string): void;
+  /**
+   * A prévia DESTE passo, como o usuário a viu no cartão que aprovou. Só existe
+   * na execução de plano; passo com referência a outro (`$1...`) não tem prévia
+   * e chega com a lista vazia. Serve à tool que só pode fazer exatamente o que
+   * foi mostrado (ver `tools/baixar.ts`).
+   */
+  previa?: PreviaItem[];
   /** Interface do painel (tools internas: perguntar, tarefas). */
   ui: InterfaceMotor;
   /** Credenciais de assinatura aprovadas no plano (só em tools de assinatura). */

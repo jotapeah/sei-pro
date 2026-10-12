@@ -130,11 +130,13 @@ export async function verificarBaixar(): Promise<void> {
       agora: () => 99,
     });
     const ctx = { sinal: new AbortController().signal, sei: async (op: string, a: Record<string, unknown> = {}) => resposta(op, a) } as unknown as ContextoTool;
-    return { t, salvos, registrados, ctx };
+    /** Como o motor: a prévia que o usuário aprovou acompanha a execução do passo. */
+    const aprovar = async (documento: string) => ({ ...ctx, previa: await t.previsualizar!({ documento }, ctx) }) as ContextoTool;
+    return { t, salvos, registrados, ctx, aprovar };
   };
   const META = { numero: "1234567", titulo: "Contrato 002/2026", formato: "pdf", externo: true, nivel: "restrito", processo: PROCESSO };
   {
-    const { t, salvos, registrados, ctx } = monta((_op, a) => ({ ...META, baixavel: true, arquivo: { ...(a.somenteMetadados ? {} : { base64: b64("%PDF-1.7") }), tipo: "application/pdf", nome: "contrato.pdf", tamanho: 8 } }));
+    const { t, salvos, registrados, ctx, aprovar } = monta((_op, a) => ({ ...META, baixavel: true, arquivo: { ...(a.somenteMetadados ? {} : { base64: b64("%PDF-1.7") }), tipo: "application/pdf", nome: "contrato.pdf", tamanho: 8 } }));
     checar("chama-se documento_baixar", t.nome === "documento_baixar");
     checar("e escrita: so roda com aprovacao, e nao existe 'permitir sempre' em plano", t.efeito === "escrita" && typeof t.previsualizar === "function");
     checar("a descricao e a combinada", t.descricao.startsWith("Baixa um documento do SEI para a pasta Downloads do usuário e devolve o caminho do arquivo. Use quando um conector precisar do arquivo em disco."), t.descricao);
@@ -145,7 +147,7 @@ export async function verificarBaixar(): Promise<void> {
     checar("e avisa que o arquivo sai com dados reais", previa[0].mudancas.some((m) => /dados pessoais reais|sem máscara/i.test(`${m.campo} ${m.depois}`)), previa[0].mudancas);
     checar("a previa nao baixa nada", salvos.length === 0);
 
-    const r = (await t.executar({ documento: "1234567" }, ctx)) as { caminho: string; tamanho: number; tipo: string; aplicado: boolean };
+    const r = (await t.executar({ documento: "1234567" }, await aprovar("1234567"))) as { caminho: string; tamanho: number; tipo: string; aplicado: boolean };
     checar("salva na pasta do processo", salvos[0]?.destino === "SEI Pro/50300.011914-2026-37/Contrato 002-2026 (1234567).pdf", salvos[0]?.destino);
     checar("com os bytes do SEI", new TextDecoder().decode(salvos[0].bytes) === "%PDF-1.7");
     checar("devolve o caminho absoluto, o tamanho e o tipo", r.caminho === "/Users/fulano/Downloads/SEI Pro/50300.011914-2026-37/Contrato 002-2026 (1234567).pdf" && r.tamanho === 8 && r.tipo === "application/pdf" && r.aplicado === true, r);
@@ -167,18 +169,25 @@ export async function verificarBaixar(): Promise<void> {
     // O arquivo trocado no SEI entre o cartão e a gravação: o usuário aprovou
     // um PDF, e o que chegaria ao disco é outra coisa.
     let trocado = false;
-    const { t, salvos, ctx } = monta((_op, a) => ({ ...META, baixavel: true, arquivo: { ...(a.somenteMetadados ? {} : { base64: b64("x") }), tipo: trocado ? "image/png" : "application/pdf", nome: trocado ? "outro.png" : "contrato.pdf", tamanho: 1 } }));
-    await t.previsualizar!({ documento: "1234567" }, ctx);
+    const { t, salvos, ctx, aprovar } = monta((_op, a) => ({ ...META, baixavel: true, arquivo: { ...(a.somenteMetadados ? {} : { base64: b64("x") }), tipo: trocado ? "image/png" : "application/pdf", nome: trocado ? "outro.png" : "contrato.pdf", tamanho: 1 } }));
+    const visto = await aprovar("1234567");
     trocado = true;
-    const e = await lanca(() => t.executar({ documento: "1234567" }, ctx));
+    const e = await lanca(() => t.executar({ documento: "1234567" }, visto));
     checar("destino diferente do aprovado: recusa", /aprovad/i.test(e?.message ?? "") && salvos.length === 0, e?.message);
     trocado = false;
-    const semCartao = await lanca(() => t.executar({ documento: "7654321" }, ctx));
-    checar("documento que nao passou pelo cartao nao e gravado", /aprovad/i.test(semCartao?.message ?? "") && salvos.length === 0, semCartao?.message);
+
+    // A aprovação é a do CARTÃO DESTE PASSO, e não uma lembrança da ferramenta:
+    // um cartão recusado antes não pode valer para uma execução que veio
+    // depois sem prévia (passo de plano com referência "$1...").
     await t.previsualizar!({ documento: "1234567" }, ctx);
-    await t.executar({ documento: "1234567" }, ctx);
-    const repetida = await lanca(() => t.executar({ documento: "1234567" }, ctx));
-    checar("uma aprovacao vale um download", salvos.length === 1 && Boolean(repetida), salvos.length);
+    const semPrevia = await lanca(() => t.executar({ documento: "1234567" }, ctx));
+    checar("previa de um cartao anterior nao autoriza execucao sem previa", /aprovad/i.test(semPrevia?.message ?? "") && salvos.length === 0, semPrevia?.message);
+    const previaVazia = await lanca(() => t.executar({ documento: "1234567" }, { ...ctx, previa: [] } as ContextoTool));
+    checar("passo sem previa (dependente) nao grava", /aprovad/i.test(previaVazia?.message ?? "") && salvos.length === 0, previaVazia?.message);
+    const deOutro = await lanca(async () => t.executar({ documento: "1234567" }, { ...ctx, previa: [{ alvo: "x", resumo: "", mudancas: [{ campo: "Salvar em", antes: "", depois: "Downloads/SEI Pro/outro/Outro (7654321).pdf" }] }] } as ContextoTool));
+    checar("previa de outro documento nao serve", /aprovad/i.test(deOutro?.message ?? "") && salvos.length === 0, deOutro?.message);
+    await t.executar({ documento: "1234567" }, await aprovar("1234567"));
+    checar("com a previa certa, grava", salvos.length === 1, salvos.length);
   }
   {
     const { t, salvos, ctx } = monta((_op, a) => ({ ...META, baixavel: true, arquivo: { ...(a.somenteMetadados ? {} : { base64: b64("MZ") }), tipo: "application/x-msdownload", nome: "instalar.exe", tamanho: 2 } }));
@@ -189,7 +198,7 @@ export async function verificarBaixar(): Promise<void> {
     const xlsx = monta((_op, a) => ({ ...META, baixavel: true, arquivo: { ...(a.somenteMetadados ? {} : { base64: b64("PK") }), tipo: "", nome: "Planilha.XLSX", tamanho: 2 } }));
     const px = await xlsx.t.previsualizar!({ documento: "1234567" }, xlsx.ctx);
     checar("o cartao mostra a extensao real, nao um palpite", px[0].mudancas.some((m) => m.depois.endsWith("(1234567).xlsx")), px[0].mudancas);
-    await xlsx.t.executar({ documento: "1234567" }, xlsx.ctx);
+    await xlsx.t.executar({ documento: "1234567" }, { ...xlsx.ctx, previa: px } as ContextoTool);
     checar("e e essa que vai para o disco", xlsx.salvos[0]?.destino.endsWith("(1234567).xlsx"), xlsx.salvos[0]?.destino);
   }
 

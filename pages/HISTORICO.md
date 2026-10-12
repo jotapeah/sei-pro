@@ -2,6 +2,13 @@
 
 ## ![SEI Pro Histórico de Versões](../img/icon-historico.png) Histórico de versões
 
+### Versão 3.2.1
+12/10/2026
+
+Mais uma correção de segurança no download de documentos pelo [Agente de IA](../pages/AGENTEIA.md) (*SEI Pro Lab*, Chrome e Edge).
+
+- **O download só acontece com o cartão que você aprovou.** O agente só grava o arquivo se o nome e o destino estiverem no cartão daquele pedido. Um cartão recusado antes não vale para um pedido posterior, e pedido que chega sem mostrar o arquivo não é gravado.
+
 ### Versão 3.2
 12/10/2026
 

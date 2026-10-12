@@ -108,6 +108,31 @@ export async function verificarMotor(): Promise<void> {
     checar("protocolo preservado", tudo.includes("50300.018905/2018-67"));
   }
 
+  secao("motor: a previa aprovada acompanha a execucao do passo");
+  {
+    const recebidas: unknown[] = [];
+    const gravar = definirTool({
+      nome: "teste_gravar",
+      descricao: "Grava algo, para o teste.",
+      parametros: s.objeto({ alvo: s.texto() }),
+      efeito: "escrita",
+      rotulo: () => "Gravar",
+      previsualizar: async (a) => [{ alvo: String(a.alvo), resumo: "", mudancas: [{ campo: "Destino", antes: "", depois: `pasta/${String(a.alvo)}` }] }],
+      executar: async (_a, ctx) => (recebidas.push(ctx.previa), { aplicado: true }),
+    });
+    const m = new Motor({
+      provedor: provedor([() => ({ texto: "", chamadas: [chamada("teste_gravar", { alvo: "a.pdf" })], fim: "tool_calls" })], []),
+      tools: new RegistroTools([gravar]),
+      ui: ui({ aprovado: true }),
+      privacidade: new Pseudonimos(),
+      sei: seiFalso([]),
+      sistema: () => "sistema",
+    });
+    await m.enviar("grave");
+    const previa = recebidas[0] as Array<{ mudancas: Array<{ depois: string }> }> | undefined;
+    checar("a ferramenta recebe a previa que o usuario viu no cartao", previa?.[0]?.mudancas[0]?.depois === "pasta/a.pdf", recebidas);
+  }
+
   secao("motor: escrita vira plano; recusa volta ao modelo");
   {
     const vistos: Mensagem[][] = [];

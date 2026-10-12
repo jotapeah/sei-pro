@@ -388,7 +388,7 @@ export class Motor {
         }
         const doPasso = (finais[i] ??= []);
         const aoModelo = (f: (texto: string) => string) => void doPasso.push(f);
-        const r = await t.executar(args, this.contexto(sinal, p.efeito === "assinatura" ? { assinatura: decisao.assinatura, aoModelo } : { aoModelo }));
+        const r = await t.executar(args, this.contexto(sinal, p.efeito === "assinatura" ? { assinatura: decisao.assinatura, aoModelo, previa: p.previa } : { aoModelo, previa: p.previa }));
         resultados.push(r);
         // Antes de `toolTerminada`: é ela que redesenha o item, e o painel
         // precisa já saber que aquela ação pode ser desfeita.
