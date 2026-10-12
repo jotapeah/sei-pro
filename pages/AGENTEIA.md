@@ -154,6 +154,25 @@ O conteúdo que você mandar a um conector **sai do seu navegador para o endere�
 
 Conector não escreve no SEI: para isso continuam valendo o cartão de aprovação e as regras da unidade.
 
+#### Conector no seu próprio computador
+
+O servidor pode rodar na sua máquina, em `http://localhost` ou `http://127.0.0.1` (é o único caso em que `http` vale). Na primeira vez, o navegador pede a sua permissão para o SEI Pro falar com esse endereço.
+
+Como é você quem liga e desliga esse servidor, a lista mostra o estado de cada conector: **conectado** ou **sem resposta**. O estado é conferido de novo toda vez que o painel abre, e o botão **Testar de novo** aparece quando o servidor não responde. Se ele estiver desligado, o agente diz isso na conversa, em vez de um erro de rede.
+
+Quando uma ferramenta do conector devolve um erro (um login que expirou, um dado recusado), o texto chega inteiro a você e ao agente, e o conector continua ligado: basta resolver o que ele pede e repetir o pedido.
+
+#### Quando o conector precisa de um arquivo
+
+Alguns conectores só leem arquivos do disco, por exemplo para anexar um contrato num sistema. Nesse caso o agente pode **baixar um documento do SEI** para `Downloads/SEI Pro/<número do processo>/` e passar ao conector o caminho do arquivo.
+
+* **Você aprova cada download.** O cartão mostra o documento e onde ele será salvo, e não existe "permitir sempre" para isso. Rotina nunca baixa sozinha.
+* **A cópia tem os dados reais.** Ela sai do SEI sem máscara e fica no seu computador até você apagar.
+* **Só documento externo** (o arquivo anexado: PDF, planilha, imagem). Documento escrito no editor do SEI ainda não. Sigiloso, nunca.
+* **Para apagar**, vá em **Configuração → O que o agente pode → Arquivos baixados pelo agente**: a tela diz quantos arquivos existem e o botão os remove do computador. Os documentos continuam no SEI.
+
+Na primeira vez, o navegador pede a permissão de **downloads**. Ela é opcional: quem não usa essa função nunca é perguntado.
+
 ### Nada é alterado sem a sua aprovação
 
 Quando o pedido implica mexer no processo, o agente **não executa**: ele monta um cartão com o que pretende fazer, item a item, mostrando o valor de antes e o de depois. Nada acontece enquanto você não clicar em **Aprovar e executar**.

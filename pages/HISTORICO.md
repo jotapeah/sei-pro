@@ -2,6 +2,19 @@
 
 ## ![SEI Pro Histórico de Versões](../img/icon-historico.png) Histórico de versões
 
+### Versão 3.1
+12/10/2026
+
+Melhorias no [Agente de IA](../pages/AGENTEIA.md) para quem usa **conectores (MCP)**, no *SEI Pro Lab* (Chrome e Edge).
+
+- **Corrigido — o teste de conexão dos conectores falhava** com a mensagem *Illegal invocation*, e o conector ficava "com erro" mesmo com o servidor no ar. Agora conecta e lista as ferramentas.
+- **Novo — conector no seu próprio computador.** Servidor em `localhost` ou `127.0.0.1` passa a mostrar o estado na lista (**conectado** ou **sem resposta**), com o botão **Testar de novo**, e o estado é conferido toda vez que o painel abre. Com o servidor desligado, o agente avisa que ele não está rodando, em vez de um erro de rede.
+- **Novo — baixar um documento do SEI para entregar a um conector.** Quando o conector só lê arquivos do disco, o agente salva o documento externo (PDF, planilha, imagem) em `Downloads/SEI Pro/<número do processo>/` e passa o caminho adiante. **Você aprova cada download**, o cartão mostra o documento e o destino, e a cópia sai com os dados reais, sem máscara. Em *Configuração → O que o agente pode → Arquivos baixados pelo agente* há um botão para apagar essas cópias. O navegador pede a permissão de downloads só na primeira vez que a função é usada.
+- **Erro da ferramenta não derruba o conector.** Quando o servidor responde que um login expirou ou que um dado foi recusado, o texto chega inteiro a você e ao agente, e o conector continua ligado.
+- **O agente acha a ferramenta certa.** Em conector com muitas ferramentas de nome parecido, a busca passa a trazer primeiro a que casa melhor com o pedido e informa o nome das que não couberam na resposta.
+- **Token colado errado é dito como tal.** Aspas curvas, acento ou quebra de linha no token agora geram um aviso para colar de novo, e não um erro de conexão.
+- **Novo — botão de copiar a resposta.** Cada resposta do agente ganhou um ícone de copiar, que leva o texto com a formatação (tabelas e listas continuam tabelas e listas ao colar).
+
 ### Versão 3.0
 12/10/2026
 
