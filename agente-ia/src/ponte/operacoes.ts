@@ -402,8 +402,8 @@ export const OPERACOES: Record<string, Op> = {
 
   /**
    * O arquivo ORIGINAL de um documento externo, para o painel gravar no disco
-   * (`documento_baixar`). Com `somenteMetadados`, só diz se dá para baixar —
-   * é o que o cartão de aprovação mostra, sem trazer byte nenhum.
+   * (`documento_baixar`). Com `somenteMetadados`, diz se dá para baixar e qual
+   * é o arquivo (nome, tipo, tamanho) — é o que o cartão de aprovação mostra.
    *
    * Documento do editor do SEI fica de fora: virar PDF é serviço do servidor
    * do SEI ("Gerar PDF"), que o agente ainda não aciona.
@@ -415,7 +415,7 @@ export const OPERACOES: Record<string, Op> = {
     }
     const meta = { ...resumoDocumento(d.documento), processo: d.arvore.protocolo };
     const baixavel = /documento_download_anexo/.test(d.documento.src ?? "");
-    if (a.somenteMetadados === true) return { ...meta, baixavel };
+    if (!baixavel && a.somenteMetadados === true) return { ...meta, baixavel };
     if (!baixavel) {
       throw new ErroSei(
         "SEI_ACAO_INDISPONIVEL",
@@ -428,6 +428,10 @@ export const OPERACOES: Record<string, Op> = {
     if (bytes.length > LIMITE_ARQUIVO) {
       throw new ErroSei("SEI_ACAO_INDISPONIVEL", `O arquivo do documento ${d.documento.numero} tem ${Math.round(bytes.length / 1024 / 1024)} MB, acima do limite de 25 MB do agente. Pe\u00E7a ao usu\u00E1rio para baix\u00E1-lo pelo SEI.`);
     }
+    // O cartão de aprovação mostra o arquivo que SERÁ gravado: nome e tipo
+    // reais, lidos do SEI, e não um palpite pelo ícone da árvore. Os bytes
+    // ficam na página; só vão ao painel na hora de gravar.
+    if (a.somenteMetadados === true) return { ...meta, baixavel, arquivo: { tipo, nome, tamanho: bytes.length } };
     return { ...meta, arquivo: { tipo, nome, tamanho: bytes.length, base64: bytesParaBase64(bytes) } };
   },
 

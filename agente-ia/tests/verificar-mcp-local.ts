@@ -136,11 +136,17 @@ export async function verificarMcpLocal(): Promise<void> {
     const torto = conector({ auth: { tipo: "token", cabecalho: "Authorization", valor: "Bearer \u201Cabc\u201D" } });
     const e = (await lanca(() => new ClienteMcp(destinoDe(torto), contando).iniciar(sinal()))) as ErroMcp;
     checar("caractere invalido no token nao vira 'desligado'", e?.codigo === "http", e?.codigo);
-    checar("a mensagem manda corrigir o token", /cabeçalho "Authorization"/.test(e?.message ?? "") && /cole o token de novo/i.test(e?.message ?? ""), e?.message);
+    checar("a mensagem manda corrigir o token", /cole o token de novo/i.test(e?.message ?? ""), e?.message);
+    checar("sem repetir o token na mensagem (ela vai ao modelo e fica guardada)", !/abc/.test(e?.message ?? ""), e?.message);
     checar("e nada sai para o servidor", pedidos === 0, pedidos);
-    const nomeRuim = conector({ auth: { tipo: "token", cabecalho: "Authorization: Bearer", valor: "abc" } });
+    // Engano comum: o token colado no campo do NOME do cabeçalho.
+    const nomeRuim = conector({ auth: { tipo: "token", cabecalho: "Authorization: Bearer tokensecreto123", valor: "abc" } });
     const n = (await lanca(() => new ClienteMcp(destinoDe(nomeRuim), contando).iniciar(sinal()))) as ErroMcp;
     checar("nome de cabecalho invalido tambem e explicado", n?.codigo === "http" && /cabeçalho/.test(n.message), n?.message);
+    checar("sem repetir o que foi digitado no nome", !/tokensecreto123/.test(`${n?.message} ${n?.detalhe ?? ""}`), n?.message);
+    const tokenNoNome = conector({ auth: { tipo: "token", cabecalho: "tokensecreto123", valor: "Bearer \u201Cx\u201D" } });
+    const v = (await lanca(() => new ClienteMcp(destinoDe(tokenNoNome), contando).iniciar(sinal()))) as ErroMcp;
+    checar("nem quando o nome e valido e o defeito esta no valor", !/tokensecreto123/.test(`${v?.message} ${v?.detalhe ?? ""}`), v?.message);
     const estranho = (async () => {
       throw new TypeError("Failed to execute 'fetch' on 'Window': algo que nao e rede");
     }) as unknown as typeof fetch;

@@ -102,8 +102,12 @@ export async function verificarBaixar(): Promise<void> {
     };
     const sinal = new AbortController().signal;
     const ext = sei(doc({}));
-    const meta = (await OPERACOES["documento.baixar"](ext.s, { numero: "1234567", somenteMetadados: true }, sinal)) as { baixavel: boolean; processo: string };
-    checar("so metadados: diz se da para baixar, sem baixar", meta.baixavel === true && meta.processo === PROCESSO && ext.baixou() === 0, meta);
+    const meta = (await OPERACOES["documento.baixar"](ext.s, { numero: "1234567", somenteMetadados: true }, sinal)) as { baixavel: boolean; processo: string; arquivo?: { nome: string; tipo: string; tamanho: number; base64?: string } };
+    checar("so metadados: diz se da para baixar", meta.baixavel === true && meta.processo === PROCESSO, meta);
+    // O cartão de aprovação tem de mostrar o arquivo que SERÁ gravado: nome e
+    // tipo reais vêm do SEI, não de um palpite pelo ícone da árvore.
+    checar("com o nome, o tipo e o tamanho reais do arquivo", meta.arquivo?.nome === "contrato.pdf" && meta.arquivo.tipo === "application/pdf" && meta.arquivo.tamanho === 4, meta.arquivo);
+    checar("mas sem trazer os bytes para o painel", meta.arquivo?.base64 === undefined, Object.keys(meta.arquivo ?? {}));
     const r = (await OPERACOES["documento.baixar"](ext.s, { numero: "1234567" }, sinal)) as { arquivo: { base64: string; tipo: string; nome: string; tamanho: number } };
     checar("documento externo: devolve o arquivo original", atob(r.arquivo.base64) === "%PDF" && r.arquivo.tipo === "application/pdf" && r.arquivo.tamanho === 4, r.arquivo);
     const nativo = sei(doc({ externo: false, formato: "interno", src: "controlador.php?acao=documento_visualizar&id=9" }));
@@ -130,7 +134,7 @@ export async function verificarBaixar(): Promise<void> {
   };
   const META = { numero: "1234567", titulo: "Contrato 002/2026", formato: "pdf", externo: true, nivel: "restrito", processo: PROCESSO };
   {
-    const { t, salvos, registrados, ctx } = monta((_op, a) => (a.somenteMetadados ? { ...META, baixavel: true } : { ...META, arquivo: { base64: b64("%PDF-1.7"), tipo: "application/pdf", nome: "contrato.pdf", tamanho: 8 } }));
+    const { t, salvos, registrados, ctx } = monta((_op, a) => ({ ...META, baixavel: true, arquivo: { ...(a.somenteMetadados ? {} : { base64: b64("%PDF-1.7") }), tipo: "application/pdf", nome: "contrato.pdf", tamanho: 8 } }));
     checar("chama-se documento_baixar", t.nome === "documento_baixar");
     checar("e escrita: so roda com aprovacao, e nao existe 'permitir sempre' em plano", t.efeito === "escrita" && typeof t.previsualizar === "function");
     checar("a descricao e a combinada", t.descricao.startsWith("Baixa um documento do SEI para a pasta Downloads do usuário e devolve o caminho do arquivo. Use quando um conector precisar do arquivo em disco."), t.descricao);
@@ -156,6 +160,37 @@ export async function verificarBaixar(): Promise<void> {
     checar("documento do editor: o cartao ja diz que nao da", /editor do SEI/.test(previa[0].erro ?? ""), previa[0]);
     const e = await lanca(() => t.executar({ documento: "1234567" }, ctx));
     checar("e a execucao recusa sem gravar nada", Boolean(e) && salvos.length === 0, e?.message);
+  }
+
+  secao("baixar: o que foi aprovado e o que e gravado");
+  {
+    // O arquivo trocado no SEI entre o cartão e a gravação: o usuário aprovou
+    // um PDF, e o que chegaria ao disco é outra coisa.
+    let trocado = false;
+    const { t, salvos, ctx } = monta((_op, a) => ({ ...META, baixavel: true, arquivo: { ...(a.somenteMetadados ? {} : { base64: b64("x") }), tipo: trocado ? "image/png" : "application/pdf", nome: trocado ? "outro.png" : "contrato.pdf", tamanho: 1 } }));
+    await t.previsualizar!({ documento: "1234567" }, ctx);
+    trocado = true;
+    const e = await lanca(() => t.executar({ documento: "1234567" }, ctx));
+    checar("destino diferente do aprovado: recusa", /aprovad/i.test(e?.message ?? "") && salvos.length === 0, e?.message);
+    trocado = false;
+    const semCartao = await lanca(() => t.executar({ documento: "7654321" }, ctx));
+    checar("documento que nao passou pelo cartao nao e gravado", /aprovad/i.test(semCartao?.message ?? "") && salvos.length === 0, semCartao?.message);
+    await t.previsualizar!({ documento: "1234567" }, ctx);
+    await t.executar({ documento: "1234567" }, ctx);
+    const repetida = await lanca(() => t.executar({ documento: "1234567" }, ctx));
+    checar("uma aprovacao vale um download", salvos.length === 1 && Boolean(repetida), salvos.length);
+  }
+  {
+    const { t, salvos, ctx } = monta((_op, a) => ({ ...META, baixavel: true, arquivo: { ...(a.somenteMetadados ? {} : { base64: b64("MZ") }), tipo: "application/x-msdownload", nome: "instalar.exe", tamanho: 2 } }));
+    const previa = await t.previsualizar!({ documento: "1234567" }, ctx);
+    checar("arquivo que nao e documento: o cartao ja recusa", /\.exe/.test(previa[0].erro ?? "") && previa[0].mudancas.length === 0, previa[0]);
+    const e = await lanca(() => t.executar({ documento: "1234567" }, ctx));
+    checar("e nada e gravado", Boolean(e) && salvos.length === 0, e?.message);
+    const xlsx = monta((_op, a) => ({ ...META, baixavel: true, arquivo: { ...(a.somenteMetadados ? {} : { base64: b64("PK") }), tipo: "", nome: "Planilha.XLSX", tamanho: 2 } }));
+    const px = await xlsx.t.previsualizar!({ documento: "1234567" }, xlsx.ctx);
+    checar("o cartao mostra a extensao real, nao um palpite", px[0].mudancas.some((m) => m.depois.endsWith("(1234567).xlsx")), px[0].mudancas);
+    await xlsx.t.executar({ documento: "1234567" }, xlsx.ctx);
+    checar("e e essa que vai para o disco", xlsx.salvos[0]?.destino.endsWith("(1234567).xlsx"), xlsx.salvos[0]?.destino);
   }
 
   secao("baixar: gravacao pelo chrome.downloads");
@@ -187,13 +222,23 @@ export async function verificarBaixar(): Promise<void> {
     checar("o mesmo caminho baixado de novo substitui o registro (o arquivo foi sobrescrito)", lista.some((x) => x.id === 3) && !lista.some((x) => x.id === 1), lista.map((x) => x.id));
 
     const d = downloadsFalsos();
-    d.itens.set(2, { id: 2, filename: "b", fileSize: 1, mime: "", state: "complete", exists: true });
-    d.itens.set(3, { id: 3, filename: "a", fileSize: 1, mime: "", state: "complete", exists: false });
+    d.itens.set(2, { id: 2, filename: "/Users/fulano/Downloads/SEI Pro/p/b.pdf", fileSize: 1, mime: "", state: "complete", exists: true });
+    d.itens.set(3, { id: 3, filename: "/Users/fulano/Downloads/SEI Pro/p/a.pdf", fileSize: 1, mime: "", state: "complete", exists: false });
     const r = await apagarBaixados(armazem, d.api);
     checar("apaga o arquivo do disco", d.removidos.join() === "2", d.removidos);
     checar("e tira os dois do historico de downloads", d.apagadosDoHistorico.sort().join() === "2,3", d.apagadosDoHistorico);
     checar("conta o que apagou e o que ja nao existia", r.apagados === 1 && r.ausentes === 1, r);
     checar("e o registro fica vazio", (await listarBaixados(armazem)).length === 0);
+
+    // O id de download pode passar a apontar para OUTRO arquivo (histórico do
+    // navegador limpo e ids reaproveitados): apagar pelo id, sem conferir o
+    // caminho, removeria um arquivo do usuário que o agente nunca criou.
+    await registrarBaixado(baixado({ id: 5, caminho: "/Users/fulano/Downloads/SEI Pro/p/meu.pdf" }), armazem);
+    const outro = downloadsFalsos();
+    outro.itens.set(5, { id: 5, filename: "/Users/fulano/Downloads/declaracao-imposto.pdf", fileSize: 1, mime: "", state: "complete", exists: true });
+    const ro = await apagarBaixados(armazem, outro.api);
+    checar("id que hoje aponta para outro arquivo: nao apaga", outro.removidos.length === 0 && ro.apagados === 0 && ro.ausentes === 1, { removidos: outro.removidos, ro });
+    checar("nem tira do historico o download alheio", outro.apagadosDoHistorico.length === 0, outro.apagadosDoHistorico);
 
     // Permissão revogada: sem o chrome.downloads não há como apagar, e
     // esvaziar o registro seria esquecer arquivos que continuam no disco.
@@ -248,6 +293,22 @@ export async function verificarBaixar(): Promise<void> {
 
     await chamar.executar({ servidor: "Arrendamento", tool: "arrendamento_enviar_arquivo", argumentos: { caminho_arquivo: "/Users/fulano.beltrano/Documents/Maria Souza.pdf" } }, ctx());
     checar("caminho que o agente NAO baixou segue a regra geral (mascarado)", !/Maria Souza/.test(String(enviados[2]?.caminho_arquivo)), enviados[2]);
+
+    // Conector de FORA não lê o disco do usuário: o caminho real não lhe serve
+    // de nada, e o título do documento levaria nome e CPF a um terceiro.
+    const deFora = toolsMcp({
+      conectores: () => [{ ...conector, url: "https://mcp.terceiro.com/mcp" }],
+      guardar: async () => undefined,
+      autorizado: async () => true,
+      arquivos: () => [caminho],
+      cliente: () => ({ iniciar: async () => ({}), chamar: async (_t: string, a: Record<string, unknown>) => (enviados.push(a), "ok") }) as never,
+    }).find((t) => t.nome === "mcp_chamar")!;
+    await deFora.executar({ servidor: "Arrendamento", tool: "arrendamento_enviar_arquivo", argumentos: { caminho_arquivo: caminho } }, ctx());
+    checar("conector remoto recebe o caminho mascarado, como qualquer outro dado", !/Maria Souza|123\.456\.789-09/.test(String(enviados[3]?.caminho_arquivo)), enviados[3]);
+
+    // A marca interna da troca não pode ser um texto que o modelo saiba escrever.
+    await chamar.executar({ servidor: "Arrendamento", tool: "arrendamento_enviar_arquivo", argumentos: { obs: "SEIPROARQUIVOBAIXADOQZX0" } }, ctx());
+    checar("texto igual a uma marca antiga nao vira caminho", enviados[4]?.obs === "SEIPROARQUIVOBAIXADOQZX0", enviados[4]);
 
     const comCartao = toolsMcp({ conectores: () => [{ ...conector, padrao: "aprovar" }], guardar: async () => undefined, autorizado: async () => true, arquivos: () => [caminho], cliente: () => ({ iniciar: async () => ({}), chamar: async () => "ok" }) as never }).find((t) => t.nome === "mcp_chamar")!;
     await comCartao.executar({ servidor: "Arrendamento", tool: "arrendamento_enviar_arquivo", argumentos: { caminho_arquivo: caminho } }, ctx());

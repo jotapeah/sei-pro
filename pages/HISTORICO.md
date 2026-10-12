@@ -2,6 +2,17 @@
 
 ## ![SEI Pro Histórico de Versões](../img/icon-historico.png) Histórico de versões
 
+### Versão 3.1.1
+12/10/2026
+
+Correções de segurança no download de documentos pelo [Agente de IA](../pages/AGENTEIA.md), que entrou na 3.1 (*SEI Pro Lab*, Chrome e Edge).
+
+- **O cartão de aprovação mostra o arquivo que será gravado de verdade.** Nome, tipo e tamanho vêm do SEI, e não mais de uma estimativa. Se o arquivo mudar entre a aprovação e a gravação, nada é salvo.
+- **Só documentos e imagens vão para o computador** (PDF, Word, Excel, imagens, texto). Anexo de outro tipo, como programa executável, é recusado.
+- **A limpeza só apaga o que o agente baixou.** Antes de remover, o SEI Pro confere se o registro ainda corresponde ao mesmo arquivo.
+- **O caminho do arquivo só vai sem máscara a conector do seu próprio computador.** Conector de fora recebe o caminho mascarado, como qualquer outro dado pessoal.
+- **Mensagem de erro do conector não repete o que foi digitado** nos campos de autenticação.
+
 ### Versão 3.1
 12/10/2026
 

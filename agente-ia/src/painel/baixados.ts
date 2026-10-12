@@ -159,7 +159,13 @@ export async function apagarBaixados(
   for (const b of lista) {
     try {
       const [item] = await api.search({ id: b.id });
-      if (!item || item.exists === false) throw new Error("ausente");
+      // O id pode ter passado a apontar para OUTRO download (histórico limpo
+      // e ids reaproveitados): só se mexe no que ainda é o arquivo registrado.
+      if (!item || item.filename !== b.caminho) {
+        ausentes += 1;
+        continue;
+      }
+      if (item.exists === false) throw new Error("ausente");
       await api.removeFile(b.id);
       apagados += 1;
     } catch {

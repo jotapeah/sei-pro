@@ -173,10 +173,12 @@ export class ClienteMcp {
     // ir procurar um servidor desligado quando o defeito é o token colado.
     for (const [nome, valor] of Object.entries(this.destino.cabecalhos ?? {})) {
       if (!/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(nome)) {
-        throw new ErroMcp("http", `O nome do cabeçalho "${nome}" não é válido (sem espaço nem dois-pontos). Edite o conector: o nome costuma ser Authorization.`);
+        // Sem repetir o que foi digitado: é comum o token vir colado no campo
+        // errado, e esta mensagem vai ao modelo e fica guardada no conector.
+        throw new ErroMcp("http", "O nome do cabeçalho de autenticação não é válido (não pode ter espaço nem dois-pontos). Edite o conector: o nome costuma ser Authorization, e o token vai no campo Valor.");
       }
       if (/[^\t\x20-\x7E\x80-\xFF]/.test(valor)) {
-        throw new ErroMcp("http", `O valor do cabeçalho "${nome}" tem caractere que não pode ir num cabeçalho (aspas curvas, acento, quebra de linha). Edite o conector e cole o token de novo.`);
+        throw new ErroMcp("http", "O valor do cabeçalho de autenticação tem caractere que não pode ir num cabeçalho (aspas curvas, acento, quebra de linha). Edite o conector e cole o token de novo.");
       }
     }
     const controlador = new AbortController();

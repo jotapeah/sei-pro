@@ -82,6 +82,15 @@ export function destinoDoArquivo(processo: string, nome: string): string {
   return `SEI Pro/${pedacoSeguro(processo) || "processo"}/${nome}`;
 }
 
+/**
+ * O que pode ir para o disco: documento e imagem. O tipo do arquivo é o SEI
+ * (e quem anexou) que define — executável, script ou atalho com cara de
+ * contrato não é gravado na pasta Downloads em nome do agente.
+ */
+const EXTENSOES = new Set(["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "rtf", "txt", "csv", "jpg", "jpeg", "png", "gif", "tif", "tiff", "bmp"]);
+
+const extensaoDe = (nome: string): string => /\.([a-z0-9]+)$/.exec(nome)?.[1] ?? "";
+
 interface Meta {
   numero: string;
   titulo: string;
@@ -89,6 +98,15 @@ interface Meta {
   nivel?: string;
   processo: string;
   baixavel?: boolean;
+  arquivo?: { tipo: string; nome: string; tamanho: number; base64?: string };
+}
+
+/** Nome e destino a partir do que o SEI informou; `erro` quando o tipo não é aceito. */
+function destinoDe(m: Meta): { nome: string; destino: string; erro?: string } {
+  const nome = nomeDeArquivo({ titulo: m.titulo, numero: m.numero, nomeOriginal: m.arquivo?.nome ?? "", tipo: m.arquivo?.tipo ?? "" });
+  const destino = destinoDoArquivo(m.processo, nome);
+  if (EXTENSOES.has(extensaoDe(nome))) return { nome, destino };
+  return { nome, destino, erro: `O arquivo do documento ${m.numero} é do tipo .${extensaoDe(nome)}, que o agente não grava no computador (só documentos e imagens: pdf, docx, xlsx, jpg, png, txt...). Peça ao usuário para baixá-lo pelo SEI, se for o caso.` };
 }
 
 const NATIVO = (numero: string) =>
@@ -102,6 +120,13 @@ function base64ParaBytes(b64: string): Uint8Array {
 }
 
 export function toolsBaixar(o: OpcoesBaixar): DefTool[] {
+  /**
+   * Destino que o usuário viu no cartão, por documento. A gravação só acontece
+   * se o arquivo que chega for o que foi aprovado; cada aprovação vale uma vez.
+   */
+  const aprovados = new Map<string, string>();
+  const chaveDe = (numero: string) => numero.replace(/\D/g, "") || numero;
+
   const baixar = definirTool({
     nome: "documento_baixar",
     descricao:
@@ -112,16 +137,18 @@ export function toolsBaixar(o: OpcoesBaixar): DefTool[] {
     previsualizar: async (a, ctx: ContextoTool): Promise<PreviaItem[]> => {
       const m = await ctx.sei<Meta>("documento.baixar", { numero: String(a.documento), somenteMetadados: true });
       const alvo = `${m.titulo} (SEI ${m.numero})`;
+      aprovados.delete(chaveDe(String(a.documento)));
       if (!m.baixavel) return [{ alvo, mudancas: [], resumo: "", erro: NATIVO(m.numero) }];
-      // A extensão exata só se sabe ao baixar; o formato da árvore é a melhor pista antes disso.
-      const pista = /^[a-z0-9]{1,8}$/i.test(m.formato ?? "") ? `x.${m.formato}` : "";
-      const nome = nomeDeArquivo({ titulo: m.titulo, numero: m.numero, nomeOriginal: pista, tipo: "application/pdf" });
+      const d = destinoDe(m);
+      if (d.erro) return [{ alvo, mudancas: [], resumo: "", erro: d.erro }];
+      aprovados.set(chaveDe(String(a.documento)), d.destino);
       return [
         {
           alvo,
           resumo: "Salvar uma cópia no computador",
           mudancas: [
-            { campo: "Salvar em", antes: "", depois: `Downloads/${destinoDoArquivo(m.processo, nome)}` },
+            { campo: "Salvar em", antes: "", depois: `Downloads/${d.destino}` },
+            ...(m.arquivo ? [{ campo: "Arquivo", antes: "", depois: `${m.arquivo.tipo || "tipo não informado"}, ${Math.max(1, Math.round(m.arquivo.tamanho / 1024))} KB` }] : []),
             ...(m.nivel && m.nivel !== "publico" ? [{ campo: "Nível de acesso no SEI", antes: "", depois: m.nivel }] : []),
             { campo: "Atenção", antes: "", depois: "a cópia sai do SEI com os dados pessoais reais, sem máscara, e fica no seu computador até você apagar" },
           ],
@@ -129,9 +156,18 @@ export function toolsBaixar(o: OpcoesBaixar): DefTool[] {
       ];
     },
     executar: async (a, ctx: ContextoTool) => {
+      const chave = chaveDe(String(a.documento));
+      const aprovado = aprovados.get(chave);
+      aprovados.delete(chave);
       const r = await ctx.sei<Meta & { arquivo: { base64: string; tipo: string; nome: string; tamanho: number } }>("documento.baixar", { numero: String(a.documento) });
-      const nome = nomeDeArquivo({ titulo: r.titulo, numero: r.numero, nomeOriginal: r.arquivo.nome ?? "", tipo: r.arquivo.tipo ?? "" });
-      const salvo = await o.salvar({ destino: destinoDoArquivo(r.processo, nome), bytes: base64ParaBytes(r.arquivo.base64), tipo: r.arquivo.tipo || "application/octet-stream" });
+      const { nome, destino, erro } = destinoDe(r);
+      if (erro) throw new Error(erro);
+      // O arquivo pode ter sido trocado no SEI entre o cartão e este momento,
+      // ou a chamada pode ter vindo sem cartão: o que não foi visto não é gravado.
+      if (!aprovado || aprovado !== destino) {
+        throw new Error(`O arquivo do documento ${r.numero} não é o que foi aprovado no cartão (o documento mudou no SEI, ou o download não passou pela aprovação). Nada foi gravado: chame documento_baixar de novo, sozinho, para o usuário aprovar.`);
+      }
+      const salvo = await o.salvar({ destino, bytes: base64ParaBytes(r.arquivo.base64), tipo: r.arquivo.tipo || "application/octet-stream" });
       await o.registrar({ id: salvo.id, caminho: salvo.caminho, nome, processo: r.processo, documento: r.numero, tamanho: salvo.tamanho, quando: (o.agora ?? Date.now)() });
       return {
         aplicado: true,

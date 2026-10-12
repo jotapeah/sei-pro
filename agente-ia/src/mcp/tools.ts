@@ -8,7 +8,7 @@
  * curta, o conteúdo vem sob demanda.
  */
 
-import { ClienteMcp, ErroMcp } from "./cliente";
+import { ClienteMcp, ErroMcp, enderecoLocal } from "./cliente";
 import { acharConector, acharTool, conferirEndereco, destinoDe, nomeDeExibicao, permissaoDe, toolsVisiveis, type Conector } from "./conectores";
 import { origemAutorizada } from "./verificacao";
 import type { ToolMcp } from "./protocolo";
@@ -43,6 +43,8 @@ function protegerArquivos(args: Record<string, unknown>, arquivos: string[], ano
   if (!arquivos.length) return { args, recolocar: (v) => v };
   const porMascara = new Map(arquivos.map((c) => [anonimizar(c), c]));
   const marcas: string[] = [];
+  // Sorteada a cada chamada: texto que o modelo escreva nunca coincide com ela.
+  const MARCA = `SEIPROARQUIVO${Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => "abcdefghijklmnop"[b % 16]).join("")}Q`;
   const trocar = (v: unknown, ida: boolean): unknown => {
     if (typeof v === "string") {
       if (!ida) return v.startsWith(MARCA) && marcas[Number(v.slice(MARCA.length))] !== undefined ? marcas[Number(v.slice(MARCA.length))] : v;
@@ -56,8 +58,6 @@ function protegerArquivos(args: Record<string, unknown>, arquivos: string[], ano
   return { args: trocar(args, true) as Record<string, unknown>, recolocar: (v) => trocar(v, false) as typeof v };
 }
 
-/** Só letras: nada que a anonimização reconheça como dado pessoal. */
-const MARCA = "SEIPROARQUIVOBAIXADOQZX";
 
 const MAX_ACHADAS = 10;
 
@@ -204,7 +204,10 @@ export function toolsMcp(o: OpcoesToolsMcp): DefTool[] {
       const brutos = (a.argumentos ?? {}) as Record<string, unknown>;
       let args: Record<string, unknown>;
       try {
-        const protegido = protegerArquivos(brutos, o.arquivos?.() ?? [], ctx.anonimizar);
+        // Só conector da própria máquina: é o único que consegue abrir o
+        // arquivo, e o título do documento no caminho levaria nome e CPF a um
+        // serviço de terceiro.
+        const protegido = protegerArquivos(brutos, enderecoLocal(c.url) ? (o.arquivos?.() ?? []) : [], ctx.anonimizar);
         args = protegido.recolocar(JSON.parse(ctx.anonimizar(JSON.stringify(protegido.args))) as Record<string, unknown>);
       } catch {
         // Nada sai do navegador sem passar pelo mascaramento: se ele falhou,

@@ -168,7 +168,8 @@ Alguns conectores só leem arquivos do disco, por exemplo para anexar um contrat
 
 * **Você aprova cada download.** O cartão mostra o documento e onde ele será salvo, e não existe "permitir sempre" para isso. Rotina nunca baixa sozinha.
 * **A cópia tem os dados reais.** Ela sai do SEI sem máscara e fica no seu computador até você apagar.
-* **Só documento externo** (o arquivo anexado: PDF, planilha, imagem). Documento escrito no editor do SEI ainda não. Sigiloso, nunca.
+* **Só documento externo** (o arquivo anexado), e só **documentos e imagens**: PDF, Word, Excel, imagem, texto. O cartão mostra o nome, o tipo e o tamanho reais do arquivo. Documento escrito no editor do SEI ainda não. Sigiloso, nunca.
+* **O caminho real do arquivo só é passado a conector do seu próprio computador.**
 * **Para apagar**, vá em **Configuração → O que o agente pode → Arquivos baixados pelo agente**: a tela diz quantos arquivos existem e o botão os remove do computador. Os documentos continuam no SEI.
 
 Na primeira vez, o navegador pede a permissão de **downloads**. Ela é opcional: quem não usa essa função nunca é perguntado.
