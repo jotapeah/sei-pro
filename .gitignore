@@ -117,3 +117,6 @@ __pycache__/
 
 # Pagina de opcoes: pre-visualizacao local (gerada)
 opcoes-pagina/.preview/
+
+# Dependencias de modulo ligadas por symlink (o padrao com barra so pega pasta)
+/grade-controle/node_modules

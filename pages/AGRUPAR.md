@@ -6,6 +6,8 @@ A tela **Controle de Processos** do SEI mostra os processos numa lista única. C
 
 > ![Tela Agrupar lista de processos](../img/tela-agrupamento.gif)
 
+> **Novidade (SEI Pro Lab, Chrome e Edge):** a [Visão nova do Controle de Processos](../pages/GRADECONTROLE.md) traz tudo isto numa grade moderna, com busca por operadores, edição na própria linha e quadro com arrastar e soltar. Ela substitui os controles abaixo quando está ligada.
+
 ### Onde fica
 
 Logo acima das tabelas de processos recebidos e gerados aparecem três controles:

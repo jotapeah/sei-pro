@@ -163,6 +163,7 @@ export const SECOES_GERAL: Secao[] = [
           "Troca a lista nativa por uma grade moderna: busca com operadores, filtros, agrupamento, quadro com arrastar e soltar, visões salvas e exportação em CSV. Um botão ao lado da seta de recolher volta à lista do SEI. Disponível no Chrome e no Edge.",
         tipo: "chave",
         icone: "fa fa-th-list",
+        manual: "GRADECONTROLE",
         padrao: false,
       },
       {
