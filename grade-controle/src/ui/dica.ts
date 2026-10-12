@@ -7,10 +7,11 @@
  * (o navegador nao mostra o dele) e o texto vira `data-tip`; sem nome acessivel, o `title` vira `aria-label`.
  */
 export const ATRIBUTO_DICA = 'data-tip';
-const ATRASO_MS = 350;
+/** Aparece na hora: sem espera entre o mouse chegar e o balao. */
+const ATRASO_MS = 0;
 const CSS = `
 :host { all: initial; }
-.dica { position: fixed; z-index: 2147483647; max-width: 320px; padding: 6px 10px; font: 12px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #fff; white-space: pre-line; pointer-events: none; background: #1b1f24; border-radius: 8px; box-shadow: 0 6px 18px rgb(0 0 0 / 28%); opacity: 0; transform: translateY(2px); transition: opacity 120ms ease, transform 120ms ease; }
+.dica { position: fixed; inset: auto; margin: 0; border: 0; overflow: visible; z-index: 2147483647; max-width: 320px; padding: 6px 10px; font: 12px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #fff; white-space: pre-line; pointer-events: none; background: #1b1f24; border-radius: 8px; box-shadow: 0 6px 18px rgb(0 0 0 / 28%); opacity: 0; transform: translateY(2px); transition: opacity 120ms ease, transform 120ms ease; }
 .dica.claro { color: #1b1f24; background: #fff; box-shadow: 0 6px 18px rgb(0 0 0 / 22%), 0 0 0 1px rgb(0 0 0 / 10%); }
 .dica.on { opacity: 1; transform: none; }
 .dica[hidden] { display: none; }
@@ -111,6 +112,8 @@ export function instalarDicas(doc: Document, escuro: () => boolean = () => false
   balao.className = 'dica';
   balao.setAttribute('role', 'tooltip');
   balao.hidden = true;
+  // popover: vai para a camada de topo e fica ACIMA dos modais (<dialog>.showModal), que cobririam um balao comum.
+  balao.setAttribute('popover', 'manual');
   sombra.append(estilo, balao);
   doc.documentElement.append(host);
 
@@ -125,6 +128,11 @@ export function instalarDicas(doc: Document, escuro: () => boolean = () => false
     visivel = false;
     balao.classList.remove('on');
     balao.hidden = true;
+    try {
+      if (balao.matches?.(':popover-open')) balao.hidePopover();
+    } catch {
+      /* sem popover */
+    }
   }
   function mostrar() {
     if (!alvo || !alvo.isConnected) return reavaliar();
@@ -133,6 +141,11 @@ export function instalarDicas(doc: Document, escuro: () => boolean = () => false
     balao.textContent = texto;
     balao.classList.toggle('claro', !escuro());
     balao.hidden = false;
+    try {
+      if (typeof balao.showPopover === 'function' && !balao.matches(':popover-open')) balao.showPopover();
+    } catch {
+      /* sem popover: fica no fluxo normal */
+    }
     const r = alvo.getBoundingClientRect();
     const b = balao.getBoundingClientRect();
     const p = posicionar(r, { largura: b.width, altura: b.height }, { w: win!.innerWidth, h: win!.innerHeight });
@@ -161,7 +174,7 @@ export function instalarDicas(doc: Document, escuro: () => boolean = () => false
     if (!novo) return;
     migrarTitulo(novo);
     alvo = novo;
-    if (estava) mostrar();
+    if (estava || ATRASO_MS === 0) mostrar();
     else timer = setTimeout(mostrar, ATRASO_MS);
   }
   aoRedesenhar = () => {
@@ -176,7 +189,8 @@ export function instalarDicas(doc: Document, escuro: () => boolean = () => false
     if (!el) return;
     migrarTitulo(el); // o title sai ja: o balao nativo do navegador nao pode aparecer
     alvo = el;
-    timer = setTimeout(mostrar, ATRASO_MS);
+    if (ATRASO_MS > 0) timer = setTimeout(mostrar, ATRASO_MS);
+    else mostrar();
   };
   const aoMover = (ev: Event) => {
     const pe = ev as PointerEvent;

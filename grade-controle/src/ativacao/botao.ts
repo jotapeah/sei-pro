@@ -23,10 +23,11 @@ export function garantirBotao(doc: Document, ativo: boolean, alternar: () => voi
     // Sem ouvinte proprio: o legado CLONA a barra de titulo (`$.fn.moveTo`) e o clone perde os ouvintes. O clique e
     // delegado ao documento em `ligarCliqueDoBotao` e funciona em qualquer copia do botao.
     botao.append(iconeGrade('grade', 18, doc));
-    const referencia = barra.querySelector('.spro-fav-recolher');
-    if (referencia) referencia.before(botao);
-    else barra.append(botao);
+    barra.append(botao);
   }
+  // Depois do botao de ordenar os paineis (que chega depois, de outro modulo): sempre o ultimo da barra.
+  const ordenar = [...barra.children].filter((c) => c.classList.contains('spro-pnl-botao')).at(-1);
+  if (ordenar && ordenar.compareDocumentPosition(botao) & 2 /* DOCUMENT_POSITION_PRECEDING */) ordenar.after(botao);
   botao.setAttribute('data-tip', rotulo);
   botao.removeAttribute('title');
   botao.setAttribute('aria-label', rotulo);

@@ -99,7 +99,7 @@ await teste('botão: entra ao lado da seta de recolher, sem rótulo e com toolti
   let n = 0;
   assert.equal(garantirBotao(doc, false, () => n++), true);
   const b = doc.querySelector<HTMLButtonElement>(`.${CLASSE_BOTAO}`)!;
-  assert.equal(b.nextElementSibling!.className, 'spro-fav-recolher');
+  assert.equal(doc.getElementById('divInfraBarraLocalizacao')!.lastElementChild, b, 'o botao e o ultimo da barra');
   assert.equal(b.textContent!.trim(), '');
   const parar = ligarCliqueDoBotao(doc, () => n++);
   assert.match(b.getAttribute('data-tip')!, /visão nova/);
@@ -119,6 +119,19 @@ await teste('botão: entra ao lado da seta de recolher, sem rótulo e com toolti
   assert.equal(doc.querySelectorAll(`.${CLASSE_BOTAO}`).length, 1);
   removerBotao(doc);
   assert.equal(doc.querySelector(`.${CLASSE_BOTAO}`), null);
+});
+await teste('botão: fica DEPOIS do botão de ordenar os painéis, mesmo quando esse chega depois', () => {
+  const doc = pagina();
+  garantirBotao(doc, false, () => undefined);
+  const barra = doc.getElementById('divInfraBarraLocalizacao')!;
+  const ordenar = doc.createElement('button');
+  ordenar.className = 'spro-pnl-botao';
+  barra.append(ordenar); // o modulo de ordem dos paineis chega depois e se poe no fim
+  assert.equal(barra.lastElementChild, ordenar);
+  garantirBotao(doc, false, () => undefined);
+  assert.equal(barra.lastElementChild!.className, CLASSE_BOTAO);
+  assert.equal(ordenar.nextElementSibling!.className, CLASSE_BOTAO);
+  assert.equal(barra.querySelectorAll(`.${CLASSE_BOTAO}`).length, 1);
 });
 await teste('botão: sem barra ainda devolve falso (o legado monta depois)', () => {
   assert.equal(garantirBotao(docDe('<html><body></body></html>'), false, () => undefined), false);
