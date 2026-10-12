@@ -603,3 +603,11 @@ await teste('app: filtros Recebidos e Gerados na faixa dos rapidos, na ordem ped
   assert.equal(app.estado().visao.busca, '');
   app.fechar();
 });
+await teste('app: os 3 primeiros filtros rapidos (Meus, Recebidos, Gerados) nunca perdem o rotulo na faixa compacta', async () => {
+  const { app } = await montar();
+  const css = (await import('node:fs')).readFileSync(new URL('../src/style.css', import.meta.url), 'utf8');
+  assert.match(css, /\.spro-faixa-c1 \.spro-rapido:nth-child\(n\+4\) \.spro-rapido-rotulo \{ display: none; \}/);
+  assert.doesNotMatch(css, /\.spro-faixa-c1 \.spro-rapido-rotulo/);
+  assert.deepEqual(qa(app, '.spro-rapido').slice(0, 3).map((b) => b.textContent!.trim()), ['Meus', 'Recebidos', 'Gerados']);
+  app.fechar();
+});

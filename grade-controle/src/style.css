@@ -43,8 +43,9 @@ a:hover { text-decoration: underline; }
 .spro-faixa .spro-rapido { flex: none; white-space: nowrap; }
 .spro-faixa .spro-combo-compacto { flex: none; }
 /* Sem espaco: os filtros rapidos viram so icone (o nome fica na dica). */
-.spro-faixa-c1 .spro-rapido-rotulo { display: none; }
-.spro-faixa-c1 .spro-rapido { width: 30px; padding: 0; justify-content: center; }
+/* Os tres primeiros (Meus, Recebidos, Gerados) mantem o rotulo sempre. */
+.spro-faixa-c1 .spro-rapido:nth-child(n+4) .spro-rapido-rotulo { display: none; }
+.spro-faixa-c1 .spro-rapido:nth-child(n+4) { width: 30px; padding: 0; justify-content: center; }
 /* Ainda sem espaco: os seletores encolhem e cortam o texto com reticencias. */
 .spro-faixa-c2 .spro-combo-compacto { flex: 0 1 auto; min-width: 74px; }
 .spro-faixa-c2 .spro-combo-compacto .spro-combo-texto { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
