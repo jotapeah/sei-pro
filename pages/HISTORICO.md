@@ -44,7 +44,7 @@ Melhorias no [Agente de IA](../pages/AGENTEIA.md) para quem usa **conectores (MC
 ### Versão 3.0
 12/10/2026
 
-**Novo — [Visão nova do Controle de Processos](../pages/GRADECONTROLE.md)** (SEI Pro Lab, no Chrome e no Edge). Uma grade moderna no lugar da lista do SEI, que vem **desligada**: para usar, marque *Visão nova do controle de processos* nas Configurações, aba Geral. Um botão ao lado do título volta à lista do SEI quando você quiser.
+**Novo — [Visão nova do Controle de Processos](../pages/GRADECONTROLE.md)** (SEI Pro Lab, no Chrome e no Edge). Uma grade moderna no lugar da lista do SEI. Na 3.0 vinha desligada; **desde a 3.2 vem ligada** (nas Configurações, aba Geral, a opção *Novo Controle de Processos*). Um botão ao lado do título volta à lista do SEI quando você quiser.
 
 - **Abre sem piscar e carrega tudo.** A tela nativa fica escondida enquanto a grade monta, e todas as páginas do seu controle são lidas em segundo plano, não só os 100 primeiros.
 - **Busca com operadores e filtros rápidos.** `resp:eu prazo:<7d marcador:urgente -tipo:ofício`, mais botões para *Meus*, *Recebidos*, *Gerados*, *Atrasados*, *Vencem na semana*, *Sem responsável*, *Não visualizados*, *Novos desde a última visita* e *Parados há +30 dias*, e seletores pesquisáveis de responsável, tipo e marcador.
