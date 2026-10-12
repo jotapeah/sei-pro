@@ -8,3 +8,6 @@
 html[data-spro-grade] #collapseControle { margin-top: -6px; margin-bottom: 22px; }
 #spro-grade { display: block; width: 100%; flex: 0 0 100%; }
 #spro-grade[hidden], #spro-grade[data-spro-recolhido] { display: none !important; }
+
+/* A seta de recolher (do legado) e os outros botoes da barra de titulo ficam na mesma linha de centro. */
+#divInfraBarraLocalizacao:has(.spro-grade-botao) .spro-fav-recolher { vertical-align: middle; position: relative; top: -3px; }
