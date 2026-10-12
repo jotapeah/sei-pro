@@ -401,6 +401,37 @@ export const OPERACOES: Record<string, Op> = {
   },
 
   /**
+   * O arquivo ORIGINAL de um documento externo, para o painel gravar no disco
+   * (`documento_baixar`). Com `somenteMetadados`, só diz se dá para baixar —
+   * é o que o cartão de aprovação mostra, sem trazer byte nenhum.
+   *
+   * Documento do editor do SEI fica de fora: virar PDF é serviço do servidor
+   * do SEI ("Gerar PDF"), que o agente ainda não aciona.
+   */
+  "documento.baixar": async (sei, a, sinal) => {
+    const d = await localizarDocumento(sei, String(a.numero), { sinal });
+    if (d.documento.nivel === "sigiloso" || d.arvore.nivel === "sigiloso") {
+      throw new ErroSei("SEI_SIGILOSO", `O documento ${d.documento.numero} \u00E9 sigiloso: o agente n\u00E3o o baixa.`);
+    }
+    const meta = { ...resumoDocumento(d.documento), processo: d.arvore.protocolo };
+    const baixavel = /documento_download_anexo/.test(d.documento.src ?? "");
+    if (a.somenteMetadados === true) return { ...meta, baixavel };
+    if (!baixavel) {
+      throw new ErroSei(
+        "SEI_ACAO_INDISPONIVEL",
+        `O documento ${d.documento.numero} foi escrito no editor do SEI, e o agente ainda n\u00E3o sabe gerar o PDF dele. S\u00F3 documento externo (o arquivo anexado) pode ser baixado.`,
+      );
+    }
+    const c = await lerConteudo(sei, d, { sinal });
+    if (c.forma !== "arquivo") throw new ErroSei("SEI_ACAO_INDISPONIVEL", `O SEI n\u00E3o entregou o arquivo do documento ${d.documento.numero}.`);
+    const { bytes, tipo, nome } = c.arquivo;
+    if (bytes.length > LIMITE_ARQUIVO) {
+      throw new ErroSei("SEI_ACAO_INDISPONIVEL", `O arquivo do documento ${d.documento.numero} tem ${Math.round(bytes.length / 1024 / 1024)} MB, acima do limite de 25 MB do agente. Pe\u00E7a ao usu\u00E1rio para baix\u00E1-lo pelo SEI.`);
+    }
+    return { ...meta, arquivo: { tipo, nome, tamanho: bytes.length, base64: bytesParaBase64(bytes) } };
+  },
+
+  /**
    * Cria e, quando aplicado, devolve junto o CATÁLOGO DE ESTILOS do documento
    * recém-criado — que é o que o modelo precisa para escrever o conteúdo com a
    * formatação daquele órgão. Ler os estilos é cortesia: se falhar, a criação

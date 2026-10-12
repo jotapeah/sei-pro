@@ -20,7 +20,12 @@ import {
   type ToolMcp,
 } from "./protocolo";
 
-export type CodigoMcp = "rede" | "http" | "jsonrpc" | "protocolo" | "sessao";
+/**
+ * `desligado`: servidor da própria máquina que não atendeu. `ferramenta`: a
+ * ferramenta rodou e devolveu `isError` — a conexão está boa, e o texto é
+ * recado do servidor para o modelo e para o usuário.
+ */
+export type CodigoMcp = "rede" | "http" | "jsonrpc" | "protocolo" | "sessao" | "desligado" | "ferramenta";
 
 export class ErroMcp extends Error {
   constructor(
@@ -36,6 +41,18 @@ export interface Destino {
   url: string;
   /** Autenticação e afins; entra em toda chamada. */
   cabecalhos?: Record<string, string>;
+  /** Como o usuário chama o conector; entra na mensagem de servidor desligado. */
+  nome?: string;
+}
+
+/** Servidor rodando no computador do usuário. */
+export function enderecoLocal(url: string): boolean {
+  try {
+    const h = new URL(url).hostname;
+    return h === "localhost" || h === "127.0.0.1";
+  } catch {
+    return false;
+  }
 }
 
 /** Teto por chamada: servidor pendurado não pode travar a conversa. */
@@ -102,7 +119,9 @@ export class ClienteMcp {
     }
     if (!partes.length && r.structuredContent !== undefined) partes.push(JSON.stringify(r.structuredContent));
     const texto = partes.join("\n\n");
-    if (r.isError) throw new ErroMcp("jsonrpc", texto || "a ferramenta falhou no servidor");
+    // Inteiro, sem corte: o servidor diz aqui o que o usuário precisa fazer
+    // ("[sessao] conclua o login...", "[validacao] falta o CNPJ...").
+    if (r.isError) throw new ErroMcp("ferramenta", texto || "a ferramenta falhou no servidor");
     return texto;
   }
 
@@ -149,12 +168,26 @@ export class ClienteMcp {
     corpo: unknown,
     sinal: AbortSignal,
   ): Promise<{ ok: boolean; status: number; corpo: string; id: number; autenticacao?: string }> {
+    // O navegador recusa cabeçalho malformado com um TypeError igual ao de
+    // rede, antes de sair qualquer pedido: conferido aqui, para o usuário não
+    // ir procurar um servidor desligado quando o defeito é o token colado.
+    for (const [nome, valor] of Object.entries(this.destino.cabecalhos ?? {})) {
+      if (!/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(nome)) {
+        throw new ErroMcp("http", `O nome do cabeçalho "${nome}" não é válido (sem espaço nem dois-pontos). Edite o conector: o nome costuma ser Authorization.`);
+      }
+      if (/[^\t\x20-\x7E\x80-\xFF]/.test(valor)) {
+        throw new ErroMcp("http", `O valor do cabeçalho "${nome}" tem caractere que não pode ir num cabeçalho (aspas curvas, acento, quebra de linha). Edite o conector e cole o token de novo.`);
+      }
+    }
     const controlador = new AbortController();
     const parar = () => controlador.abort();
     sinal.addEventListener("abort", parar, { once: true });
     const prazo = setTimeout(parar, PRAZO);
     try {
-      const r = await this.buscar(this.destino.url, {
+      // Solto, e não `this.buscar(...)`: o fetch do navegador recusa ser
+      // chamado com outro `this` ("Illegal invocation").
+      const buscar = this.buscar;
+      const r = await buscar(this.destino.url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -173,6 +206,16 @@ export class ClienteMcp {
     } catch (e) {
       if (controlador.signal.aborted && !sinal.aborted) throw new ErroMcp("rede", "O servidor não respondeu em 60 segundos.");
       if (sinal.aborted) throw new ErroMcp("rede", "Interrompido.");
+      // O navegador não diz por que o fetch falhou; num endereço da própria
+      // máquina, com a permissão de host já conferida por quem chama, o que
+      // sobra é não haver ninguém ouvindo na porta.
+      if (enderecoLocal(this.destino.url) && /failed to fetch|networkerror|load failed/i.test((e as Error).message) && !/failed to execute/i.test((e as Error).message)) {
+        throw new ErroMcp(
+          "desligado",
+          `O ${this.destino.nome?.trim() || "servidor local"} não está rodando neste computador. Inicie-o e tente de novo.`,
+          (e as Error).message,
+        );
+      }
       throw new ErroMcp("rede", `Não foi possível alcançar o servidor: ${(e as Error).message}`);
     } finally {
       clearTimeout(prazo);

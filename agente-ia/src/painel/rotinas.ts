@@ -242,6 +242,12 @@ export function avaliarPassos(r: Rotina, passos: PassoParaAvaliar[]): { aprovado
       motivo: `"${grave.tool}" é ${grave.efeito === "assinatura" ? "assinatura" : "irreversível"} e uma rotina nunca faz isso sozinha. Peça ao usuário na conversa.`,
     };
   }
+  // Cópia de documento do SEI no disco, com dados reais: sempre com o usuário
+  // olhando, mesmo que a ferramenta tenha entrado na lista de autorizadas.
+  const copia = escritas.find((p) => p.tool === "documento_baixar");
+  if (copia) {
+    return { aprovado: false, motivo: '"documento_baixar" grava no computador uma cópia de documento do SEI, e uma rotina nunca faz isso sozinha. Peça ao usuário na conversa.' };
+  }
   if (r.alcance === "leitura") {
     return { aprovado: false, motivo: "Esta rotina é de leitura: ela não altera nada no SEI. Responda com o que foi encontrado." };
   }

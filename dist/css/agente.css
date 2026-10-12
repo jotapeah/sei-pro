@@ -243,6 +243,10 @@ input.switch:checked::after { transform: translateX(15px); background: #fff; }
 .msg.agente th, .msg.agente td { border: 1px solid var(--linha); padding: 4px 8px; text-align: left; }
 .msg.agente th { background: var(--superficie-2); font-weight: 600; }
 /* Tempo da rodada, no rodapé da resposta: informação de apoio, não conteúdo. */
+.resposta-rodape { display: flex; align-items: center; justify-content: space-between; margin: 2px 0 0 -5px; }
+.resposta-rodape button.icone { color: var(--ink-3); }
+.resposta-rodape button.icone:hover { color: var(--ink); }
+.resposta-rodape .tempo-resposta { margin-top: 0; }
 .msg.agente .tempo-resposta { display: block; text-align: right; font-size: 10.5px; color: var(--ink-3); margin-top: 2px; font-variant-numeric: tabular-nums; }
 
 .msg.aviso, .msg.erro {

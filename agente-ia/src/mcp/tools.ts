@@ -8,8 +8,10 @@
  * curta, o conteúdo vem sob demanda.
  */
 
-import { ClienteMcp } from "./cliente";
-import { acharConector, acharTool, destinoDe, nomeDeExibicao, permissaoDe, toolsVisiveis, type Conector } from "./conectores";
+import { ClienteMcp, ErroMcp } from "./cliente";
+import { acharConector, acharTool, conferirEndereco, destinoDe, nomeDeExibicao, permissaoDe, toolsVisiveis, type Conector } from "./conectores";
+import { origemAutorizada } from "./verificacao";
+import type { ToolMcp } from "./protocolo";
 import { s } from "../motor/esquema";
 import { definirTool, type ContextoTool, type DefTool } from "../motor/tools";
 
@@ -19,7 +21,43 @@ export interface OpcoesToolsMcp {
   guardar(c: Conector): Promise<void>;
   /** Trocável nos testes. */
   cliente?(c: Conector): ClienteMcp;
+  /** O navegador já tem a permissão de host? Trocável nos testes. */
+  autorizado?(permissao: string): Promise<boolean>;
+  /**
+   * Caminhos de arquivo que o agente baixou do SEI (`documento_baixar`).
+   * Passam ao conector como são: mascarado, o caminho não abre arquivo nenhum.
+   */
+  arquivos?(): string[];
 }
+
+/**
+ * Tira dos argumentos os caminhos de arquivo baixados pelo agente, para o
+ * mascaramento não os alcançar, e devolve como recolocá-los.
+ *
+ * O caminho tem nome de usuário do sistema e título de documento — coisas que
+ * a anonimização troca por rótulo. A comparação é feita nas duas formas (real
+ * e mascarada) porque o modelo devolve o que leu, que é a forma mascarada, e
+ * a reidratação do motor não garante devolver a caixa original.
+ */
+function protegerArquivos(args: Record<string, unknown>, arquivos: string[], anonimizar: (texto: string) => string): { args: Record<string, unknown>; recolocar<T>(v: T): T } {
+  if (!arquivos.length) return { args, recolocar: (v) => v };
+  const porMascara = new Map(arquivos.map((c) => [anonimizar(c), c]));
+  const marcas: string[] = [];
+  const trocar = (v: unknown, ida: boolean): unknown => {
+    if (typeof v === "string") {
+      if (!ida) return v.startsWith(MARCA) && marcas[Number(v.slice(MARCA.length))] !== undefined ? marcas[Number(v.slice(MARCA.length))] : v;
+      const real = arquivos.includes(v) ? v : porMascara.get(anonimizar(v));
+      return real === undefined ? v : `${MARCA}${marcas.push(real) - 1}`;
+    }
+    if (Array.isArray(v)) return v.map((x) => trocar(x, ida));
+    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, trocar(x, ida)]));
+    return v;
+  };
+  return { args: trocar(args, true) as Record<string, unknown>, recolocar: (v) => trocar(v, false) as typeof v };
+}
+
+/** Só letras: nada que a anonimização reconheça como dado pessoal. */
+const MARCA = "SEIPROARQUIVOBAIXADOQZX";
 
 const MAX_ACHADAS = 10;
 
@@ -39,6 +77,52 @@ export function linhasDeConectores(lista: Conector[]): string {
   return `\n- Conectores do usuário (servidores MCP). Para usar: mcp_buscar_tools para ver os parâmetros, depois mcp_chamar. Eles NÃO são o SEI:\n${linhas}`;
 }
 
+const semAcento = (texto: string): string =>
+  texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+interface Pontuada {
+  c: Conector;
+  t: ToolMcp;
+  exibicao: string;
+  /** 2: a busca É o nome; 1: a busca é o fim do nome ("criar contrato" em "x_criar_contrato"). */
+  exato: number;
+  casados: number;
+  noNome: number;
+}
+
+/**
+ * As ferramentas do conector que casam com a busca, com o que é preciso para
+ * ordená-las.
+ *
+ * Termo que casa com TODAS as ferramentas do conector não escolhe nenhuma — é
+ * o prefixo comum ("arrendamento" em 27 ferramentas "arrendamento_*"). Ele sai
+ * da conta, a menos que seja tudo o que a busca tem.
+ */
+function pontuar(c: Conector, termos: string[]): Pontuada[] {
+  const fichas = toolsVisiveis(c).map((t) => ({ t, exibicao: nomeDeExibicao(c, t.nome), nome: semAcento(t.nome), descricao: semAcento(t.descricao) }));
+  type Ficha = (typeof fichas)[number];
+  const noNome = (f: Ficha, termo: string) => f.nome.includes(termo) || f.exibicao === termo;
+  const casa = (f: Ficha, termo: string) => noNome(f, termo) || f.descricao.includes(termo);
+  const discriminam = termos.filter((termo) => !fichas.every((f) => casa(f, termo)));
+  const uteis = discriminam.length ? discriminam : termos;
+  const inteira = termos.join("_");
+  const fins = [...new Set([inteira, uteis.join("_")])].filter(Boolean);
+  const saida: Pontuada[] = [];
+  for (const f of fichas) {
+    const casados = uteis.filter((termo) => casa(f, termo)).length;
+    if (termos.length && !casados) continue;
+    const exato = !inteira ? 0 : f.nome === inteira || f.exibicao === inteira ? 2 : fins.some((fim) => f.nome === fim || f.nome.endsWith(`_${fim}`)) ? 1 : 0;
+    saida.push({ c, t: f.t, exibicao: f.exibicao, exato, casados, noNome: uteis.filter((termo) => noNome(f, termo)).length });
+  }
+  return saida;
+}
+
+/** Nome exato, depois mais termos casados, depois mais termos no nome; empate fica na ordem do servidor. */
+const porRelevancia = (a: Pontuada, b: Pontuada): number => b.exato - a.exato || b.casados - a.casados || b.noNome - a.noNome;
+
 function erro(mensagem: string): { erro: string } {
   return { erro: mensagem };
 }
@@ -49,7 +133,7 @@ export function toolsMcp(o: OpcoesToolsMcp): DefTool[] {
   const buscar = definirTool({
     nome: "mcp_buscar_tools",
     descricao:
-      "Mostra os parâmetros das ferramentas dos conectores do usuário (servidores MCP). Use antes de mcp_chamar, filtrando pelo assunto. NÃO use para o SEI: as ferramentas do SEI já estão todas disponíveis.",
+      "Mostra os parâmetros das ferramentas dos conectores do usuário (servidores MCP). Use antes de mcp_chamar, filtrando pelo assunto. Voltam as 10 mais relevantes; as demais vêm só pelo nome em 'outras' — para ver os parâmetros de uma delas, busque pelo nome. NÃO use para o SEI: as ferramentas do SEI já estão todas disponíveis.",
     parametros: s.objeto({
       "servidor?": s.texto({ descricao: "Nome do conector, como aparece na lista. Em branco: procura em todos." }),
       "busca?": s.texto({ descricao: 'Palavras do que você quer fazer (ex.: "criar página"). Em branco: as primeiras.' }),
@@ -61,29 +145,25 @@ export function toolsMcp(o: OpcoesToolsMcp): DefTool[] {
       if (!lista.length) return erro("O usuário não tem nenhum conector ligado.");
       const alvo = a.servidor ? acharConector(lista, String(a.servidor)) : undefined;
       if (a.servidor && !alvo) return erro(`Não há conector "${String(a.servidor)}". Ligados: ${lista.map((c) => c.nome).join(", ")}.`);
-      const termos = String(a.busca ?? "")
-        .toLowerCase()
-        .split(/\s+/)
-        .filter(Boolean);
-      const achadas: Array<{ nome: string; servidor: string; descricao: string; parametros: unknown }> = [];
-      for (const c of alvo ? [alvo] : lista) {
-        for (const t of toolsVisiveis(c)) {
-          const alvoTexto = `${t.nome} ${t.descricao}`.toLowerCase();
-          if (termos.length && !termos.some((termo) => alvoTexto.includes(termo))) continue;
-          achadas.push({ nome: nomeDeExibicao(c, t.nome), servidor: c.nome, descricao: t.descricao, parametros: t.esquema });
-          if (achadas.length >= MAX_ACHADAS) break;
-        }
-        if (achadas.length >= MAX_ACHADAS) break;
-      }
-      if (!achadas.length) return erro("Nenhuma ferramenta casou com a busca. Tente outras palavras ou liste sem busca.");
-      return { ferramentas: achadas, como_chamar: "mcp_chamar com servidor, tool e argumentos" };
+      const termos = semAcento(String(a.busca ?? "")).split(/\s+/).filter(Boolean);
+      const ordenadas = (alvo ? [alvo] : lista).flatMap((c) => pontuar(c, termos)).sort(porRelevancia);
+      if (!ordenadas.length) return erro("Nenhuma ferramenta casou com a busca. Tente outras palavras ou liste sem busca.");
+      const achadas = ordenadas.slice(0, MAX_ACHADAS).map(({ c, t, exibicao }) => ({ nome: exibicao, servidor: c.nome, descricao: t.descricao, parametros: t.esquema }));
+      // Só os nomes do que não coube: o modelo fica sabendo que existem, sem
+      // o custo de dezenas de esquemas, e pede o que quiser pelo nome.
+      const outras = ordenadas.slice(MAX_ACHADAS).map((x) => x.exibicao);
+      return {
+        ferramentas: achadas,
+        ...(outras.length ? { outras, como_ver_outras: "mcp_buscar_tools com busca = o nome da ferramenta" } : {}),
+        como_chamar: "mcp_chamar com servidor, tool e argumentos",
+      };
     },
   });
 
   const chamar = definirTool({
     nome: "mcp_chamar",
     descricao:
-      "Executa uma ferramenta de um conector do usuário (servidor MCP). Confira os parâmetros com mcp_buscar_tools antes. O conteúdo enviado sai do navegador para o servidor do conector; dados pessoais vão mascarados.",
+      "Executa uma ferramenta de um conector do usuário (servidor MCP). Confira os parâmetros com mcp_buscar_tools antes. O conteúdo enviado sai do navegador para o servidor do conector; dados pessoais vão mascarados. Se a ferramenta devolver erro, o texto é do servidor: repasse ao usuário o que ele pede (concluir um login, corrigir um dado) e tente de novo só depois.",
     parametros: s.objeto({
       servidor: s.texto({ descricao: "Nome do conector." }),
       tool: s.texto({ descricao: "Nome da ferramenta, como mcp_buscar_tools devolveu." }),
@@ -93,8 +173,15 @@ export function toolsMcp(o: OpcoesToolsMcp): DefTool[] {
     rotulo: (a) => `${String(a.servidor)}: ${String(a.tool)}`,
     executar: async (a, ctx: ContextoTool) => {
       const todos = o.conectores();
-      const c = acharConector(todos, String(a.servidor));
-      if (!c) return erro(`Não há conector "${String(a.servidor)}". Disponíveis: ${todos.map((x) => x.nome).join(", ") || "nenhum"}.`);
+      const achado = acharConector(todos, String(a.servidor));
+      // Cada gravação parte da anterior: consentimento e "permitir sempre"
+      // dados na mesma chamada não podem se sobrescrever.
+      let c = achado as Conector;
+      const guardar = async (mudanca: Partial<Conector>) => {
+        c = { ...c, ...mudanca };
+        await o.guardar(c);
+      };
+      if (!achado) return erro(`Não há conector "${String(a.servidor)}". Disponíveis: ${todos.map((x) => x.nome).join(", ") || "nenhum"}.`);
       if (!c.ativo) return erro(`O conector "${c.nome}" está desligado nas configurações.`);
       const t = acharTool(c, String(a.tool));
       if (!t) return erro(`O conector "${c.nome}" não tem a ferramenta "${String(a.tool)}". Use mcp_buscar_tools.`);
@@ -102,13 +189,23 @@ export function toolsMcp(o: OpcoesToolsMcp): DefTool[] {
       const permissao = permissaoDe(c, t.nome);
       if (permissao === "bloqueado") return erro("O usuário não autorizou esta ferramenta.");
 
+      // Sem a permissão de host o fetch falha sem dizer por quê (conector que
+      // veio de outro computador pela sincronização, permissão revogada), e
+      // pedi-la exige um clique do usuário: aqui só dá para apontar o caminho.
+      const endereco = conferirEndereco(c.url);
+      if (!endereco.ok) return erro(endereco.motivo);
+      if (!(await (o.autorizado ?? origemAutorizada)(endereco.permissao))) {
+        return erro(`O navegador ainda não tem autorização para acessar o endereço do conector "${c.nome}". Peça ao usuário para abrir a configuração do agente, em Conectores, e clicar em "Testar conexão" nesse conector.`);
+      }
+
       // Dados pessoais: o motor reidrata os argumentos antes de executar, para
       // que a escrita no SEI leve o valor real. O que sai para um terceiro
       // tem de voltar a ser rótulo.
       const brutos = (a.argumentos ?? {}) as Record<string, unknown>;
       let args: Record<string, unknown>;
       try {
-        args = JSON.parse(ctx.anonimizar(JSON.stringify(brutos))) as Record<string, unknown>;
+        const protegido = protegerArquivos(brutos, o.arquivos?.() ?? [], ctx.anonimizar);
+        args = protegido.recolocar(JSON.parse(ctx.anonimizar(JSON.stringify(protegido.args))) as Record<string, unknown>);
       } catch {
         // Nada sai do navegador sem passar pelo mascaramento: se ele falhou,
         // a chamada não acontece.
@@ -121,18 +218,30 @@ export function toolsMcp(o: OpcoesToolsMcp): DefTool[] {
           `O conector "${c.nome}" (${c.url}) vai receber o conteúdo deste pedido. Ele é um serviço de terceiro, fora do SEI e fora do SEI Pro.`,
         );
         if (!ok) return erro("O usuário não autorizou enviar dados a este conector.");
-        await o.guardar({ ...c, consentido: true });
+        await guardar({ consentido: true });
       }
 
       if (permissao === "aprovar") {
         const decisao = await ctx.ui.aprovarExterno?.({ conector: c.nome, tool: t.nome, descricao: t.descricao, argumentos: args });
         if (!decisao?.permitido) return erro("O usuário não autorizou esta chamada.");
-        if (decisao.sempre) await o.guardar({ ...c, permissoes: { ...c.permissoes, [t.nome]: "sempre" } });
+        if (decisao.sempre) await guardar({ permissoes: { ...c.permissoes, [t.nome]: "sempre" } });
       }
 
+      // Cliente novo a cada chamada: a sessão não atravessa chamadas, então
+      // servidor reiniciado entre uma e outra não deixa sessão velha para trás.
       const cliente = fabricar(c);
-      await cliente.iniciar(ctx.sinal);
-      const texto = await cliente.chamar(t.nome, args, ctx.sinal);
+      let texto: string;
+      try {
+        await cliente.iniciar(ctx.sinal);
+        texto = await cliente.chamar(t.nome, args, ctx.sinal);
+      } catch (e) {
+        // Só o servidor que não atendeu muda o estado do conector. Erro que a
+        // FERRAMENTA devolveu (login pendente, validação) segue como veio: o
+        // conector está bom e continua ligado.
+        if (e instanceof ErroMcp && e.codigo === "desligado") await guardar({ semResposta: true, erro: e.message });
+        throw e;
+      }
+      if (c.semResposta) await guardar({ semResposta: undefined, erro: undefined });
       return texto || "(o servidor respondeu sem conteúdo)";
     },
   });

@@ -6,17 +6,15 @@
  * esta tela tem vida própria: lista, dois modais e um teste de conexão.
  */
 
-import { ClienteMcp } from "../mcp/cliente";
 import {
   conferirEndereco,
-  destinoDe,
   MAX_CONECTORES,
-  MAX_TOOLS,
   permissaoDe,
   toolsVisiveis,
   type Conector,
   type Permissao,
 } from "../mcp/conectores";
+import { verificarConector } from "../mcp/verificacao";
 import type { DecisaoExterna, PedidoExterno } from "../motor/tipos";
 import { h, icone } from "./dom";
 
@@ -33,6 +31,8 @@ export interface OpcoesSecao {
   definir(lista: Conector[]): Promise<void>;
   abrirModal: AbrirModal;
   aviso(texto: string): void;
+  /** Trocável nos testes; o padrão pede a permissão de host e fala com o servidor. */
+  verificar?(c: Conector): Promise<Conector>;
 }
 
 const ROTULOS: Array<{ valor: Permissao; texto: string }> = [
@@ -56,13 +56,21 @@ const hostDe = (url: string): string => {
  * Pedir permissão exige gesto do usuário, e é por isso que isto acontece no
  * clique de "Testar" — nunca no carregamento do painel.
  */
-async function autorizarOrigem(origem: string): Promise<boolean> {
+async function autorizarOrigem(permissao: string): Promise<boolean> {
   try {
-    if (await chrome.permissions.contains({ origins: [`${origem}/*`] })) return true;
-    return await chrome.permissions.request({ origins: [`${origem}/*`] });
+    if (await chrome.permissions.contains({ origins: [permissao] })) return true;
+    return await chrome.permissions.request({ origins: [permissao] });
   } catch {
     return false;
   }
+}
+
+/** O estado que a lista mostra, na ordem em que importa ao usuário. */
+function estadoDe(c: Conector): string {
+  if (c.semResposta) return "sem resposta";
+  if (c.erro) return "com erro";
+  const ferramentas = `${toolsVisiveis(c).length} ferramenta(s)`;
+  return c.verificadoEm ? `conectado · ${ferramentas}` : ferramentas;
 }
 
 export function secaoConectores(o: OpcoesSecao): { elemento: HTMLElement; redesenhar: () => void } {
@@ -85,23 +93,11 @@ export function secaoConectores(o: OpcoesSecao): { elemento: HTMLElement; redese
     };
     const endereco = conferirEndereco(c.url);
     if (!endereco.ok) return diga(endereco.motivo, "status erro");
-    if (!(await autorizarOrigem(endereco.origem))) {
-      await salvar({ ...c, erro: "Falta autorizar o acesso a este endereço." });
-      return diga("O navegador não autorizou o acesso a este endereço.", "status erro");
-    }
     diga("Conversando com o servidor...");
-    const cliente = new ClienteMcp(destinoDe(c));
-    const sinal = new AbortController().signal;
-    try {
-      const servidor = await cliente.iniciar(sinal);
-      const tools = (await cliente.listarTools(sinal)).slice(0, MAX_TOOLS);
-      await salvar({ ...c, tools, servidor, verificadoEm: Date.now(), erro: undefined });
-      diga(`${servidor.nome}: ${tools.length} ferramenta(s).`, "status ok");
-    } catch (e) {
-      const msg = (e as Error).message;
-      await salvar({ ...c, erro: msg, verificadoEm: Date.now() });
-      diga(msg, "status erro");
-    }
+    const depois = await (o.verificar ?? ((x) => verificarConector(x, { autorizado: () => autorizarOrigem(endereco.permissao) })))(c);
+    await salvar(depois);
+    if (depois.erro) diga(depois.erro, "status erro");
+    else diga(`${depois.servidor?.nome ?? depois.nome}: ${depois.tools?.length ?? 0} ferramenta(s).`, "status ok");
   };
 
   /** Permissão de cada ferramenta, e o padrão para as que aparecerem depois. */
@@ -277,9 +273,10 @@ export function secaoConectores(o: OpcoesSecao): { elemento: HTMLElement; redese
                 "div",
                 { class: "skill-texto" },
                 h("strong", {}, c.nome),
-                h("code", {}, c.erro ? "com erro" : `${toolsVisiveis(c).length} ferramenta(s)`),
+                h("code", {}, estadoDe(c)),
                 h("small", { class: "origem" }, `${hostDe(c.url)}${c.auth.tipo === "token" ? " · token salvo" : ""}`),
                 c.erro ? h("small", { class: "falha" }, c.erro) : null,
+                c.semResposta ? h("button", { class: "plana", onclick: () => void testar(c, status) }, "Testar de novo") : null,
                 status,
               ),
               h("button", { class: "icone", title: "Testar conexão", "aria-label": `Testar ${c.nome}`, onclick: () => void testar(c, status) }, icone("check", 15)),

@@ -12,7 +12,7 @@
  * que o modelo saiba que ela existe.
  */
 
-import type { Destino } from "./cliente";
+import { enderecoLocal, type Destino } from "./cliente";
 import type { ToolMcp } from "./protocolo";
 import { ESPELHOS, espelhar } from "../painel/espelho";
 
@@ -37,6 +37,8 @@ export interface Conector {
   servidor?: { nome: string; versao: string; protocolo: string };
   verificadoEm?: number;
   erro?: string;
+  /** Servidor da própria máquina que não atendeu no último contato. */
+  semResposta?: boolean;
   /** O usuário já consentiu que dados saiam para este conector. */
   consentido?: boolean;
 }
@@ -76,6 +78,7 @@ export function normalizarConector(bruto: unknown): Conector | null {
     ...(c.servidor ? { servidor: c.servidor } : {}),
     ...(c.verificadoEm ? { verificadoEm: c.verificadoEm } : {}),
     ...(c.erro ? { erro: c.erro } : {}),
+    ...(c.semResposta ? { semResposta: true } : {}),
     ...(c.consentido ? { consentido: true } : {}),
   };
 }
@@ -144,28 +147,31 @@ export function acharTool(c: Conector, nome: string): ToolMcp | undefined {
 }
 
 /**
- * Endereço aceitável, e a origem a pedir em `chrome.permissions`.
+ * Endereço aceitável, e o padrão a pedir em `chrome.permissions`.
  *
  * Só `https`, com a exceção do servidor rodando na própria máquina — que é o
  * caso de quem desenvolve um conector e já está em `optional_host_permissions`.
+ *
+ * `permissao` vai SEM a porta: o manifest declara "http://127.0.0.1/*", que
+ * vale para qualquer porta, e padrão com porta o Firefox recusa.
  */
-export function conferirEndereco(url: string): { ok: true; origem: string } | { ok: false; motivo: string } {
+export function conferirEndereco(url: string): { ok: true; origem: string; permissao: string } | { ok: false; motivo: string } {
   let u: URL;
   try {
     u = new URL(url.trim());
   } catch {
     return { ok: false, motivo: "Endereço inválido. Comece com https://" };
   }
-  const local = u.hostname === "localhost" || u.hostname === "127.0.0.1";
+  const local = enderecoLocal(u.href);
   if (u.protocol !== "https:" && !(u.protocol === "http:" && local)) {
     return { ok: false, motivo: "O endereço precisa ser https (http vale só para localhost)." };
   }
-  return { ok: true, origem: u.origin };
+  return { ok: true, origem: u.origin, permissao: `${u.protocol}//${u.hostname}/*` };
 }
 
 export function destinoDe(c: Conector): Destino {
   const cabecalhos: Record<string, string> = {};
   if (c.auth.tipo === "token" && c.auth.valor.trim()) cabecalhos[c.auth.cabecalho || "Authorization"] = c.auth.valor.trim();
   if (c.auth.tipo === "oauth" && c.auth.token) cabecalhos.Authorization = `Bearer ${c.auth.token}`;
-  return { url: c.url, cabecalhos };
+  return { url: c.url, cabecalhos, nome: c.nome };
 }
