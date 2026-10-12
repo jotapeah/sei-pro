@@ -7,6 +7,8 @@ import { type Combo, criarCombo } from '../../../sei-comum/src/ui/combobox';
 import { h, icone as iconeComum, type NomeIcone } from '../../../sei-comum/src/ui/dom';
 import { aplicarSelecao, lerSelecao, observarSelecao } from '../acoes/selecao';
 import { executarAcaoNativa } from '../acoes/barra';
+import { chavePagina, type PlanoAcao, planejarAcao, temSigiloso } from '../acoes/foraDaPagina';
+import { urlDaAcao } from '../leitura/barra';
 import { criarFila, type DepsMover } from '../acoes/mover';
 import type { AcaoNativa } from '../leitura/barra';
 import { lerTabelas } from '../leitura/tabela';
@@ -21,6 +23,7 @@ import { alternarOrdem, ordenar } from '../modelo/ordem';
 import { aplicarMovimento, type ExtrasQuadro, planejarMovimento } from '../modelo/quadro';
 import { type AgruparPor, type CampoOrdem, COLUNAS, type Coluna, type LeituraTabela, type Processo, ROTULO_COLUNA, type Visao } from '../modelo/tipos';
 import { excluirVisao, mudouDe, salvarVisao, visaoPadrao } from '../modelo/visoes';
+import type { Grupo, SelecaoDaPagina } from '../modelo/tipos';
 import type { Fonte, Progresso } from '../paginas/carregar';
 import { carregarRestante } from '../paginas/carregar';
 import type { Armazem } from '../persistencia/armazem';
@@ -48,6 +51,8 @@ export interface DepsApp {
   /** Marcadores e usuários da unidade, para o quadro mostrar colunas vazias. Falha = só o que está carregado. */
   extras?(): Promise<ExtrasQuadro>;
   aoVoltarNativa(): void;
+  /** Envia a acao do SEI com os pares de outra pagina (processos que nao estao na tabela nativa). */
+  enviarAcao(url: string, plano: PlanoAcao): void;
   editarEspecificacao(protocolo: string, texto: string): Promise<void>;
   /** Pede ao modulo de prazos que abra o menu do prazo do processo. */
   abrirPrazo(id: string): void;
@@ -287,6 +292,22 @@ export function criarApp(d: DepsApp) {
 
   // ---------- render ----------
   const clonarIcones = criarClonador();
+  /** O par (ids, hash) de cada pagina lida: e o que o SEI exige para aceitar uma acao em lote. */
+  const selecoesPaginas = new Map<string, SelecaoDaPagina>([
+    [chavePagina('recebidos', 0), d.inicial.selecoes.recebidos],
+    [chavePagina('gerados', 0), d.inicial.selecoes.gerados],
+  ]);
+  function acionar(a: AcaoNativa) {
+    const marcados = todos.filter((p) => selecionados.has(p.id));
+    const regra = urlDaAcao(a);
+    if (regra?.requerSelecao && !marcados.length) return aviso('Marque ao menos um processo.');
+    if (regra && !regra.aceitaSigiloso && temSigiloso(marcados)) return aviso('Operação não aplicável em processo sigiloso.');
+    const r = planejarAcao(marcados, selecoesPaginas);
+    if (!r.ok) return aviso(r.motivo);
+    // Tudo na pagina que o usuario ve: o caminho nativo (o clique do botao, com a selecao ja espelhada nas caixas).
+    if (r.plano.todosNaPaginaAtual || !regra) { const x = executarAcaoNativa(a, marcados.length); if (!x.ok && x.motivo) aviso(x.motivo); return; }
+    try { d.enviarAcao(regra.url, r.plano); } catch (e) { aviso(`Não foi possível enviar a ação: ${e instanceof Error ? e.message : String(e)}`); }
+  }
   let emVoo = 0;
   let editando: string | null = null;
   let rascunho = '';
@@ -359,7 +380,7 @@ export function criarApp(d: DepsApp) {
     lote.replaceChildren(
       h('strong', {}, `${n} selecionado${n === 1 ? '' : 's'}`),
       ...(fora ? [h('span', { class: 'spro-suave' }, `(${fora} fora do filtro atual)`)] : []),
-      ...d.acoes().map((a) => h('button', { type: 'button', class: 'spro-bt', title: a.rotulo, onclick: () => { const r = executarAcaoNativa(a, selecionados.size); if (!r.ok && r.motivo) aviso(r.motivo); } }, h('img', { src: a.icone, alt: '', width: '16', height: '16' }), h('span', {}, a.rotulo))),
+      ...d.acoes().map((a) => h('button', { type: 'button', class: 'spro-bt', title: a.rotulo, onclick: () => acionar(a) }, h('img', { src: a.icone, alt: '', width: '16', height: '16' }), h('span', {}, a.rotulo))),
       h('button', { type: 'button', class: 'spro-link', onclick: () => selecionar([...selecionados], false) }, 'Limpar seleção'));
   }
 
@@ -507,7 +528,7 @@ export function criarApp(d: DepsApp) {
       tabela.mostrar(foco);
     } else if (k === 'x' && foco) {
       const p = todos.find((x) => x.id === foco);
-      if (p?.naPaginaAtual) selecionar([foco], !selecionados.has(foco));
+      if (p) selecionar([foco], !selecionados.has(foco));
     } else if (k === 'Enter' && foco) {
       const link = todos.find((x) => x.id === foco)?.link;
       if (link) doc.defaultView?.location.assign(link);
@@ -569,6 +590,7 @@ export function criarApp(d: DepsApp) {
     const r = await carregarRestante(d.inicial, d.fonte, {
       sinal: ctl.signal,
       aoProgresso: (p) => { progresso = p; renderStatus(filtrados().length); },
+      aoSelecao: (g, n, s) => { selecoesPaginas.set(chavePagina(g, n), s); },
       aoPagina: (novos) => { todos = [...todos, ...novos]; render(); },
     });
     doc.defaultView?.removeEventListener('pagehide', aoSair);
@@ -620,6 +642,8 @@ export function criarApp(d: DepsApp) {
     mostrar: (v: boolean) => { host.hidden = !v; },
     definirNomesCompletos: (v: boolean) => { nomesCompletos = v; render(); },
     sincronizar,
+    /** So para os testes: registra o par de uma pagina como se o carregador a tivesse lido. */
+    registrarSelecaoParaTeste: (g: Grupo, n: number, sel: SelecaoDaPagina) => void selecoesPaginas.set(chavePagina(g, n), sel),
   };
 }
 

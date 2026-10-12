@@ -15,6 +15,13 @@ export interface AcaoNativa {
 // SEI 3/4.0 usam #divInfraBarraComandosSuperior; o 4.1+ usa #divBotoesControleProcessos. O onclick e o que une todos.
 const BARRAS = 'a[onclick*="acaoControleProcessos"]';
 
+/** O endereco assinado de `acaoControleProcessos('URL', requer, aceitaSigiloso)`. */
+export function urlDaAcao(a: AcaoNativa): { url: string; requerSelecao: boolean; aceitaSigiloso: boolean } | null {
+  const m = /acaoControleProcessos\(\s*'([^']*)'\s*,\s*(true|false)\s*,\s*(true|false)/.exec(a.elemento.getAttribute('onclick') ?? '');
+  if (!m) return null;
+  return { url: m[1]!.replace(/&amp;/g, '&'), requerSelecao: m[2] === 'true', aceitaSigiloso: m[3] === 'true' };
+}
+
 export function acoesDaBarra(doc: Document): AcaoNativa[] {
   const vistos = new Set<string>();
   const saida: AcaoNativa[] = [];

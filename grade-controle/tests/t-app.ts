@@ -5,7 +5,7 @@ import { lerTabelas } from '../src/leitura/tabela';
 import { criarArmazem } from '../src/persistencia/armazem';
 import type { DepsMover } from '../src/acoes/mover';
 import { criarApp, type DepsApp } from '../src/ui/app';
-import { ativarToggle, docFixture, teste } from './util';
+import { ativarToggle, docDe, docFixture, proc, teste } from './util';
 
 const q = <T extends Element>(app: { host: HTMLElement }, s: string) => app.host.shadowRoot!.querySelector<T>(s)!;
 /** A dica pode estar em data-tip (convertida) ou ainda em title. */
@@ -15,6 +15,7 @@ const marcadas = (doc: Document) => [...doc.querySelectorAll<HTMLInputElement>('
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 const salvos: Array<[string, string]> = [];
+const enviados: Array<[string, string]> = [];
 const prazosAbertos: string[] = [];
 const anotados: Array<[string, string, boolean]> = [];
 async function montar(extra: Partial<DepsApp> = {}, nome = 'caixa_prazos.html') {
@@ -32,6 +33,7 @@ async function montar(extra: Partial<DepsApp> = {}, nome = 'caixa_prazos.html') 
     armazem: criarArmazem({ local: areaMemoria(), sync: areaMemoria() }, 'u'), fonte: null, mover,
     acoes: () => acoesDaBarra(doc), css: '', escuro: false, baixar: (n, c) => void baixados.push([n, c]), novoId: () => 'id1', semDebounce: true,
     aoVoltarNativa: () => undefined,
+    enviarAcao: (url, plano) => void enviados.push([url, JSON.stringify(plano.porGrupo)]),
     editarEspecificacao: async (p, t) => void salvos.push([p, t]),
     abrirPrazo: (id) => void prazosAbertos.push(id),
     anotar: async (p, a) => void anotados.push([p, a.texto, a.prioridade]),
@@ -279,7 +281,7 @@ async function montarCom(doc: Document, extra: Partial<DepsApp> = {}) {
   const inicial = lerTabelas(doc);
   const app = criarApp({ doc, inicial, agora: () => Date.UTC(2026, 9, 11, 12), hoje: () => '2026-10-11', eu: 'teste01', armazem: criarArmazem({ local: areaMemoria(), sync: areaMemoria() }, 'u'), fonte: null,
     mover: { marcador: async () => undefined, atribuir: async () => undefined }, acoes: () => acoesDaBarra(doc), css: '', escuro: false, baixar: () => undefined, novoId: () => 'id1', semDebounce: true,
-    aoVoltarNativa: () => undefined, editarEspecificacao: async (p, t) => void salvos.push([p, t]), abrirPrazo: (id) => void prazosAbertos.push(id), anotar: async (p, a) => void anotados.push([p, a.texto, a.prioridade]), ...extra });
+    aoVoltarNativa: () => undefined, enviarAcao: (url, plano) => void enviados.push([url, JSON.stringify(plano.porGrupo)]), editarEspecificacao: async (p, t) => void salvos.push([p, t]), abrirPrazo: (id) => void prazosAbertos.push(id), anotar: async (p, a) => void anotados.push([p, a.texto, a.prioridade]), ...extra });
   doc.body.append(app.host);
   await app.iniciar();
   await tick();
@@ -565,7 +567,7 @@ await teste('app: icone de origem (recebido/gerado) com dica e icone para abrir 
   (globalThis as unknown as { document: Document }).document = doc;
   const app = criarApp({ doc, inicial: l, agora: () => Date.UTC(2026, 9, 11, 12), hoje: () => '2026-10-11', armazem: criarArmazem({ local: areaMemoria(), sync: areaMemoria() }, 'u'), fonte: null,
     mover: { marcador: async () => undefined, atribuir: async () => undefined }, acoes: () => [], css: '', escuro: false, baixar: () => undefined, novoId: () => 'i', semDebounce: true,
-    aoVoltarNativa: () => undefined, editarEspecificacao: async () => undefined, abrirPrazo: () => undefined, anotar: async () => undefined });
+    aoVoltarNativa: () => undefined, enviarAcao: () => undefined, editarEspecificacao: async () => undefined, abrirPrazo: () => undefined, anotar: async () => undefined });
   doc.body.append(app.host);
   await app.iniciar(); await tick();
   const rec = linhaDe(app, '150098').querySelector('.spro-origem')!;
@@ -619,5 +621,95 @@ await teste('app: cada filtro rapido tem dica (data-tip) com o nome, o que faz e
     assert.equal(b.hasAttribute('title'), false);
   }
   assert.match(qa(app, '.spro-rapido')[0]!.getAttribute('data-tip')!, /Meus\nProcessos atribuídos a você\nBusca: resp:eu/);
+  app.fechar();
+});
+
+// ---------------- acao em lote com processos de outra pagina ----------------
+import { camposDoPlano, enviarAcao, planejarAcao } from '../src/acoes/foraDaPagina';
+import { urlDaAcao } from '../src/leitura/barra';
+const sel = (itens: string, hash: string) => ({ itens, hash });
+await teste('fora da pagina: um grupo, uma pagina — plano com o par daquela pagina; mais de uma pagina por grupo e recusado', () => {
+  const a = proc({ id: '1', grupo: 'recebidos', pagina: 2, naPaginaAtual: false });
+  const b = proc({ id: '2', grupo: 'recebidos', pagina: 2, naPaginaAtual: false });
+  const c = proc({ id: '3', grupo: 'recebidos', pagina: 0 });
+  const g = proc({ id: '9', grupo: 'gerados', pagina: 0 });
+  const mapa = new Map([['recebidos:2', sel('1,2,5', 'H2')], ['recebidos:0', sel('3,4', 'H0')], ['gerados:0', sel('9', 'HG')]]);
+  const r = planejarAcao([a, b], mapa);
+  assert.ok(r.ok);
+  assert.equal(r.ok && r.plano.todosNaPaginaAtual, false);
+  assert.deepEqual(r.ok && camposDoPlano(r.plano), { hdnRecebidosItemId: '', hdnRecebidosItensSelecionados: '1,2', hdnRecebidosItens: '1,2,5', hdnRecebidosItensHash: 'H2', hdnGeradosItemId: '', hdnGeradosItensSelecionados: '' });
+  const dois = planejarAcao([a, g], mapa);
+  assert.ok(dois.ok, 'recebidos da pagina 3 + gerados da 1 cabem no mesmo POST');
+  assert.equal(dois.ok && camposDoPlano(dois.plano).hdnGeradosItensHash, 'HG');
+  const mistura = planejarAcao([a, c], mapa);
+  assert.equal(mistura.ok, false);
+  assert.match(!mistura.ok ? mistura.motivo : '', /páginas 1 e 3/);
+  const semDados = planejarAcao([a], new Map());
+  assert.equal(semDados.ok, false);
+  assert.match(!semDados.ok ? semDados.motivo : '', /ainda não foram lidos/);
+  assert.equal(planejarAcao([c], mapa).ok && (planejarAcao([c], mapa) as { plano: { todosNaPaginaAtual: boolean } }).plano.todosNaPaginaAtual, true);
+});
+await teste('fora da pagina: o formulario enviado leva os campos da tela nativa e o par da outra pagina por cima', () => {
+  const doc = docDe('<body><form id="frmProcedimentoControlar"><input type="hidden" name="hdnTipoVisualizacao" value="R"><input type="hidden" name="hdnRecebidosItens" value="3,4"><input type="hidden" name="hdnRecebidosItensHash" value="H0"><input type="hidden" name="hdnRecebidosItensSelecionados" value="3"><input type="checkbox" name="chk" value="x" checked></form></body>');
+  const enviados2: Array<[string, string, Record<string, string>]> = [];
+  const f0 = (doc.defaultView as unknown as { HTMLFormElement?: { prototype: { submit(): void } } });
+  void f0;
+  const orig = doc.createElement.bind(doc);
+  (doc as any).createElement = (tag: string) => { const e = orig(tag) as any; if (tag === 'form') e.submit = function () { enviados2.push([this.getAttribute('action'), this.getAttribute('method'), Object.fromEntries([...this.querySelectorAll('input')].map((i: any) => [i.getAttribute('name'), i.getAttribute('value')]))]); }; return e; };
+  const plano = { porGrupo: { recebidos: { ids: ['1', '2'], pagina: 2, selecao: sel('1,2,5', 'H2') } }, todosNaPaginaAtual: false };
+  enviarAcao(doc, 'controlador.php?acao=procedimento_atribuicao_cadastrar&infra_hash=abc', plano as any);
+  assert.equal(enviados2.length, 1);
+  assert.equal(enviados2[0]![0], 'controlador.php?acao=procedimento_atribuicao_cadastrar&infra_hash=abc');
+  assert.equal(enviados2[0]![1], 'post');
+  const c = enviados2[0]![2];
+  assert.equal(c.hdnTipoVisualizacao, 'R');
+  assert.equal(c.hdnRecebidosItens, '1,2,5');
+  assert.equal(c.hdnRecebidosItensHash, 'H2');
+  assert.equal(c.hdnRecebidosItensSelecionados, '1,2');
+  assert.equal(c.chk, undefined, 'checkbox da tela nao vai (a selecao e a do plano)');
+});
+await teste('fora da pagina: le o endereco assinado e as regras da acao do botao nativo', () => {
+  const doc = docFixture('caixa_prazos.html');
+  const [enviar, , atribuir] = acoesDaBarra(doc);
+  const u = urlDaAcao(enviar!)!;
+  assert.match(u.url, /^controlador\.php\?acao=procedimento_enviar&acao_origem=/);
+  assert.equal(u.requerSelecao, true);
+  assert.equal(u.aceitaSigiloso, false);
+  assert.equal(urlDaAcao(atribuir!)!.aceitaSigiloso, false);
+});
+await teste('app: marcar processo de outra pagina e acionar a acao do SEI envia o POST com o par daquela pagina', async () => {
+  enviados.length = 0;
+  const doc = ativarToggle(docFixture('caixa_prazos.html'));
+  const l = lerTabelas(doc);
+  const fora = l.processos[1]!;
+  fora.pagina = 2; fora.naPaginaAtual = false;
+  (globalThis as unknown as { document: Document }).document = doc;
+  const { app } = await montarCom(doc, { inicial: l });
+  app.registrarSelecaoParaTeste('recebidos', 2, { itens: `${fora.id},777`, hash: 'HASH2' });
+  const cb = linhaDe(app, fora.id).querySelector<HTMLInputElement>('input[type=checkbox]')!;
+  assert.equal(cb.disabled, false, 'a caixa de processo de outra pagina funciona');
+  cb.checked = true;
+  cb.dispatchEvent(new (doc.defaultView as any).Event('change'));
+  await tick();
+  assert.match(q(app, '.spro-lote strong').textContent!, /1 selecionado/);
+  qa(app, '.spro-lote .spro-bt').find((b) => dicaDe(b) === 'Atribuição de Processos')!.click();
+  assert.equal(enviados.length, 1);
+  assert.match(enviados[0]![0], /acao=procedimento_atribuicao_cadastrar/);
+  assert.deepEqual(JSON.parse(enviados[0]![1]).recebidos, { ids: [fora.id], pagina: 2, selecao: { itens: `${fora.id},777`, hash: 'HASH2' } });
+  app.fechar();
+});
+await teste('app: marcados em duas paginas do mesmo grupo — a acao nao e enviada e o aviso explica', async () => {
+  enviados.length = 0;
+  const doc = ativarToggle(docFixture('caixa_prazos.html'));
+  const l = lerTabelas(doc);
+  const fora = l.processos[1]!; fora.pagina = 2; fora.naPaginaAtual = false;
+  (globalThis as unknown as { document: Document }).document = doc;
+  const { app } = await montarCom(doc, { inicial: l });
+  app.registrarSelecaoParaTeste('recebidos', 2, { itens: fora.id, hash: 'H' });
+  for (const id of [fora.id, l.processos[0]!.id]) { const cb = linhaDe(app, id).querySelector<HTMLInputElement>('input[type=checkbox]')!; cb.checked = true; cb.dispatchEvent(new (doc.defaultView as any).Event('change')); }
+  await tick();
+  qa(app, '.spro-lote .spro-bt').find((b) => dicaDe(b) === 'Atribuição de Processos')!.click();
+  assert.equal(enviados.length, 0);
+  assert.match(q(app, '.spro-aviso').textContent!, /páginas 1 e 3/);
   app.fechar();
 });

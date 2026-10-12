@@ -21,7 +21,7 @@ const TIPO_DND = 'application/x-spro-cartao';
 
 function cartao(p: Processo, de: string, props: PropsQuadro): HTMLElement {
   const r = resumoDoPrazo(p, props.ctx);
-  const cb = h('input', { type: 'checkbox', class: 'spro-cb', 'aria-label': `Marcar ${p.protocolo}`, disabled: !p.naPaginaAtual });
+  const cb = h('input', { type: 'checkbox', class: 'spro-cb', 'aria-label': `Marcar ${p.protocolo}` });
   cb.checked = props.selecionados.has(p.id);
   cb.addEventListener('change', () => props.aoSelecionar(p.id, cb.checked));
   const c = h('div', { class: `spro-cartao${cb.checked ? ' spro-sel' : ''}`, draggable: 'true', 'data-id': p.id, 'data-de': de },

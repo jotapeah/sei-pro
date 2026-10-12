@@ -67,7 +67,15 @@ export interface Processo {
   observacao?: string;
 }
 
+/** O par que o SEI valida em toda acao em lote: os ids da pagina e o hash que so o servidor sabe gerar. */
+export interface SelecaoDaPagina {
+  itens: string;
+  hash: string;
+}
+
 export interface LeituraTabela {
+  /** Pares `hdn<Grupo>Itens` / `hdn<Grupo>ItensHash` desta pagina, por grupo. */
+  selecoes: Record<Grupo, SelecaoDaPagina>;
   processos: Processo[];
   /** Total que o SEI informa no `caption` ("212 registros"), por grupo. */
   totais: Record<Grupo, number>;

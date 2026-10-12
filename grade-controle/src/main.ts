@@ -18,6 +18,7 @@ import { alterarProcesso } from '../../sei-nucleo/src/dominio/processo';
 import { atribuirProcesso, definirAnotacao, definirMarcador } from '../../sei-nucleo/src/dominio/acoesProcesso';
 import { Sei, lerContexto } from '../../sei-nucleo/src/sei';
 import { paginaDe } from '../../sei-nucleo/src/sessao/pagina';
+import { enviarAcao } from './acoes/foraDaPagina';
 import { acoesDaBarra } from './leitura/barra';
 import { instalarDicas } from './ui/dica';
 import { ativarCedo, desativar, estaAtiva, gravarDica, lerDica, marcarPronta, vigiar } from './ativacao/inicio';
@@ -119,6 +120,7 @@ function montar() {
         }
       : undefined,
     aoVoltarNativa: () => alternar(),
+    enviarAcao: (url, plano) => enviarAcao(document, url, plano),
     editarEspecificacao: async (protocolo, texto) => void (await alterarProcesso(sei, protocolo, { especificacao: texto }, { aplicar: true })),
     abrirPrazo: (id) => {
       // O modulo de Prazos escuta este evento (o mesmo que o legado dispara) e abre o menu do prazo do processo.

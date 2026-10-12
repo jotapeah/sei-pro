@@ -113,5 +113,10 @@ export function lerTabelas(doc: Document, o: OpcoesLeitura = {}): LeituraTabela 
       }
     }
   }
-  return { processos, totais, porPagina, visao: detalhada ? 'detalhada' : 'resumida' };
+  const campo = (nome: string) => (doc.getElementById(nome) as HTMLInputElement | null)?.getAttribute('value') ?? '';
+  const selecoes = {
+    recebidos: { itens: campo('hdnRecebidosItens'), hash: campo('hdnRecebidosItensHash') },
+    gerados: { itens: campo('hdnGeradosItens'), hash: campo('hdnGeradosItensHash') },
+  };
+  return { processos, totais, porPagina, visao: detalhada ? 'detalhada' : 'resumida', selecoes };
 }

@@ -184,9 +184,9 @@ export function criarTabela(inicial: PropsTabela) {
   function desenharCabecalho() {
     cabecalho.replaceChildren();
     cabecalho.style.gridTemplateColumns = modelo();
-    const todos = p.linhas.filter((l): l is Extract<LinhaLista, { tipo: 'processo' }> => l.tipo === 'processo' && l.processo.naPaginaAtual).map((l) => l.processo.id);
+    const todos = p.linhas.filter((l): l is Extract<LinhaLista, { tipo: 'processo' }> => l.tipo === 'processo').map((l) => l.processo.id);
     const marcados = todos.filter((id) => p.selecionados.has(id)).length;
-    const geral = h('input', { type: 'checkbox', class: 'spro-cb', 'aria-label': 'Marcar todos os processos visíveis', title: 'Marcar todos os visíveis (desta página do SEI)', disabled: !todos.length });
+    const geral = h('input', { type: 'checkbox', class: 'spro-cb', 'aria-label': 'Marcar todos os processos visíveis', title: 'Marcar todos os visíveis', disabled: !todos.length });
     geral.checked = todos.length > 0 && marcados === todos.length;
     geral.indeterminate = marcados > 0 && marcados < todos.length;
     geral.addEventListener('change', () => p.aoMarcarGrupo(todos, geral.checked));
@@ -207,7 +207,7 @@ export function criarTabela(inicial: PropsTabela) {
 
   function linhaProcesso(proc: Processo, grupo: string): HTMLElement {
     const sel = p.selecionados.has(proc.id);
-    const cb = h('input', { type: 'checkbox', class: 'spro-cb', 'aria-label': `Marcar ${proc.protocolo}`, disabled: !proc.naPaginaAtual, title: proc.naPaginaAtual ? undefined : 'Este processo está em outra página do SEI; abra-o ou use o quadro para mover.' });
+    const cb = h('input', { type: 'checkbox', class: 'spro-cb', 'aria-label': `Marcar ${proc.protocolo}`, title: proc.naPaginaAtual ? undefined : `Está na página ${proc.pagina + 1} do SEI: as ações do SEI aceitam processos de uma página por vez` });
     cb.checked = sel;
     cb.addEventListener('change', () => p.aoSelecionar(proc.id, cb.checked));
     const tr = h('div', { class: `spro-linha${sel ? ' spro-sel' : ''}${p.foco === proc.id ? ' spro-foco' : ''}${proc.urgente ? ' spro-linha-urgente' : ''}`, role: 'row', 'data-id': proc.id, 'data-grupo': grupo });
@@ -220,7 +220,7 @@ export function criarTabela(inicial: PropsTabela) {
   }
 
   function linhaGrupo(l: Extract<LinhaLista, { tipo: 'grupo' }>): HTMLElement {
-    const ids = l.grupo.itens.filter((x) => x.naPaginaAtual).map((x) => x.id);
+    const ids = l.grupo.itens.map((x) => x.id);
     const botao = h('button', { type: 'button', class: 'spro-grupo-b', 'aria-expanded': String(!l.recolhido), onclick: () => p.aoGrupo(l.grupo.chave) },
       h('span', { class: `spro-grupo-seta${l.recolhido ? ' spro-fechado' : ''}` }, iconeGrade('seta', 14)),
       h('span', { class: 'spro-grupo-nome' }, l.grupo.rotulo),

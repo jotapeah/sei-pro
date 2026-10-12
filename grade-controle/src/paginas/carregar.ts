@@ -6,7 +6,7 @@
 import { Formulario } from '../../../sei-nucleo/src/formulario/formulario';
 import type { Http, Pagina } from '../../../sei-nucleo/src/sessao/http';
 import { lerTabelas } from '../leitura/tabela';
-import type { Grupo, LeituraTabela, Processo } from '../modelo/tipos';
+import type { Grupo, LeituraTabela, Processo, SelecaoDaPagina } from '../modelo/tipos';
 
 export interface Fonte {
   /** Documento da página `n` (a partir de 1) do grupo. */
@@ -40,7 +40,7 @@ export const MAX_PAGINAS = 60;
 export async function carregarRestante(
   inicial: LeituraTabela,
   fonte: Fonte,
-  o: { aoProgresso?: (p: Progresso) => void; aoPagina?: (novos: Processo[]) => void; sinal?: AbortSignal; maxPaginas?: number } = {},
+  o: { aoProgresso?: (p: Progresso) => void; aoPagina?: (novos: Processo[]) => void; aoSelecao?: (grupo: Grupo, pagina: number, s: SelecaoDaPagina) => void; sinal?: AbortSignal; maxPaginas?: number } = {},
 ): Promise<ResultadoCarga> {
   const max = o.maxPaginas ?? MAX_PAGINAS;
   const novos: Processo[] = [];
@@ -72,6 +72,7 @@ export async function carregarRestante(
         for (const p of daPagina) conhecidos.add(p.id);
         lidos += daPagina.length;
         novos.push(...daPagina);
+        o.aoSelecao?.(grupo, n, leitura.selecoes[grupo]);
         o.aoPagina?.(daPagina);
         o.aoProgresso?.({ grupo, paginasLidas: n + 1, paginasTotal, processos: lidos, total });
       }
