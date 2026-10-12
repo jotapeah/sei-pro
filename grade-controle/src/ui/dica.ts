@@ -6,7 +6,12 @@
  * O texto vem de `data-tip`. Quem ainda usa `title` e convertido na primeira vez que o mouse passa: o atributo sai
  * (o navegador nao mostra o dele) e o texto vira `data-tip`; sem nome acessivel, o `title` vira `aria-label`.
  */
+import { lerNota } from '../modelo/checklist';
+
 export const ATRIBUTO_DICA = 'data-tip';
+/** Dica de anotacao: o texto bruto da nota (com [ ] e [X]) e o autor; o balao desenha as caixas e risca o feito. */
+export const ATRIBUTO_NOTA = 'data-tip-nota';
+export const ATRIBUTO_AUTOR = 'data-tip-autor';
 /** Aparece na hora: sem espera entre o mouse chegar e o balao. */
 const ATRASO_MS = 0;
 const CSS = `
@@ -14,6 +19,13 @@ const CSS = `
 .dica { position: fixed; inset: auto; margin: 0; border: 0; overflow: visible; z-index: 2147483647; max-width: 320px; padding: 6px 10px; font: 12px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #fff; white-space: pre-line; pointer-events: none; background: #1b1f24; border-radius: 8px; box-shadow: 0 6px 18px rgb(0 0 0 / 28%); opacity: 0; transform: translateY(2px); transition: opacity 120ms ease, transform 120ms ease; }
 .dica.claro { color: #1b1f24; background: #fff; box-shadow: 0 6px 18px rgb(0 0 0 / 22%), 0 0 0 1px rgb(0 0 0 / 10%); }
 .dica.on { opacity: 1; transform: none; }
+.nota { display: flex; flex-direction: column; gap: 3px; }
+.nota-l { position: relative; min-height: 1.45em; }
+.nota-l[data-t] { padding-left: 22px; }
+.nota-l[data-t]::before { content: ""; position: absolute; left: 1px; top: 0.2em; box-sizing: border-box; width: 14px; height: 14px; border: 1.6px solid currentColor; border-radius: 4px; opacity: 0.75; }
+.nota-l[data-t="x"] { text-decoration: line-through; opacity: 0.8; }
+.nota-l[data-t="x"]::before { content: "\\2713"; opacity: 1; text-align: center; font: 700 11px/11px system-ui; color: #fff; background: #4a8f5a; border-color: #4a8f5a; }
+.nota-autor { margin-top: 4px; font-size: 11px; opacity: 0.7; }
 .dica[hidden] { display: none; }
 @media (prefers-reduced-motion: reduce) { .dica { transition: none; } }
 `;
@@ -30,7 +42,7 @@ export function acharDica(caminho: EventTarget[]): Alvo | null {
   for (const n of caminho) {
     if (!ehElemento(n)) continue;
     if (n.id === 'spro-grade') return null;
-    if (n.hasAttribute(ATRIBUTO_DICA) || n.hasAttribute('title')) return n;
+    if (n.hasAttribute(ATRIBUTO_DICA) || n.hasAttribute(ATRIBUTO_NOTA) || n.hasAttribute('title')) return n;
   }
   return null;
 }
@@ -44,6 +56,28 @@ export function migrarTitulo(el: Element): string {
     el.removeAttribute('title');
   }
   return el.getAttribute(ATRIBUTO_DICA) ?? '';
+}
+
+/** A nota no balao: caixa para `[ ]`, caixa marcada e texto riscado para `[X]`. So nos de texto: nada vira HTML. */
+export function desenharNota(balao: HTMLElement, texto: string, autor: string): void {
+  const doc = balao.ownerDocument;
+  const raiz = doc.createElement('div');
+  raiz.className = 'nota';
+  for (const l of lerNota(texto)) {
+    if (l.marca === null && !l.texto.trim()) continue;
+    const d = doc.createElement('div');
+    d.className = 'nota-l';
+    if (l.marca !== null) d.setAttribute('data-t', l.marca ? 'x' : 'o');
+    d.textContent = l.texto;
+    raiz.append(d);
+  }
+  if (autor) {
+    const a = doc.createElement('div');
+    a.className = 'nota-autor';
+    a.textContent = autor;
+    raiz.append(a);
+  }
+  balao.replaceChildren(raiz);
 }
 
 /** Ganchos entre `vigiarTitulos` (quem converte) e `instalarDicas` (quem mostra o balao). */
@@ -136,9 +170,11 @@ export function instalarDicas(doc: Document, escuro: () => boolean = () => false
   }
   function mostrar() {
     if (!alvo || !alvo.isConnected) return reavaliar();
-    const texto = migrarTitulo(alvo);
+    const nota = alvo.getAttribute(ATRIBUTO_NOTA);
+    const texto = nota !== null ? nota : migrarTitulo(alvo);
     if (!texto) return ocultar();
-    balao.textContent = texto;
+    if (nota !== null) desenharNota(balao, nota, alvo.getAttribute(ATRIBUTO_AUTOR) ?? '');
+    else balao.textContent = texto;
     balao.classList.toggle('claro', !escuro());
     balao.hidden = false;
     try {

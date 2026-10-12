@@ -55,3 +55,14 @@ await teste('dica: caminhoDe sobe ate o documento', () => {
   const ids = caminhoDe(doc.getElementById('b')!).filter((n) => (n as Element).id).map((n) => (n as Element).id);
   assert.deepEqual(ids, ['b', 'a']);
 });
+await teste('dica: anotacao no balao — [ ] vira caixa, [X] vira caixa marcada com texto riscado, sem HTML', async () => {
+  const { desenharNota } = await import('../src/ui/dica');
+  const doc = docDe('<body><div id="b"></div></body>');
+  const b = doc.getElementById('b')!;
+  desenharNota(b, 'Aguardando parecer.\n\n[X] Minuta pronta\n[ ] <b>Parecer</b>', 'pedro em 10/10/2026');
+  const ls = [...b.querySelectorAll('.nota-l')].map((l) => [l.getAttribute('data-t'), l.textContent]);
+  assert.deepEqual(ls, [[null, 'Aguardando parecer.'], ['x', 'Minuta pronta'], ['o', '<b>Parecer</b>']]);
+  assert.equal(b.querySelector('b'), null);
+  assert.equal(b.querySelector('.nota-autor')!.textContent, 'pedro em 10/10/2026');
+  assert.ok(acharDica([(() => { const e = doc.createElement('td'); e.setAttribute('data-tip-nota', 'x'); return e; })(), doc.getElementById('b')!].map((x) => x)) === null, 'fora da grade nao age');
+});

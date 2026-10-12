@@ -749,3 +749,11 @@ await teste('detalhada: sem o icone de origem e sem os filtros Recebidos/Gerados
   assert.deepEqual(qa(app, '.spro-rapido').slice(0, 2).map((b) => b.textContent!.trim()), ['Meus', 'Atrasados']);
   app.fechar();
 });
+await teste('app: a celula de anotacao leva a nota bruta para a dica rica (sem title nativo)', async () => {
+  const { app } = await montar();
+  const c = linhaDe(app, '148265').querySelector('.spro-c-anotacao')!;
+  assert.equal(c.hasAttribute('title'), false);
+  assert.match(c.getAttribute('data-tip-nota')!, /teste|\[/);
+  assert.ok(c.getAttribute('data-tip-autor'));
+  app.fechar();
+});

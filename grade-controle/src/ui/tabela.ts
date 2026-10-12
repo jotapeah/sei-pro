@@ -148,7 +148,8 @@ function celula(p: Processo, c: Coluna, ctx: Ctx, props: PropsTabela): HTMLEleme
       td.classList.add('spro-editavel');
       if (p.anotacao) {
         td.append(el('span', `spro-corta${p.anotacao.prioridade ? ' spro-prio' : ''}`, resumoDaNota(p.anotacao.texto)));
-        td.title = `${p.anotacao.texto}\n${p.anotacao.autor}`;
+        td.setAttribute('data-tip-nota', p.anotacao.texto);
+        td.setAttribute('data-tip-autor', p.anotacao.autor);
       } else if (!p.sigiloso) td.append(h('span', { class: 'spro-prazo-vazio spro-vazio-edicao' }, 'anotar'));
       if (!p.sigiloso) td.append(botaoLapis(p.anotacao ? 'Editar a anotação' : 'Adicionar anotação', () => props.aoEditar(p.id, 'anotacao')));
       break;
