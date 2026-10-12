@@ -180,7 +180,11 @@ export function instalarDicas(doc: Document, escuro: () => boolean = () => false
   aoRedesenhar = () => {
     if (alvo && !alvo.isConnected) reavaliar();
   };
-  const aoEntrar = (ev: Event) => {
+  /**
+   * Quem decide e o `pointermove` (e o `pointerover`/`mouseover`, o que chegar primeiro): em alguns navegadores e
+   * situacoes (janela sem foco, elemento recriado sob o ponteiro) o `pointerover` nao chega, mas o movimento sempre.
+   */
+  const aoApontar = (ev: Event) => {
     const pe = ev as PointerEvent;
     if (typeof pe.clientX === 'number') ponteiro = { x: pe.clientX, y: pe.clientY };
     const el = acharDica(ev.composedPath());
@@ -192,10 +196,6 @@ export function instalarDicas(doc: Document, escuro: () => boolean = () => false
     if (ATRASO_MS > 0) timer = setTimeout(mostrar, ATRASO_MS);
     else mostrar();
   };
-  const aoMover = (ev: Event) => {
-    const pe = ev as PointerEvent;
-    if (typeof pe.clientX === 'number') ponteiro = { x: pe.clientX, y: pe.clientY };
-  };
   const aoFocar = (ev: Event) => {
     const el = acharDica(ev.composedPath());
     if (!el || !(el as HTMLElement).matches?.(':focus-visible')) return;
@@ -205,8 +205,10 @@ export function instalarDicas(doc: Document, escuro: () => boolean = () => false
     mostrar();
   };
   const aoSairDaJanela = () => ocultar();
-  doc.addEventListener('pointerover', aoEntrar, true);
-  doc.addEventListener('pointermove', aoMover, true);
+  doc.addEventListener('pointerover', aoApontar, true);
+  doc.addEventListener('mouseover', aoApontar, true);
+  doc.addEventListener('pointermove', aoApontar, true);
+  doc.addEventListener('mousemove', aoApontar, true);
   doc.addEventListener('focusin', aoFocar, true);
   doc.addEventListener('focusout', ocultar, true);
   doc.addEventListener('pointerdown', ocultar, true);
@@ -216,8 +218,10 @@ export function instalarDicas(doc: Document, escuro: () => boolean = () => false
   return () => {
     ocultar();
     aoRedesenhar = null;
-    doc.removeEventListener('pointerover', aoEntrar, true);
-    doc.removeEventListener('pointermove', aoMover, true);
+    doc.removeEventListener('pointerover', aoApontar, true);
+    doc.removeEventListener('mouseover', aoApontar, true);
+    doc.removeEventListener('pointermove', aoApontar, true);
+    doc.removeEventListener('mousemove', aoApontar, true);
     doc.documentElement.removeEventListener('pointerleave', aoSairDaJanela);
     doc.removeEventListener('focusin', aoFocar, true);
     doc.removeEventListener('focusout', ocultar, true);
