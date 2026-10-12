@@ -26,7 +26,7 @@ Loja de extensões bloqueada no computador de trabalho? Veja [como instalar pelo
 
 ### Tela Controle de Processos
 
-- ![Visão nova do Controle de Processos](/img/icon-agruparlista.png) [Visão nova do Controle de Processos](./pages/GRADECONTROLE.md)
+- ![Novo Controle de Processos](/img/icon-agruparlista.png) [Novo Controle de Processos](./pages/GRADECONTROLE.md)
 - ![Gerenciar processos monitorados](/img/icon-favoritos.png) [Gerenciar processos monitorados](./pages/FAVORITOS.md)
 - ![Pesquisa rápida](/img/icon-pesquisa.png) [Filtrar e destacar pela pesquisa rápida](./pages/PESQUISARAPIDA.md)
 - ![Anotações no Controle de Processos](/img/icon-notaarvore.png) [Anotações no Controle de Processos](./pages/ANOTACAOCONTROLE.md)

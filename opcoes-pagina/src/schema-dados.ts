@@ -37,6 +37,16 @@ export const SECOES_GERAL: Secao[] = [
         padrao: true,
       },
       {
+        nome: "gradecontrole",
+        rotulo: "Novo Controle de Processos (tabela e quadro com busca, agrupamento e visões salvas)",
+        ajuda:
+          "Troca a lista nativa por uma grade moderna: busca com operadores, filtros, agrupamento, quadro com arrastar e soltar, visões salvas e exportação em CSV. Um botão ao lado da seta de recolher volta à lista do SEI. Disponível no Chrome e no Edge.",
+        tipo: "chave",
+        icone: "fa fa-th-list",
+        manual: "GRADECONTROLE",
+        padrao: true,
+      },
+      {
         nome: "gerenciarprazos",
         rotulo: "Controlar Prazos",
         tipo: "chave",
@@ -154,16 +164,6 @@ export const SECOES_GERAL: Secao[] = [
         tipo: "chave",
         icone: "fa fa-sticky-note",
         manual: "ANOTACAOCONTROLE",
-        padrao: false,
-      },
-      {
-        nome: "gradecontrole",
-        rotulo: "Visão nova do controle de processos (tabela e quadro com busca, agrupamento e visões salvas)",
-        ajuda:
-          "Troca a lista nativa por uma grade moderna: busca com operadores, filtros, agrupamento, quadro com arrastar e soltar, visões salvas e exportação em CSV. Um botão ao lado da seta de recolher volta à lista do SEI. Disponível no Chrome e no Edge.",
-        tipo: "chave",
-        icone: "fa fa-th-list",
-        manual: "GRADECONTROLE",
         padrao: false,
       },
       {

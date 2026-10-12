@@ -29,7 +29,7 @@ Melhorias no [Agente de IA](../pages/AGENTEIA.md) para quem usa **conectores (MC
 ### Versão 3.0
 12/10/2026
 
-**Novo — [Visão nova do Controle de Processos](../pages/GRADECONTROLE.md)** (SEI Pro Lab, no Chrome e no Edge). Uma grade moderna no lugar da lista do SEI, que vem **desligada**: para usar, marque *Visão nova do controle de processos* nas Configurações, aba Geral. Um botão ao lado do título volta à lista do SEI quando você quiser.
+**Novo — [Novo Controle de Processos](../pages/GRADECONTROLE.md)** (SEI Pro Lab, no Chrome e no Edge). Uma grade moderna no lugar da lista do SEI, que já vem **ligada**: para desligar, use a opção *Novo Controle de Processos* nas Configurações, aba Geral. Um botão ao lado do título volta à lista do SEI quando você quiser.
 
 - **Abre sem piscar e carrega tudo.** A tela nativa fica escondida enquanto a grade monta, e todas as páginas do seu controle são lidas em segundo plano, não só os 100 primeiros.
 - **Busca com operadores e filtros rápidos.** `resp:eu prazo:<7d marcador:urgente -tipo:ofício`, mais botões para *Meus*, *Recebidos*, *Gerados*, *Atrasados*, *Vencem na semana*, *Sem responsável*, *Não visualizados*, *Novos desde a última visita* e *Parados há +30 dias*, e seletores pesquisáveis de responsável, tipo e marcador.
@@ -41,7 +41,7 @@ Melhorias no [Agente de IA](../pages/AGENTEIA.md) para quem usa **conectores (MC
 - **Tudo o que já estava na linha:** ícones de Monitorados, Projetos, Demandas e Acompanhamento especial; ícone de **recebido/gerado**; ícone para **abrir em nova guia**; não visualizados em vermelho; urgente e trancado; **dicas na hora** ao passar o mouse; atalhos de teclado (`/`, `j`, `k`, `x`, `Enter`, `g t`, `g q`).
 - **Convive com o resto.** O botão de recolher o painel, a ordem dos painéis e o legado seguem funcionando; com a opção desligada, nada muda.
 
-**Bom saber:** as edições, o quadro e as ações em lote **gravam de verdade no SEI**. A visão nova foi testada no SEI 4.1.5 e no 5.0.4. A versão da loja e o Firefox não recebem a visão nova nesta versão.
+**Bom saber:** as edições, o quadro e as ações em lote **gravam de verdade no SEI**. O Novo Controle de Processos foi testado no SEI 4.1.5 e no 5.0.4. A versão da loja e o Firefox não recebem o Novo Controle de Processos nesta versão.
 
 ### Versão 2.9
 11/10/2026

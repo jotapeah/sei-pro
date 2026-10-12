@@ -7,7 +7,7 @@ import { iconeGrade } from '../ui/icones';
 
 export const CLASSE_BOTAO = 'spro-grade-botao';
 const BARRA = '#processosSEIPro .titlePanelHome, #processosSEIPro #divInfraBarraLocalizacao, #divInfraBarraLocalizacao.titlePanelHome, #divInfraBarraLocalizacao';
-const ROTULO_LIGAR = 'Usar a visão nova do controle de processos';
+const ROTULO_LIGAR = 'Usar o Novo Controle de Processos';
 const ROTULO_DESLIGAR = 'Voltar à visão nativa do SEI';
 
 /** Põe (ou atualiza) o botão. Devolve `false` se a barra ainda não existe. */

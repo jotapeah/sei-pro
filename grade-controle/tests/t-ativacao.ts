@@ -102,7 +102,7 @@ await teste('botão: entra ao lado da seta de recolher, sem rótulo e com toolti
   assert.equal(doc.getElementById('divInfraBarraLocalizacao')!.lastElementChild, b, 'o botao e o ultimo da barra');
   assert.equal(b.textContent!.trim(), '');
   const parar = ligarCliqueDoBotao(doc, () => n++);
-  assert.match(b.getAttribute('data-tip')!, /visão nova/);
+  assert.match(b.getAttribute('data-tip')!, /Novo Controle/);
   assert.equal(b.hasAttribute('title'), false, 'sem o title nativo');
   assert.equal(b.getAttribute('aria-pressed'), 'false');
   b.click();

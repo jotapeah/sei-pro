@@ -1,20 +1,18 @@
 # [![Home](../img/home.png)](../) |  SEI Pro ![Icone](../img/icon-32.png)
 
-## ![SEI Pro Visão nova do Controle de Processos](../img/icon-agruparlista.png) Visão nova do Controle de Processos
+## ![SEI Pro Novo Controle de Processos](../img/icon-agruparlista.png) Novo Controle de Processos
 
 Uma **grade moderna no lugar da lista do SEI**: você busca com operadores, filtra com um clique, agrupa, ordena, vê os processos em quadro (Kanban) e **edita direto na linha** a especificação, o responsável, os marcadores, o prazo e a anotação. Ela carrega **todos os seus processos** (de todas as páginas do SEI) e abre **sem piscar a tela**.
 
-> A visão nova está disponível no **Chrome** e no **Edge** e vem **desligada** de fábrica. A lista do SEI continua ali: um botão ao lado do título volta a ela a qualquer momento.
+> O Novo Controle de Processos está disponível no **Chrome** e no **Edge** e vem **ligado** por padrão. A lista do SEI continua ali: um botão ao lado do título volta a ela a qualquer momento.
 
-> ![Busca, filtros rápidos e agrupamento na visão nova](../img/grade-busca-filtros.gif)
+> ![Busca, filtros rápidos e agrupamento no Novo Controle de Processos](../img/grade-busca-filtros.gif)
 
 ### Como ativar
 
-1. Abra as [Configurações do SEI Pro](../pages/DESATIVARFUNCOES.md), aba **Geral**, seção **Controle de Processos**;
-2. Marque **Visão nova do controle de processos** e salve;
-3. Abra o **Controle de Processos**. A visão nova já vem como padrão.
+Ele já vem **ligado**: é só abrir o **Controle de Processos**. Para desligar (ou ligar de novo), abra as [Configurações do SEI Pro](../pages/DESATIVARFUNCOES.md), aba **Geral**, e use a opção **Novo Controle de Processos**, logo antes de *Controlar Prazos*.
 
-Um botão sem rótulo, **ao lado da seta de recolher** no título, alterna entre a visão nova e a lista do SEI (passe o mouse para ver o que ele faz). A seta de **recolher e expandir** o painel também funciona com a visão nova.
+Um botão sem rótulo, **ao lado da seta de recolher** no título, alterna entre o Novo Controle de Processos e a lista do SEI (passe o mouse para ver o que ele faz). A seta de **recolher e expandir** o painel também funciona com o Novo Controle de Processos.
 
 ### Buscar e filtrar
 
@@ -85,7 +83,7 @@ Marque as caixas (a do cabeçalho marca todos os visíveis) e uma barra de açõ
 
 ### Ícones e sinais na linha
 
-Antes do número do processo ficam os ícones que o SEI Pro já tinha: **Monitorado**, **Projetos**, **Demandas** e **Acompanhamento especial** — com o mesmo clique de sempre. Mais um ícone indica se o processo é **recebido** ou **gerado**, e um outro, depois do número, **abre o processo em nova guia**. Processos **não visualizados** ficam em **vermelho**, **urgentes** e **trancados** ganham uma etiqueta e **sigilosos** mostram o aviso (o SEI não entrega a especificação nem os marcadores deles, e a visão nova também não).
+Antes do número do processo ficam os ícones que o SEI Pro já tinha: **Monitorado**, **Projetos**, **Demandas** e **Acompanhamento especial** — com o mesmo clique de sempre. Mais um ícone indica se o processo é **recebido** ou **gerado**, e um outro, depois do número, **abre o processo em nova guia**. Processos **não visualizados** ficam em **vermelho**, **urgentes** e **trancados** ganham uma etiqueta e **sigilosos** mostram o aviso (o SEI não entrega a especificação nem os marcadores deles, e o Novo Controle de Processos também não).
 
 ### Atalhos de teclado
 
@@ -101,10 +99,10 @@ Antes do número do processo ficam os ícones que o SEI Pro já tinha: **Monitor
 
 ### Bom saber
 
-* A visão nova **lê** a tabela do próprio SEI e a deixa escondida: nada é reescrito nela. Se algo der errado ao montar a grade, a lista do SEI volta sozinha.
+* O Novo Controle de Processos **lê** a tabela do próprio SEI e a deixa escondida: nada é reescrito nela. Se algo der errado ao montar a grade, a lista do SEI volta sozinha.
 * Funciona na **visão resumida** e na **detalhada** do SEI (na detalhada, os filtros Recebidos e Gerados e o ícone de origem não aparecem), no **SEI 4.1.5** e no **5.0.4**.
 * As edições, o quadro e as ações em lote **gravam de verdade no SEI**, como se você fizesse pela tela do SEI.
-* A visão nova substitui o agrupamento, o filtro e o quadro da lista antiga (veja [Agrupar, filtrar e ver os processos em quadro](../pages/AGRUPAR.md)); com a opção desligada, tudo continua como antes.
+* O Novo Controle de Processos substitui o agrupamento, o filtro e o quadro da lista antiga (veja [Agrupar, filtrar e ver os processos em quadro](../pages/AGRUPAR.md)); com a opção desligada, tudo continua como antes.
 * Não faz nenhuma consulta fora do seu SEI.
 
 ## Próximo item

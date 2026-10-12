@@ -1,6 +1,6 @@
 /**
  * Content script isolado (`document_start`): a grade nova do Controle de Processos, com a opção `gradecontrole`
- * (desligada por padrão). Ligada, abre como padrão; o botão ao lado do chevron alterna na sessão.
+ * (ligada por padrão). Ligada, abre como padrão; o botão ao lado do chevron alterna na sessão.
  *
  * Ordem importa: a bandeira síncrona (localStorage) marca o `<html>` ANTES do corpo existir, e o CSS injetado
  * esconde a tabela nativa e desenha o esqueleto. Só depois, com o DOM pronto, a grade lê a tabela e se monta.
@@ -8,7 +8,7 @@
  */
 import { areaChrome } from '../../sei-comum/src/armazenamento/area';
 import { hojeISO } from '../../sei-comum/src/datas/dias';
-import { opcaoLegadaMarcada } from '../../sei-comum/src/opcoes/legadas';
+import { opcaoLegadaLigada, opcaoLegadaMarcada } from '../../sei-comum/src/opcoes/legadas';
 import { temaEscuroLegado } from '../../sei-comum/src/pagina/tema';
 import { novoId } from '../../sei-comum/src/id';
 import cssBase from '../../sei-comum/src/ui/base.css';
@@ -228,7 +228,8 @@ function partir() {
   const ler = (dataValues: unknown) => {
     nomesCompletos = opcaoLegadaMarcada(dataValues, 'nomesusuarios');
     app?.definirNomesCompletos(nomesCompletos);
-    configurar(opcaoLegadaMarcada(dataValues, OPCAO));
+    // Ligada por padrao (como Prazos e Projetos): so `false` gravado desliga.
+    configurar(opcaoLegadaLigada(dataValues, OPCAO));
   };
   let mudou = false;
   chrome.storage.onChanged.addListener((m, area) => {
