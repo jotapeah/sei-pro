@@ -542,3 +542,27 @@ await teste('dica: nenhum elemento da grade fica com title (o navegador nao most
   assert.ok(app.host.shadowRoot!.querySelectorAll('[data-tip]').length > 10);
   app.fechar();
 });
+await teste('app: icone de origem (recebido/gerado) com dica e icone para abrir em nova guia', async () => {
+  const doc = ativarToggle(docFixture('caixa_prazos.html'));
+  const l = lerTabelas(doc);
+  l.processos[1]!.grupo = 'gerados';
+  (globalThis as unknown as { document: Document }).document = doc;
+  const app = criarApp({ doc, inicial: l, agora: () => Date.UTC(2026, 9, 11, 12), hoje: () => '2026-10-11', armazem: criarArmazem({ local: areaMemoria(), sync: areaMemoria() }, 'u'), fonte: null,
+    mover: { marcador: async () => undefined, atribuir: async () => undefined }, acoes: () => [], css: '', escuro: false, baixar: () => undefined, novoId: () => 'i', semDebounce: true,
+    aoVoltarNativa: () => undefined, editarEspecificacao: async () => undefined, abrirPrazo: () => undefined, anotar: async () => undefined });
+  doc.body.append(app.host);
+  await app.iniciar(); await tick();
+  const rec = linhaDe(app, '150098').querySelector('.spro-origem')!;
+  const ger = linhaDe(app, '148265').querySelector('.spro-origem')!;
+  void rec; void ger;
+  const origens = qa(app, '.spro-origem').map((o) => [o.className.split(' ')[1], o.getAttribute('data-tip') ?? o.getAttribute('title')]);
+  assert.ok(origens.some(([c, t]) => c === 'spro-origem-gerados' && /gerado/.test(t!)));
+  assert.ok(origens.some(([c, t]) => c === 'spro-origem-recebidos' && /recebido/.test(t!)));
+  const g = qa(app, '.spro-linha').find((x) => x.querySelector('.spro-origem-gerados'))!;
+  const nova = g.querySelector<HTMLAnchorElement>('.spro-nova-guia')!;
+  assert.equal(nova.getAttribute('target'), '_blank');
+  assert.equal(nova.getAttribute('rel'), 'noopener');
+  assert.equal(nova.getAttribute('href'), g.querySelector('.spro-proc')!.getAttribute('href'));
+  assert.equal(nova.previousElementSibling, g.querySelector('.spro-proc'), 'logo depois do numero');
+  app.fechar();
+});

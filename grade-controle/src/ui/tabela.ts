@@ -12,7 +12,7 @@ import { iconeGrade } from './icones';
 
 export const ALTURA: Record<Densidade, number> = { compacta: 34, confortavel: 48 };
 const LARGURA: Record<Coluna, string> = {
-  processo: 'minmax(300px, 330px)',
+  processo: 'minmax(340px, 370px)',
   tipo: 'minmax(120px, 1.2fr)',
   especificacao: 'minmax(200px, 2fr)',
   responsavel: 'minmax(90px, 130px)',
@@ -76,8 +76,11 @@ function celula(p: Processo, c: Coluna, ctx: Ctx, props: PropsTabela): HTMLEleme
         ? h('span', { class: 'spro-acomp', title: p.acompanhamentoGrupo ? `Acompanhamento especial: ${p.acompanhamentoGrupo}` : 'Acompanhamento especial' }, icone('olho', 15))
         : h('span', { class: 'spro-slot' });
       td.append(h('span', { class: 'spro-icones' }, slot('spro-fav-estrela'), slot('spro-prj-ic'), slot('spro-dem-cx'), acomp));
+      const rec = p.grupo === 'recebidos';
+      td.append(h('span', { class: `spro-origem spro-origem-${p.grupo}`, title: rec ? 'Processo recebido: veio de outra unidade' : 'Processo gerado: autuado nesta unidade', role: 'img', 'aria-label': rec ? 'Processo recebido' : 'Processo gerado' }, iconeGrade(rec ? 'recebido' : 'gerado', 16)));
       const a = h('a', { class: `spro-proc${p.naoVisualizado ? ' spro-novo' : ''}`, href: p.link ?? '#', title: 'Abrir o processo' }, p.protocolo);
       td.append(a);
+      if (p.link) td.append(h('a', { class: 'spro-nova-guia', href: p.link, target: '_blank', rel: 'noopener', title: 'Abrir em nova guia', 'aria-label': `Abrir ${p.protocolo} em nova guia` }, iconeGrade('novaGuia', 14)));
       if (p.sigiloso) td.append(h('span', { class: 'spro-sigilo', title: 'Processo sigiloso' }, 'sigiloso'));
       if (p.urgente) td.append(h('span', { class: 'spro-urgente', title: 'Marcado como urgente' }, 'urgente'));
       if (p.trancado) td.append(h('span', { class: 'spro-sigilo', title: 'Processo trancado' }, 'trancado'));

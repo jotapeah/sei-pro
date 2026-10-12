@@ -37,6 +37,21 @@ const FORMAS = {
     ['circle', { cx: '12', cy: '12', r: '2.8' }],
     ['path', { d: 'M4 4l16 16' }],
   ],
+  /** Caixa de entrada: processo recebido. */
+  recebido: [
+    ['path', { d: 'M4 13.5l2.2-7A1.6 1.6 0 0 1 7.7 5.4h8.6a1.6 1.6 0 0 1 1.5 1.1l2.2 7' }],
+    ['path', { d: 'M4 13.5V18a1.6 1.6 0 0 0 1.6 1.6h12.8A1.6 1.6 0 0 0 20 18v-4.5h-4.6a3.4 3.4 0 0 1-6.8 0z' }],
+  ],
+  /** Folha com seta para fora: processo gerado (autuado) pela unidade. */
+  gerado: [
+    ['path', { d: 'M14 3.5H7.5A1.5 1.5 0 0 0 6 5v14a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 18 19V7.5z' }],
+    ['path', { d: 'M14 3.5V7.5h4M9.5 14.5h5M9.5 17h3' }],
+    ['path', { d: 'M9.5 11.5l2-2 2 2M11.5 9.5v3.5' }],
+  ],
+  novaGuia: [
+    ['path', { d: 'M14 4.5h5.5V10M19.5 4.5L11 13' }],
+    ['path', { d: 'M17.5 14v4a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 18V8A1.5 1.5 0 0 1 6 6.5h4' }],
+  ],
   seta: [['path', { d: 'M6 9l6 6 6-6' }]],
   setaDireita: [['path', { d: 'M9 6l6 6-6 6' }]],
   desfazer: [['path', { d: 'M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3' }]],

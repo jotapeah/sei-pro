@@ -135,7 +135,7 @@ kbd { padding: 0 5px; font: 12px var(--spro-mono); background: var(--spro-fundo-
 
 /* ---- Icones dos outros modulos, edicao inline ---- */
 .spro-icones { display: inline-flex; gap: 2px; align-items: center; margin-right: 6px; vertical-align: middle; }
-.spro-icones > * { flex: none; width: 22px; height: 24px; }
+.spro-icones > * { box-sizing: border-box; flex: 0 0 22px; width: 22px; min-width: 0; max-width: 22px; height: 24px; padding: 0 !important; margin: 0 !important; }
 .spro-slot { display: inline-block; }
 .spro-acomp { align-items: center; justify-content: center; }
 .spro-icones button { display: inline-flex; align-items: center; justify-content: center; padding: 2px; cursor: pointer; background: none; border: 0; border-radius: 6px; color: var(--spro-suave); position: relative; }
@@ -172,3 +172,11 @@ kbd { padding: 0 5px; font: 12px var(--spro-mono); background: var(--spro-fundo-
 .spro-vazio-edicao { opacity: 0; font-size: 11px; }
 .spro-editavel-quebra { flex-wrap: wrap; }
 .spro-linha:hover .spro-vazio-edicao { opacity: 1; }
+
+/* ---- Origem do processo e abrir em nova guia ---- */
+.spro-origem { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 22px; height: 24px; margin-right: 4px; color: var(--spro-suave); }
+.spro-origem-recebidos { color: var(--spro-destaque); }
+.spro-origem-gerados { color: var(--spro-ok); }
+.spro-nova-guia { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 22px; height: 22px; margin-left: 4px; color: var(--spro-suave); border-radius: 6px; opacity: 0; transition: opacity var(--spro-dur); }
+.spro-linha:hover .spro-nova-guia, .spro-nova-guia:focus-visible { opacity: 1; }
+.spro-nova-guia:hover { color: var(--spro-destaque); background: var(--spro-fundo-3); text-decoration: none; }
