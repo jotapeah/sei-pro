@@ -2,6 +2,14 @@
 
 ## ![SEI Pro Histórico de Versões](../img/icon-historico.png) Histórico de versões
 
+### Versão 3.2.2
+12/10/2026
+
+Ajuste no [Novo Controle de Processos](../pages/GRADECONTROLE.md) (*SEI Pro Lab*, Chrome e Edge): a opção continua **ligada por padrão**, mas a grade **não abre sozinha**.
+
+- **O Controle de Processos abre na lista do SEI**, como sempre. A grade só aparece depois que você clica no botão ao lado do título; o navegador lembra a escolha nas próximas aberturas, e clicar de novo volta à lista.
+- Quem desmarcar a opção nas Configurações, aba Geral, tira o botão e a grade de cena.
+
 ### Versão 3.2.1
 12/10/2026
 

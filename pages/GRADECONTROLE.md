@@ -4,15 +4,15 @@
 
 Uma **grade moderna no lugar da lista do SEI**: você busca com operadores, filtra com um clique, agrupa, ordena, vê os processos em quadro (Kanban) e **edita direto na linha** a especificação, o responsável, os marcadores, o prazo e a anotação. Ela carrega **todos os seus processos** (de todas as páginas do SEI) e abre **sem piscar a tela**.
 
-> O Novo Controle de Processos está disponível no **Chrome** e no **Edge** e vem **ligado** por padrão. A lista do SEI continua ali: um botão ao lado do título volta a ela a qualquer momento.
+> O Novo Controle de Processos está disponível no **Chrome** e no **Edge** e a opção vem **ligada** por padrão, mas a grade só aparece quando você **clica no botão** ao lado do título. A lista do SEI continua sendo a tela inicial e o botão alterna entre as duas a qualquer momento.
 
 > ![Busca, filtros rápidos e agrupamento no Novo Controle de Processos](../img/grade-busca-filtros.gif)
 
 ### Como ativar
 
-Ele já vem **ligado**: é só abrir o **Controle de Processos**. Para desligar (ou ligar de novo), abra as [Configurações do SEI Pro](../pages/DESATIVARFUNCOES.md), aba **Geral**, e use a opção **Novo Controle de Processos**, logo antes de *Controlar Prazos*.
+A opção já vem **ligada**, e o Controle de Processos continua abrindo na lista do SEI. Para usar o Novo Controle de Processos, clique no botão (sem rótulo) **ao lado do título**; o navegador lembra a sua escolha nas próximas aberturas. Para tirar o botão (ou trazê-lo de volta), abra as [Configurações do SEI Pro](../pages/DESATIVARFUNCOES.md), aba **Geral**, e use a opção **Novo Controle de Processos**, logo antes de *Controlar Prazos*.
 
-Um botão sem rótulo, **ao lado da seta de recolher** no título, alterna entre o Novo Controle de Processos e a lista do SEI (passe o mouse para ver o que ele faz). A seta de **recolher e expandir** o painel também funciona com o Novo Controle de Processos.
+Esse botão, **ao lado da seta de recolher** no título, alterna entre o Novo Controle de Processos e a lista do SEI (passe o mouse para ver o que ele faz). A seta de **recolher e expandir** o painel também funciona com o Novo Controle de Processos.
 
 ### Buscar e filtrar
 
