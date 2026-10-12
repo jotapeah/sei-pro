@@ -38,7 +38,16 @@ a:hover { text-decoration: underline; }
 .spro-chip-neg { background: color-mix(in srgb, var(--spro-perigo) 16%, transparent); }
 .spro-chip button, .spro-aviso-x { width: 20px; height: 20px; line-height: 1; cursor: pointer; background: none; border: 0; border-radius: 99px; }
 .spro-chip button:hover, .spro-aviso-x:hover { background: color-mix(in srgb, currentColor 16%, transparent); }
-.spro-faixa { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+.spro-faixa { display: flex; flex-wrap: nowrap; gap: 6px; align-items: center; margin-bottom: 8px; overflow: hidden; }
+.spro-rapidos { display: flex; flex: none; flex-wrap: nowrap; gap: 6px; }
+.spro-faixa .spro-rapido { flex: none; white-space: nowrap; }
+.spro-faixa .spro-combo-compacto { flex: none; }
+/* Sem espaco: os filtros rapidos viram so icone (o nome fica na dica). */
+.spro-faixa-c1 .spro-rapido-rotulo { display: none; }
+.spro-faixa-c1 .spro-rapido { width: 30px; padding: 0; justify-content: center; }
+/* Ainda sem espaco: os seletores encolhem e cortam o texto com reticencias. */
+.spro-faixa-c2 .spro-combo-compacto { flex: 0 1 auto; min-width: 74px; }
+.spro-faixa-c2 .spro-combo-compacto .spro-combo-texto { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .spro-rapido { height: 26px; padding: 0 10px; cursor: pointer; background: var(--spro-fundo); border: 1px solid var(--spro-borda-forte); border-radius: 99px; font-size: 12px; }
 .spro-rapido { display: inline-flex; gap: 5px; align-items: center; }
 .spro-rapido-perigo .spro-icone { color: var(--spro-perigo); }

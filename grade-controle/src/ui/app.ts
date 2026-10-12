@@ -352,8 +352,25 @@ export function criarApp(d: DepsApp) {
     chips.replaceChildren(...c.tokens.map((t) => h('span', { class: `spro-chip${t.termo.negado ? ' spro-chip-neg' : ''}` }, t.texto, h('button', { type: 'button', 'aria-label': `Remover ${t.texto}`, onclick: () => { alterar({ busca: remover(visao.busca, t.texto) }); busca.value = visao.busca; } }, '×'))));
     chips.hidden = !c.tokens.length;
     const ativos = new Set(c.tokens.map((t) => t.texto));
-    rapidos.replaceChildren(...FILTROS_RAPIDOS.map(([rotulo, termo, ic, tom]) => h('button', { type: 'button', title: `Filtrar: ${termo}`, class: `spro-rapido${tom ? ` spro-rapido-${tom}` : ''}${ativos.has(termo) ? ' spro-rapido-on' : ''}`, 'aria-pressed': String(ativos.has(termo)), onclick: () => { alterar({ busca: ativos.has(termo) ? remover(visao.busca, termo) : `${visao.busca} ${termo}`.trim() }); busca.value = visao.busca; } }, 'comum' in ic ? iconeComum(ic.comum, 14, doc) : iconeGrade(ic.grade, 14, doc), rotulo)));
+    rapidos.replaceChildren(...FILTROS_RAPIDOS.map(([rotulo, termo, ic, tom]) => h('button', { type: 'button', title: `${rotulo}\nFiltro: ${termo}`, 'aria-label': rotulo, class: `spro-rapido${tom ? ` spro-rapido-${tom}` : ''}${ativos.has(termo) ? ' spro-rapido-on' : ''}`, 'aria-pressed': String(ativos.has(termo)), onclick: () => { alterar({ busca: ativos.has(termo) ? remover(visao.busca, termo) : `${visao.busca} ${termo}`.trim() }); busca.value = visao.busca; } }, 'comum' in ic ? iconeComum(ic.comum, 14, doc) : iconeGrade(ic.grade, 14, doc), h('span', { class: 'spro-rapido-rotulo' }, rotulo))));
+    ajustarFaixa();
   }
+
+  /**
+   * A faixa dos filtros rapidos e dos seletores fica SEMPRE numa linha so. Sem espaco: primeiro os filtros rapidos
+   * perdem o rotulo (so icone, o texto vai na dica); se ainda faltar, os seletores encolhem.
+   */
+  const faixa = host.shadowRoot!.querySelector<HTMLElement>('.spro-faixa')!;
+  function ajustarFaixa() {
+    if (encerrado) return;
+    faixa.classList.remove('spro-faixa-c1', 'spro-faixa-c2');
+    if (!faixa.clientWidth) return; // sem layout (testes, aba oculta)
+    if (faixa.scrollWidth > faixa.clientWidth + 1) faixa.classList.add('spro-faixa-c1');
+    if (faixa.scrollWidth > faixa.clientWidth + 1) faixa.classList.add('spro-faixa-c2');
+  }
+  const ObsTamanho = doc.defaultView?.ResizeObserver;
+  const observadorTamanho = ObsTamanho ? new ObsTamanho(() => ajustarFaixa()) : null;
+  observadorTamanho?.observe(faixa);
 
   function render() {
     if (encerrado) return;
@@ -578,6 +595,7 @@ export function criarApp(d: DepsApp) {
       ctl.abort();
       clearTimeout(buscaTimer); clearTimeout(gravarTimer); clearTimeout(sincTimer);
       observadorNativo?.disconnect();
+      observadorTamanho?.disconnect();
       pararTitulos();
       doc.removeEventListener('keydown', aoTeclar);
       pararSelecao(); pararVisoes();
