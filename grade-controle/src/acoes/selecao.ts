@@ -32,9 +32,22 @@ export function aplicarSelecao(doc: Document, desejados: ReadonlySet<string>): s
 }
 
 /** Avisa quando a seleção nativa muda por qualquer meio (clique na grade, ação concluída, teclado). */
+/**
+ * Clique ou mudanca que nasceu DENTRO da grade (o checkbox da grade, o do cabecalho, um botao). A grade ja trata o
+ * proprio evento: reagir a ele aqui redesenhava as linhas no meio do clique, antes de o navegador disparar o
+ * `change`, e o checkbox sumia sem marcar nada (so o clique real do mouse expunha isso).
+ */
+function veioDaGrade(ev: Event): boolean {
+  const caminho = ev.composedPath?.() ?? [];
+  if (caminho.length) return caminho.some((n) => (n as Element).id === 'spro-grade');
+  for (let n = ev.target as Node | null; n; n = n.parentNode) if ((n as Element).id === 'spro-grade') return true;
+  return false;
+}
+
 export function observarSelecao(doc: Document, aoMudar: (ids: Set<string>) => void): () => void {
   let agendado = false;
-  const notificar = () => {
+  const notificar = (ev?: Event) => {
+    if (ev && veioDaGrade(ev)) return;
     if (agendado) return;
     agendado = true;
     queueMicrotask(() => {

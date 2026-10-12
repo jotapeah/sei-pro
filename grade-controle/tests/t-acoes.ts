@@ -226,3 +226,21 @@ await teste('mover: a fila serializa (o segundo só começa depois do primeiro) 
   assert.deepEqual([ra.ok, rb.ok, rc.ok], [true, false, true]);
   assert.deepEqual(ordem, ['ini P1', 'fim P1+', 'ini P2', 'ini P3', 'fim P3+']);
 });
+await teste('seleção: evento que nasce dentro da grade nao redesenha no meio do clique (o clique real do mouse perdia o change)', async () => {
+  const doc = caixa('recebidos', [1, 2], 2);
+  const host = doc.createElement('div');
+  host.id = 'spro-grade';
+  const dentro = doc.createElement('input');
+  dentro.type = 'checkbox';
+  host.append(dentro);
+  doc.body.append(host);
+  const vistos: string[][] = [];
+  const parar = observarSelecao(doc, (ids) => vistos.push([...ids]));
+  dentro.click();
+  await Promise.resolve();
+  assert.deepEqual(vistos, [], 'clique da grade e ignorado');
+  doc.querySelector<HTMLInputElement>('input[value="1"]')!.click();
+  await Promise.resolve();
+  assert.deepEqual(vistos, [['1']], 'clique na linha nativa continua sendo observado');
+  parar();
+});
