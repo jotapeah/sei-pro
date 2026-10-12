@@ -43,7 +43,7 @@ await teste('ativação: pronta tira o esqueleto (o CSS só o mostra sem o atrib
   assert.equal(doc.getElementById(ID_ESTILO), null);
 });
 await teste('ativação: CSS sem a marca não esconde nada (todas as regras dependem do atributo)', () => {
-  const css = cssPrimeiraPintura();
+  const css = cssPrimeiraPintura().replace(/\/\*[\s\S]*?\*\//g, '');
   const regras = css.split('}').map((r) => r.split('{')[0]!.trim()).filter((s) => s && !s.startsWith('@') && !/^\d|^(0%|50%)/.test(s));
   assert.ok(regras.every((r) => r.split(',').every((s) => s.trim().startsWith(`html[${ATRIBUTO}]`) || s.trim().startsWith('}') || /^(0%|50%|100%)/.test(s.trim()) || s.trim() === '')), regras.join(' | '));
 });
@@ -192,4 +192,8 @@ await teste('persistência: aoMudarVisoes dispara só para chaves das visões', 
   await a.gravarVisoes([{ ...visaoPadrao(), id: 'a' }]);
   assert.ok(n >= 1);
   parar();
+});
+await teste('ativação: com a grade pronta o container nativo das tabelas some (sem o vazio de 200px antes do painel de baixo)', () => {
+  const css = cssPrimeiraPintura();
+  assert.ok(css.includes(`html[${ATRIBUTO}][${PRONTA}] #divTabelaProcesso { display: none !important; }`));
 });

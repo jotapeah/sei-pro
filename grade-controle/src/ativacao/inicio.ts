@@ -24,6 +24,8 @@ html[${ATRIBUTO}]:not([${PRONTA}]) #frmProcedimentoControlar:not(:has(#divTabela
   // Controles da visao antiga (links nativos "Ver por...", seletores e Tabela/Quadro do legado): a grade os substitui.
   const antigos = ['#divFiltro', '#newFiltro', '#processosProActions'].map((t) => `html[${ATRIBUTO}] ${t}`).join(',\n');
   return `${tabelas} { display: none !important; }
+/* Com a grade pronta, o container nativo das tabelas (min-height: 200px) so deixaria um vazio entre a grade e o painel de baixo. */
+html[${ATRIBUTO}][${PRONTA}] #divTabelaProcesso { display: none !important; }
 ${antigos} { display: none !important; }
 html[${ATRIBUTO}] #divRecebidosAreaPaginacaoSuperior, html[${ATRIBUTO}] #divRecebidosAreaPaginacaoInferior,
 html[${ATRIBUTO}] #divGeradosAreaPaginacaoSuperior, html[${ATRIBUTO}] #divGeradosAreaPaginacaoInferior { display: none !important; }
