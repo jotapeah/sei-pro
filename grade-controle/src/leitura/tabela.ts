@@ -117,6 +117,8 @@ export function lerTabelas(doc: Document, o: OpcoesLeitura = {}): LeituraTabela 
   const selecoes = {
     recebidos: { itens: campo('hdnRecebidosItens'), hash: campo('hdnRecebidosItensHash') },
     gerados: { itens: campo('hdnGeradosItens'), hash: campo('hdnGeradosItensHash') },
+    // Visao detalhada: uma tabela so, com campos proprios (hdnDetalhado...).
+    detalhado: { itens: campo('hdnDetalhadoItens'), hash: campo('hdnDetalhadoItensHash') },
   };
   return { processos, totais, porPagina, visao: detalhada ? 'detalhada' : 'resumida', selecoes };
 }

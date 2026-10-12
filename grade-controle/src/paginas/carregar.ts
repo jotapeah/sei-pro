@@ -40,7 +40,7 @@ export const MAX_PAGINAS = 60;
 export async function carregarRestante(
   inicial: LeituraTabela,
   fonte: Fonte,
-  o: { aoProgresso?: (p: Progresso) => void; aoPagina?: (novos: Processo[]) => void; aoSelecao?: (grupo: Grupo, pagina: number, s: SelecaoDaPagina) => void; sinal?: AbortSignal; maxPaginas?: number } = {},
+  o: { aoProgresso?: (p: Progresso) => void; aoPagina?: (novos: Processo[]) => void; aoSelecao?: (grupo: Grupo | 'detalhado', pagina: number, s: SelecaoDaPagina) => void; sinal?: AbortSignal; maxPaginas?: number } = {},
 ): Promise<ResultadoCarga> {
   const max = o.maxPaginas ?? MAX_PAGINAS;
   const novos: Processo[] = [];
@@ -72,7 +72,8 @@ export async function carregarRestante(
         for (const p of daPagina) conhecidos.add(p.id);
         lidos += daPagina.length;
         novos.push(...daPagina);
-        o.aoSelecao?.(grupo, n, leitura.selecoes[grupo]);
+        if (leitura.visao === 'detalhada') o.aoSelecao?.('detalhado', n, leitura.selecoes.detalhado);
+        else o.aoSelecao?.(grupo, n, leitura.selecoes[grupo]);
         o.aoPagina?.(daPagina);
         o.aoProgresso?.({ grupo, paginasLidas: n + 1, paginasTotal, processos: lidos, total });
       }
@@ -93,19 +94,20 @@ export async function carregarRestante(
   return { processos: novos, completo, ...(erro ? { erro } : {}) };
 }
 
-const SELECAO = ['hdnRecebidosItensSelecionados', 'hdnGeradosItensSelecionados', 'hdnRecebidosItemId', 'hdnGeradosItemId'];
+const SELECAO = ['hdnRecebidosItensSelecionados', 'hdnGeradosItensSelecionados', 'hdnRecebidosItemId', 'hdnGeradosItemId', 'hdnDetalhadoItensSelecionados', 'hdnDetalhadoItemId'];
 
 /** A fonte de verdade em produção: reaproveita o formulário da própria tela, como o legado e o núcleo. */
-export function criarFonteSei(http: Http, viva: Pagina): Fonte {
+export function criarFonteSei(http: Http, viva: Pagina, visao: 'resumida' | 'detalhada' = 'resumida'): Fonte {
   const seletor = '#frmProcedimentoControlar';
   const base = (): Record<string, string> => ({
     hdnRecebidosPaginaAtual: '0',
     hdnGeradosPaginaAtual: '0',
+    hdnDetalhadoPaginaAtual: '0',
     ...Object.fromEntries(SELECAO.map((c) => [c, ''])),
   });
   return {
     async pagina(grupo, n, sinal) {
-      const campo = grupo === 'recebidos' ? 'hdnRecebidosPaginaAtual' : 'hdnGeradosPaginaAtual';
+      const campo = visao === 'detalhada' ? 'hdnDetalhadoPaginaAtual' : grupo === 'recebidos' ? 'hdnRecebidosPaginaAtual' : 'hdnGeradosPaginaAtual';
       const p = await Formulario.de(viva, seletor, http)
         .definir({ ...base(), [campo]: String(n) })
         .enviar({ sinal, aceitarValidacao: true });

@@ -8,32 +8,36 @@
  */
 import type { Grupo, Processo, SelecaoDaPagina } from '../modelo/tipos';
 
-const NOME: Record<Grupo, string> = { recebidos: 'Recebidos', gerados: 'Gerados' };
+type Chave = Grupo | 'detalhado';
+const NOME: Record<Chave, string> = { recebidos: 'Recebidos', gerados: 'Gerados', detalhado: 'Detalhado' };
 
-export const chavePagina = (grupo: Grupo, pagina: number): string => `${grupo}:${pagina}`;
+export const chavePagina = (grupo: Chave, pagina: number): string => `${grupo}:${pagina}`;
 
 export interface PlanoAcao {
-  /** Por grupo: ids marcados e o par da pagina de onde vem. */
-  porGrupo: Partial<Record<Grupo, { ids: string[]; pagina: number; selecao: SelecaoDaPagina }>>;
+  /** Por grupo (ou "detalhado", na visao detalhada): ids marcados e o par da pagina de onde vem. */
+  porGrupo: Partial<Record<Chave, { ids: string[]; pagina: number; selecao: SelecaoDaPagina }>>;
   /** Todos estao na pagina que o usuario esta vendo: vale o caminho nativo (clicar no botao). */
   todosNaPaginaAtual: boolean;
 }
 
 export type ResultadoPlano = { ok: true; plano: PlanoAcao } | { ok: false; motivo: string };
 
-export function planejarAcao(selecionados: readonly Processo[], selecoes: ReadonlyMap<string, SelecaoDaPagina>): ResultadoPlano {
+export function planejarAcao(selecionados: readonly Processo[], selecoes: ReadonlyMap<string, SelecaoDaPagina>, visao: 'resumida' | 'detalhada' = 'resumida'): ResultadoPlano {
   const porGrupo: PlanoAcao['porGrupo'] = {};
-  for (const grupo of ['recebidos', 'gerados'] as const) {
-    const doGrupo = selecionados.filter((p) => p.grupo === grupo);
+  // Na visao detalhada nao ha Recebidos/Gerados: e uma tabela so ("Detalhado"), com paginacao e hash proprios.
+  const grupos: Chave[] = visao === 'detalhada' ? ['detalhado'] : ['recebidos', 'gerados'];
+  for (const grupo of grupos) {
+    const doGrupo = grupo === 'detalhado' ? [...selecionados] : selecionados.filter((p) => p.grupo === grupo);
     if (!doGrupo.length) continue;
     const paginas = [...new Set(doGrupo.map((p) => p.pagina))].sort((a, b) => a - b);
+    const rotulo = grupo === 'detalhado' ? 'na lista' : `em ${NOME[grupo]}`;
     if (paginas.length > 1) {
       const nomes = paginas.map((n) => n + 1).join(' e ');
-      return { ok: false, motivo: `O SEI só aceita, de uma vez, processos de uma mesma página em ${NOME[grupo]} (marcados nas páginas ${nomes}). Deixe só uma página marcada.` };
+      return { ok: false, motivo: `O SEI só aceita, de uma vez, processos de uma mesma página ${rotulo} (marcados nas páginas ${nomes}). Deixe só uma página marcada.` };
     }
     const pagina = paginas[0]!;
     const selecao = selecoes.get(chavePagina(grupo, pagina));
-    if (!selecao?.itens || !selecao.hash) return { ok: false, motivo: `Os dados da página ${pagina + 1} de ${NOME[grupo]} ainda não foram lidos. Espere o carregamento terminar.` };
+    if (!selecao?.itens || !selecao.hash) return { ok: false, motivo: `Os dados da página ${pagina + 1} ainda não foram lidos. Espere o carregamento terminar.` };
     porGrupo[grupo] = { ids: doGrupo.map((p) => p.id), pagina, selecao };
   }
   return { ok: true, plano: { porGrupo, todosNaPaginaAtual: selecionados.every((p) => p.naPaginaAtual) } };
@@ -42,7 +46,8 @@ export function planejarAcao(selecionados: readonly Processo[], selecoes: Readon
 /** Os pares de campos que mudam no POST (o resto do formulario vai como a tela nativa o enviaria). */
 export function camposDoPlano(plano: PlanoAcao): Record<string, string> {
   const c: Record<string, string> = {};
-  for (const grupo of ['recebidos', 'gerados'] as const) {
+  const chaves: Chave[] = plano.porGrupo.detalhado ? ['detalhado'] : ['recebidos', 'gerados'];
+  for (const grupo of chaves) {
     const g = plano.porGrupo[grupo];
     const n = NOME[grupo];
     c[`hdn${n}ItemId`] = '';

@@ -67,7 +67,7 @@ function montar() {
   const armazem = criarArmazem({ local: areaChrome(chrome.storage.local, 'local'), sync: areaChrome(chrome.storage.sync, 'sync') }, String(unidade));
   // Uma carga interrompida (aba fechada no meio) pode ter deixado o SEI numa pagina que nao e a primeira: a tela
   // mostraria so um trecho. Volta para a primeira e recarrega uma unica vez.
-  const fora = ['hdnRecebidosPaginaAtual', 'hdnGeradosPaginaAtual'].some((id) => (document.getElementById(id) as HTMLInputElement | null)?.value && (document.getElementById(id) as HTMLInputElement).value !== '0');
+  const fora = ['hdnRecebidosPaginaAtual', 'hdnGeradosPaginaAtual', 'hdnDetalhadoPaginaAtual'].some((id) => (document.getElementById(id) as HTMLInputElement | null)?.value && (document.getElementById(id) as HTMLInputElement).value !== '0');
   if (fora && !sessionStorage.getItem('spro_grade_reset')) {
     try { sessionStorage.setItem('spro_grade_reset', '1'); } catch { /* segue */ }
     void criarFonteSei(sei.http, paginaDe(document, location.href)).restaurar().then(() => location.reload()).catch(() => voltarNativa('pagina intermediaria'));
@@ -90,7 +90,7 @@ function montar() {
     hoje: () => hojeISO(),
     eu: contexto.usuario.login || undefined,
     armazem,
-    fonte: criarFonteSei(sei.http, paginaDe(document, location.href)),
+    fonte: criarFonteSei(sei.http, paginaDe(document, location.href), inicial.visao),
     mover: {
       marcador: async (protocolo, m) => void (await definirMarcador(sei, protocolo, m, { aplicar: true })),
       atribuir: async (protocolo, usuario) => void (await atribuirProcesso(sei, protocolo, usuario, { aplicar: true })),

@@ -75,7 +75,7 @@ export interface SelecaoDaPagina {
 
 export interface LeituraTabela {
   /** Pares `hdn<Grupo>Itens` / `hdn<Grupo>ItensHash` desta pagina, por grupo. */
-  selecoes: Record<Grupo, SelecaoDaPagina>;
+  selecoes: Record<Grupo | 'detalhado', SelecaoDaPagina>;
   processos: Processo[];
   /** Total que o SEI informa no `caption` ("212 registros"), por grupo. */
   totais: Record<Grupo, number>;

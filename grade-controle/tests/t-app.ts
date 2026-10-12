@@ -713,3 +713,39 @@ await teste('app: marcados em duas paginas do mesmo grupo — a acao nao e envia
   assert.match(q(app, '.spro-aviso').textContent!, /páginas 1 e 3/);
   app.fechar();
 });
+
+// ---------------- visao detalhada ----------------
+await teste('detalhada: plano usa o par Detalhado (uma tabela so) e recusa duas paginas', () => {
+  const a = proc({ id: '1', pagina: 2, naPaginaAtual: false });
+  const b = proc({ id: '2', pagina: 0 });
+  const mapa = new Map([['detalhado:2', sel('1,5', 'HD2')], ['detalhado:0', sel('2', 'HD0')]]);
+  const r = planejarAcao([a], mapa, 'detalhada');
+  assert.ok(r.ok);
+  assert.deepEqual(r.ok && camposDoPlano(r.plano), { hdnDetalhadoItemId: '', hdnDetalhadoItensSelecionados: '1', hdnDetalhadoItens: '1,5', hdnDetalhadoItensHash: 'HD2' });
+  const dois = planejarAcao([a, b], mapa, 'detalhada');
+  assert.equal(dois.ok, false);
+  assert.match(!dois.ok ? dois.motivo : '', /páginas 1 e 3/);
+});
+await teste('detalhada: o leitor guarda o par hdnDetalhado e o carregador pagina por hdnDetalhadoPaginaAtual', async () => {
+  const html = (ids: number[], pag: number) => `<body><form id="frmProcedimentoControlar"><input type="hidden" id="hdnDetalhadoItens" name="hdnDetalhadoItens" value="${ids.join(',')}"><input type="hidden" id="hdnDetalhadoItensHash" name="hdnDetalhadoItensHash" value="H${pag}"><input type="hidden" id="hdnDetalhadoPaginaAtual" name="hdnDetalhadoPaginaAtual" value="${pag}"></form><table id="tblProcessosDetalhado"><caption>Processos (4 registros - ${pag * 2 + 1} a ${pag * 2 + 2}):</caption>${ids.map((i) => `<tr id="P${i}"><td><input type="checkbox" name="chkDetalhadoItem${i}" title="1/${i}" value="${i}" aria-label="Tipo A / Especificação x"></td><td></td><td><a href="controlador.php?acao=procedimento_trabalhar&id_procedimento=${i}">1/${i}</a></td></tr>`).join('')}</table></form></body>`;
+  const l0 = lerTabelas(docDe(html([1, 2], 0)));
+  assert.equal(l0.visao, 'detalhada');
+  assert.deepEqual(l0.selecoes.detalhado, { itens: '1,2', hash: 'H0' });
+  const pedidas: number[] = [];
+  const pares: Array<[string, number, string]> = [];
+  const { carregarRestante } = await import('../src/paginas/carregar');
+  const fonte = { pagina: async (_g: string, n: number) => { pedidas.push(n); return docDe(html([n * 2 + 1, n * 2 + 2], n)); }, restaurar: async () => undefined };
+  const r = await carregarRestante(l0, fonte as any, { aoSelecao: (g, n, s) => void pares.push([g, n, s.hash]) });
+  assert.deepEqual(pedidas, [1]);
+  assert.equal(r.completo, true);
+  assert.deepEqual(pares, [['detalhado', 1, 'H1']]);
+});
+await teste('detalhada: sem o icone de origem e sem os filtros Recebidos/Gerados', async () => {
+  const html = `<body><table id="tblProcessosDetalhado"><caption>Processos (1 registro):</caption><tr id="P7"><td><input type="checkbox" name="chkDetalhadoItem0" title="1/7" value="7" aria-label="Tipo A / Especificação x"></td><td></td><td><a class="processoVisualizado" href="controlador.php?acao=procedimento_trabalhar&id_procedimento=7">1/7</a></td></tr></table></body>`;
+  const doc = ativarToggle(docDe(html));
+  (globalThis as unknown as { document: Document }).document = doc;
+  const { app } = await montarCom(doc);
+  assert.equal(qa(app, '.spro-origem').length, 0);
+  assert.deepEqual(qa(app, '.spro-rapido').slice(0, 2).map((b) => b.textContent!.trim()), ['Meus', 'Atrasados']);
+  app.fechar();
+});

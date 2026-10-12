@@ -296,13 +296,15 @@ export function criarApp(d: DepsApp) {
   const selecoesPaginas = new Map<string, SelecaoDaPagina>([
     [chavePagina('recebidos', 0), d.inicial.selecoes.recebidos],
     [chavePagina('gerados', 0), d.inicial.selecoes.gerados],
+    [chavePagina('detalhado', 0), d.inicial.selecoes.detalhado],
   ]);
+  const detalhada = d.inicial.visao === 'detalhada';
   function acionar(a: AcaoNativa) {
     const marcados = todos.filter((p) => selecionados.has(p.id));
     const regra = urlDaAcao(a);
     if (regra?.requerSelecao && !marcados.length) return aviso('Marque ao menos um processo.');
     if (regra && !regra.aceitaSigiloso && temSigiloso(marcados)) return aviso('Operação não aplicável em processo sigiloso.');
-    const r = planejarAcao(marcados, selecoesPaginas);
+    const r = planejarAcao(marcados, selecoesPaginas, detalhada ? 'detalhada' : 'resumida');
     if (!r.ok) return aviso(r.motivo);
     // Tudo na pagina que o usuario ve: o caminho nativo (o clique do botao, com a selecao ja espelhada nas caixas).
     if (r.plano.todosNaPaginaAtual || !regra) { const x = executarAcaoNativa(a, marcados.length); if (!x.ok && x.motivo) aviso(x.motivo); return; }
@@ -315,7 +317,7 @@ export function criarApp(d: DepsApp) {
   const propsDaTabela = (linhas: LinhaLista[]): PropsTabela => ({
     linhas, colunas: visao.colunas, densidade: visao.densidade, ctx: ctx(), ordem: visao.ordem, selecionados, foco,
     icones: (id) => clonarIcones(doc, id),
-    nomesCompletos, editando, rascunho,
+    nomesCompletos, editando, rascunho, semOrigem: detalhada,
     aoOrdenar: (campo, mais) => alterar({ ordem: alternarOrdem(visao.ordem, campo, mais) }),
     aoSelecionar: (id, m) => selecionar([id], m),
     aoGrupo: (chave) => { const n = new Set(recolhidos); n.has(chave) ? n.delete(chave) : n.add(chave); recolhidos = n; void d.armazem.gravarRecolhidos([...n]).catch(() => undefined); renderConteudo(); },
@@ -389,7 +391,8 @@ export function criarApp(d: DepsApp) {
     chips.replaceChildren(...c.tokens.map((t) => h('span', { class: `spro-chip${t.termo.negado ? ' spro-chip-neg' : ''}` }, t.texto, h('button', { type: 'button', 'aria-label': `Remover ${t.texto}`, onclick: () => { alterar({ busca: remover(visao.busca, t.texto) }); busca.value = visao.busca; } }, '×'))));
     chips.hidden = !c.tokens.length;
     const ativos = new Set(c.tokens.map((t) => t.texto));
-    rapidos.replaceChildren(...FILTROS_RAPIDOS.map(([rotulo, termo, ic, tom]) => h('button', { type: 'button', 'data-tip': `${rotulo}\n${DESCRICAO_RAPIDO[termo] ?? ''}\nBusca: ${termo}${ativos.has(termo) ? '\nClique para desligar' : ''}`, 'aria-label': rotulo, class: `spro-rapido${tom ? ` spro-rapido-${tom}` : ''}${ativos.has(termo) ? ' spro-rapido-on' : ''}`, 'aria-pressed': String(ativos.has(termo)), onclick: () => { alterar({ busca: ativos.has(termo) ? remover(visao.busca, termo) : `${termoExcludente(termo) ? remover(visao.busca, termoExcludente(termo)!) : visao.busca} ${termo}`.trim() }); busca.value = visao.busca; } }, 'comum' in ic ? iconeComum(ic.comum, 14, doc) : iconeGrade(ic.grade, 14, doc), h('span', { class: 'spro-rapido-rotulo' }, rotulo))));
+    // Na visao detalhada o SEI nao distingue Recebidos de Gerados: esses dois filtros nao fazem sentido.
+    rapidos.replaceChildren(...FILTROS_RAPIDOS.filter(([, termo]) => !(detalhada && termo.startsWith('grupo:'))).map(([rotulo, termo, ic, tom]) => h('button', { type: 'button', 'data-tip': `${rotulo}\n${DESCRICAO_RAPIDO[termo] ?? ''}\nBusca: ${termo}${ativos.has(termo) ? '\nClique para desligar' : ''}`, 'aria-label': rotulo, class: `spro-rapido${tom ? ` spro-rapido-${tom}` : ''}${ativos.has(termo) ? ' spro-rapido-on' : ''}`, 'aria-pressed': String(ativos.has(termo)), onclick: () => { alterar({ busca: ativos.has(termo) ? remover(visao.busca, termo) : `${termoExcludente(termo) ? remover(visao.busca, termoExcludente(termo)!) : visao.busca} ${termo}`.trim() }); busca.value = visao.busca; } }, 'comum' in ic ? iconeComum(ic.comum, 14, doc) : iconeGrade(ic.grade, 14, doc), h('span', { class: 'spro-rapido-rotulo' }, rotulo))));
     ajustarFaixa();
   }
 
@@ -643,7 +646,7 @@ export function criarApp(d: DepsApp) {
     definirNomesCompletos: (v: boolean) => { nomesCompletos = v; render(); },
     sincronizar,
     /** So para os testes: registra o par de uma pagina como se o carregador a tivesse lido. */
-    registrarSelecaoParaTeste: (g: Grupo, n: number, sel: SelecaoDaPagina) => void selecoesPaginas.set(chavePagina(g, n), sel),
+    registrarSelecaoParaTeste: (g: Grupo | 'detalhado', n: number, sel: SelecaoDaPagina) => void selecoesPaginas.set(chavePagina(g, n), sel),
   };
 }
 

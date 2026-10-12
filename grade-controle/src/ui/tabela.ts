@@ -43,6 +43,8 @@ export interface PropsTabela {
   /** Clones dos icones dos outros modulos (monitorado, projeto, demanda) da linha nativa. */
   icones(id: string): HTMLElement[];
   nomesCompletos: boolean;
+  /** Na visao detalhada do SEI nao se sabe se o processo e recebido ou gerado: sem o icone de origem. */
+  semOrigem?: boolean;
   /** Processo cuja especificacao esta em edicao, e o texto que o usuario ja digitou. */
   editando: string | null;
   rascunho: string;
@@ -78,7 +80,7 @@ function celula(p: Processo, c: Coluna, ctx: Ctx, props: PropsTabela): HTMLEleme
         : h('span', { class: 'spro-slot' });
       td.append(h('span', { class: 'spro-icones' }, slot('spro-fav-estrela'), slot('spro-prj-ic'), slot('spro-dem-cx'), acomp));
       const rec = p.grupo === 'recebidos';
-      td.append(h('span', { class: `spro-origem spro-origem-${p.grupo}`, title: rec ? 'Processo recebido: veio de outra unidade' : 'Processo gerado: autuado nesta unidade', role: 'img', 'aria-label': rec ? 'Processo recebido' : 'Processo gerado' }, iconeGrade(rec ? 'recebido' : 'gerado', 16)));
+      if (!props.semOrigem) td.append(h('span', { class: `spro-origem spro-origem-${p.grupo}`, title: rec ? 'Processo recebido: veio de outra unidade' : 'Processo gerado: autuado nesta unidade', role: 'img', 'aria-label': rec ? 'Processo recebido' : 'Processo gerado' }, iconeGrade(rec ? 'recebido' : 'gerado', 16)));
       const a = h('a', { class: `spro-proc${p.naoVisualizado ? ' spro-novo' : ''}`, href: p.link ?? '#', title: 'Abrir o processo' }, p.protocolo);
       td.append(a);
       if (p.link) td.append(h('a', { class: 'spro-nova-guia', href: p.link, target: '_blank', rel: 'noopener', title: 'Abrir em nova guia', 'aria-label': `Abrir ${p.protocolo} em nova guia` }, iconeGrade('novaGuia', 14)));
