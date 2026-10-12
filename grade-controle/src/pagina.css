@@ -7,4 +7,4 @@
 /* Com a grade ativa a barra de acoes sobe um pouco e ganha respiro antes da barra de ferramentas da grade. */
 html[data-spro-grade] #collapseControle { margin-top: -6px; margin-bottom: 22px; }
 #spro-grade { display: block; width: 100%; flex: 0 0 100%; }
-#spro-grade[hidden] { display: none; }
+#spro-grade[hidden], #spro-grade[data-spro-recolhido] { display: none !important; }

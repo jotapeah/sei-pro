@@ -20,6 +20,7 @@ import { Sei, lerContexto } from '../../sei-nucleo/src/sei';
 import { paginaDe } from '../../sei-nucleo/src/sessao/pagina';
 import { enviarAcao } from './acoes/foraDaPagina';
 import { acoesDaBarra } from './leitura/barra';
+import { acompanharRecolhimento } from './ativacao/recolher';
 import { instalarDicas } from './ui/dica';
 import { ativarCedo, desativar, estaAtiva, gravarDica, lerDica, marcarPronta, vigiar } from './ativacao/inicio';
 import { ligarCliqueDoBotao, manterBotao } from './ativacao/botao';
@@ -131,6 +132,7 @@ function montar() {
   });
   app.definirNomesCompletos(nomesCompletos);
   alvo.before(app.host);
+  acompanharRecolhimento(document, app.host);
   guardarHost();
   void app.iniciar().then(() => {
     vigia?.pronta();
