@@ -8,6 +8,8 @@ import { criarApp, type DepsApp } from '../src/ui/app';
 import { ativarToggle, docFixture, teste } from './util';
 
 const q = <T extends Element>(app: { host: HTMLElement }, s: string) => app.host.shadowRoot!.querySelector<T>(s)!;
+/** A dica pode estar em data-tip (convertida) ou ainda em title. */
+const dicaDe = (e: Element): string => e.getAttribute('data-tip') ?? e.getAttribute('title') ?? '';
 const qa = (app: { host: HTMLElement }, s: string) => [...app.host.shadowRoot!.querySelectorAll<HTMLElement>(s)];
 const marcadas = (doc: Document) => [...doc.querySelectorAll<HTMLInputElement>('#tblProcessosRecebidos input[type=checkbox]')].filter((c) => c.checked).length;
 const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -110,7 +112,7 @@ await teste('app: marcar uma linha clica o checkbox nativo e mostra a barra de l
   assert.equal(marcadas(doc), 1);
   assert.equal(q(app, '.spro-lote').hasAttribute('hidden'), false);
   assert.match(q(app, '.spro-lote strong').textContent!, /1 selecionado/);
-  assert.ok(qa(app, '.spro-lote .spro-bt').some((b) => b.title === 'Enviar Processo'));
+  assert.ok(qa(app, '.spro-lote .spro-bt').some((b) => dicaDe(b) === 'Enviar Processo'));
   qa(app, '.spro-lote .spro-link').at(-1)!.click();
   await tick();
   assert.equal(marcadas(doc), 0);
@@ -124,14 +126,14 @@ await teste('app: o botão de ação do lote repassa o clique ao link nativo', a
   cb.checked = true;
   cb.dispatchEvent(new (doc.defaultView as any).Event('change'));
   await tick();
-  qa(app, '.spro-lote .spro-bt').find((b) => b.title === 'Enviar Processo')!.click();
+  qa(app, '.spro-lote .spro-bt').find((b) => dicaDe(b) === 'Enviar Processo')!.click();
   assert.equal(cliques, 1);
   app.fechar();
 });
 await teste('app: exportar CSV baixa a visão filtrada', async () => {
   const { app, baixados } = await montar();
   app.definirVisao({ busca: 'resp:teste01' });
-  qa(app, '.spro-bt').find((b) => b.title === 'Exportar CSV')!.click();
+  qa(app, '.spro-bt').find((b) => dicaDe(b) === 'Exportar CSV')!.click();
   assert.equal(baixados.length, 1);
   assert.equal(baixados[0]![0], 'processos-2026-10-11.csv');
   assert.equal(baixados[0]![1].split('\r\n').length, 5);
@@ -188,7 +190,7 @@ await teste('app: visão salva persiste e reaplica (visões no sync)', async () 
   const local = areaMemoria();
   const a = await montar({ armazem: criarArmazem({ local, sync }, 'u') });
   a.app.definirVisao({ busca: 'prazo:atrasado', agrupar: 'prazo' });
-  qa(a.app, '.spro-bt').find((b) => b.title === 'Visões')!.click();
+  qa(a.app, '.spro-bt').find((b) => dicaDe(b) === 'Visões')!.click();
   q<HTMLInputElement>(a.app, '.spro-nome').value = 'Atrasados';
   qa(a.app, '.spro-painel .spro-bt').find((b) => b.textContent === 'Salvar como nova')!.click();
   await tick(); await tick();
@@ -530,5 +532,13 @@ await teste('edicao: o que a grade gravou nao e desfeito quando a linha nativa (
   app.sincronizar();
   assert.equal(linhaDe(app, '148265').querySelector('.spro-c-responsavel .spro-corta')!.textContent, 'ana');
   assert.match(linhaDe(app, '148265').querySelector('.spro-c-prazo .spro-prazo')!.textContent!, /19 dias/);
+  app.fechar();
+});
+await teste('dica: nenhum elemento da grade fica com title (o navegador nao mostra o balao dele)', async () => {
+  const { app } = await montar({ extras: extrasEdicao });
+  await tick();
+  const comTitle = [...app.host.shadowRoot!.querySelectorAll('[title]')].filter((e) => e.getAttribute('title'));
+  assert.equal(comTitle.length, 0, comTitle.map((e) => e.className).join(','));
+  assert.ok(app.host.shadowRoot!.querySelectorAll('[data-tip]').length > 10);
   app.fechar();
 });

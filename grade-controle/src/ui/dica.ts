@@ -45,6 +45,47 @@ export function migrarTitulo(el: Element): string {
   return el.getAttribute(ATRIBUTO_DICA) ?? '';
 }
 
+/** Ganchos entre `vigiarTitulos` (quem converte) e `instalarDicas` (quem mostra o balao). */
+let aoRedesenhar: (() => void) | null = null;
+
+/**
+ * Converte `title` em `data-tip` assim que o atributo aparece (e nos elementos novos): a grade redesenha as linhas
+ * com frequencia, e um elemento recem-criado com `title` mostraria o balao nativo do navegador antes de qualquer
+ * evento do mouse. O MutationObserver roda como microtarefa, bem antes do navegador mostrar o dele.
+ */
+export function vigiarTitulos(raiz: Node): () => void {
+  const converter = (no: Node) => {
+    if (no.nodeType !== 1) return;
+    const el = no as Element;
+    if (el.hasAttribute('title')) migrarTitulo(el);
+    for (const filho of Array.from(el.querySelectorAll('[title]'))) migrarTitulo(filho);
+  };
+  converter(raiz.nodeType === 11 ? (raiz as ShadowRoot).host : raiz);
+  if (raiz.nodeType === 11) for (const filho of Array.from((raiz as ShadowRoot).querySelectorAll('[title]'))) migrarTitulo(filho);
+  const Obs = (raiz.ownerDocument ?? (raiz as Document)).defaultView?.MutationObserver;
+  if (!Obs) return () => undefined;
+  const mo = new Obs((registros) => {
+    for (const r of registros) {
+      if (r.type === 'attributes') converter(r.target);
+      else for (const n of Array.from(r.addedNodes)) converter(n);
+    }
+    aoRedesenhar?.();
+  });
+  mo.observe(raiz, { attributes: true, attributeFilter: ['title'], childList: true, subtree: true });
+  return () => mo.disconnect();
+}
+
+/** O caminho de `el` ate o documento, atravessando Shadow DOM (como o `composedPath` de um evento). */
+export function caminhoDe(el: Node): Node[] {
+  const c: Node[] = [];
+  let n: Node | null = el;
+  while (n) {
+    c.push(n);
+    n = n.nodeType === 11 ? ((n as ShadowRoot).host ?? null) : n.parentNode;
+  }
+  return c;
+}
+
 export function posicionar(alvo: DOMRect, dica: { largura: number; altura: number }, janela: { w: number; h: number }): { x: number; y: number; acima: boolean } {
   const m = 8;
   let y = alvo.bottom + m;
@@ -75,15 +116,18 @@ export function instalarDicas(doc: Document, escuro: () => boolean = () => false
 
   let alvo: Alvo | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let visivel = false;
+  let ponteiro: { x: number; y: number } | null = null;
 
   function ocultar() {
     clearTimeout(timer);
     alvo = null;
+    visivel = false;
     balao.classList.remove('on');
     balao.hidden = true;
   }
   function mostrar() {
-    if (!alvo || !alvo.isConnected) return ocultar();
+    if (!alvo || !alvo.isConnected) return reavaliar();
     const texto = migrarTitulo(alvo);
     if (!texto) return ocultar();
     balao.textContent = texto;
@@ -95,40 +139,72 @@ export function instalarDicas(doc: Document, escuro: () => boolean = () => false
     balao.style.left = `${p.x}px`;
     balao.style.top = `${p.y}px`;
     balao.classList.add('on');
+    visivel = true;
   }
+  /** O que esta debaixo do ponteiro agora, atravessando os Shadow DOM (a grade redesenha elementos sob o mouse parado). */
+  function sob(x: number, y: number): Element | null {
+    let el = doc.elementFromPoint(x, y);
+    for (let i = 0; i < 4 && el?.shadowRoot; i++) {
+      const dentro = el.shadowRoot.elementFromPoint(x, y);
+      if (!dentro || dentro === el) break;
+      el = dentro;
+    }
+    return el;
+  }
+  function reavaliar() {
+    if (!ponteiro) return ocultar();
+    const el = sob(ponteiro.x, ponteiro.y);
+    const novo = el ? acharDica(caminhoDe(el)) : null;
+    if (novo === alvo && alvo?.isConnected) return;
+    const estava = visivel;
+    ocultar();
+    if (!novo) return;
+    migrarTitulo(novo);
+    alvo = novo;
+    if (estava) mostrar();
+    else timer = setTimeout(mostrar, ATRASO_MS);
+  }
+  aoRedesenhar = () => {
+    if (alvo && !alvo.isConnected) reavaliar();
+  };
   const aoEntrar = (ev: Event) => {
+    const pe = ev as PointerEvent;
+    if (typeof pe.clientX === 'number') ponteiro = { x: pe.clientX, y: pe.clientY };
     const el = acharDica(ev.composedPath());
-    if (el === alvo) return;
+    if (el === alvo && alvo?.isConnected) return;
     ocultar();
     if (!el) return;
-    migrarTitulo(el); // tira o title ja: o balao nativo do navegador nao pode aparecer
+    migrarTitulo(el); // o title sai ja: o balao nativo do navegador nao pode aparecer
     alvo = el;
     timer = setTimeout(mostrar, ATRASO_MS);
   };
-  const aoSair = (ev: Event) => {
-    if (!alvo) return;
-    const para = (ev as PointerEvent).relatedTarget as Node | null;
-    if (para && alvo.contains(para)) return;
-    ocultar();
+  const aoMover = (ev: Event) => {
+    const pe = ev as PointerEvent;
+    if (typeof pe.clientX === 'number') ponteiro = { x: pe.clientX, y: pe.clientY };
   };
   const aoFocar = (ev: Event) => {
     const el = acharDica(ev.composedPath());
     if (!el || !(el as HTMLElement).matches?.(':focus-visible')) return;
     ocultar();
+    migrarTitulo(el);
     alvo = el;
     mostrar();
   };
+  const aoSairDaJanela = () => ocultar();
   doc.addEventListener('pointerover', aoEntrar, true);
-  doc.addEventListener('pointerout', aoSair, true);
+  doc.addEventListener('pointermove', aoMover, true);
   doc.addEventListener('focusin', aoFocar, true);
   doc.addEventListener('focusout', ocultar, true);
   doc.addEventListener('pointerdown', ocultar, true);
   doc.addEventListener('keydown', ocultar, true);
   doc.addEventListener('scroll', ocultar, true);
+  doc.documentElement.addEventListener('pointerleave', aoSairDaJanela);
   return () => {
     ocultar();
+    aoRedesenhar = null;
     doc.removeEventListener('pointerover', aoEntrar, true);
-    doc.removeEventListener('pointerout', aoSair, true);
+    doc.removeEventListener('pointermove', aoMover, true);
+    doc.documentElement.removeEventListener('pointerleave', aoSairDaJanela);
     doc.removeEventListener('focusin', aoFocar, true);
     doc.removeEventListener('focusout', ocultar, true);
     doc.removeEventListener('pointerdown', ocultar, true);

@@ -14,8 +14,9 @@ const tipoDe = (el: Element): string => ORDEM.find((c) => el.classList.contains(
 
 /** Copia o estado do icone nativo para o clone SEM troca-lo de lugar: o balao do modulo esta ancorado nele. */
 function sincronizarClone(clone: HTMLElement, nativo: HTMLElement, id: string): void {
-  for (const a of Array.from(clone.attributes)) if (!nativo.hasAttribute(a.name) && a.name !== 'data-spro-id') clone.removeAttribute(a.name);
-  for (const a of Array.from(nativo.attributes)) if (a.name !== 'aria-busy' && clone.getAttribute(a.name) !== a.value) clone.setAttribute(a.name, a.value);
+  for (const a of Array.from(clone.attributes)) if (!nativo.hasAttribute(a.name) && a.name !== 'data-spro-id' && a.name !== 'data-tip') clone.removeAttribute(a.name);
+  for (const a of Array.from(nativo.attributes)) if (a.name !== 'aria-busy' && a.name !== 'title' && clone.getAttribute(a.name) !== a.value) clone.setAttribute(a.name, a.value);
+  if (nativo.getAttribute('title') && clone.getAttribute('data-tip') !== nativo.getAttribute('title')) clone.setAttribute('data-tip', nativo.getAttribute('title')!);
   clone.removeAttribute('aria-busy');
   clone.setAttribute('data-spro-id', id);
   if (clone.innerHTML !== nativo.innerHTML) clone.replaceChildren(...Array.from(nativo.cloneNode(true).childNodes));

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { acharDica, ATRIBUTO_DICA, instalarDicas, migrarTitulo, posicionar } from '../src/ui/dica';
+import { acharDica, ATRIBUTO_DICA, caminhoDe, instalarDicas, migrarTitulo, posicionar, vigiarTitulos } from '../src/ui/dica';
 import { docDe, teste } from './util';
 
 const R = (x: number, y: number, w: number, h: number) => ({ left: x, top: y, right: x + w, bottom: y + h, width: w, height: h }) as DOMRect;
@@ -42,4 +42,16 @@ await teste('dica: instalar cria um unico balao e desinstalar o remove', () => {
   assert.equal(doc.querySelectorAll('#spro-dica-host').length, 1);
   parar();
   assert.equal(doc.querySelectorAll('#spro-dica-host').length, 0);
+});
+await teste('dica: vigiarTitulos converte de uma vez todos os title ja existentes (nenhum fica para o navegador)', () => {
+  const doc = docDe('<body><div id="r"><button title="a"></button><span><i title="b"></i></span></div></body>');
+  const raiz = doc.getElementById('r')!;
+  vigiarTitulos(raiz);
+  assert.equal(raiz.querySelectorAll('[title]').length, 0);
+  assert.deepEqual([...raiz.querySelectorAll('[data-tip]')].map((e) => e.getAttribute('data-tip')), ['a', 'b']);
+});
+await teste('dica: caminhoDe sobe ate o documento', () => {
+  const doc = docDe('<body><div id="a"><b id="b"></b></div></body>');
+  const ids = caminhoDe(doc.getElementById('b')!).filter((n) => (n as Element).id).map((n) => (n as Element).id);
+  assert.deepEqual(ids, ['b', 'a']);
 });

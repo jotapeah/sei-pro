@@ -26,6 +26,7 @@ import { carregarRestante } from '../paginas/carregar';
 import type { Armazem } from '../persistencia/armazem';
 import { desenharQuadro } from './quadro';
 import { iconeGrade } from './icones';
+import { vigiarTitulos } from './dica';
 import { assinaturaIcones, criarClonador, estilosDosModulos } from './iconesNativos';
 import { editarAnotacao, editarMarcadores, editarResponsavel, type DepsEdicao } from './edicoes';
 import { criarTabela, type PropsTabela } from './tabela';
@@ -106,6 +107,7 @@ export function criarApp(d: DepsApp) {
   const raiz = h('div', { class: `spro-app${d.escuro ? ' spro-escuro' : ''}` });
   const estiloModulos = doc.createElement('style');
   sombra.append(estilo, estiloModulos, raiz);
+  const pararTitulos = vigiarTitulos(sombra);
 
   const busca = h('input', { type: 'search', class: 'spro-busca', placeholder: 'Buscar: texto, resp:ana, prazo:<7d, marcador:urgente...', 'aria-label': 'Buscar processos', spellcheck: 'false', autocomplete: 'off' });
   const chips = h('div', { class: 'spro-chips' });
@@ -576,6 +578,7 @@ export function criarApp(d: DepsApp) {
       ctl.abort();
       clearTimeout(buscaTimer); clearTimeout(gravarTimer); clearTimeout(sincTimer);
       observadorNativo?.disconnect();
+      pararTitulos();
       doc.removeEventListener('keydown', aoTeclar);
       pararSelecao(); pararVisoes();
       host.remove();
