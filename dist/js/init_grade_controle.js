@@ -1031,8 +1031,9 @@ kbd { padding: 0 5px; font: 12px var(--spro-mono); background: var(--spro-fundo-
 .spro-c-marcadores, .spro-c-sinais { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; max-height: 100%; }
 .spro-corta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .spro-proc { font-weight: 600; white-space: nowrap; }
-.spro-novo { font-weight: 800; }
-.spro-novo::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 5px; background: var(--spro-novidade); border-radius: 50%; }
+.spro-novo { font-weight: 800; color: var(--spro-perigo); }
+.spro-novo:hover { color: var(--spro-perigo); }
+.spro-novo::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 5px; background: var(--spro-perigo); border-radius: 50%; }
 .spro-sigilo { margin-left: 6px; padding: 0 5px; font-size: 11px; color: var(--spro-perigo); border: 1px solid currentColor; border-radius: 99px; }
 .spro-marcador { display: inline-flex; gap: 4px; align-items: center; max-width: 100%; padding: 0 7px; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; background: var(--spro-fundo-3); border-radius: 99px; }
 .spro-marcador i { flex: none; width: 8px; height: 8px; border-radius: 50%; }
