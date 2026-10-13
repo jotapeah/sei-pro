@@ -84,15 +84,18 @@ kbd { padding: 0 5px; font: 12px var(--spro-mono); background: var(--spro-fundo-
 .spro-foco { box-shadow: inset 3px 0 0 var(--spro-destaque); }
 .spro-c { min-width: 0; overflow: hidden; }
 .spro-c-marcadores, .spro-c-sinais { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; max-height: 100%; }
+/* Marcadores: as pílulas quebram dentro de .spro-pilulas; o lápis nunca desce para a linha de baixo. */
+.spro-c-marcadores { flex-wrap: nowrap; }
 .spro-corta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .spro-proc { font-weight: 600; white-space: nowrap; }
 .spro-novo { font-weight: 800; color: var(--spro-perigo); }
 .spro-novo:hover { color: var(--spro-perigo); }
 .spro-novo::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 5px; background: var(--spro-perigo); border-radius: 50%; }
 .spro-sigilo { margin-left: 6px; padding: 0 5px; font-size: 11px; color: var(--spro-perigo); border: 1px solid currentColor; border-radius: 99px; }
-.spro-marcador { display: inline-flex; gap: 4px; align-items: center; max-width: 100%; padding: 0 7px; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; background: var(--spro-fundo-3); border-radius: 99px; }
+.spro-pilulas { display: flex; flex: 0 1 auto; flex-wrap: wrap; gap: 4px; align-items: center; min-width: 0; }
+.spro-marcador { display: inline-flex; gap: 4px; align-items: center; max-width: 100%; box-sizing: border-box; height: 20px; padding: 0 7px; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; background: var(--spro-fundo-3); border-radius: 99px; }
 .spro-marcador i { flex: none; width: 8px; height: 8px; border-radius: 50%; }
-.spro-prazo { padding: 1px 7px; font-size: 12px; white-space: nowrap; border-radius: 99px; background: var(--spro-fundo-3); }
+.spro-prazo { display: inline-flex; align-items: center; box-sizing: border-box; height: 20px; padding: 0 7px; font-size: 12px; white-space: nowrap; border-radius: 99px; background: var(--spro-fundo-3); }
 .spro-prazo-atrasado { color: #fff; background: var(--spro-perigo); }
 .spro-prazo-hoje { color: #fff; background: var(--spro-aviso); }
 .spro-prazo-noPrazo { background: color-mix(in srgb, var(--spro-ok) 18%, transparent); }
@@ -172,7 +175,6 @@ kbd { padding: 0 5px; font: 12px var(--spro-mono); background: var(--spro-fundo-
 .spro-marcadores-lista { display: flex; flex-direction: column; gap: 8px; }
 .spro-marcador-linha { display: grid; grid-template-columns: minmax(120px, 190px) 1fr auto; gap: 8px; align-items: center; }
 .spro-vazio-edicao { opacity: 0; font-size: 11px; }
-.spro-editavel-quebra { flex-wrap: wrap; }
 .spro-linha:hover .spro-vazio-edicao { opacity: 1; }
 
 /* ---- Origem do processo e abrir em nova guia ---- */

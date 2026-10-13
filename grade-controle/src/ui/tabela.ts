@@ -125,10 +125,10 @@ function celula(p: Processo, c: Coluna, ctx: Ctx, props: PropsTabela): HTMLEleme
       td.append(botaoLapis(p.atribuicao ? 'Mudar o responsável' : 'Atribuir a alguém', () => props.aoEditar(p.id, 'responsavel')));
       break;
     case 'marcadores':
-      td.classList.add('spro-editavel', 'spro-editavel-quebra');
-      for (const m of p.marcadores) {
-        const pil = h('span', { class: 'spro-marcador', title: m.texto ? `${m.nome}: ${m.texto}` : m.nome }, h('i', { style: `background:${corDoMarcador(m.cor)}` }), m.nome);
-        td.append(pil);
+      td.classList.add('spro-editavel');
+      if (p.marcadores.length) {
+        // As pílulas quebram de linha entre si, mas o lápis fica ao lado delas (e centralizado com o resto da linha).
+        td.append(h('span', { class: 'spro-pilulas' }, ...p.marcadores.map((m) => h('span', { class: 'spro-marcador', title: m.texto ? `${m.nome}: ${m.texto}` : m.nome }, h('i', { style: `background:${corDoMarcador(m.cor)}` }), m.nome))));
       }
       if (!p.sigiloso) {
         if (!p.marcadores.length) td.append(h('span', { class: 'spro-prazo-vazio spro-vazio-edicao' }, 'marcar'));
