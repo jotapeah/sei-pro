@@ -188,3 +188,34 @@ O pacote segue o padrão do Favoritos (`package.json`, `tsconfig.json` com alias
 - Remover ou migrar o `sei-slim.css` e o popup antigo.
 - Release oficial, Firefox e whitelabels.
 - Fontes personalizadas e ajuste de densidade.
+
+## 11. Resultado da implementação (14/10/2026)
+
+Implementado na branch `feat/estilo-avancado-2` e testado no Chrome real, com a extensão carregada, no **SEI MJ de homologação (5.0.4, CK5)** e no **SEI SP de Treinamento (4.1.5, CK4)**. Telas em `2026-10-14-estilo-avancado-telas/`.
+
+**Mudanças em relação ao desenho acima**
+
+- **Remapeamento só nas telas de leitura** (`documento_visualizar`, `documento_imprimir_web`). O editor fica de fora: o que ele grava não pode carregar cor adaptada. O escuro no editor é do sub-projeto 4. `limparParaGravar` existe e é testado, para esse dia.
+- **Sem variáveis `--spro-orig-*`.** A cor original nunca é tocada, então não há o que guardar. O atributo `style` volta byte a byte ao original ao desligar.
+- **`!important` permitido só nas classes de tema do SEI** (`.infraCor*`, `.sparkling-modal-title`, `div.pesquisaPaginaSelecionada`): o esquema de cores do SEI as define com `!important`, e é a única forma de uma regra de tema vencer outra. O teste da folha base confere.
+- **Variáveis do SEI redefinidas** (`--infra-esquema-cor-*`) a partir dos tokens, além das classes.
+- **Token novo `--spro-menu`** (a cor da barra bem mais escura) para o menu lateral não brigar com a barra.
+- **O botão "Ver original" fica no canto inferior esquerdo** do documento: no superior direito ele ficava atrás da barra "Abrir documento em nova aba".
+- **"Usar a cor atual do Estilo Avançado" não foi feito**: o `colorSlimPro` fica no `localStorage` da origem do SEI e a página de opções não o alcança.
+- O aviso "Ajustamos o tom…" vale só para a cor escolhida (tema claro); no escuro a barra escurece por design.
+
+**Verificado no navegador real**
+
+- Barra, menu lateral, fundo, tabelas, campos, botões e diálogos no tema; cor escolhida aparece na barra (Floresta = `rgb(31,122,77)`).
+- Claro, escuro e automático (o automático reage ao sistema ao vivo, sem recarregar).
+- Documento real nos dois SEIs: cores adaptadas, "Ver original" liga e desliga.
+- Desligar a opção ou "escurecer documentos" limpa tudo: zero rastro de atributo, variável, estilo e botão (10 frames).
+- Sem flash: o tema é aplicado com o documento ainda em `loading`.
+- Nenhuma URL externa nos bundles.
+
+**Lacunas conhecidas (não verificadas ou fora desta etapa)**
+
+- **Editor CK4/CK5 não exercitado** no SEI real: o ícone "Editar Conteúdo" não aparecia nos documentos de teste. Por construção o remapeamento não roda no editor.
+- Resíduos brancos de elementos do SEI Pro e do SEI (barra de ícones, seletor Tabela/Quadro, barra "Abrir documento em nova aba"): sub-projetos 2 e 3.
+- Imagens (selo "assinatura eletrônica", código de barras) ficam intactas por decisão; num fundo escuro têm menos contraste.
+- Firefox, release oficial e whitelabels: fora de escopo.
