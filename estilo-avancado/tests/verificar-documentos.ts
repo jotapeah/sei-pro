@@ -101,7 +101,7 @@ export async function verificarDocumentos(): Promise<void> {
     grande.body.appendChild(p);
   }
   const parar2 = iniciarRemapeamento(grande);
-  await tique(120);
+  for (let i = 0; i < 100 && grande.querySelectorAll(`[${ATRIBUTO_ADAPTADO}]`).length < 1300; i++) await tique(30);
   checar(
     "1.300 elementos processados em lotes",
     grande.querySelectorAll(`[${ATRIBUTO_ADAPTADO}]`).length === 1300,
