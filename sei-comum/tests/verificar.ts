@@ -1,5 +1,6 @@
 import { resumo } from "./util";
 import { verificarAbertura } from "./verificar-abertura";
+import { verificarAdaptar } from "./verificar-adaptar";
 import { verificarAreaChrome } from "./verificar-area-chrome";
 import { verificarArmazenamento } from "./verificar-armazenamento";
 import { verificarArquivo } from "./verificar-arquivo";
@@ -20,11 +21,12 @@ import { verificarMenu } from "./verificar-menu";
 import { verificarMotorTexto } from "./verificar-motor";
 import { verificarMotorUnidade } from "./verificar-motor-unidade";
 import { verificarOpcoes } from "./verificar-opcoes";
-import { verificarPaleta } from "./verificar-paleta";
 import { verificarPainelApp } from "./verificar-painel-app";
+import { verificarPaleta } from "./verificar-paleta";
 import { verificarPonteApp } from "./verificar-ponte-app";
 import { verificarRpc } from "./verificar-rpc";
 import { verificarSincroniaBase } from "./verificar-sincronia-base";
+import { verificarTema } from "./verificar-tema";
 import { verificarTravaEConsentimento } from "./verificar-trava";
 import { verificarUi } from "./verificar-ui";
 
@@ -56,5 +58,7 @@ await verificarPainelApp();
 await verificarEmbutido();
 verificarAvatar();
 verificarPaleta();
+verificarTema();
+verificarAdaptar();
 await verificarPonteApp();
 resumo();

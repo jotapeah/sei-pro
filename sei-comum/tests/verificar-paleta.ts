@@ -1,4 +1,4 @@
-import { AZUL_PADRAO, PALETAS, contraste, derivarBarra, deOklch, paraOklch } from "../src/tema/paleta";
+import { AZUL_PADRAO, contraste, deOklch, derivarBarra, PALETAS, paraOklch } from "../src/tema/paleta";
 import { checar, secao } from "./util";
 
 const FUNDO = { claro: "#ffffff", escuro: "#1a1d21" } as const;
@@ -14,7 +14,13 @@ function prng(semente: number): () => number {
   };
 }
 const hexAleatorio = (r: () => number) =>
-  `#${[0, 0, 0].map(() => Math.floor(r() * 256).toString(16).padStart(2, "0")).join("")}`;
+  `#${[0, 0, 0]
+    .map(() =>
+      Math.floor(r() * 256)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
 
 export function verificarPaleta(): void {
   secao("tema/paleta");

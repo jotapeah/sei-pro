@@ -54,7 +54,13 @@ export function lerHex(hex: string): [number, number, number] | null {
 }
 
 export const paraHex = (rgb: readonly number[]): string =>
-  `#${rgb.map((x) => Math.round(limitar(x, 0, 255)).toString(16).padStart(2, "0")).join("")}`;
+  `#${rgb
+    .map((x) =>
+      Math.round(limitar(x, 0, 255))
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
 
 const linear = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
 const gama = (v: number) => (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055);
@@ -137,7 +143,7 @@ export function derivarBarra(corBase: string, esquema: Esquema): BarraDerivada {
   }
 
   let barra = deOklch({ l, c, h });
-  let texto = contraste("#ffffff", barra) >= contraste(TEXTO_ESCURO, barra) ? "#ffffff" : TEXTO_ESCURO;
+  const texto = contraste("#ffffff", barra) >= contraste(TEXTO_ESCURO, barra) ? "#ffffff" : TEXTO_ESCURO;
   for (let i = 0; i < 100 && contraste(texto, barra) < CONTRASTE_MIN; i++) {
     l += texto === "#ffffff" ? -0.01 : 0.01;
     barra = deOklch({ l, c, h });
