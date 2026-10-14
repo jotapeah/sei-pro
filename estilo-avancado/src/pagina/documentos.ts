@@ -23,7 +23,7 @@ const REGRAS = `
 :root[data-spro-tema="escuro"]:not([${ATRIBUTO_ORIGINAL}]) [${ATRIBUTO_ADAPTADO}~="t"] { color: var(${VAR_TEXTO}) !important; }
 :root[data-spro-tema="escuro"]:not([${ATRIBUTO_ORIGINAL}]) [${ATRIBUTO_ADAPTADO}~="f"] { background-color: var(${VAR_FUNDO}) !important; }
 :root[${ATRIBUTO_ORIGINAL}] body { background: #fff; color: #000; }
-[${MARCA_BOTAO}] { position: fixed; top: 8px; right: 12px; z-index: 2147483000; padding: 4px 10px;
+[${MARCA_BOTAO}] { position: fixed; bottom: 12px; left: 12px; z-index: 2147483000; padding: 4px 10px;
   font: 12px/1.4 var(--spro-fonte, system-ui, sans-serif); color: var(--spro-texto); background: var(--spro-fundo);
   border: 1px solid var(--spro-borda-forte); border-radius: var(--spro-raio, 8px); cursor: pointer; box-shadow: var(--spro-sombra-2); }
 [${MARCA_BOTAO}]:hover { background: var(--spro-destaque); color: var(--spro-destaque-texto); }

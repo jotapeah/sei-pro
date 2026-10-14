@@ -53,6 +53,8 @@ export function gerarTokens(cfg: ConfigTema, esquema: Esquema): Record<string, s
     "--spro-barra-texto": b.texto,
     "--spro-barra-hover": b.hover,
     "--spro-barra-borda": b.borda,
+    "--spro-menu": b.menu,
+    "--spro-menu-texto": "#f2f4f7",
     "--spro-destaque": b.destaque,
     "--spro-destaque-texto": TEXTO_DO_DESTAQUE[esquema],
     "--spro-destaque-suave": "color-mix(in srgb, var(--spro-destaque) 12%, transparent)",

@@ -19,6 +19,8 @@ export interface BarraDerivada {
   texto: string;
   hover: string;
   borda: string;
+  /** Fundo do menu lateral: a mesma cor da barra, bem mais escura (texto sempre branco). */
+  menu: string;
   destaque: string;
 }
 
@@ -152,6 +154,7 @@ export function derivarBarra(corBase: string, esquema: Esquema): BarraDerivada {
   const passo = esquema === "escuro" ? 0.05 : -0.05;
   const hover = deOklch({ l: l + passo, c, h });
   const borda = deOklch({ l: l - 0.08, c, h });
+  const menu = deOklch({ l: Math.min(l, 0.26), c: c * 0.55, h });
 
   const fundo = FUNDO_DO_ESQUEMA[esquema];
   const origem = paraOklch(semCroma ? (esquema === "escuro" ? AZUL_ESCURO : AZUL_PADRAO) : base);
@@ -162,5 +165,5 @@ export function derivarBarra(corBase: string, esquema: Esquema): BarraDerivada {
     destaque = deOklch({ l: dl, c: origem.c, h: origem.h });
   }
 
-  return { barra, texto, hover, borda, destaque };
+  return { barra, texto, hover, borda, menu, destaque };
 }

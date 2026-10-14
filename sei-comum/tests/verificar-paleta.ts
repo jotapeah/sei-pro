@@ -42,6 +42,7 @@ export function verificarPaleta(): void {
     let pior = 99;
     let piorDest = 99;
     let invalida = 0;
+    let menuRuim = 99;
     const g = prng(esquema === "claro" ? 7 : 11);
     const entradas = [
       ...Array.from({ length: 2000 }, () => hexAleatorio(g)),
@@ -57,10 +58,12 @@ export function verificarPaleta(): void {
       const d = derivarBarra(cor, esquema);
       for (const v of Object.values(d)) if (!/^#[0-9a-f]{6}$/.test(v)) invalida++;
       pior = Math.min(pior, contraste(d.texto, d.barra));
+      menuRuim = Math.min(menuRuim, contraste("#f2f4f7", d.menu));
       piorDest = Math.min(piorDest, contraste(d.destaque, FUNDO[esquema]));
     }
     checar(`${esquema}: todos os campos sao #rrggbb`, invalida === 0, invalida);
     checar(`${esquema}: texto/barra >= 4,5 (pior ${pior.toFixed(2)})`, pior >= 4.5);
+    checar(`${esquema}: texto do menu/menu >= 4,5 (pior ${menuRuim.toFixed(2)})`, menuRuim >= 4.5);
     checar(`${esquema}: destaque/fundo >= 4,5 (pior ${piorDest.toFixed(2)})`, piorDest >= 4.5);
   }
 

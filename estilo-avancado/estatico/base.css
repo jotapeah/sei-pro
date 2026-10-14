@@ -7,6 +7,42 @@
  * (menu, árvore, barra de ações) é do sub-projeto 2; telas nativas, do 3.
  */
 
+/*
+ * Tema nativo do SEI (esquemas de cor do infra): o SEI define as cores da barra, do menu e do
+ * título dos diálogos em classes com !important e em variáveis no :root. Só aqui o !important
+ * é permitido (o teste confere): é a única forma de uma regra de tema vencer outra de tema.
+ */
+:root[data-spro-tema-ativo] {
+  --infra-esquema-cor-barra-superior: var(--spro-barra-borda);
+  --infra-esquema-cor-barra-sistema: var(--spro-barra);
+  --infra-esquema-cor-clara: var(--spro-destaque);
+  --infra-esquema-cor-escura: var(--spro-barra-borda);
+  --infra-esquema-cor-texto: var(--spro-texto);
+}
+:root[data-spro-tema-ativo] .infraCorBarraSuperior {
+  background-color: var(--spro-barra-borda) !important;
+}
+:root[data-spro-tema-ativo] .infraCorBarraSistema {
+  background-color: var(--spro-barra) !important;
+  color: var(--spro-barra-texto);
+}
+:root[data-spro-tema-ativo] .infraCorMenu {
+  background-color: var(--spro-menu) !important;
+}
+:root[data-spro-tema-ativo] .sparkling-modal-title {
+  background-color: var(--spro-barra) !important;
+  color: var(--spro-barra-texto);
+}
+:root[data-spro-tema-ativo] div.pesquisaPaginaSelecionada {
+  background-color: var(--spro-destaque) !important;
+  color: var(--spro-destaque-texto);
+}
+:root[data-spro-tema-ativo] .divInfraAreaTelaE,
+:root[data-spro-tema-ativo] #divInfraPesquisarMenu {
+  background-color: var(--spro-menu);
+  color: var(--spro-menu-texto);
+}
+
 /* Página */
 :root[data-spro-tema-ativo] body,
 :root[data-spro-tema-ativo] #divInfraAreaGlobal,
