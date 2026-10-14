@@ -26,7 +26,7 @@ import { verificarPaleta } from "./verificar-paleta";
 import { verificarPonteApp } from "./verificar-ponte-app";
 import { verificarRpc } from "./verificar-rpc";
 import { verificarSincroniaBase } from "./verificar-sincronia-base";
-import { verificarTema } from "./verificar-tema";
+import { verificarTema, verificarTemaNosPaineis } from "./verificar-tema";
 import { verificarTravaEConsentimento } from "./verificar-trava";
 import { verificarUi } from "./verificar-ui";
 
@@ -59,6 +59,7 @@ await verificarEmbutido();
 verificarAvatar();
 verificarPaleta();
 verificarTema();
+await verificarTemaNosPaineis();
 verificarAdaptar();
 await verificarPonteApp();
 resumo();

@@ -22,9 +22,15 @@
 :root[data-spro-tema-ativo] .infraCorBarraSuperior {
   background-color: var(--spro-barra-borda) !important;
 }
-:root[data-spro-tema-ativo] .infraCorBarraSistema {
+:root[data-spro-tema-ativo] .infraCorBarraSistema:not(img) {
   background-color: var(--spro-barra) !important;
   color: var(--spro-barra-texto);
+}
+/* O SEI Pro põe infraCorBarraSistema nas imagens dos botões que injeta (Monitorados, PDF, Agente de IA, Fluxos):
+   o esquema do SEI as pintaria com a cor da barra. Ícone é ícone: sem fundo, como os botões nativos. */
+:root[data-spro-tema-ativo] img.infraCorBarraSistema,
+:root[data-spro-tema-ativo] .botaoSEI img {
+  background-color: transparent !important;
 }
 :root[data-spro-tema-ativo] .infraCorMenu {
   background-color: var(--spro-menu) !important;
@@ -188,6 +194,68 @@
   background-color: color-mix(in srgb, var(--spro-perigo) 18%, var(--spro-fundo)) !important;
   color: var(--spro-texto);
   border-color: color-mix(in srgb, var(--spro-perigo) 45%, transparent);
+}
+
+/* Linhas de status das listas (o SEI Pro injeta o fundo rosado das atrasadas com !important) */
+:root[data-spro-tema-ativo] tr.infraTrAtrasada,
+:root[data-spro-tema-ativo] td.infraTdAtrasada,
+:root[data-spro-tema-ativo] tr.infraTrVermelha {
+  background-color: color-mix(in srgb, var(--spro-perigo) 16%, var(--spro-fundo)) !important;
+}
+:root[data-spro-tema-ativo] tr.infraTrAlerta {
+  background-color: color-mix(in srgb, var(--spro-aviso) 16%, var(--spro-fundo)) !important;
+}
+/* Caixa do menu do SEI 5 (aplicativo do SEI) com fundo claro inline */
+:root[data-spro-tema-ativo] #divInfraAreaTelaE div[style*="f5f6f7"] {
+  background-color: var(--spro-fundo-2) !important;
+  color: var(--spro-menu-texto) !important;
+}
+/* Botões claros do Bootstrap do SEI 5 e o quadro do modal */
+:root[data-spro-tema-ativo] .btn-light,
+:root[data-spro-tema-ativo] .btn-default {
+  background-color: var(--spro-fundo-3);
+  color: var(--spro-texto);
+  border-color: var(--spro-borda-forte);
+}
+:root[data-spro-tema-ativo] .btn-light.active,
+:root[data-spro-tema-ativo] .btn-light:hover,
+:root[data-spro-tema-ativo] .btn-default:hover {
+  background-color: var(--spro-destaque-medio);
+}
+:root[data-spro-tema-ativo] .sparkling-modal-frame {
+  background-color: var(--spro-fundo);
+}
+
+/* Selos de prazo do SEI Pro e botões do Bootstrap: as variantes escuras deles são do modo noturno antigo (.seiSlim.dark-mode) */
+:root[data-spro-tema="escuro"] .dateboxDisplay.spro-prazo-atrasado,
+:root[data-spro-tema="escuro"] .dateboxDisplay.spro-prazo-atrasado .spro-prazo-icone {
+  color: var(--spro-perigo);
+}
+:root[data-spro-tema="escuro"] .dateboxDisplay.spro-prazo-concluido {
+  color: var(--spro-suave);
+}
+:root[data-spro-tema="escuro"] .dateboxDisplay.spro-prazo-concluido .spro-prazo-icone {
+  color: var(--spro-ok);
+}
+:root[data-spro-tema="escuro"] .dateboxDisplay.spro-prazo-hoje .spro-prazo-icone {
+  color: var(--spro-aviso);
+}
+:root[data-spro-tema="escuro"] .dateboxDisplay.spro-prazo-desde .spro-prazo-icone {
+  color: var(--spro-suave);
+}
+:root[data-spro-tema-ativo] .btn-light *,
+:root[data-spro-tema-ativo] .btn-default * {
+  color: inherit;
+}
+
+/* O SEI Pro reinjeta cor fixa em .btn-light:not(:disabled):not(.disabled):active; precisa da mesma especificidade */
+:root[data-spro-tema-ativo] .btn-light:not(:disabled):not(.disabled),
+:root[data-spro-tema-ativo] .btn-default:not(:disabled):not(.disabled) {
+  color: var(--spro-texto);
+}
+:root[data-spro-tema-ativo] .btn-light:not(:disabled):not(.disabled):active,
+:root[data-spro-tema-ativo] .btn-default:not(:disabled):not(.disabled):active {
+  background-color: var(--spro-destaque-medio);
 }
 
 /* Links */

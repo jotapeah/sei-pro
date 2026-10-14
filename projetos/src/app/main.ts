@@ -25,6 +25,7 @@ import { esperarConexaoDaAba } from "@comum/ponte/conexaoDaAba";
 import { PonteLateral } from "@comum/ponte/lateral";
 import type { PortaRpc, Rpc } from "@comum/ponte/rpc";
 import { temSeletorDeArquivo } from "@comum/sincronia/arquivo";
+import { acompanharTemaDoPainel, aplicarTemaDoContexto } from "@comum/tema/painel";
 import { definirEmissorDeAviso } from "@comum/ui/aviso";
 import { baixar, criarAbrirModal, criarConfirmar } from "@comum/ui/dialogo";
 import { h } from "@comum/ui/dom";
@@ -74,6 +75,9 @@ async function iniciarEmbutido(conectar: Promise<Rpc>): Promise<void> {
     html.style.setProperty("--spro-cor-sei", ctx.corTema);
     html.dataset.corSei = "";
   }
+  acompanharTemaDoPainel(document, {
+    aoDesligar: async () => aplicarTemaDoContexto(html, await rpc.chamar<ContextoProjetos>("contexto")),
+  });
   const altura = observarAltura(rpc);
   // A lista de um seletor ou menu aberto perto do fim do painel: o iframe cresce até ela caber.
   addEventListener("spro-popover", (ev) => altura.extra(Number((ev as CustomEvent<{ fundo?: number }>).detail?.fundo) || 0));
@@ -117,6 +121,7 @@ async function iniciarEmbutido(conectar: Promise<Rpc>): Promise<void> {
 }
 
 async function iniciarLateral(): Promise<void> {
+  acompanharTemaDoPainel(document);
   // Painel lateral: claro ou escuro conforme o sistema (prefers-color-scheme), sem o `data-tema` do SEI.
   // Como o content script: a opção antiga "Gerenciar Projetos" desligada, nada de projetos (nem anúncio às abas).
   if (!(await lerOpcaoLegada("gerenciarprojetos"))) {

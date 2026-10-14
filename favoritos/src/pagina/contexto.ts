@@ -15,5 +15,5 @@ export function contextoDe(doc: Document, temaEscuro: boolean, url?: string): Co
   };
 }
 
-export { corDoTemaSei, temaEscuroLegado } from "@comum/pagina/tema";
+export { corDoTemaSei, seiEscuro, temaEscuroLegado } from "@comum/pagina/tema";
 export { documentoTopo, paginaDe } from "@nucleo/sessao/pagina";

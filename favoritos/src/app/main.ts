@@ -20,6 +20,7 @@ import { esperarConexaoDaAba } from "@comum/ponte/conexaoDaAba";
 import { PonteLateral } from "@comum/ponte/lateral";
 import { ErroRpc, type PortaRpc, type Rpc } from "@comum/ponte/rpc";
 import { escolherArquivoSync } from "@comum/sincronia/arquivo";
+import { acompanharTemaDoPainel, aplicarTemaDoContexto } from "@comum/tema/painel";
 import { definirEmissorDeAviso } from "@comum/ui/aviso";
 import { baixar, criarAbrirModal, criarConfirmar, escolherArquivo } from "@comum/ui/dialogo";
 import { h, icone } from "@comum/ui/dom";
@@ -43,7 +44,9 @@ const raiz = document.getElementById("app")!;
 const conexao = lateral ? null : esperarConexaoDaAba(CANAL_FAVORITOS);
 
 const mostrarErro = (e: unknown) =>
-  raiz.replaceChildren(h("p", { class: "fav-erro" }, `Não foi possível abrir os monitorados: ${e instanceof Error ? e.message : String(e)}`));
+  raiz.replaceChildren(
+    h("p", { class: "fav-erro" }, `Não foi possível abrir os monitorados: ${e instanceof Error ? e.message : String(e)}`),
+  );
 
 void (lateral ? iniciarLateral() : iniciarEmbutido()).catch(mostrarErro);
 
@@ -180,6 +183,11 @@ function criarApp(b: Base, ctx: ContextoAba, rpc: Pick<Rpc, "chamar">, g: Gancho
     delete html.dataset.tema;
     delete html.dataset.corSei;
   }
+  // Estilo Avançado 2 (quando ligado): o tema e o destaque dele valem em todos os modos e mudam ao vivo.
+  acompanharTemaDoPainel(
+    document,
+    g.embutido ? { aoDesligar: async () => aplicarTemaDoContexto(html, await rpc.chamar<ContextoAba>("contexto")) } : {},
+  );
   const esc = escoposDoContexto(ctx);
   const repos = {
     unidade: esc.unidade ? new RepositorioFavoritos(b.area, esc.unidade, b.carimbo) : null,

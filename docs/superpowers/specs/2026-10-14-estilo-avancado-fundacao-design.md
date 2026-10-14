@@ -235,3 +235,18 @@ Ficam de fora, por decisão: os cartões de anotação pastel do SEI Pro (fundo 
 **Verificado no editor CK4 (SP, Despacho Marcia Goncalves 0104775), só leitura:** as 4 áreas editáveis ficam em dark; o `getData()` das 4 instâncias tem os mesmos tamanhos com e sem o tema (12854, 62, 313, 10078) e nenhum traço de `data-spro-*`. Nada foi salvo.
 
 A lista de `!important` permitidos na folha base (conferida por teste) agora é: `.infraCor*`, `.sparkling-modal-title`, `div.pesquisaPaginaSelecionada`, `a.infraAcaoBarraConjugada`, `body.cke_editable`, `a.openNewTab` e `#checkNaoAssinados`. Todos existem porque o SEI ou o SEI Pro grava a cor com `!important` ou inline.
+
+### 11.3 Terceira rodada: os painéis refatorados (14/10/2026)
+
+A grade do Controle de Processos, os Monitorados/Favoritos, os Projetos, as Demandas e o Histórico decidiam claro/escuro por `temaEscuroLegado` (o modo noturno antigo, `darkModePro`), então ficavam claros num SEI escuro. Agora seguem o Estilo Avançado 2.
+
+- **Pergunta única:** `seiEscuro(doc, storage)` (em `sei-comum/src/pagina/tema.ts`): o esquema que o Estilo Avançado 2 gravou no `<html>` manda, inclusive para dizer "claro"; sem ele vale o modo noturno antigo. Todas as páginas e controladores passaram a usá-la.
+- **Grade (dentro da página do SEI):** `aoMudarEsquemaSei` observa `data-spro-tema` e chama `app.definirTema(...)`: troca o modo ao vivo.
+- **Painéis em iframe e lateral (páginas da extensão):** `acompanharTemaDoPainel` (`sei-comum/src/tema/painel.ts`) lê `spro_tema` do `chrome.storage`, aplica `data-tema` e o destaque derivado da cor da barra (`derivarBarra(...).destaque`, contraste garantido), e acompanha mudanças, inclusive o modo Automático.
+- **Desligar com o painel aberto:** a página mantém o contexto da aba em dia (`manterTemaNoContexto`; o RPC `contexto` devolve esse objeto vivo) e o iframe o pede de novo (`aoDesligar`, após 300 ms), em vez de voltar ao valor que já vinha do estilo ligado. Sem isso o painel ficava escuro num SEI claro.
+- **Botões injetados (Monitorados, PDF, Agente de IA, Fluxos):** o SEI Pro põe `infraCorBarraSistema` nas `<img>` deles, e o override da cor da barra os pintava de verde. A regra agora exclui `img` e zera o fundo desses ícones.
+- **Selos de prazo e botões do SEI 5:** as variantes escuras dos selos de prazo são do modo antigo (`.seiSlim.dark-mode`); foram escritas versões com tokens. `.btn-light`, linhas atrasadas (`infraTrAtrasada`) e a caixa do menu do SEI 5 também entraram.
+
+**Verificado no navegador real (SP 4.1.5 e MJ 5.0.4):** modo escuro, claro, escuro de novo, desligado e religado, com a grade e os três iframes seguindo cada passo (destaque `#5eb382` no escuro e `#1f7a4d` no claro; ao desligar, tudo volta ao claro e o destaque some). A auditoria de contraste fecha vazia no Controle e nas telas testadas dos dois SEIs, com a instalação limpa.
+
+**Não coberto:** os balões (Shadow DOM) de Favoritos e Projetos criados depois de a página abrir pegam o esquema do momento da criação do contexto (`ctx` agora é mantido em dia, então novos balões saem certos); um balão já aberto durante a troca de modo só atualiza ao reabrir. O Histórico em modal não foi aberto neste teste.

@@ -53,6 +53,17 @@ await teste('app: renderiza as linhas da caixa real, com protocolo e contagem', 
   assert.ok(qa(app, '.spro-proc').some((a) => a.textContent === '99906.713-630.000032/2025-82'));
   app.fechar();
 });
+await teste('app: definirTema troca claro/escuro com a grade aberta (host e raiz)', async () => {
+  const { app } = await montar();
+  assert.equal(app.host.getAttribute('data-tema'), 'claro');
+  app.definirTema(true);
+  assert.equal(app.host.getAttribute('data-tema'), 'escuro');
+  assert.ok(app.host.shadowRoot!.querySelector('.spro-app')!.classList.contains('spro-escuro'));
+  app.definirTema(false);
+  assert.equal(app.host.getAttribute('data-tema'), 'claro');
+  assert.ok(!app.host.shadowRoot!.querySelector('.spro-app')!.classList.contains('spro-escuro'));
+  app.fechar();
+});
 await teste('app: nada do SEI vira HTML (texto malicioso continua texto)', async () => {
   const doc = docFixture('caixa_prazos.html');
   const { app } = await montar({ inicial: (() => { const l = lerTabelas(doc); l.processos[0]!.especificacao = '<img src=x onerror=alert(1)>'; return l; })() });

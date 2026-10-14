@@ -33,7 +33,7 @@ export function verificarBaseCss(): void {
     .map((bloco) => bloco.split("{")[0]?.trim() ?? "");
   const proibidas = comImportante.filter(
     (sel) =>
-      !/\.infraCor|sparkling-modal-title|pesquisaPaginaSelecionada|infraAcaoBarraConjugada|body\.cke_editable|openNewTab|checkNaoAssinados/.test(
+      !/\.infraCor|sparkling-modal-title|pesquisaPaginaSelecionada|infraAcaoBarraConjugada|body\.cke_editable|openNewTab|checkNaoAssinados|infraTrAtrasada|infraTdAtrasada|infraTrVermelha|infraTrAlerta|f5f6f7/.test(
         sel,
       ),
   );

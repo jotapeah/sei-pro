@@ -61,3 +61,143 @@ export function verificarTema(): void {
     ["#141619", "#1a1d21", "#22262b", "#2b3036"].every((c) => esc.includes(c)),
   );
 }
+
+export async function verificarTemaNosPaineis(): Promise<void> {
+  const { acompanharTemaEstilo2 } = await import("../src/tema/painel");
+  const { aoMudarEsquemaSei, esquemaDoEstilo2, seiEscuro } = await import("../src/pagina/tema");
+  const { instalarDom, tique } = await import("./util");
+
+  secao("tema: esquema do SEI para os paineis");
+  const doc = instalarDom("<html><head></head><body></body></html>");
+  const sem = { getItem: () => null };
+  const legado = { getItem: (k: string) => (k === "darkModePro" ? "1" : null) };
+  checar("sem Estilo 2 e sem legado: claro", esquemaDoEstilo2(doc) === null && seiEscuro(doc, sem) === false);
+  checar("sem Estilo 2, com modo noturno antigo: escuro", seiEscuro(doc, legado) === true);
+  doc.documentElement.setAttribute("data-spro-tema", "escuro");
+  checar("Estilo 2 escuro: escuro", seiEscuro(doc, sem) === true);
+  doc.documentElement.setAttribute("data-spro-tema", "claro");
+  checar("Estilo 2 claro vence o modo noturno antigo", seiEscuro(doc, legado) === false);
+  doc.documentElement.setAttribute("data-spro-tema", "lixo");
+  checar("valor desconhecido: ignora e usa o legado", esquemaDoEstilo2(doc) === null && seiEscuro(doc, legado) === true);
+  doc.documentElement.removeAttribute("data-spro-tema");
+  checar("aoMudarEsquemaSei nao quebra sem MutationObserver", typeof aoMudarEsquemaSei(doc, () => {}) === "function");
+
+  secao("tema: painel (pagina da extensao)");
+  const fake = (inicial: unknown, sistemaEscuro = false) => {
+    let aoMudar: ((v: unknown) => void) | null = null;
+    let aoSistema: (() => void) | null = null;
+    let escuroSistema = sistemaEscuro;
+    return {
+      deps: {
+        ler: async () => inicial,
+        aoMudar: (cb: (v: unknown) => void) => {
+          aoMudar = cb;
+          return () => {
+            aoMudar = null;
+          };
+        },
+        sistemaEscuro: () => escuroSistema,
+        aoMudarSistema: (cb: () => void) => {
+          aoSistema = cb;
+          return () => {
+            aoSistema = null;
+          };
+        },
+      },
+      mudar: (v: unknown) => aoMudar?.(v),
+      sistema: (e: boolean) => {
+        escuroSistema = e;
+        aoSistema?.();
+      },
+      assinado: () => aoMudar !== null || aoSistema !== null,
+    };
+  };
+  const ligado = { versao: 1, ativo: true, modo: "escuro", paleta: "floresta", corBarra: "#1f7a4d", escurecerDocumentos: true };
+
+  const d1 = instalarDom("<html data-tema='claro'><head></head><body></body></html>");
+  const f1 = fake(ligado);
+  const parar1 = acompanharTemaEstilo2(d1, f1.deps);
+  await tique(10);
+  checar("ativo + escuro: data-tema vira escuro", d1.documentElement.dataset.tema === "escuro");
+  checar("destaque derivado da barra (hex)", /^#[0-9a-f]{6}$/.test(d1.documentElement.style.getPropertyValue("--spro-destaque")));
+  checar("texto do destaque no escuro", d1.documentElement.style.getPropertyValue("--spro-destaque-texto") === "#0a1526");
+
+  f1.mudar({ ...ligado, modo: "claro" });
+  checar(
+    "mudar para claro ao vivo",
+    d1.documentElement.dataset.tema === "claro" && d1.documentElement.style.getPropertyValue("--spro-destaque-texto") === "#ffffff",
+  );
+  f1.mudar({ ...ligado, ativo: false });
+  checar(
+    "desligar restaura o que o contexto da aba tinha (claro) e tira o destaque",
+    d1.documentElement.dataset.tema === "claro" && d1.documentElement.style.getPropertyValue("--spro-destaque") === "",
+  );
+  f1.mudar({ ...ligado, modo: "auto" });
+  f1.sistema(true);
+  checar("automatico segue o sistema ao vivo", d1.documentElement.dataset.tema === "escuro");
+  f1.sistema(false);
+  checar("automatico volta ao claro", d1.documentElement.dataset.tema === "claro");
+  parar1();
+  checar("parar desassina tudo", !f1.assinado());
+
+  const d2 = instalarDom("<html data-tema='escuro'><head></head><body></body></html>");
+  const f2 = fake(null);
+  acompanharTemaEstilo2(d2, f2.deps);
+  await tique(10);
+  checar(
+    "sem configuracao (Estilo 2 desligado): nao mexe no que o contexto definiu",
+    d2.documentElement.dataset.tema === "escuro" && d2.documentElement.style.getPropertyValue("--spro-destaque") === "",
+  );
+
+  const d3 = instalarDom("<html><head></head><body></body></html>");
+  const f3 = fake("lixo{");
+  acompanharTemaEstilo2(d3, f3.deps);
+  await tique(10);
+  checar("configuracao corrompida: nao lanca e nao mexe", d3.documentElement.dataset.tema === undefined);
+
+  secao("tema: painel ao desligar (aoDesligar) e contexto");
+  const { aplicarTemaDoContexto } = await import("../src/tema/painel");
+  const d4 = instalarDom("<html data-tema='escuro'><head></head><body></body></html>");
+  const f4 = fake(ligado);
+  let pedidos = 0;
+  acompanharTemaEstilo2(d4, f4.deps, {
+    aoDesligar: () => {
+      pedidos++;
+      aplicarTemaDoContexto(d4.documentElement, { temaEscuro: false, corTema: "#336699" });
+    },
+  });
+  await tique(10);
+  checar("ligado: sem pedir contexto", pedidos === 0 && d4.documentElement.dataset.tema === "escuro");
+  f4.mudar({ ...ligado, ativo: false });
+  checar("desligar tira o destaque na hora", d4.documentElement.style.getPropertyValue("--spro-destaque") === "");
+  await tique(350);
+  checar("desligar pede o contexto atual (uma vez) e aplica", pedidos === 1 && d4.documentElement.dataset.tema === "claro");
+  checar(
+    "a cor da barra do contexto vira --spro-cor-sei",
+    d4.documentElement.style.getPropertyValue("--spro-cor-sei") === "#336699" && d4.documentElement.hasAttribute("data-cor-sei"),
+  );
+  aplicarTemaDoContexto(d4.documentElement, { temaEscuro: true });
+  checar(
+    "contexto sem cor limpa o que havia",
+    d4.documentElement.style.getPropertyValue("--spro-cor-sei") === "" &&
+      !d4.documentElement.hasAttribute("data-cor-sei") &&
+      d4.documentElement.dataset.tema === "escuro",
+  );
+
+  const d5 = instalarDom("<html data-tema='claro'><head></head><body></body></html>");
+  const f5 = fake({ ...ligado, ativo: false });
+  let pedidos5 = 0;
+  acompanharTemaEstilo2(d5, f5.deps, { aoDesligar: () => void pedidos5++ });
+  await tique(350);
+  checar("nunca esteve ligado: desligado nao pede contexto", pedidos5 === 0 && d5.documentElement.dataset.tema === "claro");
+
+  const d6 = instalarDom("<html data-tema='escuro'><head></head><body></body></html>");
+  const f6 = fake(ligado);
+  let pedidos6 = 0;
+  const parar6 = acompanharTemaEstilo2(d6, f6.deps, { aoDesligar: () => void pedidos6++ });
+  await tique(10);
+  f6.mudar({ ...ligado, ativo: false });
+  parar6();
+  await tique(350);
+  checar("parar antes do prazo cancela o pedido", pedidos6 === 0);
+}

@@ -7,6 +7,44 @@ export function temaEscuroLegado(armazenamento: Pick<Storage, "getItem">): boole
   }
 }
 
+/** Esquema que o Estilo Avançado 2 aplicou neste documento (o content script o grava no <html>); null = desligado. */
+export function esquemaDoEstilo2(doc: Document): "claro" | "escuro" | null {
+  const v = doc.documentElement?.getAttribute("data-spro-tema");
+  return v === "claro" || v === "escuro" ? v : null;
+}
+
+/** O SEI está escuro? O Estilo Avançado 2 manda quando está ligado (inclusive para dizer "claro"); senão vale o modo noturno antigo. */
+export function seiEscuro(doc: Document, armazenamento: Pick<Storage, "getItem">): boolean {
+  const novo = esquemaDoEstilo2(doc);
+  return novo ? novo === "escuro" : temaEscuroLegado(armazenamento);
+}
+
+/** Avisa quando o esquema do Estilo Avançado 2 muda (modo, sistema, ligar ou desligar). Devolve o desligador. */
+export function aoMudarEsquemaSei(doc: Document, cb: () => void): () => void {
+  const Observador =
+    (doc.defaultView as unknown as { MutationObserver?: typeof MutationObserver } | null)?.MutationObserver ?? globalThis.MutationObserver;
+  if (typeof Observador !== "function" || !doc.documentElement) return () => {};
+  const o = new Observador(cb);
+  o.observe(doc.documentElement, { attributes: true, attributeFilter: ["data-spro-tema"] });
+  return () => o.disconnect();
+}
+
+/**
+ * Mantém `temaEscuro` e `corTema` do contexto da aba em dia quando o Estilo Avançado 2 muda (o RPC
+ * `contexto` devolve este objeto vivo): os painéis em iframe o pedem de novo ao desligar o estilo.
+ */
+export function manterTemaNoContexto(
+  doc: Document,
+  armazenamento: Pick<Storage, "getItem">,
+  ctx: { temaEscuro: boolean; corTema?: string | undefined },
+): () => void {
+  return aoMudarEsquemaSei(doc, () => {
+    ctx.temaEscuro = seiEscuro(doc, armazenamento);
+    const cor = corDoTemaSei(doc);
+    if (cor) ctx.corTema = cor;
+  });
+}
+
 /** Cor do tema do SEI (a barra do sistema): SEI 4+ marca com `infraCorBarraSistema`, o 3.x usa a barra direto. */
 export function corDoTemaSei(doc: Document): string | undefined {
   const visao = doc.defaultView;
