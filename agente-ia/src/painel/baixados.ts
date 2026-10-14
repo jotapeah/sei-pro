@@ -22,6 +22,8 @@ export interface Baixado {
   processo: string;
   documento: string;
   tamanho: number;
+  /** Hash do conteúdo aprovado, para conferir antes de transferir ao MCP remoto. */
+  sha256?: string;
   quando: number;
 }
 

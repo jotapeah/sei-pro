@@ -3,6 +3,7 @@ import { verificarErro429, verificarProvedor, verificarRaciocinioComFerramentas 
 import { verificarSkills } from "./verificar-skills";
 import { verificarMcp } from "./verificar-mcp";
 import { verificarBaixar } from "./verificar-baixar";
+import { verificarArquivoRemoto } from "./verificar-arquivo-remoto";
 import { verificarMcpBusca } from "./verificar-mcp-busca";
 import { verificarMcpLocal } from "./verificar-mcp-local";
 import { verificarRespostaUi } from "./verificar-resposta-ui";
@@ -55,6 +56,7 @@ await verificarMcpUi();
 await verificarMcpLocal();
 await verificarMcpBusca();
 await verificarBaixar();
+await verificarArquivoRemoto();
 await verificarRespostaUi();
 verificarDesfazer();
 verificarRegras();

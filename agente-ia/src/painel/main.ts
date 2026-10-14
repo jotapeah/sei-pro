@@ -2418,6 +2418,7 @@ Voc\u00EA \u00E9 um AUXILIAR: recebeu uma tarefa de leitura de outro agente e n\
   private toolsDeConectores(): ReturnType<typeof toolsMcp> {
     return toolsMcp({
       arquivos: () => this.baixados.map((b) => b.caminho),
+      baixados: () => this.baixados,
       conectores: () => this.conectores,
       guardar: async (c) => {
         this.conectores = this.conectores.map((x) => (x.id === c.id ? c : x));

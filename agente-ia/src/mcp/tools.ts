@@ -11,6 +11,8 @@
 import { ClienteMcp, ErroMcp, enderecoLocal } from "./cliente";
 import { acharConector, acharTool, conferirEndereco, destinoDe, nomeDeExibicao, permissaoDe, toolsVisiveis, type Conector } from "./conectores";
 import { origemAutorizada } from "./verificacao";
+import { conteudoDoBaixado } from "./arquivo";
+import type { Baixado } from "../painel/baixados";
 import type { ToolMcp } from "./protocolo";
 import { s } from "../motor/esquema";
 import { definirTool, type ContextoTool, type DefTool } from "../motor/tools";
@@ -28,6 +30,8 @@ export interface OpcoesToolsMcp {
    * Passam ao conector como são: mascarado, o caminho não abre arquivo nenhum.
    */
   arquivos?(): string[];
+  /** Downloads aprovados, com hash, para envio ao Arrendamento por túnel privado. */
+  baixados?(): Baixado[];
 }
 
 /**
@@ -202,17 +206,27 @@ export function toolsMcp(o: OpcoesToolsMcp): DefTool[] {
       // que a escrita no SEI leve o valor real. O que sai para um terceiro
       // tem de voltar a ser rótulo.
       const brutos = (a.argumentos ?? {}) as Record<string, unknown>;
+      const props = (t.esquema as { properties?: Record<string, unknown> }).properties;
+      const transferir = t.nome === "arrendamento_enviar_arquivo" && !!props?.conteudo_base64 && !!o.baixados;
       let args: Record<string, unknown>;
       try {
         // Só conector da própria máquina: é o único que consegue abrir o
         // arquivo, e o título do documento no caminho levaria nome e CPF a um
         // serviço de terceiro.
-        const protegido = protegerArquivos(brutos, enderecoLocal(c.url) ? (o.arquivos?.() ?? []) : [], ctx.anonimizar);
+        const protegido = protegerArquivos(brutos, enderecoLocal(c.url) || transferir ? (o.arquivos?.() ?? []) : [], ctx.anonimizar);
         args = protegido.recolocar(JSON.parse(ctx.anonimizar(JSON.stringify(protegido.args))) as Record<string, unknown>);
       } catch {
         // Nada sai do navegador sem passar pelo mascaramento: se ele falhou,
         // a chamada não acontece.
         return erro("Não foi possível mascarar os dados pessoais destes argumentos, então nada foi enviado. Simplifique os parâmetros e tente de novo.");
+      }
+
+      const baixado = transferir ? o.baixados?.().find((b) => b.caminho === args.caminho_arquivo) : undefined;
+      if (transferir) {
+        if (!baixado?.sha256) return erro("Use documento_baixar novamente: o arquivo precisa ter um download aprovado com verificação de conteúdo.");
+        if (brutos.conteudo_base64 !== undefined) return erro("Não informe bytes na conversa. O SEI Pro transfere o documento aprovado diretamente ao MCP.");
+        if (args.nome_arquivo !== undefined && args.nome_arquivo !== baixado.nome) return erro("Escolha o nome legível em documento_baixar e use o nome aprovado, sem renomear após o download.");
+        args.nome_arquivo = baixado.nome;
       }
 
       // Primeira vez neste conector: o usuário precisa saber que o conteúdo sai.
@@ -224,10 +238,18 @@ export function toolsMcp(o: OpcoesToolsMcp): DefTool[] {
         await guardar({ consentido: true });
       }
 
-      if (permissao === "aprovar") {
-        const decisao = await ctx.ui.aprovarExterno?.({ conector: c.nome, tool: t.nome, descricao: t.descricao, argumentos: args });
+      if (permissao === "aprovar" || transferir) {
+        const decisao = await ctx.ui.aprovarExterno?.({ conector: c.nome, tool: t.nome, descricao: transferir ? `${t.descricao} O documento será transferido ao servidor MCP com seus dados reais, sem máscara.` : t.descricao, argumentos: args });
         if (!decisao?.permitido) return erro("O usuário não autorizou esta chamada.");
-        if (decisao.sempre) await guardar({ permissoes: { ...c.permissoes, [t.nome]: "sempre" } });
+        if (decisao.sempre && !transferir) await guardar({ permissoes: { ...c.permissoes, [t.nome]: "sempre" } });
+      }
+
+      let envio = args;
+      if (transferir && baixado) {
+        // Só depois da aprovação: relê do SEI e confere o hash da cópia aprovada.
+        const conteudo = await conteudoDoBaixado(baixado, ctx);
+        // O caminho do Windows não precisa sair para o servidor Linux.
+        envio = { ...args, caminho_arquivo: "", conteudo_base64: conteudo };
       }
 
       // Cliente novo a cada chamada: a sessão não atravessa chamadas, então
@@ -236,7 +258,7 @@ export function toolsMcp(o: OpcoesToolsMcp): DefTool[] {
       let texto: string;
       try {
         await cliente.iniciar(ctx.sinal);
-        texto = await cliente.chamar(t.nome, args, ctx.sinal);
+        texto = await cliente.chamar(t.nome, envio, ctx.sinal);
       } catch (e) {
         // Só o servidor que não atendeu muda o estado do conector. Erro que a
         // FERRAMENTA devolveu (login pendente, validação) segue como veio: o
