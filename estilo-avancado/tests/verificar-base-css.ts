@@ -9,7 +9,7 @@ export function verificarBaseCss(): void {
   const semComentario = css.replace(/\/\*[\s\S]*?\*\//g, "");
   checar(
     "nenhuma cor literal (#hex, rgb(), hsl())",
-    !/#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i.test(semComentario.replace(/\[type="[^"]*"\]/g, "")),
+    !/#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i.test(semComentario.replace(/\[[a-z-]+[*^$|~]?="[^"]*"(?:\s+[is])?\]/gi, "")),
   );
   checar("sem recurso externo", !/@import|url\(/i.test(semComentario));
   const seletores = semComentario
@@ -33,7 +33,7 @@ export function verificarBaseCss(): void {
     .map((bloco) => bloco.split("{")[0]?.trim() ?? "");
   const proibidas = comImportante.filter(
     (sel) =>
-      !/\.infraCor|sparkling-modal-title|pesquisaPaginaSelecionada|infraAcaoBarraConjugada|body\.cke_editable|openNewTab|checkNaoAssinados|infraTrAtrasada|infraTdAtrasada|infraTrVermelha|infraTrAlerta|f5f6f7/.test(
+      !/\.infraCor|sparkling-modal-title|pesquisaPaginaSelecionada|infraAcaoBarraConjugada|body\.cke_editable|openNewTab|checkNaoAssinados|infraTrAtrasada|infraTdAtrasada|infraTrVermelha|infraTrAlerta|f5f6f7|table\.tablesorter|table\.infraTable|infraTrMarcada|infraTdMarcada|ed1c24|d8f5b9|tabelaOpcoes|tdOpcaoSigiloso|input-label-first|input-label-second/.test(
         sel,
       ),
   );

@@ -250,3 +250,24 @@ A grade do Controle de Processos, os Monitorados/Favoritos, os Projetos, as Dema
 **Verificado no navegador real (SP 4.1.5 e MJ 5.0.4):** modo escuro, claro, escuro de novo, desligado e religado, com a grade e os três iframes seguindo cada passo (destaque `#5eb382` no escuro e `#1f7a4d` no claro; ao desligar, tudo volta ao claro e o destaque some). A auditoria de contraste fecha vazia no Controle e nas telas testadas dos dois SEIs, com a instalação limpa.
 
 **Não coberto:** os balões (Shadow DOM) de Favoritos e Projetos criados depois de a página abrir pegam o esquema do momento da criação do contexto (`ctx` agora é mantido em dia, então novos balões saem certos); um balão já aberto durante a troca de modo só atualiza ao reabrir. O Histórico em modal não foi aberto neste teste.
+
+### 11.4 Quarta rodada: rastreio de todo o menu lateral (14/10/2026)
+
+A pedido do usuário (os Blocos de Assinatura tinham linhas vermelhas ilegíveis), um script abriu **todos os links do menu lateral** (só leitura: nenhum formulário foi enviado; ações com nome de efeito colateral foram filtradas), tirou o print de cada tela e rodou a auditoria de contraste (≥ 4,5:1) e de fundos claros em todos os frames.
+
+- **SP (SEI 4.1.5): 178 telas.** Primeiro rastreio: dezenas de telas com problema. Depois das correções: **0 problemas**.
+- **MJ (SEI 5.0.4): 122 ações únicas de leitura** (as telas "novo/reativar" repetem as do SP). De 19 telas com problema para **1 ocorrência**: o texto azul inline de uma notícia escrita pelo administrador, que é conteúdo do usuário.
+
+Todas as correções vieram de regras fixas que o SEI ou o SEI Pro gravam, descobertas com `CSS.getMatchedStylesForNode`:
+
+- **Listagens (51 telas):** `table.tablesorter` com `background-color:#ccc` inline, e a legenda `caption.infraCaption` sobre ele (contraste 1,4). `table.infraTable` passa a ter fundo do tema com `!important`.
+- **Blocos de Assinatura:** `tr.trVermelha` (`#ffbfbf`) com texto claro. Vira vermelho do tema a 16% sobre o fundo.
+- **Painel de Controle:** os rótulos dos cartões usam `color: var(--infra-esquema-cor-escura)` inline, e o tema tinha redefinido essa variável como o verde-escuro da borda da barra. **Erro meu:** no escuro a variável passa a ser o destaque.
+- **Retorno Programado:** calendário (`#divCalendario td.diaUtil` `#ccc`, `td.diaFimDeSemana` branco).
+- **Iniciar Processo:** `td.tdOpcaoSigiloso a { background: red }` e, no SEI 5, `table.tabelaOpcoes, table.tabelaOpcoes tr { background: white !important }`.
+- **Configuração do Histórico:** `tr.infraTrMarcada` com `!important` ciano.
+- **Telas de administração dos módulos (SEI 5, Bootstrap):** `.form-control`, `fieldset.infraFieldset`, `.input-group-text`, `.alert-*`, rótulos `.input-label-first/second` (`#666 !important`), linhas gravadas com `style="background-color:#d8f5b9"` e `bgcolor="#F4A460"`, `.cke_inner`.
+
+A lista de `!important` permitidos na folha base, conferida por teste, agora também cobre `table.tablesorter`, `table.infraTable`, `infraTrMarcada`, `tabelaOpcoes`, `tdOpcaoSigiloso`, `input-label-*`, `#ed1c24` e `d8f5b9`. O teste também passou a ignorar valores de cor que aparecem dentro de seletores de atributo (texto a casar, não cor aplicada).
+
+Os prints de todas as telas e um `INDICE.md` ficam em `capturas-estilo-avancado-2/` (fora do Git; 58 MB).

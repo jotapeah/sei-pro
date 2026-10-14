@@ -1,5 +1,5 @@
 /* GERADO por estilo-avancado/build.mjs. NAO EDITE ESTE ARQUIVO. Rode: npm run build */
-"use strict";(()=>{var E="#1f5fbf",so="#79acff",z="#14181d",no={claro:"#ffffff",escuro:"#1a1d21"},N=4.5,H=[{id:"sei-pro",nome:"SEI Pro",cor:"#1f5fbf"},{id:"oceano",nome:"Oceano",cor:"#0b6e99"},{id:"floresta",nome:"Floresta",cor:"#1f7a4d"},{id:"esmeralda",nome:"Esmeralda",cor:"#0e7c66"},{id:"grafite",nome:"Grafite",cor:"#3a4350"},{id:"vinho",nome:"Vinho",cor:"#8a2a43"},{id:"roxo",nome:"Roxo",cor:"#5b43b8"},{id:"ambar",nome:"\xC2mbar",cor:"#a85d00"},{id:"ardosia",nome:"Ard\xF3sia",cor:"#475c7a"},{id:"preto",nome:"Preto",cor:"#14181d"}],O=(r,o=0,a=1)=>Math.min(a,Math.max(o,r));function v(r){let o=String(r).trim().toLowerCase(),a=/^#([0-9a-f])([0-9a-f])([0-9a-f])$/.exec(o);if(a)return[a[1],a[2],a[3]].map(e=>Number.parseInt(e+e,16));let t=/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/.exec(o);return t?[t[1],t[2],t[3]].map(e=>Number.parseInt(e,16)):null}var S=r=>`#${r.map(o=>Math.round(O(o,0,255)).toString(16).padStart(2,"0")).join("")}`,F=r=>r<=.04045?r/12.92:((r+.055)/1.055)**2.4,io=r=>r<=.0031308?12.92*r:1.055*r**(1/2.4)-.055;function po(r){let[o,a,t]=r.map(i=>F(i/255)),e=Math.cbrt(.4122214708*o+.5363325363*a+.0514459929*t),s=Math.cbrt(.2119034982*o+.6806995451*a+.1073969566*t),n=Math.cbrt(.0883024619*o+.2817188376*a+.6299787005*t);return[.2104542553*e+.793617785*s-.0040720468*n,1.9779984951*e-2.428592205*s+.4505937099*n,.0259040371*e+.7827717662*s-.808675766*n]}function co(r,o,a){let t=(r+.3963377774*o+.2158037573*a)**3,e=(r-.1055613458*o-.0638541728*a)**3,s=(r-.0894841775*o-1.291485548*a)**3;return[4.0767416621*t-3.3077115913*e+.2309699292*s,-1.2684380046*t+2.6097574011*e-.3413193965*s,-.0041960863*t-.7034186147*e+1.707614701*s]}function _(r){let o=v(r)??v(E),[a,t,e]=po(o),s=Math.hypot(t,e);return{l:a,c:s,h:s<1e-4?0:(Math.atan2(e,t)*180/Math.PI+360)%360}}var U=r=>r.every(o=>o>=-5e-4&&o<=1.0005);function m({l:r,c:o,h:a}){let t=O(r),e=a*Math.PI/180,s=i=>co(t,i*Math.cos(e),i*Math.sin(e)),n=s(o);if(!U(n)){let i=0,p=o;for(let u=0;u<24;u++){let l=(i+p)/2;U(s(l))?i=l:p=l}n=s(i)}return S(n.map(i=>io(O(i))*255))}function V(r){let o=v(r)??[0,0,0],[a,t,e]=o.map(s=>F(s/255));return .2126*a+.7152*t+.0722*e}function x(r,o){let[a,t]=[V(r),V(o)];return(Math.max(a,t)+.05)/(Math.min(a,t)+.05)}function j(r,o){let a=v(r)?r:E,{l:t,c:e,h:s}=_(a),n=e<.03;o==="escuro"&&(t=Math.min(t,.42),e*=.85);let i=m({l:t,c:e,h:s}),p=x("#ffffff",i)>=x(z,i)?"#ffffff":z;for(let k=0;k<100&&x(p,i)<N;k++)t+=p==="#ffffff"?-.01:.01,i=m({l:t,c:e,h:s});let l=m({l:t+(o==="escuro"?.05:-.05),c:e,h:s}),d=m({l:t-.08,c:e,h:s}),c=m({l:Math.min(t,.26),c:e*.55,h:s}),I=no[o],g=_(n?o==="escuro"?so:E:a),q=o==="escuro"?Math.max(g.l,.7):Math.min(g.l,.55),P=m({l:q,c:g.c,h:g.h});for(let k=0;k<100&&x(P,I)<N;k++)q+=o==="escuro"?.01:-.01,P=m({l:q,c:g.c,h:g.h});return{barra:i,texto:p,hover:l,borda:d,menu:c,destaque:P}}var T="spro_tema",B="spro_tema_cache",A={versao:1,ativo:!1,modo:"auto",paleta:"sei-pro",corBarra:E,escurecerDocumentos:!0};function y(r){if(typeof r=="string")try{return y(JSON.parse(r))}catch{return{...A}}if(!r||typeof r!="object"||r.versao!==1)return{...A};let o=r,a=o.modo==="claro"||o.modo==="escuro"||o.modo==="auto"?o.modo:A.modo,t=H.find(p=>p.id===o.paleta),e=typeof o.corBarra=="string"?o.corBarra.trim().toLowerCase():"",s=v(e)&&/^#[0-9a-f]{6}$/.test(e)?e:null,n=t?t.id:"livre",i=t?t.cor:s??A.corBarra;return{versao:1,ativo:o.ativo===!0,modo:a,paleta:t||s?n:A.paleta,corBarra:i,escurecerDocumentos:o.escurecerDocumentos!==!1}}function C(r,o){return r.modo==="claro"?"claro":r.modo==="escuro"||o?"escuro":"claro"}var G=`/*
+"use strict";(()=>{var E="#1f5fbf",so="#79acff",$="#14181d",no={claro:"#ffffff",escuro:"#1a1d21"},N=4.5,F=[{id:"sei-pro",nome:"SEI Pro",cor:"#1f5fbf"},{id:"oceano",nome:"Oceano",cor:"#0b6e99"},{id:"floresta",nome:"Floresta",cor:"#1f7a4d"},{id:"esmeralda",nome:"Esmeralda",cor:"#0e7c66"},{id:"grafite",nome:"Grafite",cor:"#3a4350"},{id:"vinho",nome:"Vinho",cor:"#8a2a43"},{id:"roxo",nome:"Roxo",cor:"#5b43b8"},{id:"ambar",nome:"\xC2mbar",cor:"#a85d00"},{id:"ardosia",nome:"Ard\xF3sia",cor:"#475c7a"},{id:"preto",nome:"Preto",cor:"#14181d"}],O=(r,o=0,a=1)=>Math.min(a,Math.max(o,r));function v(r){let o=String(r).trim().toLowerCase(),a=/^#([0-9a-f])([0-9a-f])([0-9a-f])$/.exec(o);if(a)return[a[1],a[2],a[3]].map(e=>Number.parseInt(e+e,16));let t=/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/.exec(o);return t?[t[1],t[2],t[3]].map(e=>Number.parseInt(e,16)):null}var y=r=>`#${r.map(o=>Math.round(O(o,0,255)).toString(16).padStart(2,"0")).join("")}`,H=r=>r<=.04045?r/12.92:((r+.055)/1.055)**2.4,io=r=>r<=.0031308?12.92*r:1.055*r**(1/2.4)-.055;function po(r){let[o,a,t]=r.map(i=>H(i/255)),e=Math.cbrt(.4122214708*o+.5363325363*a+.0514459929*t),s=Math.cbrt(.2119034982*o+.6806995451*a+.1073969566*t),n=Math.cbrt(.0883024619*o+.2817188376*a+.6299787005*t);return[.2104542553*e+.793617785*s-.0040720468*n,1.9779984951*e-2.428592205*s+.4505937099*n,.0259040371*e+.7827717662*s-.808675766*n]}function co(r,o,a){let t=(r+.3963377774*o+.2158037573*a)**3,e=(r-.1055613458*o-.0638541728*a)**3,s=(r-.0894841775*o-1.291485548*a)**3;return[4.0767416621*t-3.3077115913*e+.2309699292*s,-1.2684380046*t+2.6097574011*e-.3413193965*s,-.0041960863*t-.7034186147*e+1.707614701*s]}function _(r){let o=v(r)??v(E),[a,t,e]=po(o),s=Math.hypot(t,e);return{l:a,c:s,h:s<1e-4?0:(Math.atan2(e,t)*180/Math.PI+360)%360}}var U=r=>r.every(o=>o>=-5e-4&&o<=1.0005);function m({l:r,c:o,h:a}){let t=O(r),e=a*Math.PI/180,s=i=>co(t,i*Math.cos(e),i*Math.sin(e)),n=s(o);if(!U(n)){let i=0,p=o;for(let u=0;u<24;u++){let l=(i+p)/2;U(s(l))?i=l:p=l}n=s(i)}return y(n.map(i=>io(O(i))*255))}function V(r){let o=v(r)??[0,0,0],[a,t,e]=o.map(s=>H(s/255));return .2126*a+.7152*t+.0722*e}function x(r,o){let[a,t]=[V(r),V(o)];return(Math.max(a,t)+.05)/(Math.min(a,t)+.05)}function j(r,o){let a=v(r)?r:E,{l:t,c:e,h:s}=_(a),n=e<.03;o==="escuro"&&(t=Math.min(t,.42),e*=.85);let i=m({l:t,c:e,h:s}),p=x("#ffffff",i)>=x($,i)?"#ffffff":$;for(let k=0;k<100&&x(p,i)<N;k++)t+=p==="#ffffff"?-.01:.01,i=m({l:t,c:e,h:s});let l=m({l:t+(o==="escuro"?.05:-.05),c:e,h:s}),d=m({l:t-.08,c:e,h:s}),c=m({l:Math.min(t,.26),c:e*.55,h:s}),I=no[o],g=_(n?o==="escuro"?so:E:a),q=o==="escuro"?Math.max(g.l,.7):Math.min(g.l,.55),P=m({l:q,c:g.c,h:g.h});for(let k=0;k<100&&x(P,I)<N;k++)q+=o==="escuro"?.01:-.01,P=m({l:q,c:g.c,h:g.h});return{barra:i,texto:p,hover:l,borda:d,menu:c,destaque:P}}var S="spro_tema",B="spro_tema_cache",A={versao:1,ativo:!1,modo:"auto",paleta:"sei-pro",corBarra:E,escurecerDocumentos:!0};function T(r){if(typeof r=="string")try{return T(JSON.parse(r))}catch{return{...A}}if(!r||typeof r!="object"||r.versao!==1)return{...A};let o=r,a=o.modo==="claro"||o.modo==="escuro"||o.modo==="auto"?o.modo:A.modo,t=F.find(p=>p.id===o.paleta),e=typeof o.corBarra=="string"?o.corBarra.trim().toLowerCase():"",s=v(e)&&/^#[0-9a-f]{6}$/.test(e)?e:null,n=t?t.id:"livre",i=t?t.cor:s??A.corBarra;return{versao:1,ativo:o.ativo===!0,modo:a,paleta:t||s?n:A.paleta,corBarra:i,escurecerDocumentos:o.escurecerDocumentos!==!1}}function C(r,o){return r.modo==="claro"?"claro":r.modo==="escuro"||o?"escuro":"claro"}var G=`/*
  * Folha base do Estilo Avan\xE7ado 2 (sub-projeto 1): barra, p\xE1gina, links, tabelas, campos,
  * bot\xF5es e di\xE1logos. S\xF3 var(--spro-*): nenhuma cor literal aqui (h\xE1 um teste que confere).
  * Tudo sob :root[data-spro-tema-ativo], que s\xF3 existe com a op\xE7\xE3o ligada.
@@ -19,6 +19,10 @@
   --infra-esquema-cor-clara: var(--spro-destaque);
   --infra-esquema-cor-escura: var(--spro-barra-borda);
   --infra-esquema-cor-texto: var(--spro-texto);
+}
+/* No escuro, a "cor escura" do esquema serve de texto de destaque (r\xF3tulos de cart\xF5es do Painel de Controle): precisa ser clara */
+:root[data-spro-tema="escuro"] {
+  --infra-esquema-cor-escura: var(--spro-destaque);
 }
 :root[data-spro-tema-ativo] .infraCorBarraSuperior {
   background-color: var(--spro-barra-borda) !important;
@@ -257,6 +261,120 @@
 :root[data-spro-tema-ativo] .btn-light:not(:disabled):not(.disabled):active,
 :root[data-spro-tema-ativo] .btn-default:not(:disabled):not(.disabled):active {
   background-color: var(--spro-destaque-medio);
+}
+
+/* Listagens do SEI: a tabela orden\xE1vel (tablesorter) traz fundo #ccc inline, e a legenda fica sobre ele */
+:root[data-spro-tema-ativo] table.tablesorter,
+:root[data-spro-tema-ativo] table.infraTable {
+  background-color: var(--spro-fundo) !important;
+}
+:root[data-spro-tema-ativo] caption.infraCaption {
+  color: var(--spro-suave);
+  background-color: transparent;
+}
+/* Linhas de destaque das listas (Blocos de Assinatura etc.): tom do tema, texto normal */
+:root[data-spro-tema-ativo] tr.trVermelha,
+:root[data-spro-tema-ativo] tr.trVermelha > td {
+  background-color: color-mix(in srgb, var(--spro-perigo) 16%, var(--spro-fundo));
+}
+/* Os !important do SEI para a linha marcada (ciano) e o destaque de "sigiloso" (vermelho puro) */
+:root[data-spro-tema-ativo] tr.infraTrMarcada,
+:root[data-spro-tema-ativo] tr.infraTrMarcada td,
+:root[data-spro-tema-ativo] td.infraTdMarcada {
+  background-color: var(--spro-destaque-medio) !important;
+}
+/* Iniciar Processo: a lista de tipos (SEI 5 for\xE7a branco com !important) e os tipos sigilosos (vermelho do SEI) */
+:root[data-spro-tema-ativo] table.tabelaOpcoes,
+:root[data-spro-tema-ativo] table.tabelaOpcoes tr {
+  background-color: var(--spro-fundo) !important;
+}
+:root[data-spro-tema-ativo] td.tdOpcaoSigiloso,
+:root[data-spro-tema-ativo] td.tdOpcaoSigiloso a {
+  background-color: color-mix(in srgb, var(--spro-perigo) 24%, var(--spro-fundo)) !important;
+  color: var(--spro-texto);
+}
+/* Calend\xE1rio do SEI (Retorno Programado, datas) */
+:root[data-spro-tema-ativo] #divCalendario td.diaUtil {
+  background-color: var(--spro-fundo-3);
+  color: var(--spro-texto);
+}
+:root[data-spro-tema-ativo] #divCalendario td.diaFimDeSemana {
+  background-color: var(--spro-fundo-2);
+  color: var(--spro-texto);
+}
+/* Texto vermelho inline (#ed1c24) do Painel de Controle: no escuro usa o vermelho do tema */
+:root[data-spro-tema="escuro"] [style*="color:#ed1c24"] {
+  color: var(--spro-perigo) !important;
+}
+
+/* Bootstrap do SEI 5 (telas de administra\xE7\xE3o e dos m\xF3dulos): campos, fieldsets, alertas e r\xF3tulos */
+:root[data-spro-tema-ativo] .form-control,
+:root[data-spro-tema-ativo] fieldset.infraFieldset {
+  background-color: var(--spro-fundo);
+  color: var(--spro-texto);
+  border-color: var(--spro-borda-forte);
+}
+:root[data-spro-tema-ativo] .input-group-text {
+  background-color: var(--spro-fundo-3);
+  color: var(--spro-texto);
+  border-color: var(--spro-borda-forte);
+}
+:root[data-spro-tema-ativo] .alert {
+  color: var(--spro-texto);
+}
+:root[data-spro-tema-ativo] .alert-danger {
+  background-color: color-mix(in srgb, var(--spro-perigo) 16%, var(--spro-fundo));
+  border-color: color-mix(in srgb, var(--spro-perigo) 40%, transparent);
+}
+:root[data-spro-tema-ativo] .alert-warning {
+  background-color: color-mix(in srgb, var(--spro-aviso) 16%, var(--spro-fundo));
+  border-color: color-mix(in srgb, var(--spro-aviso) 40%, transparent);
+}
+:root[data-spro-tema-ativo] .alert-success {
+  background-color: color-mix(in srgb, var(--spro-ok) 16%, var(--spro-fundo));
+  border-color: color-mix(in srgb, var(--spro-ok) 40%, transparent);
+}
+:root[data-spro-tema-ativo] .alert-info {
+  background-color: var(--spro-destaque-suave);
+  border-color: var(--spro-destaque-medio);
+}
+:root[data-spro-tema-ativo] label.input-label-first,
+:root[data-spro-tema-ativo] label.input-label-second {
+  color: var(--spro-suave) !important;
+}
+:root[data-spro-tema-ativo] .cke_inner,
+:root[data-spro-tema-ativo] iframe.cke_wysiwyg_frame {
+  background-color: var(--spro-fundo);
+}
+/* Linha de destaque laranja que um m\xF3dulo grava no atributo bgcolor (#F4A460) */
+:root[data-spro-tema-ativo] tr[bgcolor="#f4a460" i],
+:root[data-spro-tema-ativo] tr[bgcolor="#f4a460" i] > td {
+  background-color: color-mix(in srgb, var(--spro-aviso) 18%, var(--spro-fundo));
+}
+/* Linha de destaque verde que um m\xF3dulo grava inline (#d8f5b9) */
+:root[data-spro-tema-ativo] tr[style*="d8f5b9"] {
+  background-color: color-mix(in srgb, var(--spro-ok) 16%, var(--spro-fundo)) !important;
+}
+
+/* Seletor m\xFAltiplo (multiple-select), campos somente leitura e cart\xF5es do Bootstrap (Painel de Controle) */
+:root[data-spro-tema-ativo] button.ms-choice,
+:root[data-spro-tema-ativo] .ms-drop {
+  background-color: var(--spro-fundo);
+  color: var(--spro-texto);
+  border-color: var(--spro-borda-forte);
+}
+:root[data-spro-tema-ativo] input.infraReadOnly,
+:root[data-spro-tema-ativo] input.infraText[readonly],
+:root[data-spro-tema-ativo] input.infraText:disabled {
+  background-color: var(--spro-fundo-2);
+  color: var(--spro-suave);
+}
+:root[data-spro-tema-ativo] .card,
+:root[data-spro-tema-ativo] .card-body,
+:root[data-spro-tema-ativo] .card-header {
+  background-color: var(--spro-fundo);
+  color: var(--spro-texto);
+  border-color: var(--spro-borda);
 }
 
 /* Links */
@@ -499,13 +617,13 @@ ${Object.entries(vo(r,o)).map(([e,s])=>`  ${e}: ${s};`).join(`
 `)}
   color-scheme: ${o==="escuro"?"dark":"light"};
 }
-${a}`}var X="data-spro-tema",J="data-spro-tema-ativo",M="data-spro-tema-estilo";function K(r,o,a,t){if(!o.ativo){fo(r);return}let e=C(o,a),s=r.documentElement;if(!s)return;let n=r.querySelector(`style[${M}]`);n||(n=r.createElement("style"),n.setAttribute(M,""),(r.head??s).appendChild(n));let i=Q(o,e,t);n.textContent!==i&&(n.textContent=i),s.setAttribute(J,""),s.setAttribute(X,e),s.style.colorScheme=e==="escuro"?"dark":"light"}function fo(r){for(let a of r.querySelectorAll(`style[${M}]`))a.remove();let o=r.documentElement;o&&(o.removeAttribute(J),o.removeAttribute(X),o.style.removeProperty("color-scheme"),o.getAttribute("style")||o.removeAttribute("style"))}function W(r){try{let o=r.getItem(B);return o?y(o):null}catch{return null}}function Z(r,o){try{r.setItem(B,JSON.stringify(o))}catch{}}var w="#1a1d21",bo="#e7e9ec",go=_(w).l,Y={black:"#000000",white:"#ffffff",red:"#ff0000",blue:"#0000ff",green:"#008000",lime:"#00ff00",yellow:"#ffff00",orange:"#ffa500",purple:"#800080",gray:"#808080",grey:"#808080",silver:"#c0c0c0",navy:"#000080",maroon:"#800000",teal:"#008080",aqua:"#00ffff",cyan:"#00ffff",fuchsia:"#ff00ff",magenta:"#ff00ff",olive:"#808000",brown:"#a52a2a",pink:"#ffc0cb"};function xo(r){let o=r.trim().toLowerCase();if(!o||o==="transparent"||o==="inherit"||o==="initial"||o==="unset"||o==="currentcolor")return null;if(Y[o])return Y[o];if(o.startsWith("#"))return v(o)?S(v(o)):null;let a=/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+([\d.]+%?))?\s*\)$/.exec(o);if(!a||!((a[4]===void 0?1:a[4].endsWith("%")?Number.parseFloat(a[4])/100:Number.parseFloat(a[4]))>0))return null;let e=[a[1],a[2],a[3]].map(s=>Number(s));return e.some(s=>!Number.isFinite(s)||s<0||s>255)?null:S(e)}function D(r,o){let a=xo(r);if(!a)return null;let{l:t,c:e,h:s}=_(a),n=e<.02;if(o==="texto"){if(n&&(t<.3||t>.9))return bo;let p=t>=.75?Math.max(.85,t):.62+(1-t)*.33,u=m({l:p,c:e,h:s});for(let l=0;l<40&&x(u,w)<4.5;l++)p+=.01,u=m({l:p,c:e,h:s});return u}if(n&&t>.97)return w;let i=Math.min(.36,go+(1-t)*.16+Math.min(e,.2)*.8);return m({l:i,c:e,h:s})}var h="data-spro-adaptado",b="data-spro-original",L="--spro-doc-texto",$="--spro-doc-fundo",R="data-spro-tema-doc",f="data-spro-ver-original",ho=400,oo="[style],[bgcolor],[color],font,td,th,table",ko=new Set(["IMG","CANVAS","SVG","IFRAME","EMBED","OBJECT","VIDEO","SCRIPT","STYLE","LINK"]),Eo=`
-:root[data-spro-tema="escuro"]:not([${b}]) [${h}~="t"] { color: var(${L}) !important; }
-:root[data-spro-tema="escuro"]:not([${b}]) [${h}~="f"] { background-color: var(${$}) !important; }
+${a}`}var X="data-spro-tema",J="data-spro-tema-ativo",M="data-spro-tema-estilo";function K(r,o,a,t){if(!o.ativo){fo(r);return}let e=C(o,a),s=r.documentElement;if(!s)return;let n=r.querySelector(`style[${M}]`);n||(n=r.createElement("style"),n.setAttribute(M,""),(r.head??s).appendChild(n));let i=Q(o,e,t);n.textContent!==i&&(n.textContent=i),s.setAttribute(J,""),s.setAttribute(X,e),s.style.colorScheme=e==="escuro"?"dark":"light"}function fo(r){for(let a of r.querySelectorAll(`style[${M}]`))a.remove();let o=r.documentElement;o&&(o.removeAttribute(J),o.removeAttribute(X),o.style.removeProperty("color-scheme"),o.getAttribute("style")||o.removeAttribute("style"))}function W(r){try{let o=r.getItem(B);return o?T(o):null}catch{return null}}function Z(r,o){try{r.setItem(B,JSON.stringify(o))}catch{}}var w="#1a1d21",bo="#e7e9ec",go=_(w).l,Y={black:"#000000",white:"#ffffff",red:"#ff0000",blue:"#0000ff",green:"#008000",lime:"#00ff00",yellow:"#ffff00",orange:"#ffa500",purple:"#800080",gray:"#808080",grey:"#808080",silver:"#c0c0c0",navy:"#000080",maroon:"#800000",teal:"#008080",aqua:"#00ffff",cyan:"#00ffff",fuchsia:"#ff00ff",magenta:"#ff00ff",olive:"#808000",brown:"#a52a2a",pink:"#ffc0cb"};function xo(r){let o=r.trim().toLowerCase();if(!o||o==="transparent"||o==="inherit"||o==="initial"||o==="unset"||o==="currentcolor")return null;if(Y[o])return Y[o];if(o.startsWith("#"))return v(o)?y(v(o)):null;let a=/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+([\d.]+%?))?\s*\)$/.exec(o);if(!a||!((a[4]===void 0?1:a[4].endsWith("%")?Number.parseFloat(a[4])/100:Number.parseFloat(a[4]))>0))return null;let e=[a[1],a[2],a[3]].map(s=>Number(s));return e.some(s=>!Number.isFinite(s)||s<0||s>255)?null:y(e)}function L(r,o){let a=xo(r);if(!a)return null;let{l:t,c:e,h:s}=_(a),n=e<.02;if(o==="texto"){if(n&&(t<.3||t>.9))return bo;let p=t>=.75?Math.max(.85,t):.62+(1-t)*.33,u=m({l:p,c:e,h:s});for(let l=0;l<40&&x(u,w)<4.5;l++)p+=.01,u=m({l:p,c:e,h:s});return u}if(n&&t>.97)return w;let i=Math.min(.36,go+(1-t)*.16+Math.min(e,.2)*.8);return m({l:i,c:e,h:s})}var h="data-spro-adaptado",b="data-spro-original",R="--spro-doc-texto",z="--spro-doc-fundo",D="data-spro-tema-doc",f="data-spro-ver-original",ho=400,oo="[style],[bgcolor],[color],font,td,th,table",ko=new Set(["IMG","CANVAS","SVG","IFRAME","EMBED","OBJECT","VIDEO","SCRIPT","STYLE","LINK"]),Eo=`
+:root[data-spro-tema="escuro"]:not([${b}]) [${h}~="t"] { color: var(${R}) !important; }
+:root[data-spro-tema="escuro"]:not([${b}]) [${h}~="f"] { background-color: var(${z}) !important; }
 :root[${b}] body { background: #fff; color: #000; }
 [${f}] { position: fixed; bottom: 12px; left: 12px; z-index: 2147483000; padding: 4px 10px;
   font: 12px/1.4 var(--spro-fonte, system-ui, sans-serif); color: var(--spro-texto); background: var(--spro-fundo);
   border: 1px solid var(--spro-borda-forte); border-radius: var(--spro-raio, 8px); cursor: pointer; box-shadow: var(--spro-sombra-2); }
 [${f}]:hover { background: var(--spro-destaque); color: var(--spro-destaque-texto); }
 [${f}][aria-pressed="true"] { outline: 2px solid var(--spro-destaque); }
-`;function _o(r,o,a){let t=r.style;return t?.getPropertyValue?.(o)||(o==="background-color"?t?.getPropertyValue?.("background"):"")||""||r.getAttribute(a)||""}function ro(r,o){let e=_o(r,o==="texto"?"color":"background-color",o==="texto"?"color":"bgcolor");if(e)return e;if(o==="fundo"&&/^(TD|TH|TABLE)$/.test(r.tagName))try{return r.ownerDocument.defaultView?.getComputedStyle(r).backgroundColor??""}catch{return""}return""}function Ao(r,o){if(ko.has(r.tagName.toUpperCase())||r.closest?.(`[${f}]`))return;let a="",t=()=>{o.has(r)||o.set(r,r.getAttribute("style"))},e=D(ro(r,"texto"),"texto");e&&(t(),r.style.setProperty(L,e),a+="t");let s=D(ro(r,"fundo"),"fundo");s&&(t(),r.style.setProperty($,s),a+="f"),a&&r.setAttribute(h,a)}function To(r){for(let o of[r,...r.querySelectorAll(`[${h}]`)]){if(!o.hasAttribute(h))continue;o.removeAttribute(h);let a=o.style;a.removeProperty(L),a.removeProperty($),o.getAttribute("style")||o.removeAttribute("style")}}function ao(r){let o=globalThis;typeof o.requestIdleCallback=="function"?o.requestIdleCallback(r):setTimeout(r,0)}function to(r,o={}){let a=(o.raizes??["body"]).flatMap(d=>[...r.querySelectorAll(d)]);if(a.length===0)return()=>{};if(!r.querySelector(`style[${R}]`)){let d=r.createElement("style");d.setAttribute(R,""),d.textContent=Eo,(r.head??r.documentElement).appendChild(d)}let t=new WeakSet,e=new Map,s=[],n=!1,i=!0,p=()=>{if(n=!1,!!i){for(let d of s.splice(0,ho))t.has(d)||(t.add(d),Ao(d,e));s.length>0&&(n=!0,ao(p))}},u=d=>{if(d.nodeType===1){d.matches?.(oo)&&s.push(d);for(let c of d.querySelectorAll?.(oo)??[])s.push(c);!n&&s.length>0&&(n=!0,ao(p))}};for(let d of a)u(d);let l=null;if(typeof MutationObserver=="function"){l=new MutationObserver(d=>{for(let c of d)if(c.type==="childList")for(let I of c.addedNodes)u(I);else c.type==="attributes"&&c.target.nodeType===1&&(t.delete(c.target),u(c.target))});for(let d of a)l.observe(d,{childList:!0,subtree:!0})}return o.botao&&So(r),()=>{i=!1,l?.disconnect(),s=[],To(r.documentElement);for(let[d,c]of e)c===null?d.removeAttribute("style"):d.setAttribute("style",c);e.clear();for(let d of r.querySelectorAll(`style[${R}], [${f}]`))d.remove();r.documentElement.removeAttribute(b)}}function yo(r){let o=r.documentElement,a=!o.hasAttribute(b);return a?o.setAttribute(b,""):o.removeAttribute(b),r.querySelector(`[${f}]`)?.setAttribute("aria-pressed",String(a)),a}function So(r){if(r.querySelector(`[${f}]`)||!r.body)return;let o=r.createElement("button");o.type="button",o.setAttribute(f,""),o.setAttribute("aria-pressed","false"),o.title="Mostra o documento com as cores originais, como ser\xE1 assinado",o.textContent="Ver original",o.addEventListener("click",()=>yo(r)),r.body.appendChild(o)}var eo=window;if(!eo.__seiProEstilo2){eo.__seiProEstilo2=!0;let r=typeof matchMedia=="function"?matchMedia("(prefers-color-scheme: dark)"):null,o=null,a=/[?&]acao=(documento_visualizar|documento_imprimir_web)\b/.test(location.search),t=null,e=()=>{if(!o)return;let n=r?.matches??!1;K(document,o,n,G);let i=a&&o.ativo&&o.escurecerDocumentos&&C(o,n)==="escuro";if(i&&!t){let p=()=>{t!==null&&(t=to(document,{botao:!0}))};t=()=>{},document.readyState==="loading"?document.addEventListener("DOMContentLoaded",p,{once:!0}):p()}else!i&&t&&(t(),t=null)};o=W(localStorage),e(),r?.addEventListener("change",e);let s=n=>{o=y(n),Z(localStorage,o),e()};chrome.storage.sync.get(T).then(n=>s(n[T])).catch(n=>console.warn("[SEI Pro] estilo avancado 2:",n)),chrome.storage.onChanged.addListener((n,i)=>{i==="sync"&&n[T]&&s(n[T].newValue)})}})();
+`;function _o(r,o,a){let t=r.style;return t?.getPropertyValue?.(o)||(o==="background-color"?t?.getPropertyValue?.("background"):"")||""||r.getAttribute(a)||""}function ro(r,o){let e=_o(r,o==="texto"?"color":"background-color",o==="texto"?"color":"bgcolor");if(e)return e;if(o==="fundo"&&/^(TD|TH|TABLE)$/.test(r.tagName))try{return r.ownerDocument.defaultView?.getComputedStyle(r).backgroundColor??""}catch{return""}return""}function Ao(r,o){if(ko.has(r.tagName.toUpperCase())||r.closest?.(`[${f}]`))return;let a="",t=()=>{o.has(r)||o.set(r,r.getAttribute("style"))},e=L(ro(r,"texto"),"texto");e&&(t(),r.style.setProperty(R,e),a+="t");let s=L(ro(r,"fundo"),"fundo");s&&(t(),r.style.setProperty(z,s),a+="f"),a&&r.setAttribute(h,a)}function So(r){for(let o of[r,...r.querySelectorAll(`[${h}]`)]){if(!o.hasAttribute(h))continue;o.removeAttribute(h);let a=o.style;a.removeProperty(R),a.removeProperty(z),o.getAttribute("style")||o.removeAttribute("style")}}function ao(r){let o=globalThis;typeof o.requestIdleCallback=="function"?o.requestIdleCallback(r):setTimeout(r,0)}function to(r,o={}){let a=(o.raizes??["body"]).flatMap(d=>[...r.querySelectorAll(d)]);if(a.length===0)return()=>{};if(!r.querySelector(`style[${D}]`)){let d=r.createElement("style");d.setAttribute(D,""),d.textContent=Eo,(r.head??r.documentElement).appendChild(d)}let t=new WeakSet,e=new Map,s=[],n=!1,i=!0,p=()=>{if(n=!1,!!i){for(let d of s.splice(0,ho))t.has(d)||(t.add(d),Ao(d,e));s.length>0&&(n=!0,ao(p))}},u=d=>{if(d.nodeType===1){d.matches?.(oo)&&s.push(d);for(let c of d.querySelectorAll?.(oo)??[])s.push(c);!n&&s.length>0&&(n=!0,ao(p))}};for(let d of a)u(d);let l=null;if(typeof MutationObserver=="function"){l=new MutationObserver(d=>{for(let c of d)if(c.type==="childList")for(let I of c.addedNodes)u(I);else c.type==="attributes"&&c.target.nodeType===1&&(t.delete(c.target),u(c.target))});for(let d of a)l.observe(d,{childList:!0,subtree:!0})}return o.botao&&yo(r),()=>{i=!1,l?.disconnect(),s=[],So(r.documentElement);for(let[d,c]of e)c===null?d.removeAttribute("style"):d.setAttribute("style",c);e.clear();for(let d of r.querySelectorAll(`style[${D}], [${f}]`))d.remove();r.documentElement.removeAttribute(b)}}function To(r){let o=r.documentElement,a=!o.hasAttribute(b);return a?o.setAttribute(b,""):o.removeAttribute(b),r.querySelector(`[${f}]`)?.setAttribute("aria-pressed",String(a)),a}function yo(r){if(r.querySelector(`[${f}]`)||!r.body)return;let o=r.createElement("button");o.type="button",o.setAttribute(f,""),o.setAttribute("aria-pressed","false"),o.title="Mostra o documento com as cores originais, como ser\xE1 assinado",o.textContent="Ver original",o.addEventListener("click",()=>To(r)),r.body.appendChild(o)}var eo=window;if(!eo.__seiProEstilo2){eo.__seiProEstilo2=!0;let r=typeof matchMedia=="function"?matchMedia("(prefers-color-scheme: dark)"):null,o=null,a=/[?&]acao=(documento_visualizar|documento_imprimir_web)\b/.test(location.search),t=null,e=()=>{if(!o)return;let n=r?.matches??!1;K(document,o,n,G);let i=a&&o.ativo&&o.escurecerDocumentos&&C(o,n)==="escuro";if(i&&!t){let p=()=>{t!==null&&(t=to(document,{botao:!0}))};t=()=>{},document.readyState==="loading"?document.addEventListener("DOMContentLoaded",p,{once:!0}):p()}else!i&&t&&(t(),t=null)};o=W(localStorage),e(),r?.addEventListener("change",e);let s=n=>{o=T(n),Z(localStorage,o),e()};chrome.storage.sync.get(S).then(n=>s(n[S])).catch(n=>console.warn("[SEI Pro] estilo avancado 2:",n)),chrome.storage.onChanged.addListener((n,i)=>{i==="sync"&&n[S]&&s(n[S].newValue)})}})();

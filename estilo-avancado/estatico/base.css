@@ -19,6 +19,10 @@
   --infra-esquema-cor-escura: var(--spro-barra-borda);
   --infra-esquema-cor-texto: var(--spro-texto);
 }
+/* No escuro, a "cor escura" do esquema serve de texto de destaque (rótulos de cartões do Painel de Controle): precisa ser clara */
+:root[data-spro-tema="escuro"] {
+  --infra-esquema-cor-escura: var(--spro-destaque);
+}
 :root[data-spro-tema-ativo] .infraCorBarraSuperior {
   background-color: var(--spro-barra-borda) !important;
 }
@@ -256,6 +260,120 @@
 :root[data-spro-tema-ativo] .btn-light:not(:disabled):not(.disabled):active,
 :root[data-spro-tema-ativo] .btn-default:not(:disabled):not(.disabled):active {
   background-color: var(--spro-destaque-medio);
+}
+
+/* Listagens do SEI: a tabela ordenável (tablesorter) traz fundo #ccc inline, e a legenda fica sobre ele */
+:root[data-spro-tema-ativo] table.tablesorter,
+:root[data-spro-tema-ativo] table.infraTable {
+  background-color: var(--spro-fundo) !important;
+}
+:root[data-spro-tema-ativo] caption.infraCaption {
+  color: var(--spro-suave);
+  background-color: transparent;
+}
+/* Linhas de destaque das listas (Blocos de Assinatura etc.): tom do tema, texto normal */
+:root[data-spro-tema-ativo] tr.trVermelha,
+:root[data-spro-tema-ativo] tr.trVermelha > td {
+  background-color: color-mix(in srgb, var(--spro-perigo) 16%, var(--spro-fundo));
+}
+/* Os !important do SEI para a linha marcada (ciano) e o destaque de "sigiloso" (vermelho puro) */
+:root[data-spro-tema-ativo] tr.infraTrMarcada,
+:root[data-spro-tema-ativo] tr.infraTrMarcada td,
+:root[data-spro-tema-ativo] td.infraTdMarcada {
+  background-color: var(--spro-destaque-medio) !important;
+}
+/* Iniciar Processo: a lista de tipos (SEI 5 força branco com !important) e os tipos sigilosos (vermelho do SEI) */
+:root[data-spro-tema-ativo] table.tabelaOpcoes,
+:root[data-spro-tema-ativo] table.tabelaOpcoes tr {
+  background-color: var(--spro-fundo) !important;
+}
+:root[data-spro-tema-ativo] td.tdOpcaoSigiloso,
+:root[data-spro-tema-ativo] td.tdOpcaoSigiloso a {
+  background-color: color-mix(in srgb, var(--spro-perigo) 24%, var(--spro-fundo)) !important;
+  color: var(--spro-texto);
+}
+/* Calendário do SEI (Retorno Programado, datas) */
+:root[data-spro-tema-ativo] #divCalendario td.diaUtil {
+  background-color: var(--spro-fundo-3);
+  color: var(--spro-texto);
+}
+:root[data-spro-tema-ativo] #divCalendario td.diaFimDeSemana {
+  background-color: var(--spro-fundo-2);
+  color: var(--spro-texto);
+}
+/* Texto vermelho inline (#ed1c24) do Painel de Controle: no escuro usa o vermelho do tema */
+:root[data-spro-tema="escuro"] [style*="color:#ed1c24"] {
+  color: var(--spro-perigo) !important;
+}
+
+/* Bootstrap do SEI 5 (telas de administração e dos módulos): campos, fieldsets, alertas e rótulos */
+:root[data-spro-tema-ativo] .form-control,
+:root[data-spro-tema-ativo] fieldset.infraFieldset {
+  background-color: var(--spro-fundo);
+  color: var(--spro-texto);
+  border-color: var(--spro-borda-forte);
+}
+:root[data-spro-tema-ativo] .input-group-text {
+  background-color: var(--spro-fundo-3);
+  color: var(--spro-texto);
+  border-color: var(--spro-borda-forte);
+}
+:root[data-spro-tema-ativo] .alert {
+  color: var(--spro-texto);
+}
+:root[data-spro-tema-ativo] .alert-danger {
+  background-color: color-mix(in srgb, var(--spro-perigo) 16%, var(--spro-fundo));
+  border-color: color-mix(in srgb, var(--spro-perigo) 40%, transparent);
+}
+:root[data-spro-tema-ativo] .alert-warning {
+  background-color: color-mix(in srgb, var(--spro-aviso) 16%, var(--spro-fundo));
+  border-color: color-mix(in srgb, var(--spro-aviso) 40%, transparent);
+}
+:root[data-spro-tema-ativo] .alert-success {
+  background-color: color-mix(in srgb, var(--spro-ok) 16%, var(--spro-fundo));
+  border-color: color-mix(in srgb, var(--spro-ok) 40%, transparent);
+}
+:root[data-spro-tema-ativo] .alert-info {
+  background-color: var(--spro-destaque-suave);
+  border-color: var(--spro-destaque-medio);
+}
+:root[data-spro-tema-ativo] label.input-label-first,
+:root[data-spro-tema-ativo] label.input-label-second {
+  color: var(--spro-suave) !important;
+}
+:root[data-spro-tema-ativo] .cke_inner,
+:root[data-spro-tema-ativo] iframe.cke_wysiwyg_frame {
+  background-color: var(--spro-fundo);
+}
+/* Linha de destaque laranja que um módulo grava no atributo bgcolor (#F4A460) */
+:root[data-spro-tema-ativo] tr[bgcolor="#f4a460" i],
+:root[data-spro-tema-ativo] tr[bgcolor="#f4a460" i] > td {
+  background-color: color-mix(in srgb, var(--spro-aviso) 18%, var(--spro-fundo));
+}
+/* Linha de destaque verde que um módulo grava inline (#d8f5b9) */
+:root[data-spro-tema-ativo] tr[style*="d8f5b9"] {
+  background-color: color-mix(in srgb, var(--spro-ok) 16%, var(--spro-fundo)) !important;
+}
+
+/* Seletor múltiplo (multiple-select), campos somente leitura e cartões do Bootstrap (Painel de Controle) */
+:root[data-spro-tema-ativo] button.ms-choice,
+:root[data-spro-tema-ativo] .ms-drop {
+  background-color: var(--spro-fundo);
+  color: var(--spro-texto);
+  border-color: var(--spro-borda-forte);
+}
+:root[data-spro-tema-ativo] input.infraReadOnly,
+:root[data-spro-tema-ativo] input.infraText[readonly],
+:root[data-spro-tema-ativo] input.infraText:disabled {
+  background-color: var(--spro-fundo-2);
+  color: var(--spro-suave);
+}
+:root[data-spro-tema-ativo] .card,
+:root[data-spro-tema-ativo] .card-body,
+:root[data-spro-tema-ativo] .card-header {
+  background-color: var(--spro-fundo);
+  color: var(--spro-texto);
+  border-color: var(--spro-borda);
 }
 
 /* Links */
