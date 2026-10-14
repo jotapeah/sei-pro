@@ -108,7 +108,8 @@ export async function montarSecaoAparencia(deps: DepsAparencia): Promise<HTMLEle
     livre.value = cfg.corBarra;
     hex.textContent = cfg.corBarra;
 
-    const d = derivarBarra(cfg.corBarra, esquema);
+    // O aviso vale para a cor escolhida em si (tema claro): escurecer a barra no modo escuro e esperado.
+    const d = derivarBarra(cfg.corBarra, "claro");
     const mudou = lerHex(d.barra) && d.barra.toLowerCase() !== cfg.corBarra.toLowerCase();
     aviso.textContent = mudou ? "Ajustamos o tom para manter o texto legível." : "";
     sub.toggleAttribute("data-inativo", !cfg.ativo);

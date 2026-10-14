@@ -56,6 +56,14 @@ export async function verificarSecao(): Promise<void> {
     g.salvo?.modo === CONFIG_PADRAO.modo && g.salvo?.corBarra === CONFIG_PADRAO.corBarra && g.salvo?.ativo === true,
   );
 
+  (el.querySelector('[data-paleta="floresta"]') as HTMLElement).click();
+  (el.querySelector('[data-modo="escuro"]') as HTMLElement).click();
+  await tique();
+  checar(
+    "paleta pronta no escuro: sem aviso (escurecer a barra e esperado)",
+    (el.querySelector(".spro-ap-aviso")?.textContent ?? "") === "",
+  );
+
   const meio = el.querySelector('input[type="color"]') as HTMLInputElement;
   meio.value = "#c06020";
   disparar(meio, "input");
