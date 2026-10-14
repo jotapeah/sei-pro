@@ -2,6 +2,14 @@
 
 ## ![SEI Pro Histórico de Versões](../img/icon-historico.png) Histórico de versões
 
+### Versão 3.2.3
+14/10/2026
+
+- **Novo — [Agente de IA](../pages/AGENTEIA.md) entrega documentos a conector em outro computador.** Antes, o agente baixava o documento e passava ao conector só o caminho do arquivo, que um servidor em outra máquina não consegue abrir. Agora, quando o conector aceita receber o arquivo, o SEI Pro confere se é o mesmo documento aprovado no download e envia o conteúdo, com o nome aprovado. **Você aprova cada envio**, mesmo com "Sempre permitir", e o cartão mostra o documento, o tamanho e o servidor. Ideia e primeira versão de Tavares (ANTAQ), para o conector do Sistema de Arrendamento.
+- **Nome legível no download.** O agente escolhe o nome do arquivo a partir do documento (por exemplo, *Contrato de Cessão de Uso - Porto de Itaqui*), sempre com a extensão original e o número SEI.
+- **Corrigido — [Demandas](../pages/DEMANDAS.md):** editar uma demanda que já tinha processo vinculado reabria o diálogo em vez de salvar.
+- **Ajuste — [Novo Controle de Processos](../pages/GRADECONTROLE.md):** os marcadores e o prazo ficam com a mesma altura e alinhados na linha.
+
 ### Versão 3.2.2
 12/10/2026
 
