@@ -1,6 +1,6 @@
 import type { Baixado } from "../painel/baixados";
 import type { ContextoTool } from "../motor/tools";
-import { hashArquivo } from "../tools/baixar";
+import { hashArquivo } from "../seguranca/hash";
 
 /** Os bytes ficam na ponte SEI -> conector, fora dos argumentos produzidos pela IA. */
 export async function conteudoDoBaixado(b: Baixado, ctx: ContextoTool): Promise<string> {

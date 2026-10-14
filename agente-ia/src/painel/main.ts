@@ -46,7 +46,7 @@ import {
 import { guardarConectores, listarConectores, type Conector } from "../mcp/conectores";
 import { linhasDeConectores, toolsMcp } from "../mcp/tools";
 import { retestarLocais } from "../mcp/verificacao";
-import { cartaoExterno, secaoConectores } from "./mcp-ui";
+import { cartaoExterno, cartaoTransferencia, secaoConectores } from "./mcp-ui";
 import { rodapeDaResposta } from "./resposta-ui";
 import { apagarBaixados, listarBaixados, pedirPermissaoDeDownloads, registrarBaixado, salvarNoDisco, secaoBaixados, temPermissaoDeDownloads, type Baixado } from "./baixados";
 import { toolsBaixar } from "../tools/baixar";
@@ -2682,6 +2682,7 @@ Voc\u00EA \u00E9 um AUXILIAR: recebeu uma tarefa de leitura de outro agente e n\
   private interfaceMotor(): InterfaceMotor {
     return {
       aprovarExterno: (p) => cartaoExterno(p, (op) => this.abrirModal(op)),
+      aprovarTransferencia: (p) => cartaoTransferencia(p, (op) => this.abrirModal(op)),
       integridade: (documento, achados) => {
         this.integridadeDaConversa.push({ documento, achados });
         this.adicionar({ tipo: "aviso", texto: textoDaIntegridade(documento, achados) });

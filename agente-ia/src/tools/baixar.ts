@@ -21,6 +21,7 @@ import { s } from "../motor/esquema";
 import { definirTool, type ContextoTool, type DefTool } from "../motor/tools";
 import type { PreviaItem } from "../motor/tipos";
 import type { Baixado } from "../painel/baixados";
+import { hashArquivo } from "../seguranca/hash";
 
 export interface OpcoesBaixar {
   /** Grava na pasta Downloads e devolve o caminho absoluto que o navegador deu. */
@@ -75,7 +76,9 @@ export function nomeDeArquivo(d: { titulo: string; numero: string; nomeOriginal:
   const fim = ` (${d.numero.replace(/\D/g, "") || "sem numero"}).${extensao}`;
   const escolhido = d.nomeLegivel?.trim();
   if (escolhido && /[\/\\\u0000-\u001f\u007f]/.test(escolhido)) throw new Error("Informe apenas o nome legível do arquivo, sem caminho nem barras.");
-  const titulo = escolhido ? escolhido.replace(/\.[A-Za-z0-9]{1,8}$/, "").replace(new RegExp(` \\(${d.numero.replace(/\D/g, "")}\\)$`), "") : d.titulo;
+  // Só sai do fim o que é extensão de verdade: "CUO 004.2023" não perde o ".2023".
+  const semExtensao = escolhido?.replace(/\.([A-Za-z0-9]{1,8})$/, (todo, ext: string) => (ext.toLowerCase() === extensao || EXTENSOES.has(ext.toLowerCase()) ? "" : todo));
+  const titulo = semExtensao ? semExtensao.replace(new RegExp(` \\(${d.numero.replace(/\D/g, "")}\\)$`), "") : d.titulo;
   const base = pedacoSeguro(titulo).slice(0, MAX_NOME - fim.length).trimEnd() || "documento";
   return `${base}${fim}`;
 }
@@ -122,18 +125,13 @@ function base64ParaBytes(b64: string): Uint8Array {
   return bytes;
 }
 
-export async function hashArquivo(bytes: Uint8Array): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", bytes as BufferSource);
-  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
-}
-
 export function toolsBaixar(o: OpcoesBaixar): DefTool[] {
   const CAMPO_DESTINO = "Salvar em";
 
   const baixar = definirTool({
     nome: "documento_baixar",
     descricao:
-      "Baixa um documento do SEI para a pasta Downloads do usuário e devolve o caminho do arquivo. Use quando um conector precisar do arquivo em disco. Só documento externo (PDF e outros anexos); documento escrito no editor do SEI ainda não. O usuário aprova cada download. Passe o 'caminho' devolvido ao conector exatamente como veio.",
+      "Baixa um documento do SEI para a pasta Downloads do usuário e devolve o caminho do arquivo. Use quando um conector precisar do arquivo em disco. Só documento externo (PDF e outros anexos); documento escrito no editor do SEI ainda não. O usuário aprova cada download. Passe o 'caminho' devolvido ao conector exatamente como veio: se o conector roda em outro computador, o SEI Pro envia o conteúdo do arquivo por conta própria, depois de nova aprovação.",
     parametros: s.objeto({ documento: s.texto({ descricao: "Nº SEI do documento." }), "nome_arquivo?": s.texto({ min: 1, max: 200, descricao: "Nome legível definido pelo agente com base no documento lido, sem caminho. A extensão original e o número SEI serão preservados. Ex.: Contrato de Cessão de Uso 002-2026 - Porto de Itaqui.pdf." }) }),
     efeito: "escrita",
     rotulo: (a) => `Baixar o documento ${String(a.documento)} para o computador`,
