@@ -1,0 +1,15 @@
+/*
+ * Folha base do Estilo Avançado 2. Só var(--spro-*): nenhuma cor literal aqui.
+ * Tudo sob :root[data-spro-tema-ativo], que só existe quando a opção está ligada.
+ */
+:root[data-spro-tema-ativo] body {
+  background: var(--spro-pagina);
+  color: var(--spro-texto);
+}
+:root[data-spro-tema-ativo] #divInfraBarraSistema,
+:root[data-spro-tema-ativo] #divInfraBarraSistemaPadrao,
+:root[data-spro-tema-ativo] .infraCorBarraSistema {
+  background: var(--spro-barra);
+  color: var(--spro-barra-texto);
+  border-bottom: 1px solid var(--spro-barra-borda);
+}
