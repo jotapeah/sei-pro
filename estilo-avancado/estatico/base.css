@@ -1,15 +1,200 @@
 /*
- * Folha base do Estilo Avançado 2. Só var(--spro-*): nenhuma cor literal aqui.
- * Tudo sob :root[data-spro-tema-ativo], que só existe quando a opção está ligada.
+ * Folha base do Estilo Avançado 2 (sub-projeto 1): barra, página, links, tabelas, campos,
+ * botões e diálogos. Só var(--spro-*): nenhuma cor literal aqui (há um teste que confere).
+ * Tudo sob :root[data-spro-tema-ativo], que só existe com a opção ligada.
+ *
+ * Seletores do SEI 4.1.5 e do 5.0.x (infra-global-esquema-3.css). A casca completa
+ * (menu, árvore, barra de ações) é do sub-projeto 2; telas nativas, do 3.
  */
-:root[data-spro-tema-ativo] body {
-  background: var(--spro-pagina);
+
+/* Página */
+:root[data-spro-tema-ativo] body,
+:root[data-spro-tema-ativo] #divInfraAreaGlobal,
+:root[data-spro-tema-ativo] div.infraAreaGlobal,
+:root[data-spro-tema-ativo] #divInfraAreaTela,
+:root[data-spro-tema-ativo] div.infraAreaTela {
+  background-color: var(--spro-pagina);
+  color: var(--spro-texto);
+  font-family: var(--spro-fonte);
+}
+:root[data-spro-tema-ativo] div.infraAreaTela {
+  background-image: none;
+}
+:root[data-spro-tema-ativo] div.infraBarraLocalizacao,
+:root[data-spro-tema-ativo] label,
+:root[data-spro-tema-ativo] .infraLegend,
+:root[data-spro-tema-ativo] legend {
   color: var(--spro-texto);
 }
-:root[data-spro-tema-ativo] #divInfraBarraSistema,
+
+/* Barra superior */
 :root[data-spro-tema-ativo] #divInfraBarraSistemaPadrao,
-:root[data-spro-tema-ativo] .infraCorBarraSistema {
-  background: var(--spro-barra);
+:root[data-spro-tema-ativo] #divInfraBarraSistema,
+:root[data-spro-tema-ativo] div.infraBarraSistema,
+:root[data-spro-tema-ativo] .infraBarraSistemaPadraoE,
+:root[data-spro-tema-ativo] .infraCorBarraSistema,
+:root[data-spro-tema-ativo] #divInfraBarraSistemaPadraoE {
+  background-color: var(--spro-barra);
   color: var(--spro-barra-texto);
-  border-bottom: 1px solid var(--spro-barra-borda);
+}
+:root[data-spro-tema-ativo] #divInfraBarraSistemaLinha {
+  background-color: var(--spro-barra-borda);
+}
+:root[data-spro-tema-ativo] #divInfraBarraSistemaPadrao a,
+:root[data-spro-tema-ativo] #divInfraBarraSistema a,
+:root[data-spro-tema-ativo] div.infraBarraSistema a,
+:root[data-spro-tema-ativo] div.infraBarraSistema h6,
+:root[data-spro-tema-ativo] #spnInfraIdentificacaoSistema,
+:root[data-spro-tema-ativo] .infraBarraSistemaPadraoE span {
+  color: var(--spro-barra-texto);
+}
+:root[data-spro-tema-ativo] #divInfraBarraSistemaPadrao a:hover,
+:root[data-spro-tema-ativo] div.infraAcaoBarraSistema a:hover {
+  background-color: var(--spro-barra-hover);
+}
+
+/* Links */
+:root[data-spro-tema-ativo] a,
+:root[data-spro-tema-ativo] a.ancoraPadraoAzul,
+:root[data-spro-tema-ativo] a.ancoraPadraoPreta,
+:root[data-spro-tema-ativo] a.infraAncoraSigla {
+  color: var(--spro-destaque);
+}
+:root[data-spro-tema-ativo] #divInfraBarraSistemaPadrao a {
+  color: var(--spro-barra-texto);
+}
+
+/* Tabelas */
+:root[data-spro-tema-ativo] table.infraTable {
+  color: var(--spro-texto);
+  border-color: var(--spro-borda);
+}
+:root[data-spro-tema-ativo] table.infraTable thead tr,
+:root[data-spro-tema-ativo] table.infraTable tr > th.infraTh,
+:root[data-spro-tema-ativo] th.infraTh {
+  background-color: var(--spro-fundo-3);
+  color: var(--spro-texto);
+  border-color: var(--spro-borda);
+}
+:root[data-spro-tema-ativo] table.infraTable td {
+  border-color: var(--spro-borda);
+}
+:root[data-spro-tema-ativo] tr.infraTrClara,
+:root[data-spro-tema-ativo] td.infraTdClara {
+  background-color: var(--spro-fundo);
+}
+:root[data-spro-tema-ativo] tr.infraTrEscura,
+:root[data-spro-tema-ativo] td.infraTdEscura {
+  background-color: var(--spro-fundo-2);
+}
+:root[data-spro-tema-ativo] tr.infraTrSelecionada,
+:root[data-spro-tema-ativo] tr.infraTrMarcada,
+:root[data-spro-tema-ativo] tr.infraTrAcessada {
+  background-color: var(--spro-destaque-suave);
+}
+:root[data-spro-tema-ativo] tr.infraTrClara:hover,
+:root[data-spro-tema-ativo] tr.infraTrEscura:hover {
+  background-color: var(--spro-destaque-suave);
+}
+:root[data-spro-tema-ativo] caption.infraCaption {
+  color: var(--spro-suave);
+}
+
+/* Campos */
+:root[data-spro-tema-ativo] input.infraText,
+:root[data-spro-tema-ativo] textarea.infraTextarea,
+:root[data-spro-tema-ativo] select.infraSelect,
+:root[data-spro-tema-ativo] input[type="text"],
+:root[data-spro-tema-ativo] input[type="password"],
+:root[data-spro-tema-ativo] input[type="search"],
+:root[data-spro-tema-ativo] input[type="date"],
+:root[data-spro-tema-ativo] input[type="number"],
+:root[data-spro-tema-ativo] textarea,
+:root[data-spro-tema-ativo] select,
+:root[data-spro-tema-ativo] .chosen-container-single .chosen-single,
+:root[data-spro-tema-ativo] .chosen-container-multi .chosen-choices {
+  background-color: var(--spro-fundo);
+  color: var(--spro-texto);
+  border: 1px solid var(--spro-borda-forte);
+  border-radius: var(--spro-raio-p);
+}
+:root[data-spro-tema-ativo] input.infraText:focus,
+:root[data-spro-tema-ativo] textarea.infraTextarea:focus,
+:root[data-spro-tema-ativo] select.infraSelect:focus,
+:root[data-spro-tema-ativo] input:focus,
+:root[data-spro-tema-ativo] textarea:focus,
+:root[data-spro-tema-ativo] select:focus {
+  outline: none;
+  border-color: var(--spro-destaque);
+  box-shadow: var(--spro-anel);
+}
+:root[data-spro-tema-ativo] input:disabled,
+:root[data-spro-tema-ativo] input[readonly],
+:root[data-spro-tema-ativo] textarea:disabled,
+:root[data-spro-tema-ativo] select:disabled {
+  background-color: var(--spro-fundo-2);
+  color: var(--spro-suave);
+}
+:root[data-spro-tema-ativo] ::placeholder {
+  color: var(--spro-fraco);
+}
+
+/* Botões */
+:root[data-spro-tema-ativo] input.infraButton,
+:root[data-spro-tema-ativo] button.infraButton,
+:root[data-spro-tema-ativo] a.infraAnchorButton {
+  background-color: var(--spro-fundo);
+  color: var(--spro-texto);
+  border: 1px solid var(--spro-borda-forte);
+  border-radius: var(--spro-raio);
+  transition: background-color var(--spro-dur), border-color var(--spro-dur), box-shadow var(--spro-dur);
+}
+:root[data-spro-tema-ativo] input.infraButton span,
+:root[data-spro-tema-ativo] button.infraButton span,
+:root[data-spro-tema-ativo] button.infraButton:hover span,
+:root[data-spro-tema-ativo] input.infraButton:hover span {
+  color: inherit;
+}
+:root[data-spro-tema-ativo] input.infraButton:hover,
+:root[data-spro-tema-ativo] button.infraButton:hover,
+:root[data-spro-tema-ativo] a.infraAnchorButton:hover {
+  background-color: var(--spro-destaque);
+  border-color: var(--spro-destaque);
+  color: var(--spro-destaque-texto);
+}
+:root[data-spro-tema-ativo] input.infraButton:focus-visible,
+:root[data-spro-tema-ativo] button.infraButton:focus-visible {
+  outline: none;
+  box-shadow: var(--spro-anel);
+}
+
+/* Diálogos (jQuery UI e Bootstrap do SEI 5) */
+:root[data-spro-tema-ativo] .ui-dialog,
+:root[data-spro-tema-ativo] .modal-content,
+:root[data-spro-tema-ativo] .ui-widget-content {
+  background-color: var(--spro-fundo);
+  color: var(--spro-texto);
+  border-color: var(--spro-borda);
+}
+:root[data-spro-tema-ativo] .ui-dialog {
+  border-radius: var(--spro-raio-g);
+  box-shadow: var(--spro-sombra-3);
+}
+:root[data-spro-tema-ativo] .ui-dialog-titlebar,
+:root[data-spro-tema-ativo] .ui-widget-header,
+:root[data-spro-tema-ativo] .modal-header,
+:root[data-spro-tema-ativo] .modal-footer,
+:root[data-spro-tema-ativo] .ui-dialog-buttonpane {
+  background-color: var(--spro-fundo-2);
+  color: var(--spro-texto);
+  border-color: var(--spro-borda);
+}
+:root[data-spro-tema-ativo] .ui-widget-overlay {
+  background: var(--spro-veu);
+  opacity: 1;
+}
+
+/* Rolagem */
+:root[data-spro-tema-ativo] {
+  scrollbar-color: var(--spro-borda-forte) var(--spro-pagina);
 }
