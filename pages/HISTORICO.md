@@ -2,6 +2,11 @@
 
 ## ![SEI Pro Histórico de Versões](../img/icon-historico.png) Histórico de versões
 
+### Versão 3.2.4
+14/10/2026
+
+- **Corrigido — [Agente de IA](../pages/AGENTEIA.md):** ao enviar um documento a conector em outro computador, o caminho de outro arquivo baixado que aparecesse no mesmo pedido ia sem máscara. Agora só o próprio documento enviado deixa de ser mascarado; o resto do pedido segue mascarado como em qualquer conector.
+
 ### Versão 3.2.3
 14/10/2026
 

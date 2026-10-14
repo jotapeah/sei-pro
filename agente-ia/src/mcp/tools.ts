@@ -266,8 +266,9 @@ export function toolsMcp(o: OpcoesToolsMcp): DefTool[] {
       try {
         // Caminho real só para quem o usa: o conector da própria máquina, que
         // abre o arquivo. Para os demais, o título do documento no caminho
-        // levaria nome e CPF a um terceiro (e na transferência ele nem vai).
-        const protegido = protegerArquivos(brutos, local || transferencia ? (o.arquivos?.() ?? []) : [], ctx.anonimizar);
+        // levaria nome e CPF a um terceiro. Na transferência o caminho nem vai
+        // (o campo é esvaziado abaixo), então não há o que proteger.
+        const protegido = protegerArquivos(brutos, local ? (o.arquivos?.() ?? []) : [], ctx.anonimizar);
         args = protegido.recolocar(JSON.parse(ctx.anonimizar(JSON.stringify(protegido.args))) as Record<string, unknown>);
       } catch {
         // Nada sai do navegador sem passar pelo mascaramento: se ele falhou,

@@ -177,6 +177,19 @@ export async function verificarArquivoRemoto(): Promise<void> {
     checar("mesmo vindo na forma mascarada", m2.enviados[0]?.args.nome_arquivo === baixado.nome, m2.enviados[0]?.args);
   }
   {
+    // Na transferência a servidor REMOTO, só o campo do caminho deixa de ser
+    // mascarado (e ele vai vazio). Outro argumento com caminho baixado, ou
+    // qualquer texto, continua mascarado como sempre.
+    const outro: Baixado = { ...baixado, id: 2, caminho: "C:\\Users\\fulano.beltrano\\Downloads\\SEI Pro\\p\\Procuração Maria Souza (456).pdf", documento: "456" };
+    const privacidade = new Pseudonimos({ nomes: true });
+    privacidade.registrarPessoas(["Maria Souza"]);
+    const m = monta({ privacidade, baixados: [baixado, outro] });
+    await m.chamar.executar(pedido({ observacao: outro.caminho }), m.ctx);
+    const e = m.enviados[0]?.args ?? {};
+    checar("outro caminho baixado nos argumentos segue mascarado ao servidor remoto", !String(e.observacao).includes("Maria Souza") && String(e.observacao).includes("[PESSOA_1]"), e.observacao);
+    checar("e o cartao mostra o que vai de fato", !String(m.cartoes[0]?.argumentos.observacao).includes("Maria Souza"), m.cartoes[0]?.argumentos);
+  }
+  {
     const m = monta({ resposta: `anexado; eco: ${B64}` });
     const r = await m.chamar.executar(pedido(), m.ctx);
     checar("servidor que ecoa o base64 nao o leva ao modelo", !String(r).includes(B64), r);
