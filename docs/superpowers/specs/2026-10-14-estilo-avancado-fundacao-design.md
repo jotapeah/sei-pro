@@ -215,7 +215,23 @@ Implementado na branch `feat/estilo-avancado-2` e testado no Chrome real, com a 
 
 **Lacunas conhecidas (não verificadas ou fora desta etapa)**
 
-- **Editor CK4/CK5 não exercitado** no SEI real: o ícone "Editar Conteúdo" não aparecia nos documentos de teste. Por construção o remapeamento não roda no editor.
+- **Editor CK5 (SEI 5) não exercitado** no SEI real: o documento de teste do MJ não tem o ícone "Editar Conteúdo". O CSS do CK5 (variáveis `--ck-*`) não foi escrito às cegas e fica para o sub-projeto 4.
 - Resíduos brancos de elementos do SEI Pro e do SEI (barra de ícones, seletor Tabela/Quadro, barra "Abrir documento em nova aba"): sub-projetos 2 e 3.
 - Imagens (selo "assinatura eletrônica", código de barras) ficam intactas por decisão; num fundo escuro têm menos contraste.
 - Firefox, release oficial e whitelabels: fora de escopo.
+
+### 11.1 Segunda rodada: escuro de verdade (14/10/2026, a partir do feedback do usuário)
+
+O primeiro escuro deixava áreas claras e texto ilegível. Em vez de caçar no olho, foi criada uma **auditoria no navegador real** (por frame: contraste de cada texto contra o fundo efetivo, mínimo 4,5:1, e fundos claros grandes) e o CSS foi corrigido até ela zerar nas telas testadas do SEI SP. Achados e correções:
+
+- `#divInfraAreaTelaD` (cinza `#e0e0e0` ao redor do documento) e o fundo do painel de visualização do SEI 4.1;
+- capa do processo: o SEI Pro injeta `div#capaProcessoPro .data a.newLink { color:#222 }` e `.label { color:#777 }`; sobrepostos com `#capaProcessoPro` na especificidade;
+- caixas brancas da árvore (`span.noVisitado`) e o destaque `a.infraArvoreNo.highlight`;
+- barra "Abrir documento em nova aba" (`a.openNewTab`, fundo inline), botão da unidade (`a.infraAcaoBarraConjugada`, `!important` do SEI), tooltips (`div.infraTooltip`), alerta `#checkNaoAssinados` (fundo inline), tabela de tipos e realce de busca (`span.spanRealce`);
+- **editor CKEditor 4:** barra de ferramentas, grupos, combos, diálogos e rodapé com tokens; ícones escurecidos por `filter` só no escuro (são decoração, não conteúdo); as áreas editáveis são iframes `about:srcdoc`, então o content script ganhou `match_about_blank: true`; o `body.cke_editable` das seções somente leitura traz fundo cinza inline (`!important`).
+
+Ficam de fora, por decisão: os cartões de anotação pastel do SEI Pro (fundo em gradiente próprio, texto escuro legível sobre ele) e as imagens.
+
+**Verificado no editor CK4 (SP, Despacho Marcia Goncalves 0104775), só leitura:** as 4 áreas editáveis ficam em dark; o `getData()` das 4 instâncias tem os mesmos tamanhos com e sem o tema (12854, 62, 313, 10078) e nenhum traço de `data-spro-*`. Nada foi salvo.
+
+A lista de `!important` permitidos na folha base (conferida por teste) agora é: `.infraCor*`, `.sparkling-modal-title`, `div.pesquisaPaginaSelecionada`, `a.infraAcaoBarraConjugada`, `body.cke_editable`, `a.openNewTab` e `#checkNaoAssinados`. Todos existem porque o SEI ou o SEI Pro grava a cor com `!important` ou inline.

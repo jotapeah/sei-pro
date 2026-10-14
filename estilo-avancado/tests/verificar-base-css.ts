@@ -20,13 +20,22 @@ export function verificarBaseCss(): void {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  const fora = seletores.filter((s) => !s.startsWith(":root[data-spro-tema-ativo]"));
-  checar("todo seletor fica sob :root[data-spro-tema-ativo]", fora.length === 0, fora.slice(0, 3));
+  const fora = seletores.filter((s) => !s.startsWith(":root[data-spro-tema-ativo]") && !s.startsWith(':root[data-spro-tema="escuro"]'));
+  checar(
+    "todo seletor fica sob o tema ativo (:root[data-spro-tema-ativo] ou o atributo de esquema, que so existe com ele ligado)",
+    fora.length === 0,
+    fora.slice(0, 3),
+  );
   // !important so nas regras que vencem os esquemas de cor do SEI (que o usam).
   const comImportante = semComentario
     .split("}")
     .filter((bloco) => /!important/.test(bloco))
     .map((bloco) => bloco.split("{")[0]?.trim() ?? "");
-  const proibidas = comImportante.filter((sel) => !/\.infraCor|sparkling-modal-title|pesquisaPaginaSelecionada/.test(sel));
+  const proibidas = comImportante.filter(
+    (sel) =>
+      !/\.infraCor|sparkling-modal-title|pesquisaPaginaSelecionada|infraAcaoBarraConjugada|body\.cke_editable|openNewTab|checkNaoAssinados/.test(
+        sel,
+      ),
+  );
   checar("!important so nas classes de tema do SEI (.infraCor*, modal, paginacao)", proibidas.length === 0, proibidas.slice(0, 3));
 }

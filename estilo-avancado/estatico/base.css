@@ -43,6 +43,11 @@
   color: var(--spro-menu-texto);
 }
 
+/* O botão da unidade e os da barra conjugada têm cor fixa com !important no SEI */
+:root[data-spro-tema-ativo] a.infraAcaoBarraConjugada {
+  color: var(--spro-texto) !important;
+}
+
 /* Página */
 :root[data-spro-tema-ativo] body,
 :root[data-spro-tema-ativo] #divInfraAreaGlobal,
@@ -105,6 +110,84 @@
   background: var(--spro-barra);
   color: var(--spro-barra-texto);
   border-radius: var(--spro-raio-p);
+}
+
+/* Área ao redor do documento, árvore do processo e capa (SEI Pro e SEI 4.1/5) */
+:root[data-spro-tema-ativo] #divInfraAreaTelaD,
+:root[data-spro-tema-ativo] .divInfraAreaTelaD {
+  background-color: var(--spro-pagina);
+}
+:root[data-spro-tema-ativo] span.noVisitado,
+:root[data-spro-tema-ativo] span.noVisitado a {
+  background-color: var(--spro-destaque-suave);
+  color: var(--spro-texto);
+  border-radius: var(--spro-raio-p);
+}
+:root[data-spro-tema-ativo] a.newLink,
+:root[data-spro-tema-ativo] .newLink {
+  color: var(--spro-texto);
+}
+:root[data-spro-tema-ativo] a.newLink:hover {
+  color: var(--spro-destaque);
+}
+:root[data-spro-tema-ativo] .txt_cinza,
+:root[data-spro-tema-ativo] .label.txt_cinza {
+  color: var(--spro-suave);
+}
+:root[data-spro-tema-ativo] a#lnkInfraUnidade {
+  background-color: var(--spro-fundo);
+  color: var(--spro-texto);
+  border: 1px solid var(--spro-borda-forte);
+}
+
+/* Capa do processo (o SEI Pro injeta cores fixas com #capaProcessoPro) */
+:root[data-spro-tema-ativo] div#capaProcessoPro .data a.newLink,
+:root[data-spro-tema-ativo] div#capaProcessoPro a.newLink {
+  color: var(--spro-texto);
+}
+:root[data-spro-tema-ativo] div#capaProcessoPro .label,
+:root[data-spro-tema-ativo] div#capaProcessoPro .label i {
+  color: var(--spro-suave);
+}
+
+/* Destaques e superfícies que o SEI e o SEI Pro pintam de claro */
+:root[data-spro-tema-ativo] a.infraArvoreNo.highlight,
+:root[data-spro-tema-ativo] .highlight,
+:root[data-spro-tema-ativo] .highlight span {
+  background-color: var(--spro-destaque-medio);
+  color: var(--spro-texto);
+}
+:root[data-spro-tema-ativo] a.openNewTab {
+  background-color: var(--spro-fundo-2) !important;
+  color: var(--spro-texto) !important;
+}
+:root[data-spro-tema-ativo] table.infraTable {
+  background-color: var(--spro-fundo);
+}
+:root[data-spro-tema-ativo] span.spanRealce {
+  background-color: var(--spro-destaque-medio);
+  color: var(--spro-texto);
+}
+
+/* Tooltips do SEI (o que aparece ao passar o mouse) e caixas de alerta */
+:root[data-spro-tema-ativo] div.infraTooltip,
+:root[data-spro-tema-ativo] div#divInfraTooltip {
+  background-color: var(--spro-fundo-3);
+  color: var(--spro-texto);
+  border: 1px solid var(--spro-borda-forte);
+  border-radius: var(--spro-raio);
+  box-shadow: var(--spro-sombra-2);
+}
+:root[data-spro-tema-ativo] .infoAlerta {
+  background-color: color-mix(in srgb, var(--spro-perigo) 18%, var(--spro-fundo));
+  color: var(--spro-texto);
+  border-color: color-mix(in srgb, var(--spro-perigo) 45%, transparent);
+}
+/* O fundo deste alerta é inline (gravado pelo SEI Pro): só !important vence */
+:root[data-spro-tema-ativo] #checkNaoAssinados {
+  background-color: color-mix(in srgb, var(--spro-perigo) 18%, var(--spro-fundo)) !important;
+  color: var(--spro-texto);
+  border-color: color-mix(in srgb, var(--spro-perigo) 45%, transparent);
 }
 
 /* Links */
@@ -251,4 +334,94 @@
 /* Rolagem */
 :root[data-spro-tema-ativo] {
   scrollbar-color: var(--spro-borda-forte) var(--spro-pagina);
+}
+
+/* Editor CKEditor 4 (SEI 4.x e as áreas editáveis, que são iframes about:srcdoc) */
+:root[data-spro-tema-ativo] .cke_chrome {
+  border-color: var(--spro-borda);
+  background: var(--spro-fundo);
+  box-shadow: none;
+}
+:root[data-spro-tema-ativo] .cke_top,
+:root[data-spro-tema-ativo] .cke_bottom,
+:root[data-spro-tema-ativo] .cke_dialog_footer {
+  background: var(--spro-fundo-2);
+  border-color: var(--spro-borda);
+  box-shadow: none;
+}
+:root[data-spro-tema-ativo] .cke_toolgroup,
+:root[data-spro-tema-ativo] .cke_combo_button {
+  background: var(--spro-fundo-3);
+  border-color: var(--spro-borda-forte);
+  box-shadow: none;
+  border-radius: var(--spro-raio-p);
+}
+:root[data-spro-tema-ativo] a.cke_button,
+:root[data-spro-tema-ativo] .cke_button_label,
+:root[data-spro-tema-ativo] .cke_combo_text,
+:root[data-spro-tema-ativo] .cke_combo_label,
+:root[data-spro-tema-ativo] .cke_path_item,
+:root[data-spro-tema-ativo] .cke_voice_label {
+  color: var(--spro-texto);
+}
+:root[data-spro-tema-ativo] a.cke_button_on,
+:root[data-spro-tema-ativo] a.cke_button_off:hover,
+:root[data-spro-tema-ativo] a.cke_button_off:focus {
+  background: var(--spro-destaque-medio);
+  border-color: var(--spro-destaque);
+}
+/* Os ícones do CK4 são imagens escuras: no escuro viram claros (só decoração, não conteúdo). */
+:root[data-spro-tema="escuro"] .cke_button_icon,
+:root[data-spro-tema="escuro"] .cke_combo_arrow,
+:root[data-spro-tema="escuro"] .cke_toolbox_collapser {
+  filter: invert(0.88) hue-rotate(180deg);
+}
+:root[data-spro-tema-ativo] .cke_contents {
+  background: var(--spro-pagina);
+}
+:root[data-spro-tema-ativo] .cke_dialog,
+:root[data-spro-tema-ativo] .cke_dialog_body,
+:root[data-spro-tema-ativo] .cke_dialog_contents,
+:root[data-spro-tema-ativo] .cke_dialog_contents_body,
+:root[data-spro-tema-ativo] .cke_dialog_title,
+:root[data-spro-tema-ativo] .cke_dialog_tabs {
+  background: var(--spro-fundo);
+  color: var(--spro-texto);
+  border-color: var(--spro-borda);
+}
+:root[data-spro-tema-ativo] a.cke_dialog_tab {
+  background: var(--spro-fundo-2);
+  color: var(--spro-texto);
+  border-color: var(--spro-borda);
+}
+:root[data-spro-tema-ativo] a.cke_dialog_tab_selected {
+  background: var(--spro-fundo);
+  color: var(--spro-destaque);
+}
+:root[data-spro-tema-ativo] .cke_dialog_ui_input_text input,
+:root[data-spro-tema-ativo] .cke_dialog_ui_input_password input,
+:root[data-spro-tema-ativo] .cke_dialog_ui_input_textarea textarea,
+:root[data-spro-tema-ativo] .cke_dialog_ui_input_select select {
+  background: var(--spro-fundo-2);
+  color: var(--spro-texto);
+  border-color: var(--spro-borda-forte);
+}
+:root[data-spro-tema-ativo] a.cke_dialog_ui_button {
+  background: var(--spro-fundo-3);
+  color: var(--spro-texto);
+  border-color: var(--spro-borda-forte);
+}
+:root[data-spro-tema-ativo] a.cke_dialog_ui_button_ok {
+  background: var(--spro-destaque);
+  color: var(--spro-destaque-texto);
+}
+
+/* Seções do documento no editor: o body das somente-leitura traz fundo cinza inline (só !important vence, sem tocar no DOM) */
+:root[data-spro-tema-ativo] body.cke_editable {
+  background-color: var(--spro-pagina) !important;
+  color: var(--spro-texto);
+}
+:root[data-spro-tema-ativo] a.cke_button_off:hover,
+:root[data-spro-tema-ativo] a.cke_button_on {
+  background-image: none;
 }
