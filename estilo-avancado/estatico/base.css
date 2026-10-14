@@ -89,6 +89,24 @@
   background-color: var(--spro-barra-hover);
 }
 
+/* Painel de visualização (SEI 4.1 aninha a tela da árvore dentro dele; o 5 usa os mesmos contêineres) */
+:root[data-spro-tema-ativo] #divArvoreConteudo,
+:root[data-spro-tema-ativo] #divArvoreConteudoIfr,
+:root[data-spro-tema-ativo] #divArvoreAcoes,
+:root[data-spro-tema-ativo] div.barraBotoesSEI,
+:root[data-spro-tema-ativo] iframe.ifrVisualizacao {
+  background-color: var(--spro-fundo);
+  color: var(--spro-texto);
+}
+
+/* Títulos de bloco dos formulários (o esquema do SEI pinta com a cor dele) */
+:root[data-spro-tema-ativo] label.infraLabelTitulo,
+:root[data-spro-tema-ativo] legend.infraLegend {
+  background: var(--spro-barra);
+  color: var(--spro-barra-texto);
+  border-radius: var(--spro-raio-p);
+}
+
 /* Links */
 :root[data-spro-tema-ativo] a,
 :root[data-spro-tema-ativo] a.ancoraPadraoAzul,
