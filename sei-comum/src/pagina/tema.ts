@@ -7,19 +7,19 @@ export function temaEscuroLegado(armazenamento: Pick<Storage, "getItem">): boole
   }
 }
 
-/** Esquema que o Estilo Avançado 2 aplicou neste documento (o content script o grava no <html>); null = desligado. */
+/** Esquema que o Estilo Avançado aplicou neste documento (o content script o grava no <html>); null = desligado. */
 export function esquemaDoEstilo2(doc: Document): "claro" | "escuro" | null {
   const v = doc.documentElement?.getAttribute("data-spro-tema");
   return v === "claro" || v === "escuro" ? v : null;
 }
 
-/** O SEI está escuro? O Estilo Avançado 2 manda quando está ligado (inclusive para dizer "claro"); senão vale o modo noturno antigo. */
+/** O SEI está escuro? O Estilo Avançado manda quando está ligado (inclusive para dizer "claro"); senão vale o modo noturno antigo. */
 export function seiEscuro(doc: Document, armazenamento: Pick<Storage, "getItem">): boolean {
   const novo = esquemaDoEstilo2(doc);
   return novo ? novo === "escuro" : temaEscuroLegado(armazenamento);
 }
 
-/** Avisa quando o esquema do Estilo Avançado 2 muda (modo, sistema, ligar ou desligar). Devolve o desligador. */
+/** Avisa quando o esquema do Estilo Avançado muda (modo, sistema, ligar ou desligar). Devolve o desligador. */
 export function aoMudarEsquemaSei(doc: Document, cb: () => void): () => void {
   const Observador =
     (doc.defaultView as unknown as { MutationObserver?: typeof MutationObserver } | null)?.MutationObserver ?? globalThis.MutationObserver;
@@ -30,7 +30,7 @@ export function aoMudarEsquemaSei(doc: Document, cb: () => void): () => void {
 }
 
 /**
- * Mantém `temaEscuro` e `corTema` do contexto da aba em dia quando o Estilo Avançado 2 muda (o RPC
+ * Mantém `temaEscuro` e `corTema` do contexto da aba em dia quando o Estilo Avançado muda (o RPC
  * `contexto` devolve este objeto vivo): os painéis em iframe o pedem de novo ao desligar o estilo.
  */
 export function manterTemaNoContexto(

@@ -1,6 +1,6 @@
 /**
  * Seção "Aparência" na página de opções (html/options.html), acima da lista de opções.
- * Só aparece onde o Estilo Avançado 2 está no manifest (Lab MV3): a página é a mesma em
+ * Só aparece onde o Estilo Avançado está no manifest (Lab MV3): a página é a mesma em
  * todos os pacotes. Grava em chrome.storage.sync; o content script de cada aba reage sozinho.
  */
 

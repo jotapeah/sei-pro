@@ -1,5 +1,5 @@
 /*
- * Folha base do Estilo Avançado 2 (sub-projeto 1): barra, página, links, tabelas, campos,
+ * Folha base do Estilo Avançado (sub-projeto 1): barra, página, links, tabelas, campos,
  * botões e diálogos. Só var(--spro-*): nenhuma cor literal aqui (há um teste que confere).
  * Tudo sob :root[data-spro-tema-ativo], que só existe com a opção ligada.
  *

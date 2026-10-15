@@ -4,7 +4,7 @@ import { derivarBarra } from "./paleta";
 /**
  * Tema nos painéis que são páginas da extensão (iframe embutido no Controle, painel lateral,
  * Histórico): eles não estão no documento do SEI, então leem a configuração `spro_tema`
- * sozinhos e acompanham mudanças (opções, sistema). Com o Estilo Avançado 2 desligado não
+ * sozinhos e acompanham mudanças (opções, sistema). Com o Estilo Avançado desligado não
  * mexem em nada: vale o que o contexto da aba já disse (modo noturno antigo, cor da barra).
  */
 export interface DepsTemaPainel {
@@ -21,7 +21,7 @@ const TEXTO_DO_DESTAQUE = { claro: "#ffffff", escuro: "#0a1526" } as const;
 
 export interface OpcoesTemaPainel {
   /**
-   * Chamado quando o Estilo Avançado 2 é desligado com o painel aberto: o que valia antes não é mais
+   * Chamado quando o Estilo Avançado é desligado com o painel aberto: o que valia antes não é mais
    * confiável (o contexto era o do estilo), então o painel pede o contexto atual à página.
    * Sem isto, o painel volta ao que tinha ao ligar o acompanhamento.
    */
@@ -123,7 +123,7 @@ export function depsDoNavegador(chave: string): DepsTemaPainel {
   };
 }
 
-/** Atalho para as páginas da extensão: acompanha o Estilo Avançado 2 com as dependências reais. */
+/** Atalho para as páginas da extensão: acompanha o Estilo Avançado com as dependências reais. */
 export function acompanharTemaDoPainel(doc: Document = document, opcoes: OpcoesTemaPainel = {}): () => void {
   return acompanharTemaEstilo2(doc, depsDoNavegador(CHAVE_TEMA), opcoes);
 }

@@ -777,7 +777,7 @@ function observeUrlPage() {
     }
 }
 function initSlimPro() {
-    // Com o Estilo Avancado 2 no pacote (marca posta pelo init_estilo.js), o interruptor e a paleta controlam o 2
+    // Com o Estilo Avancado no pacote (marca posta pelo init_estilo.js), o interruptor e a paleta controlam o novo
     // e o estilo antigo fica desativado. O content script ouve os eventos abaixo e mantem o interruptor em dia.
     var estilo2 = document.documentElement.hasAttribute('data-spro-estilo2');
     var estiloLigado = estilo2 ? document.documentElement.hasAttribute('data-spro-tema-ativo') : !!localStorage.getItem('seiSlim');

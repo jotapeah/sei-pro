@@ -1,5 +1,5 @@
 /**
- * Content script do Estilo Avançado 2 (mundo isolado, todos os frames, document_start).
+ * Content script do Estilo Avançado (mundo isolado, todos os frames, document_start).
  * Aplica o tema na primeira pintura pelo espelho síncrono, confirma pelo chrome.storage.sync
  * e acompanha mudanças (opções, esquema do sistema) sem recarregar a página.
  */
@@ -22,7 +22,7 @@ const global = window as unknown as { __seiProEstilo2?: boolean };
 if (!global.__seiProEstilo2) {
   global.__seiProEstilo2 = true;
 
-  // Marca que o Estilo Avancado 2 existe neste pacote: o interruptor e a paleta da barra do SEI (sei-pro-all.js)
+  // Marca que o Estilo Avancado existe neste pacote: o interruptor e a paleta da barra do SEI (sei-pro-all.js)
   // passam a controla-lo, e o estilo antigo (localStorage.seiSlim) fica desativado. Roda antes dos scripts do legado.
   document.documentElement.setAttribute("data-spro-estilo2", "");
   try {

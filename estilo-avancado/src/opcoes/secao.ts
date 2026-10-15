@@ -184,9 +184,9 @@ export async function montarCorpoAparencia(deps: DepsAparencia): Promise<{ conte
     "div",
     { class: "secao-corpo" },
     linha(
-      "Ativar o Estilo Avançado 2",
+      "Ativar o Estilo Avançado",
       "Visual novo do SEI, no mesmo estilo das telas do SEI Pro. As mudanças valem na hora, sem precisar salvar.",
-      chave(cfg.ativo, "Ativar o Estilo Avançado 2", (v) => void salvar({ ativo: v })),
+      chave(cfg.ativo, "Ativar o Estilo Avançado", (v) => void salvar({ ativo: v })),
     ),
     sub,
   );
@@ -209,7 +209,7 @@ export async function montarSecaoAparencia(deps: DepsAparencia): Promise<HTMLEle
   return h(
     "details",
     { class: "secao", open: true, id: "secao-aparencia" },
-    h("summary", {}, h("span", { class: "secao-titulo" }, "Aparência (Estilo Avançado 2)"), h("span", { class: "spro-ap-selo" }, "Novo")),
+    h("summary", {}, h("span", { class: "secao-titulo" }, "Aparência (Estilo Avançado)"), h("span", { class: "spro-ap-selo" }, "Novo")),
     conteudo,
   );
 }
