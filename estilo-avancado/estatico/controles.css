@@ -141,13 +141,18 @@
   font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
-  color: var(--spro-fraco);
+  color: var(--spro-suave);
   background-color: var(--spro-fundo-2);
   border-top: 0;
   border-bottom: 1px solid var(--spro-borda);
 }
 :root[data-spro-tema-ativo] th.infraTh a,
 :root[data-spro-tema-ativo] th.infraTh span {
+  color: inherit;
+}
+:root[data-spro-tema-ativo] th.infraTh div.tablesorter-header-inner,
+:root[data-spro-tema-ativo] th.infraTh div.infraDivRotuloOrdenacao,
+:root[data-spro-tema-ativo] th.infraTh div.infraDivThCheckRotulo {
   color: inherit;
 }
 :root[data-spro-tema-ativo] table.infraTable td {
