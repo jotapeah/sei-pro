@@ -32,22 +32,32 @@ export function nomesDeIcones(): string[] {
   return Object.keys(TODOS);
 }
 
-/** O desenho como SVG (só silhueta: a cor vem do `background-color` da imagem, pela máscara). */
-export function svgDoIcone(nome: string): string {
+/**
+ * O desenho como SVG (só silhueta: a cor vem do `background-color` da imagem, pela máscara). Com `preenchido`
+ * (0 a 1), os corpos fechados (círculos, retângulos e caminhos que fecham com `z`) ganham preenchimento com
+ * essa opacidade e o contorno continua cheio por cima: o resultado é um ícone preenchido na cor do tom,
+ * com os detalhes (linhas, pontos) ainda legíveis. Sem `preenchido`, é só traço.
+ */
+export function svgDoIcone(nome: string, preenchido = 0): string {
   const formas = TODOS[nome];
   if (!formas) throw new Error(`Ícone desconhecido: ${nome}`);
   const corpo = formas
     .map(([tag, attrs]) => {
+      const fecha = tag === "circle" || tag === "rect" || (tag === "path" && /z/i.test(String(attrs.d ?? "")));
+      const extra = preenchido > 0 && fecha && !attrs.fill ? ` fill="#000" fill-opacity="${preenchido}"` : "";
       const a = Object.entries(attrs)
         .map(([k, v]) =>
           k === "fill" && v === "currentColor" ? `fill="#000"` : k === "stroke" && v === "none" ? `stroke="none"` : `${k}="${v}"`,
         )
         .join(" ");
-      return `<${tag} ${a}/>`;
+      return `<${tag} ${a}${extra}/>`;
     })
     .join("");
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${corpo}</svg>`;
 }
+
+/** Opacidade do preenchimento por contexto: as barras de ações são preenchidas, o resto é só traço. */
+const PREENCHIMENTO: Partial<Record<ContextoIcone, number>> = { barra: 0.62 };
 
 const uri = (svg: string) => `url("data:image/svg+xml,${encodeURIComponent(svg).replace(/'/g, "%27").replace(/"/g, "%22")}")`;
 /** GIF transparente de 1 px: `content` na <img> troca o desenho original por ele, e a máscara pinta o novo. */
@@ -70,7 +80,7 @@ export function gerarCssIcones(mapa: EntradaIcone[] = MAPA_ICONES): string {
   }
   for (const e of mapa) {
     partes.push(
-      `${seletor(e)} {\n  -webkit-mask-image: ${uri(svgDoIcone(e.icone))};${e.tom ? `\n  color: var(--${e.tom === "perigo" ? "spro-perigo" : `spro-tom-${e.tom}`});` : ""}\n}`,
+      `${seletor(e)} {\n  -webkit-mask-image: ${uri(svgDoIcone(e.icone, PREENCHIMENTO[e.contexto] ?? 0))};${e.tom ? `\n  color: var(--${e.tom === "perigo" ? "spro-perigo" : `spro-tom-${e.tom}`});` : ""}\n}`,
     );
   }
   return partes.join("\n");

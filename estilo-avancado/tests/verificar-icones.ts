@@ -38,6 +38,21 @@ export function verificarIcones(): void {
   checar("o menu lateral fica sem tom (uma cor so, como pedido)", menuComTom.length === 0);
   const tonsUsados = new Set(MAPA_ICONES.filter((e) => e.contexto === "barra").map((e) => e.tom));
   checar("a barra usa pelo menos 6 tons distintos", tonsUsados.size >= 6, [...tonsUsados]);
+  const so = svgDoIcone("documento");
+  const cheio = svgDoIcone("documento", 0.62);
+  checar("sem preenchimento: so traco", !/fill-opacity/.test(so));
+  checar(
+    "com preenchimento: corpo fechado ganha fill-opacity e o contorno continua",
+    /fill="#000" fill-opacity="0.62"/.test(cheio) && /stroke="#000"/.test(cheio),
+  );
+  checar(
+    "preenchido e traco geram o mesmo numero de formas",
+    (so.match(/<path|<circle|<rect/g) ?? []).length === (cheio.match(/<path|<circle|<rect/g) ?? []).length,
+  );
+  checar(
+    "as barras de acoes usam o preenchido e o menu nao",
+    /fill-opacity/.test(gerarCssIcones()) && !/fill-opacity/.test(gerarCssIcones(MAPA_ICONES.filter((e) => e.contexto === "menu"))),
+  );
   const pro = gerarCssMenuPro();
   checar(
     "itens do SEI Pro: um icone existente por id",
