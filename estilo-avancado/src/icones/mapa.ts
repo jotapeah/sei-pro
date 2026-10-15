@@ -72,9 +72,8 @@ export const MAPA_ICONES: EntradaIcone[] = [
   t("configuracao", "engrenagem"),
   t("usuario_topo", "pessoa"),
   t("sair", "saida"),
-  // Barras de ações: os ícones nativos do SEI ficam como são (o Agente de IA e o Estúdio de Fluxo também).
+  // Barras de ações: os ícones nativos do SEI ficam como são (o Agente de IA, o Estúdio de Fluxo e o Monitorados também).
   // Só os botões do SEI Pro abaixo ganham desenho próprio, multicolor como os nativos (ver proprios.ts).
-  b("favoritos", "alvo", { daExtensao: true, proprio: true }),
   b("ferramentas_pdf", "pdf", { daExtensao: true, proprio: true }),
   b("acao_lote", "camadas", { daExtensao: true, proprio: true }),
   b("doc_lote", "documentos", { daExtensao: true, proprio: true }),
