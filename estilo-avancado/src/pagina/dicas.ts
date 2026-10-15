@@ -21,7 +21,8 @@ export const ESCOPOS_DICAS = [
 const SELETOR_TITULO = ESCOPOS_DICAS.map((e) => `${e} [title]`).join(",");
 const ATRASO_MS = 250;
 
-const temTooltipDoSei = (el: Element) => /infraTooltipMostrar/.test(el.getAttribute("onmouseover") ?? "");
+/** O tooltip do SEI costuma morar no <a> e o title na <img> de dentro: vale o elemento ou qualquer ancestral. */
+export const temTooltipDoSei = (el: Element): boolean => el.closest('[onmouseover*="infraTooltipMostrar"]') !== null;
 
 /** Troca `title` por `data-spro-dica` nos botões da casca dentro de `raiz`. Devolve quantos converteu. */
 export function converterTitulos(raiz: ParentNode): number {
