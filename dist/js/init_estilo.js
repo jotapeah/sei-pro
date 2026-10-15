@@ -689,7 +689,8 @@
 /* Barra de a\xE7\xF5es fixa: o legado grava o top inline (altura da barra no instante da rolagem); acompanha a altura atual. */
 :root[data-spro-tema-ativo]:has(#navInfraBarraNavegacao) #divComandos.fixed,
 :root[data-spro-tema-ativo]:has(#navInfraBarraNavegacao) #divBotoesControleProcessos.fixed {
-  top: var(--spro-nav-fim, var(--spro-nav-total)) !important;
+  /* 5 px abaixo do fim da barra superior: respiro fino pedido (colada, ela parecia invadir a barra) */
+  top: calc(var(--spro-nav-fim, var(--spro-nav-total)) + 5px) !important;
 }
 `;var no=`/*
  * Casca do SEI (sub-projeto 2): a barra superior, o menu lateral, a barra de a\xE7\xF5es, os t\xEDtulos, os
