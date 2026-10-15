@@ -70,6 +70,6 @@ export function verificarPaleta(): void {
   checar("cinza cai no azul padrao no destaque", derivarBarra("#808080", "claro").destaque === derivarBarra(AZUL_PADRAO, "claro").destaque);
   checar("matiz preservado na barra (verde)", Math.abs(paraOklch(derivarBarra("#1f7a4d", "claro").barra).h - paraOklch("#1f7a4d").h) < 6);
   checar("escuro nao ofusca: barra com L <= 0,42", paraOklch(derivarBarra("#ffff00", "escuro").barra).l <= 0.43);
-  checar("10 paletas, ids unicos", PALETAS.length === 10 && new Set(PALETAS.map((p) => p.id)).size === 10);
+  checar("18 paletas, ids unicos", PALETAS.length === 18 && new Set(PALETAS.map((p) => p.id)).size === 18);
   checar("hex invalido nao lanca", derivarBarra("xyz" as string, "claro").barra.startsWith("#"));
 }

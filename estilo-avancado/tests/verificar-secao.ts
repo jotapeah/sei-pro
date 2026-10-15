@@ -16,7 +16,7 @@ export async function verificarSecao(): Promise<void> {
   const el = await montarSecaoAparencia(deps);
   doc.body.append(el);
 
-  checar("10 paletas na grade", el.querySelectorAll("[data-paleta]").length === 10);
+  checar("18 paletas na grade", el.querySelectorAll("[data-paleta]").length === 18);
   checar("3 modos", el.querySelectorAll("[data-modo]").length === 3);
   checar("modo automatico marcado", el.querySelector('[data-modo="auto"]')?.getAttribute("aria-checked") === "true");
   checar("paleta SEI Pro marcada", el.querySelector('[data-paleta="sei-pro"]')?.getAttribute("aria-pressed") === "true");

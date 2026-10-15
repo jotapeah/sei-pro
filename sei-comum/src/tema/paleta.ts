@@ -41,6 +41,14 @@ export const PALETAS: readonly { id: string; nome: string; cor: string }[] = [
   { id: "ambar", nome: "Âmbar", cor: "#a85d00" },
   { id: "ardosia", nome: "Ardósia", cor: "#475c7a" },
   { id: "preto", nome: "Preto", cor: "#14181d" },
+  { id: "rosa", nome: "Rosa", cor: "#c2417a" },
+  { id: "magenta", nome: "Magenta", cor: "#9c2a8c" },
+  { id: "indigo", nome: "Índigo", cor: "#3949ab" },
+  { id: "turquesa", nome: "Turquesa", cor: "#0a7c86" },
+  { id: "terracota", nome: "Terracota", cor: "#a8452a" },
+  { id: "oliva", nome: "Oliva", cor: "#5a7424" },
+  { id: "cobre", nome: "Cobre", cor: "#8a5a3c" },
+  { id: "azul-petroleo", nome: "Azul-petróleo", cor: "#1b4f72" },
 ];
 
 const limitar = (x: number, a = 0, b = 1) => Math.min(b, Math.max(a, x));
