@@ -4,7 +4,7 @@
  * `fetch` é substituído por um que grava o que recebeu.
  */
 
-import { Acumulador, criarProvedor, enderecoDoServico, lerSSE, limparAssinaturasDeOutro, listarModelos, parametroRecusado, serveParaConversar, SERVICOS, TEMPERATURA_PADRAO, esperaDaTentativa, mensagemDeErro, valeRepetir } from "../src/motor/provedor";
+import { Acumulador, criarProvedor, enderecoDoServico, lerSSE, limparAssinaturasDeOutro, listarModelos, parametroRecusado, serveParaConversar, SERVICOS, TEMPERATURA_PADRAO, enderecoLocal, esperaDaTentativa, mensagemDeErro, valeRepetir } from "../src/motor/provedor";
 import { promptSistema } from "../src/motor/prompt";
 import type { ChamadaTool, PedidoLLM } from "../src/motor/tipos";
 import { checar, secao, lanca } from "./util";
@@ -393,5 +393,48 @@ export async function verificarRaciocinioComFerramentas(): Promise<void> {
     // O texto cru do provedor nao se perde: vai no diagnostico que o botao de
     // copiar do cartao de erro leva para o chamado.
     checar("e o texto original fica no diagnostico", /reasoning_effort/.test((e as { corpo?: string })?.corpo ?? ""), (e as { corpo?: string })?.corpo);
+  }
+}
+
+/**
+ * Ollama local devolve 403 quando a origem chrome-extension:// não está em
+ * OLLAMA_ORIGINS. Não é a chave: o aviso tem de mandar liberar a origem.
+ */
+export async function verificarErro403Local(): Promise<void> {
+  secao("provedor: 403 de servidor local (OLLAMA_ORIGINS)");
+  checar("localhost e local", enderecoLocal("http://localhost:11434/v1"));
+  checar("127.0.0.1 e local", enderecoLocal("http://127.0.0.1:11434/v1"));
+  checar("[::1] e local", enderecoLocal("http://[::1]:11434/v1"));
+  checar("rede 192.168 e local", enderecoLocal("http://192.168.0.10:11434/v1"));
+  checar("NVIDIA nao e local", !enderecoLocal("https://integrate.api.nvidia.com/v1"));
+  checar("endereco invalido nao e local", !enderecoLocal("nada"));
+  {
+    const m = mensagemDeErro(403, "", "compativel", null, "http://localhost:11434/v1");
+    checar("403 local cita OLLAMA_ORIGINS", /OLLAMA_ORIGINS/.test(m), m);
+    checar("403 local nao culpa a chave", !/chave do .* foi recusada/.test(m), m);
+  }
+  checar("401 local continua falando da chave", /foi recusada/.test(mensagemDeErro(401, "", "compativel", null, "http://localhost:11434/v1")));
+  checar("403 remoto continua falando da chave", /foi recusada/.test(mensagemDeErro(403, "", "compativel", null, "https://api.groq.com/openai/v1")));
+  checar("403 da OpenAI continua falando da chave", /foi recusada/.test(mensagemDeErro(403, "", "openai")));
+  {
+    const { f } = espiao([{ status: 403, corpo: "" }]);
+    const p = criarProvedor({ servico: "compativel", url: "http://localhost:11434/v1", chave: "ollama", modelo: "qwen", fetch: f });
+    let msg = "";
+    try {
+      await p.conversar(PEDIDO, new AbortController().signal, () => {});
+    } catch (e) {
+      msg = (e as Error).message;
+    }
+    checar("conversa com Ollama local: 403 vira aviso de OLLAMA_ORIGINS", /OLLAMA_ORIGINS/.test(msg), msg);
+  }
+  {
+    const { f } = espiao([{ status: 403, corpo: "" }]);
+    let msg = "";
+    try {
+      await listarModelos({ servico: "compativel", url: "http://localhost:11434/v1", chave: "ollama", fetch: f });
+    } catch (e) {
+      msg = (e as Error).message;
+    }
+    checar("Atualizar com 403 local tambem cita OLLAMA_ORIGINS", /OLLAMA_ORIGINS/.test(msg), msg);
   }
 }
