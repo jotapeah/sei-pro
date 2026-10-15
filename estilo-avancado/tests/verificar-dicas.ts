@@ -1,49 +1,62 @@
-import { ATRIBUTO_DICA, converterTitulos, iniciarDicas, restaurarTitulos, temTooltipDoSei } from "../src/pagina/dicas";
-import { checar, instalarDom, secao } from "./util";
+import { ATRIBUTO_DICA, alvoDaDica, iniciarDicas, temTooltipDoSei } from "../src/pagina/dicas";
+import { checar, disparar, instalarDom, secao } from "./util";
 
 export function verificarDicas(): void {
   secao("dicas (tooltips da casca)");
   const html = `<html><head></head><body>
-<div id="divInfraBarraSistemaPadrao"><a id="a1" title="Controle de Processos"><img src="x.svg"></a><a id="a2" title="  ">vazio</a></div>
-<div class="barraBotoesSEI"><a id="c1" onmouseover="return infraTooltipMostrar('Historico')"><img id="c1img" title="Historico"></a><a id="b1" title="Atribuir Processo" onmouseover="return infraTooltipMostrar('Atribuir')"></a><a id="b2" title="Enviar" aria-label="Enviar processo"></a><a id="b3">sem titulo</a></div>
+<div id="divInfraBarraSistemaPadrao"><a id="usuario" title="Fulano de Tal (fulano/ORGAO)"><img src="x.svg"></a><a id="a1" title="Controle de Processos"><img id="a1img" src="x.svg"></a></div>
+<div class="barraBotoesSEI"><a id="c1" onmouseover="return infraTooltipMostrar('Historico')"><img id="c1img" title="Historico"></a><a id="b1" title="Atribuir Processo" onmouseover="return infraTooltipMostrar('Atribuir')"></a><a id="b3">sem titulo</a></div>
 <div id="infraMenu"><input id="campo" title="Pesquisar no Menu" placeholder="Pesquisar no Menu"></div>
 <div id="fora"><a id="f1" title="Fora da casca"></a></div>
 </body></html>`;
   const doc = instalarDom(html);
   const g = (id: string) => doc.getElementById(id) as HTMLElement;
 
-  const n = converterTitulos(doc);
-  checar("converte so os titulos dentro dos escopos da casca", n === 4, n);
-  checar(
-    "title sai e vira data-spro-dica",
-    !g("a1").hasAttribute("title") && g("a1").getAttribute(ATRIBUTO_DICA) === "Controle de Processos",
-  );
-  checar("icone sem texto ganha aria-label", g("a1").getAttribute("aria-label") === "Controle de Processos");
-  checar("aria-label existente e preservado", g("b2").getAttribute("aria-label") === "Enviar processo");
-  checar("link com texto nao ganha aria-label", !g("a2").hasAttribute("aria-label"));
-  checar("title vazio some sem criar dica", !g("a2").hasAttribute("title") && !g("a2").hasAttribute(ATRIBUTO_DICA));
-  checar(
-    "quem ja tem o tooltip do SEI perde o title mas segue com a dica registrada",
-    !g("b1").hasAttribute("title") && g("b1").getAttribute("onmouseover")?.includes("infraTooltipMostrar") === true,
-  );
-  checar("fora da casca o title fica intacto", g("f1").getAttribute("title") === "Fora da casca");
-  checar("campo de texto perde o title e nao ganha dica", !g("campo").hasAttribute("title") && !g("campo").hasAttribute(ATRIBUTO_DICA));
-  checar("converter de novo nao duplica nem lanca", converterTitulos(doc) === 0);
-
+  checar("alvo: dentro dos escopos da casca", alvoDaDica(g("a1")) === g("a1") && alvoDaDica(g("a1img")) === g("a1"));
+  checar("alvo: fora da casca nao e alvo", alvoDaDica(g("f1")) === null && alvoDaDica(g("b3")) === null);
   checar("title na <img> com tooltip do SEI no <a> pai: nao mostra o proprio", temTooltipDoSei(g("c1img")) && temTooltipDoSei(g("b1")));
-  checar("botao sem tooltip do SEI continua com o proprio", !temTooltipDoSei(g("b2")) && !temTooltipDoSei(g("a1")));
-  restaurarTitulos(doc);
-  checar("restaurar devolve o title", g("a1").getAttribute("title") === "Controle de Processos" && !g("a1").hasAttribute(ATRIBUTO_DICA));
+  checar("botao sem tooltip do SEI continua com o proprio", !temTooltipDoSei(g("a1")));
 
   const parar = iniciarDicas(doc);
-  checar("iniciar converte", !g("a1").hasAttribute("title"));
+  // O dado que o SEI Pro le do title (login, unidade...) NAO pode sumir fora do hover: era o que derrubava os modulos.
+  checar(
+    "ligar nao mexe em nenhum title (o contexto da aba le o login do title do usuario)",
+    g("usuario").getAttribute("title") === "Fulano de Tal (fulano/ORGAO)" && g("a1").getAttribute("title") === "Controle de Processos",
+  );
+
+  disparar(g("a1"), "mouseover");
+  checar(
+    "sob o mouse: o title nativo sai e vira data-spro-dica",
+    !g("a1").hasAttribute("title") && g("a1").getAttribute(ATRIBUTO_DICA) === "Controle de Processos",
+  );
+  checar("os outros botoes seguem intactos", g("usuario").getAttribute("title") === "Fulano de Tal (fulano/ORGAO)");
+  disparar(g("a1"), "mouseout");
+  checar(
+    "ao sair: o title volta e a dica some",
+    g("a1").getAttribute("title") === "Controle de Processos" && !g("a1").hasAttribute(ATRIBUTO_DICA),
+  );
+
+  disparar(g("b1"), "mouseover");
+  checar(
+    "quem ja tem o tooltip do SEI perde o title so no hover, sem dica propria agendada",
+    !g("b1").hasAttribute("title") && g("b1").getAttribute("onmouseover")?.includes("infraTooltipMostrar") === true,
+  );
+  disparar(g("a1"), "mouseover");
+  checar(
+    "trocar de botao devolve o title do anterior",
+    g("b1").getAttribute("title") === "Atribuir Processo" && !g("a1").hasAttribute("title"),
+  );
+
+  disparar(g("campo"), "mouseover");
+  checar(
+    "campo de texto perde o title no hover e nao ganha dica",
+    !g("campo").hasAttribute("title") && !g("campo").hasAttribute(ATRIBUTO_DICA),
+  );
+
   parar();
   checar(
-    "desligar devolve os titulos e nao deixa caixa",
-    g("a1").getAttribute("title") === "Controle de Processos" && doc.querySelector("[data-spro-dica-caixa]") === null,
+    "desligar devolve o title do que estava sob o mouse e nao deixa caixa",
+    g("campo").getAttribute("title") === "Pesquisar no Menu" && doc.querySelector("[data-spro-dica-caixa]") === null,
   );
-  checar(
-    "desligar devolve tambem o title do botao que tinha o tooltip do SEI",
-    g("b1").getAttribute("title") === "Atribuir Processo" && g("f1").getAttribute("title") === "Fora da casca",
-  );
+  checar("fora da casca o title nunca foi tocado", g("f1").getAttribute("title") === "Fora da casca");
 }

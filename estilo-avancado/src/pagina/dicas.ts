@@ -1,8 +1,12 @@
 /**
  * Tooltips da casca: o `title` nativo do navegador (caixa cinza do sistema, que se soma ao tooltip do SEI)
- * sai dos botões da casca e vira `data-spro-dica`; uma única caixa, no mesmo visual do tooltip do SEI no
- * tema, mostra o texto. Elementos que já têm o tooltip do SEI (`infraTooltipMostrar`) só perdem o `title`.
- * Autocontido: não depende de nenhuma função da página, e desligar o tema devolve cada `title`.
+ * é suspenso SÓ enquanto o mouse está sobre o botão (vira `data-spro-dica`) e devolvido ao sair; uma única
+ * caixa, no mesmo visual do tooltip do SEI no tema, mostra o texto. Elementos que já têm o tooltip do SEI
+ * (`infraTooltipMostrar`) só perdem o `title` durante o hover.
+ * Por que não tirar o `title` de uma vez: o SEI e o SEI Pro LEEM `title` como dado (login e nome do usuário em
+ * #lnkUsuarioSistema, nome da unidade, ícones da árvore). Sem ele, o contexto da aba vinha sem login e
+ * Favoritos, Projetos, Demandas e a ordem dos painéis desistiam de carregar. Autocontido: não depende de
+ * nenhuma função da página, e desligar o tema devolve o `title` do botão sob o mouse.
  */
 
 export const ATRIBUTO_DICA = "data-spro-dica";
@@ -18,46 +22,49 @@ export const ESCOPOS_DICAS = [
   "#divArvore",
 ];
 
-const SELETOR_TITULO = ESCOPOS_DICAS.map((e) => `${e} [title]`).join(",");
+const SELETOR_ESCOPO = ESCOPOS_DICAS.join(",");
+const SELETOR_ALVO = `[${ATRIBUTO_DICA}],[title]`;
 const ATRASO_MS = 250;
 
 /** O tooltip do SEI costuma morar no <a> e o title na <img> de dentro: vale o elemento ou qualquer ancestral. */
 export const temTooltipDoSei = (el: Element): boolean => el.closest('[onmouseover*="infraTooltipMostrar"]') !== null;
 
-/** Troca `title` por `data-spro-dica` nos botões da casca dentro de `raiz`. Devolve quantos converteu. */
-export function converterTitulos(raiz: ParentNode): number {
-  let n = 0;
-  for (const el of raiz.querySelectorAll(SELETOR_TITULO)) {
-    const texto = (el.getAttribute("title") ?? "").trim();
-    el.removeAttribute("title");
-    // Campos de texto: o placeholder já diz o mesmo e o balão cobriria o que vem logo abaixo.
-    if (!texto || /^(input|textarea|select)$/i.test(el.tagName)) continue;
-    el.setAttribute(ATRIBUTO_DICA, texto);
-    // Quem só tem ícone precisa de nome acessível (o title fazia esse papel).
-    if (!el.getAttribute("aria-label") && !(el.textContent ?? "").trim()) el.setAttribute("aria-label", texto);
-    n++;
-  }
-  return n;
+/** O botão da casca sob o ponteiro (com `title`, ou já suspenso), ou null se estiver fora dos escopos. */
+export function alvoDaDica(el: Element | null): Element | null {
+  const alvo = el?.closest?.(SELETOR_ALVO) ?? null;
+  return alvo?.closest(SELETOR_ESCOPO) ? alvo : null;
 }
 
-/** Devolve cada `title` e tira o que este módulo acrescentou. */
-export function restaurarTitulos(raiz: ParentNode): void {
-  for (const el of raiz.querySelectorAll(`[${ATRIBUTO_DICA}]`)) {
-    el.setAttribute("title", el.getAttribute(ATRIBUTO_DICA) ?? "");
-    el.removeAttribute(ATRIBUTO_DICA);
-  }
-}
-
-/** Liga os tooltips no documento. Devolve o desligador (restaura os `title` e remove a caixa). */
+/** Liga os tooltips no documento. Devolve o desligador (devolve o `title` suspenso e remove a caixa). */
 export function iniciarDicas(doc: Document): () => void {
   const visao = doc.defaultView;
   let caixa: HTMLElement | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  /** O botão cujo `title` está suspenso agora, com o texto original. */
+  let suspenso: { el: Element; titulo: string } | null = null;
 
   const esconder = () => {
     clearTimeout(timer);
     caixa?.remove();
     caixa = null;
+  };
+
+  const devolver = () => {
+    esconder();
+    if (!suspenso) return;
+    const { el, titulo } = suspenso;
+    suspenso = null;
+    el.removeAttribute(ATRIBUTO_DICA);
+    if (!el.hasAttribute("title")) el.setAttribute("title", titulo);
+  };
+
+  const suspender = (el: Element) => {
+    const titulo = el.getAttribute("title") ?? "";
+    suspenso = { el, titulo };
+    el.removeAttribute("title");
+    const texto = titulo.trim();
+    // Campos de texto: o placeholder já diz o mesmo e o balão cobriria o que vem logo abaixo.
+    if (texto && !/^(input|textarea|select)$/i.test(el.tagName)) el.setAttribute(ATRIBUTO_DICA, texto);
   };
 
   const mostrar = (alvo: Element) => {
@@ -80,44 +87,33 @@ export function iniciarDicas(doc: Document): () => void {
   };
 
   const aoEntrar = (ev: Event) => {
-    const alvo = (ev.target as Element | null)?.closest?.(`[${ATRIBUTO_DICA}]`);
-    if (!alvo || temTooltipDoSei(alvo)) return;
+    const alvo = alvoDaDica(ev.target as Element | null);
+    if (!alvo) return;
+    if (suspenso?.el !== alvo) {
+      devolver();
+      suspender(alvo);
+    }
+    if (temTooltipDoSei(alvo) || !alvo.hasAttribute(ATRIBUTO_DICA)) return;
     clearTimeout(timer);
     timer = setTimeout(() => mostrar(alvo), ATRASO_MS);
   };
   const aoSair = (ev: Event) => {
-    if ((ev.target as Element | null)?.closest?.(`[${ATRIBUTO_DICA}]`)) esconder();
+    if (!suspenso) return;
+    const para = (ev as MouseEvent).relatedTarget as Node | null;
+    if (para && suspenso.el.contains(para)) return;
+    devolver();
   };
 
-  converterTitulos(doc);
   doc.addEventListener("mouseover", aoEntrar, true);
   doc.addEventListener("mouseout", aoSair, true);
   doc.addEventListener("mousedown", esconder, true);
   doc.addEventListener("scroll", esconder, true);
 
-  // Botões que o SEI e o SEI Pro injetam depois (barra de ações, itens do menu...).
-  const Observador =
-    (visao as unknown as { MutationObserver?: typeof MutationObserver } | null)?.MutationObserver ?? globalThis.MutationObserver;
-  let observador: MutationObserver | null = null;
-  if (typeof Observador === "function" && doc.documentElement) {
-    observador = new Observador((registros) => {
-      let precisa = false;
-      for (const r of registros) {
-        if (r.type === "childList" && r.addedNodes.length > 0) precisa = true;
-        else if (r.type === "attributes" && r.attributeName === "title") precisa = true;
-      }
-      if (precisa) converterTitulos(doc);
-    });
-    observador.observe(doc.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["title"] });
-  }
-
   return () => {
-    observador?.disconnect();
     doc.removeEventListener("mouseover", aoEntrar, true);
     doc.removeEventListener("mouseout", aoSair, true);
     doc.removeEventListener("mousedown", esconder, true);
     doc.removeEventListener("scroll", esconder, true);
-    esconder();
-    restaurarTitulos(doc);
+    devolver();
   };
 }
