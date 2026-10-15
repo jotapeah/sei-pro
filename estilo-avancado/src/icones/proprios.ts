@@ -28,7 +28,7 @@ export const ICONES_PROPRIOS: Record<string, string> = {
   ),
   // Histórico de processos visitados: relógio com seta de retorno
   historico: svg(
-    `<circle cx="13" cy="12" r="8.6" fill="#3b82f6"/><circle cx="13" cy="12" r="6.2" fill="#dbeafe"/><path d="M13 8v4.4l3 1.8" fill="none" stroke="#1d4ed8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.2 6.2v4.6h4.6" fill="none" stroke="#1d4ed8" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 10.8a9.6 9.6 0 0 1 2-4.8" fill="none" stroke="#1d4ed8" stroke-width="1.9" stroke-linecap="round"/>`,
+    `<circle cx="12" cy="12" r="7.6" fill="#dbeafe"/><path d="M6.67 5.64A8.3 8.3 0 1 1 3.88 10.27" fill="none" stroke="#3b82f6" stroke-width="2.3" stroke-linecap="round"/><path d="M12 7.6v4.6l3.2 1.9" fill="none" stroke="#1d4ed8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.96 7.6 5.45 4.18 7.89 7.1z" fill="#1d4ed8" stroke="#1d4ed8" stroke-width="0.8" stroke-linejoin="round"/>`,
   ),
   // Certidão: folha com selo
   certidao: svg(
