@@ -1692,8 +1692,10 @@ body {
   font: 13px/1.45 var(--spro-fonte);
   -webkit-font-smoothing: antialiased;
 }
+/* Fundo transparente: a pagina do SEI (cinza claro, ou escuro) aparece por tras; os cartoes e grades do painel seguem com o proprio fundo. */
+html[data-modo="embutido"],
 html[data-modo="embutido"] body {
-  background: var(--spro-fundo);
+  background: transparent;
 }
 /* Impressao: o app forca o tema claro (data-tema="claro"), entao o fundo e branco. */
 html[data-modo="impressao"] body {

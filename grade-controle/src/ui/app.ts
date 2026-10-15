@@ -643,6 +643,11 @@ export function criarApp(d: DepsApp) {
       host.remove();
     },
     mostrar: (v: boolean) => { host.hidden = !v; },
+    /** Troca claro/escuro com a grade aberta (o tema do SEI mudou). */
+    definirTema: (escuro: boolean) => {
+      host.setAttribute('data-tema', escuro ? 'escuro' : 'claro');
+      raiz.classList.toggle('spro-escuro', escuro);
+    },
     definirNomesCompletos: (v: boolean) => { nomesCompletos = v; render(); },
     sincronizar,
     /** So para os testes: registra o par de uma pagina como se o carregador a tivesse lido. */

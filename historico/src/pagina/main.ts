@@ -7,7 +7,7 @@
  */
 import { areaChrome } from "@comum/armazenamento/area";
 import { lerOpcaoLegada } from "@comum/opcoes/legadas";
-import { corDoTemaSei, temaEscuroLegado } from "@comum/pagina/tema";
+import { corDoTemaSei, manterTemaNoContexto, seiEscuro } from "@comum/pagina/tema";
 import type { PortaRpc } from "@comum/ponte/rpc";
 import { temPainelLateral } from "@favoritos/modelo/exibicao";
 import { type Arvore, lerArvore } from "@nucleo/dominio/arvore";
@@ -63,7 +63,7 @@ async function principal(): Promise<void> {
   const ctx = contextoHistorico(
     topo,
     {
-      temaEscuro: temaEscuroLegado(localStorage),
+      temaEscuro: seiEscuro(document, localStorage),
       favoritosAtivo: temFavoritos && (await lerOpcaoLegada("gerenciarfavoritos")),
       lateralDisponivel: temPainelLateral(manifesto),
       corTema: corDoTemaSei(topo),
@@ -74,6 +74,7 @@ async function principal(): Promise<void> {
     semModal();
     return;
   }
+  manterTemaNoContexto(topo, localStorage, ctx);
   if (noTopo) ligarModal(ctx);
   const area = areaChrome(chrome.storage.local, "local");
   if (noTopo) ligarPainelLateral(ctx, area, tratadoresHistorico({ doc: document, ctx, armazenamento: localStorage }));

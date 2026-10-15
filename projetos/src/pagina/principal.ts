@@ -29,7 +29,7 @@
 import { type Area, areaChrome } from "@comum/armazenamento/area";
 import { idDispositivo } from "@comum/armazenamento/dispositivo";
 import { hojeISO } from "@comum/datas/dias";
-import { corDoTemaSei, temaEscuroLegado } from "@comum/pagina/tema";
+import { corDoTemaSei, manterTemaNoContexto, seiEscuro } from "@comum/pagina/tema";
 import { avisoComAcoesNaPagina, avisoNaPagina } from "@comum/painel/aviso";
 import { ligarPortaDoPainel, type PainelMontado } from "@comum/painel/embutido";
 import type { PortaRpc } from "@comum/ponte/rpc";
@@ -93,11 +93,12 @@ async function reposDaUnidade(ctx: ContextoProjetos, unidade: { id: string }, ar
 export async function principalTopo(): Promise<void> {
   const ctx = contextoProjetos(
     document,
-    { temaEscuro: temaEscuroLegado(localStorage), corTema: corDoTemaSei(document), atividades: atividadesConfigurado(localStorage) },
+    { temaEscuro: seiEscuro(document, localStorage), corTema: corDoTemaSei(document), atividades: atividadesConfigurado(localStorage) },
     location.href,
   );
   // Sem unidade no cabeçalho (login, janelas sem a barra do SEI): nem sincronia nem lateral.
   if (!ctx?.unidade) return;
+  manterTemaNoContexto(document, localStorage, ctx);
   const unidade = ctx.unidade;
   const naCaixa = qualTela(document) === "caixa";
   const area = areaChrome(chrome.storage.local, "local");
@@ -230,7 +231,7 @@ function ligarCaixa(aba: Aba, painel: Promise<PainelDaAba | null>): void {
  */
 export async function principalArvore(): Promise<void> {
   const topo = documentoTopo();
-  const temaEscuro = temaEscuroLegado(localStorage);
+  const temaEscuro = seiEscuro(document, localStorage);
   const ctx = contextoProjetos(topo, { temaEscuro, atividades: atividadesConfigurado(localStorage) }, topo.location?.href);
   if (!ctx?.unidade) return;
   const unidade = ctx.unidade;

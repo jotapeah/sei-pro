@@ -50,6 +50,9 @@ function initSeiProVisualizacao() {
     if (typeof parent.insertIconEstudioFluxo === 'function' && parent.restrictConfigValue('estudiofluxo')) {
         parent.insertIconEstudioFluxo();
     }
+    if (typeof parent.insertIconHistoricoProcessos === 'function' && parent.checkConfigValue('historicoproc')) {
+        parent.insertIconHistoricoProcessos();
+    }
     if (typeof parent.insertNewIcons === 'function' && typeof parent.insertNewIcons !== 'undefined') {
         parent.insertNewIcons();
     }

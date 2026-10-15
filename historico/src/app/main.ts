@@ -19,6 +19,7 @@ import { lerOpcaoLegada } from "@comum/opcoes/legadas";
 import { esperarConexaoDaAba } from "@comum/ponte/conexaoDaAba";
 import { PonteLateral } from "@comum/ponte/lateral";
 import { ErroRpc, type PortaRpc, type Rpc } from "@comum/ponte/rpc";
+import { acompanharTemaDoPainel, aplicarTemaDoContexto } from "@comum/tema/painel";
 import { baixar, criarAbrirModal, criarConfirmar } from "@comum/ui/dialogo";
 import { h, icone } from "@comum/ui/dom";
 import { CANAL_HISTORICO, CANAL_LATERAL, CHAVE_LATERAL, chaveEscopo } from "../modelo/constantes";
@@ -215,6 +216,10 @@ async function iniciarModal(): Promise<void> {
       html.style.setProperty("--spro-cor-sei", ctx.corTema);
       html.dataset.corSei = "";
     }
+    const rpcAba = rpc;
+    acompanharTemaDoPainel(document, {
+      aoDesligar: async () => aplicarTemaDoContexto(html, await rpcAba.chamar<ContextoHistorico>("contexto")),
+    });
     const area = areaChrome(chrome.storage.local, "local");
     app = new AppHistorico(raiz, {
       ...depsComuns(ctx, area, rpc, await idDispositivo(area)),

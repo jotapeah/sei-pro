@@ -20,7 +20,7 @@
 import { type Area, areaChrome } from "@comum/armazenamento/area";
 import { idDispositivo } from "@comum/armazenamento/dispositivo";
 import { hojeISO } from "@comum/datas/dias";
-import { corDoTemaSei, temaEscuroLegado } from "@comum/pagina/tema";
+import { corDoTemaSei, manterTemaNoContexto, seiEscuro } from "@comum/pagina/tema";
 import { avisoComAcoesNaPagina, avisoNaPagina } from "@comum/painel/aviso";
 import { ligarPortaDoPainel, type PainelMontado } from "@comum/painel/embutido";
 import type { PortaRpc } from "@comum/ponte/rpc";
@@ -75,9 +75,10 @@ async function reposDaUnidade(ctx: ContextoDemandas, unidade: { id: string }, ar
 
 /** A janela de topo de uma tela do SEI com unidade (o carregador já conferiu a tela e a opção). */
 export async function principalTopo(): Promise<void> {
-  const ctx = contextoDemandas(document, { temaEscuro: temaEscuroLegado(localStorage), corTema: corDoTemaSei(document) }, location.href);
+  const ctx = contextoDemandas(document, { temaEscuro: seiEscuro(document, localStorage), corTema: corDoTemaSei(document) }, location.href);
   // Sem unidade no cabeçalho (login, janelas sem a barra do SEI): nem sincronia nem painel.
   if (!ctx?.unidade) return;
+  manterTemaNoContexto(document, localStorage, ctx);
   const unidade = ctx.unidade;
   const naCaixa = qualTela(document) === "caixa";
   const area = areaChrome(chrome.storage.local, "local");
@@ -231,7 +232,7 @@ function urlsDoVisualizador(doc: Document): string[] {
  */
 export async function principalArvore(): Promise<void> {
   const topo = documentoTopo();
-  const temaEscuro = temaEscuroLegado(localStorage);
+  const temaEscuro = seiEscuro(document, localStorage);
   const ctx = contextoDemandas(topo, { temaEscuro }, topo.location?.href);
   if (!ctx?.unidade) return;
   const unidade = ctx.unidade;

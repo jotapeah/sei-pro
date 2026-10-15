@@ -1190,6 +1190,17 @@ function getNewTabProcesso() {
                             '</a>'
                             : '';
 
+        // Historico de Processos Visitados: o mesmo do item do menu lateral, ao lado do Estudio de Fluxo.
+        // Icone embutido (data URI): ele existe em todas as versoes, e o Estudio de Fluxo so no Lab.
+        var htmlBtnHistorico = (checkConfigValue('historicoproc')) ?
+                            '<a class="botaoSEI '+(iconLabel ? 'iconLabel' : '')+' '+(iconBoxSlim ? 'iconBoxSlim' : '')+' iconPro_historico" href="#" onclick="getHistoryProcessosPro(); return false;" '+(iconLabel ? '' : 'onmouseout="return infraTooltipOcultar();" onmouseover="return infraTooltipMostrar(\'Hist\u00F3rico de Processos Visitados\')"')+' style="position: relative; margin-left: -3px;">'+
+                            '    <img class="infraCorBarraSistema" src="'+iconeHistoricoBarraPro()+'" alt="Hist\u00F3rico de Processos Visitados" title="Hist\u00F3rico de Processos Visitados">'+
+                            (iconLabel ?
+                            '    <span class="newIconTitle">Hist\u00F3rico</span>'+
+                            '' : '')+
+                            '</a>'
+                            : '';
+
         var htmlBtnPrazo =  (checkConfigValue('gerenciarprazos')) ? 
                             '<a class="botaoSEI botaoSEI_hide '+(iconLabel ? 'iconLabel' : '')+' '+(iconBoxSlim ? 'iconBoxSlim' : '')+' iconPro_Observe iconPrazo_new" '+(iconLabel ? '' : 'onmouseout="return infraTooltipOcultar();" onmouseover="return infraTooltipMostrar(\'Adicionar prazo\')"')+' onclick="addControlePrazo()" style="position: relative; margin-left: -3px;">'+
                             '    <img class="infraCorBarraSistema" src="data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==" title="Adicionar prazo">'+
@@ -1223,7 +1234,7 @@ function getNewTabProcesso() {
                     '    <span class="newIconTitle">Abrir Processos em Nova Aba</span>'+
                     '' : '')+
 
-                    '</a>'+htmlBtnAtiv+htmlBtnPrazo+htmlBtnTypes+htmlBtnUpload+htmlBtnFerramentasPdf+htmlBtnAgenteIA+htmlBtnEstudioFluxo+htmlBtnNaoLido;
+                    '</a>'+htmlBtnAtiv+htmlBtnPrazo+htmlBtnTypes+htmlBtnUpload+htmlBtnFerramentasPdf+htmlBtnAgenteIA+htmlBtnEstudioFluxo+htmlBtnHistorico+htmlBtnNaoLido;
                     
         $(`${divComandos}${infraBarraComandos}`).each(function(){
             var _this = $(this);
@@ -1234,6 +1245,7 @@ function getNewTabProcesso() {
                 _this.find('.iconPro_ferramentaspdf').remove();
                 _this.find('.iconPro_agenteia').remove();
                 _this.find('.iconPro_estudiofluxo').remove();
+                _this.find('.iconPro_historico').remove();
                 _this.append(htmlBtn);            
         });
     }, 500);

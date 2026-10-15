@@ -9,7 +9,7 @@
 import { areaChrome } from '../../sei-comum/src/armazenamento/area';
 import { hojeISO } from '../../sei-comum/src/datas/dias';
 import { opcaoLegadaLigada, opcaoLegadaMarcada } from '../../sei-comum/src/opcoes/legadas';
-import { temaEscuroLegado } from '../../sei-comum/src/pagina/tema';
+import { aoMudarEsquemaSei, esquemaDoEstilo2, temaEscuroLegado } from '../../sei-comum/src/pagina/tema';
 import { novoId } from '../../sei-comum/src/id';
 import cssBase from '../../sei-comum/src/ui/base.css';
 import { baixar } from '../../sei-comum/src/ui/dialogo';
@@ -37,7 +37,11 @@ function noControle(): boolean {
   return new URL(location.href).searchParams.get('acao') === 'procedimento_controlar';
 }
 
-const escuro = (): boolean => !!document.body?.classList.contains('dark-mode') || temaEscuroLegado(localStorage);
+/** O Estilo Avançado 2, quando ligado, manda (inclusive para dizer "claro"); senão vale o modo noturno antigo. */
+const escuro = (): boolean => {
+  const novo = esquemaDoEstilo2(document);
+  return novo ? novo === 'escuro' : !!document.body?.classList.contains('dark-mode') || temaEscuroLegado(localStorage);
+};
 
 /** A opção do SEI Pro (liga o recurso e mostra o botão). */
 let habilitada: boolean | null = null;
@@ -49,6 +53,7 @@ let pararBotao: (() => void) | null = null;
 let remontagens = 0;
 let nomesCompletos = false;
 let vigiaHost: MutationObserver | null = null;
+let pararTema: (() => void) | null = null;
 let domPronto = document.readyState !== 'loading';
 
 function ancora(): Element | null {
@@ -134,6 +139,9 @@ function montar() {
     anotar: async (protocolo, a) => void (await definirAnotacao(sei, protocolo, a, { aplicar: true })),
   });
   app.definirNomesCompletos(nomesCompletos);
+  // O tema do SEI pode mudar com a grade aberta (opcoes do Estilo Avancado 2, tema do sistema).
+  pararTema?.();
+  pararTema = aoMudarEsquemaSei(document, () => app?.definirTema(escuro()));
   alvo.before(app.host);
   acompanharRecolhimento(document, app.host);
   guardarHost();

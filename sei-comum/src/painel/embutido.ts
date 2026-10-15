@@ -10,6 +10,7 @@
  * painel atende (`altura`, `sobrepor`, `aviso`) e a porta nova a cada carga do iframe.
  */
 
+import { aoMudarEsquemaSei, seiEscuro } from "../pagina/tema";
 import { criarRpc, type PortaRpc, type Rpc, type Tratador } from "../ponte/rpc";
 import { h, icone } from "../ui/dom";
 import { type AvisarComAcoes, type AvisarNaPagina, validarPrefixo } from "./aviso";
@@ -153,6 +154,11 @@ export function montarPainelEmbutido(doc: Document, o: OpcoesPainelEmbutido): Pa
     title: o.tituloIframe,
     allow: "clipboard-write",
     style: `width: 100%; height: ${o.alturaInicial ?? 120}px; border: 0; display: block; color-scheme: ${o.temaEscuro ? "dark" : "light"};`,
+  });
+  // Com o fundo transparente, o iframe só continua transparente se o color-scheme dele bater com o do documento
+  // de dentro (senão o Chrome pinta um fundo opaco). O tema do SEI pode mudar com o painel aberto.
+  aoMudarEsquemaSei(doc, () => {
+    iframe.style.colorScheme = seiEscuro(doc, localStorage) ? "dark" : "light";
   });
   const corpo = h("div", { class: `${p}-corpo`, hidden: o.recolhido }, iframe);
   const recolher = h("button", { type: "button", class: `${p}-recolher` });
