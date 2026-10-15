@@ -153,7 +153,7 @@ export async function verificarTemaNosPaineis(): Promise<void> {
   checar("parar desassina tudo", !f1.assinado());
 
   const d2 = instalarDom("<html data-tema='escuro'><head></head><body></body></html>");
-  const f2 = fake({ ...CONFIG_PADRAO, ativo: false });
+  const f2 = fake(null);
   acompanharTemaEstilo2(d2, f2.deps);
   await tique(10);
   checar(
@@ -165,7 +165,7 @@ export async function verificarTemaNosPaineis(): Promise<void> {
   const f3 = fake("lixo{");
   acompanharTemaEstilo2(d3, f3.deps);
   await tique(10);
-  checar("configuracao corrompida: nao lanca e cai no padrao (Estilo 2 ligado)", d3.documentElement.dataset.tema !== undefined);
+  checar("configuracao corrompida: nao lanca e nao mexe", d3.documentElement.dataset.tema === undefined);
 
   secao("tema: painel ao desligar (aoDesligar) e contexto");
   const { aplicarTemaDoContexto } = await import("../src/tema/painel");

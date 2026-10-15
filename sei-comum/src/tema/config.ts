@@ -8,7 +8,7 @@ export type ModoTema = "claro" | "escuro" | "auto";
 
 export interface ConfigTema {
   versao: 1;
-  /** "Estilo Avançado 2" ligado (padrão: sim; o estilo antigo fica desativado onde o 2 existe). */
+  /** "Estilo Avançado 2" ligado (padrão: não; o usuário liga pelo interruptor da barra do SEI ou pelas opções). */
   ativo: boolean;
   modo: ModoTema;
   /** Id de uma paleta pronta, ou "livre". */
@@ -20,7 +20,7 @@ export interface ConfigTema {
 
 export const CONFIG_PADRAO: ConfigTema = {
   versao: 1,
-  ativo: true,
+  ativo: false,
   modo: "auto",
   paleta: "sei-pro",
   corBarra: AZUL_PADRAO,

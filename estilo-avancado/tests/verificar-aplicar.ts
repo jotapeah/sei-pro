@@ -40,7 +40,7 @@ export function verificarAplicar(): void {
   gravarCache(arm, ligado);
   checar("round-trip", lerCache(arm)?.ativo === true);
   mem.set("spro_tema_cache", "{lixo");
-  checar("cache corrompido -> padrao ligado, sem lancar", lerCache(arm)?.ativo === true);
+  checar("cache corrompido -> padrao desligado, sem lancar", lerCache(arm)?.ativo === false);
   const quebrado = {
     getItem: () => {
       throw new Error("bloqueado");
