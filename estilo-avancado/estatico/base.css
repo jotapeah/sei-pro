@@ -691,3 +691,31 @@
   /* 5 px abaixo do fim da barra superior: respiro fino pedido (colada, ela parecia invadir a barra) */
   top: calc(var(--spro-nav-fim, var(--spro-nav-total)) + 5px) !important;
 }
+
+/* Botões do canto do documento (Abrir em nova aba, Baixar HTML/DOCX): o SEI Pro os põe em posição absoluta, com cor,
+   margem e raio inline; no grupo (largura.ts) eles seguem o estilo do botão de largura. */
+:root[data-spro-tema-ativo] a.openNewTab.spro-doc-acao {
+  position: static !important;
+  margin: 0 !important;
+  padding: 0 12px !important;
+  border-radius: var(--spro-raio) var(--spro-raio) 0 0 !important;
+  background-color: var(--spro-fundo-2) !important;
+  color: var(--spro-texto) !important;
+}
+
+/* Menu suspenso do documento na árvore (plugin de toolbar do SEI Pro): a largura vem fixa (185/175 px) e o texto
+   quebrava ("Copiar nome do documento"); passa a acompanhar o conteúdo, sem quebrar. */
+:root[data-spro-tema-ativo] .tool-container.toolbar-menu {
+  width: max-content !important;
+  min-width: 185px;
+  max-width: calc(100vw - 16px);
+}
+:root[data-spro-tema-ativo] .tool-container.toolbar-menu .tool-items {
+  width: auto !important;
+}
+:root[data-spro-tema-ativo] .tool-container.toolbar-menu .tool-item {
+  width: auto !important;
+  float: none !important;
+  clear: both;
+  white-space: nowrap;
+}

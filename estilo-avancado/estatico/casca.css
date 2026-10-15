@@ -22,6 +22,9 @@
 :root[data-spro-tema-ativo] {
   --spro-nav-base: 65px;
   --spro-nav-extra: 14px;
+  /* A troca de altura é lenta e suave (a barra de ações fixa acompanha quadro a quadro pelo valor medido) */
+  --spro-nav-dur: 380ms;
+  --spro-nav-curva: cubic-bezier(0.22, 0.61, 0.36, 1);
   --spro-nav-total: calc(var(--spro-nav-base) + var(--spro-nav-extra));
 }
 /* Compacta: some a faixa do órgão (4 + 15 px) e a barra fica só com a altura da linha principal */
@@ -35,8 +38,8 @@
   max-height: 20px;
   overflow: hidden;
   transition:
-    max-height var(--spro-dur) var(--spro-curva),
-    opacity var(--spro-dur) var(--spro-curva);
+    max-height var(--spro-nav-dur) var(--spro-nav-curva),
+    opacity calc(var(--spro-nav-dur) * 0.7) var(--spro-nav-curva);
 }
 :root[data-spro-tema-ativo][data-spro-nav-compacta] #divInfraBarraSistemaLinha,
 :root[data-spro-tema-ativo][data-spro-nav-compacta] #divInfraBarraSistema > h6.d-md-block {
@@ -60,7 +63,7 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: color-mix(in srgb, var(--spro-barra-texto) 88%, transparent);
-  animation: spro-orgao-entra var(--spro-dur) var(--spro-curva);
+  animation: spro-orgao-entra var(--spro-nav-dur) var(--spro-nav-curva);
 }
 @keyframes spro-orgao-entra {
   from {
@@ -73,16 +76,16 @@
   height: var(--spro-nav-total);
   min-height: var(--spro-nav-total);
   transition:
-    height var(--spro-dur) var(--spro-curva),
-    min-height var(--spro-dur) var(--spro-curva);
+    height var(--spro-nav-dur) var(--spro-nav-curva),
+    min-height var(--spro-nav-dur) var(--spro-nav-curva);
 }
 :root[data-spro-tema-ativo] #divInfraBarraSistemaPadrao {
   height: calc(50px + var(--spro-nav-extra));
   min-height: calc(50px + var(--spro-nav-extra));
   align-items: center;
   transition:
-    height var(--spro-dur) var(--spro-curva),
-    min-height var(--spro-dur) var(--spro-curva);
+    height var(--spro-nav-dur) var(--spro-nav-curva),
+    min-height var(--spro-nav-dur) var(--spro-nav-curva);
 }
 /* Ícones da barra: botões redondos de 40 px */
 :root[data-spro-tema-ativo] #divInfraBarraSistemaPadrao a.align-self-center,
@@ -461,4 +464,15 @@
     opacity: 0.6;
     transform: translateY(-8px);
   }
+}
+
+/* ============================== Página do processo: respiro e alinhamento da árvore ============================== */
+/* Respiro entre a barra superior e a linha do número do processo (a tela da árvore tem o cabeçalho de altura fixa) */
+:root[data-spro-tema-ativo] body:has(> #header.px-2) {
+  padding-top: 12px;
+}
+/* O selo da unidade ao lado de cada documento: o legado o põe em "text-top" (fica mais baixo que os ícones de copiar,
+   que estão em "super"); no mesmo alinhamento deles, os dois ficam na mesma linha horizontal. */
+:root[data-spro-tema-ativo] .infraArvore > a.infraArvoreInformacao {
+  vertical-align: super;
 }

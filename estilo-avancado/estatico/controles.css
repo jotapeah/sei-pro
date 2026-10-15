@@ -285,10 +285,84 @@
 :root[data-spro-tema-ativo][data-spro-papel] body {
   box-sizing: border-box;
   max-width: 940px;
-  margin: 28px auto;
+  margin: 52px auto 28px;
   padding: 40px 56px;
   background-color: var(--spro-fundo);
   border: 1px solid var(--spro-borda);
   border-radius: var(--spro-raio-g);
   box-shadow: var(--spro-sombra-2);
+}
+
+/* ---------- Visualização do documento: uma caixa só (o papel), e a largura escolhida ---------- */
+/* A tela de fora (arvore_visualizar) tinha um cartão branco com sombra em volta do iframe, e o papel de dentro
+   outro: ficam só o papel (estreito) ou o documento em toda a largura. */
+:root[data-spro-tema-ativo] #divArvoreConteudoIfr {
+  padding: 0;
+  background-color: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+:root[data-spro-tema-ativo] #divArvoreConteudoIfr iframe.ifrVisualizacao {
+  background-color: transparent;
+}
+:root[data-spro-tema-ativo][data-spro-papel][data-spro-papel-largo] body {
+  max-width: none;
+  margin: 52px 16px 16px;
+}
+/* Grupo de botões no canto do documento: o de largura e os do SEI Pro, no mesmo estilo (aba presa ao papel) */
+:root[data-spro-tema-ativo] div.spro-doc-acoes {
+  position: absolute;
+  z-index: 2;
+  right: 28px;
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  margin-top: 10px;
+}
+:root[data-spro-tema-ativo] .spro-doc-acao {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  min-width: 0;
+  border: 1px solid var(--spro-borda);
+  font: 600 12px/1 var(--spro-fonte);
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color var(--spro-dur) var(--spro-curva),
+    color var(--spro-dur) var(--spro-curva);
+}
+:root[data-spro-tema-ativo] button.spro-largura {
+  margin: 0;
+  padding: 0 12px;
+  border-radius: var(--spro-raio) var(--spro-raio) 0 0;
+  background-color: var(--spro-fundo-2);
+  color: var(--spro-texto);
+}
+:root[data-spro-tema-ativo] .spro-doc-acao[data-spro-rotulo]::after {
+  content: attr(data-spro-rotulo);
+}
+:root[data-spro-tema-ativo] .spro-doc-acao img {
+  width: 16px;
+  height: 16px;
+}
+:root[data-spro-tema-ativo] button.spro-largura::before {
+  content: "\2194";
+  font-size: 14px;
+  color: var(--spro-destaque);
+}
+:root[data-spro-tema-ativo] .spro-doc-acao:hover {
+  background-color: var(--spro-destaque-suave);
+}
+:root[data-spro-tema-ativo] button.spro-largura[aria-pressed="true"] {
+  background-color: var(--spro-destaque-suave);
+  border-color: color-mix(in srgb, var(--spro-destaque) 45%, transparent);
+}
+:root[data-spro-tema-ativo] button.spro-largura:focus-visible {
+  outline: none;
+  box-shadow: var(--spro-anel);
 }

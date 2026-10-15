@@ -14,6 +14,7 @@ import { aplicarTema } from "./aplicar";
 import { gravarCache, lerCache } from "./cache";
 import { iniciarDicas } from "./dicas";
 import { iniciarRemapeamento } from "./documentos";
+import { iniciarBotaoLargura, iniciarLarguraDoPapel } from "./largura";
 import { abrirModalAparencia } from "./modal";
 import { iniciarNavbarCompacta } from "./navbar";
 import { ativarNovoControleNaAba } from "./novoControle";
@@ -41,7 +42,11 @@ if (!global.__seiProEstilo2) {
   let pararRemapeamento: (() => void) | null = null;
   let pararDicas: (() => void) | null = null;
   let pararRespiro: (() => void) | null = null;
+  // A tela que embute o documento (e tem "Abrir documento em nova aba"): so ela ganha o botao de largura.
+  const ehTelaDeVisualizacao = /[?&]acao=arvore_visualizar\b/.test(location.search);
   let pararNavbar: (() => void) | null = null;
+  let pararLargura: (() => void) | null = null;
+  let pararBotaoLargura: (() => void) | null = null;
 
   /** O interruptor da barra do SEI acompanha o estado (ele e criado depois, pelo legado). */
   const sincronizarInterruptor = () => {
@@ -63,6 +68,24 @@ if (!global.__seiProEstilo2) {
     else if (!cfg.ativo && pararRespiro) {
       pararRespiro();
       pararRespiro = null;
+    }
+    // Largura do documento (papel estreito ou total): o documento aplica; a tela de fora tem o botão.
+    if (cfg.ativo && ehDocumentoDeLeitura && !pararLargura) pararLargura = iniciarLarguraDoPapel(document, localStorage);
+    else if (!cfg.ativo && pararLargura) {
+      pararLargura();
+      pararLargura = null;
+    }
+    if (cfg.ativo && ehTelaDeVisualizacao && !pararBotaoLargura) {
+      const ligar = () => {
+        if (pararBotaoLargura === null) return;
+        pararBotaoLargura = iniciarBotaoLargura(document, localStorage);
+      };
+      pararBotaoLargura = () => {};
+      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", ligar, { once: true });
+      else ligar();
+    } else if (!cfg.ativo && pararBotaoLargura) {
+      pararBotaoLargura();
+      pararBotaoLargura = null;
     }
     // Barra superior mais alta no topo e normal ao rolar (so com o tema ativo).
     if (cfg.ativo && !pararNavbar) pararNavbar = iniciarNavbarCompacta(document);
