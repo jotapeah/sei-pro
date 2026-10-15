@@ -240,6 +240,25 @@ export const COMPATIVEIS: Array<{ nome: string; url: string; ajuda: string }> = 
   { nome: "Ollama nesta m\u00E1quina", url: "http://localhost:11434/v1", ajuda: "Modelo rodando no pr\u00F3prio computador: nada sai da m\u00E1quina. A chave pode ser qualquer texto. Antes, libere a extens\u00E3o no Ollama: OLLAMA_ORIGINS=chrome-extension://* e reinicie o Ollama (sem isso a conversa falha com 403)." },
 ];
 
+
+/** Valor do select de atalhos quando o usuário digita a URL à mão. */
+export const ENDERECO_OUTRO = "";
+
+/** Atalho conhecido (NVIDIA, Groq, Ollama…) para esta URL, se houver. */
+export function atalhoDeEndereco(url: string): (typeof COMPATIVEIS)[number] | undefined {
+  const n = normalizarUrl(url);
+  return COMPATIVEIS.find((c) => c.url === n);
+}
+
+/**
+ * Valor do <select> de endereço: URL do atalho, ou `ENDERECO_OUTRO` (= digitar).
+ * O datalist filtrava pelo texto atual e escondia os atalhos com o campo cheio;
+ * o select sempre lista todos, e "Outro" preserva URL livre.
+ */
+export function valorSelectEndereco(url: string): string {
+  return atalhoDeEndereco(url)?.url ?? ENDERECO_OUTRO;
+}
+
 /**
  * Controle fino do modelo (a antiga "configuração avançada" do chat de IA).
  * Campo em branco é campo não enviado: cada serviço tem o seu padrão.

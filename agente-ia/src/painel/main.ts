@@ -13,7 +13,7 @@
 import { Pseudonimos } from "@nucleo/privacidade/anonimizar";
 import { Motor, type TelaAtual } from "../motor/motor";
 import { promptSistema } from "../motor/prompt";
-import { COMPATIVEIS, campoModeloEhSelect, conferirChave, criarProvedor, DOC_CHAVES, enderecoDoServico, listarModelos, MODELO_PADRAO, normalizarUrl, SERVICOS, TEMPERATURA_PADRAO, type Ajustes, type Servico } from "../motor/provedor";
+import { COMPATIVEIS, atalhoDeEndereco, campoModeloEhSelect, conferirChave, criarProvedor, DOC_CHAVES, enderecoDoServico, listarModelos, MODELO_PADRAO, normalizarUrl, SERVICOS, TEMPERATURA_PADRAO, valorSelectEndereco, type Ajustes, type Servico } from "../motor/provedor";
 import { RegistroTools } from "../motor/tools";
 import type { DecisaoPlano, InterfaceMotor, Mensagem, PlanoPrevisto, Tarefa, Uso } from "../motor/tipos";
 import { PontePainel } from "../ponte/cliente";
@@ -878,7 +878,15 @@ class App {
       ),
     );
     const ajudaServico = h("div", { class: "ajuda" }, ...ajudaDoServico(this.config.servico));
-    const url = h("input", { type: "url", placeholder: "https://.../v1", value: this.config.url, list: "urlsCompativeis", spellcheck: "false", "aria-label": "Endere\u00E7o do servi\u00E7o" });
+    // Select de atalhos (NVIDIA/Groq/Ollama) + campo livre em "Outro". O datalist
+    // filtrava pelo valor atual e o chevron n\u00E3o reabria a lista com a URL cheia.
+    const url = h("input", { type: "url", placeholder: "https://.../v1", value: this.config.url, spellcheck: "false", "aria-label": "Endere\u00E7o do servi\u00E7o" });
+    const urlAtalho = h(
+      "select",
+      { "aria-label": "Atalho de endere\u00E7o" },
+      ...COMPATIVEIS.map((c) => h("option", { value: c.url }, c.nome)),
+      h("option", { value: "" }, "Outro (digitar o endere\u00E7o)"),
+    );
     const ajudaUrl = h("div", { class: "ajuda" });
     const chave = h("input", { type: "password", placeholder: "sk-or-v1-...", value: this.config.chave, autocomplete: "off", autofocus: true, "aria-label": "Chave do servi\u00E7o" });
     const verChave = h("button", { class: "icone", title: "Mostrar a chave", "aria-label": "Mostrar a chave" }, icone("olho"));
@@ -922,12 +930,18 @@ class App {
       }
     };
 
+    const sincronizarUrlAtalho = (): void => {
+      const atalho = atalhoDeEndereco(url.value);
+      urlAtalho.value = valorSelectEndereco(url.value);
+      url.hidden = Boolean(atalho);
+      if (atalho) url.value = atalho.url;
+    };
     const campoUrl = h(
       "div",
       { class: "campo" },
       h("label", {}, "Endere\u00E7o do servi\u00E7o"),
+      urlAtalho,
       url,
-      h("datalist", { id: "urlsCompativeis" }, ...COMPATIVEIS.map((c) => h("option", { value: c.url }, c.nome))),
       ajudaUrl,
     );
     const notaCompativel = h(
@@ -1049,8 +1063,9 @@ class App {
       linhaBuscar.hidden = comSelect || !comp;
       chave.placeholder = SERVICOS[svc].exemploChave;
       ajudaServico.replaceChildren(...ajudaDoServico(svc));
-      const preset = COMPATIVEIS.find((c) => c.url === normalizarUrl(url.value));
+      const preset = atalhoDeEndereco(url.value);
       ajudaUrl.textContent = preset ? preset.ajuda : SERVICOS.compativel.ajuda;
+      if (comp) sincronizarUrlAtalho();
       // Ao trocar de fabricante, o modelo do anterior não serve: sugere o de casa
       // (e num serviço sem sugestão, limpa em vez de deixar o nome alheio).
       const sugestao = SERVICOS[svc].modeloPadrao ?? "";
@@ -1074,6 +1089,18 @@ class App {
       const svc = ajustarServico();
       // O `change` É o gesto do usuário: dá para pedir a permissão e já listar.
       if (svc !== "compativel") void carregarModelos(true);
+    });
+    urlAtalho.addEventListener("change", () => {
+      catalogoCompativel = false;
+      if (urlAtalho.value) {
+        url.value = urlAtalho.value;
+        url.hidden = true;
+      } else {
+        url.hidden = false;
+        if (atalhoDeEndereco(url.value)) url.value = "";
+        url.focus();
+      }
+      ajustarServico();
     });
     url.addEventListener("input", () => {
       catalogoCompativel = false;
