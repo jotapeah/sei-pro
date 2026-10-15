@@ -5,6 +5,7 @@ import { verificarDicas } from "./verificar-dicas";
 import { verificarDocumentos } from "./verificar-documentos";
 import { verificarIcones } from "./verificar-icones";
 import { verificarNavbar } from "./verificar-navbar";
+import { verificarNovoControle } from "./verificar-novo-controle";
 import { verificarRespiro } from "./verificar-respiro";
 import { verificarSecao } from "./verificar-secao";
 
@@ -15,6 +16,7 @@ verificarIcones();
 verificarDicas();
 verificarRespiro();
 verificarNavbar();
+verificarNovoControle();
 await verificarDocumentos();
 await verificarSecao();
 resumo();

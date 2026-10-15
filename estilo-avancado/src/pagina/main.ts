@@ -16,6 +16,7 @@ import { iniciarDicas } from "./dicas";
 import { iniciarRemapeamento } from "./documentos";
 import { abrirModalAparencia } from "./modal";
 import { iniciarNavbarCompacta } from "./navbar";
+import { ativarNovoControleNaAba } from "./novoControle";
 import { iniciarRespiro } from "./respiro";
 
 const iconesCss = `${gerarCssIcones()}\n${gerarCssMenuPro()}`;
@@ -101,10 +102,15 @@ if (!global.__seiProEstilo2) {
 
   consulta?.addEventListener("change", reaplicar);
 
+  let primeiraLeitura = true;
   const receber = (valor: unknown) => {
+    const anterior = cfg;
     cfg = normalizarConfig(valor);
     gravarCache(localStorage, cfg);
     reaplicar();
+    // Virou de desligado para ligado (e não é só a leitura inicial): o Novo Controle de Processos entra junto.
+    if (!primeiraLeitura && !anterior?.ativo && cfg.ativo && window === window.top) ativarNovoControleNaAba(document, localStorage);
+    primeiraLeitura = false;
   };
 
   chrome.storage.sync
