@@ -7,6 +7,8 @@
  */
 
 export const ATRIBUTO_COMPACTA = "data-spro-nav-compacta";
+/** Onde a barra superior realmente termina (px, medido): a barra de ações fixa gruda nesse valor, sem depender de conta. */
+export const VAR_FIM = "--spro-nav-fim";
 const ROLADOR = "#divInfraAreaTelaD";
 const LIMITE_COMPACTAR = 24;
 const LIMITE_EXPANDIR = 4;
@@ -17,6 +19,8 @@ export function iniciarNavbarCompacta(doc: Document): () => void {
   const raiz = doc.documentElement;
   let rolador: Element | null = null;
   let ligado = true;
+  let observador: ResizeObserver | null = null;
+  let medir: () => void = () => {};
 
   const avaliar = () => {
     if (!rolador) return;
@@ -25,6 +29,9 @@ export function iniciarNavbarCompacta(doc: Document): () => void {
     const compacta = raiz.hasAttribute(ATRIBUTO_COMPACTA);
     if (!compacta && topo > LIMITE_COMPACTAR && sobra > FOLGA) raiz.setAttribute(ATRIBUTO_COMPACTA, "");
     else if (compacta && topo <= LIMITE_EXPANDIR) raiz.removeAttribute(ATRIBUTO_COMPACTA);
+    else return;
+    // Mede já, no mesmo quadro: a barra de ações fixa nasce no mesmo instante e não pode herdar a altura antiga.
+    medir();
   };
 
   const ligar = () => {
@@ -32,6 +39,16 @@ export function iniciarNavbarCompacta(doc: Document): () => void {
     rolador = doc.querySelector(ROLADOR);
     if (!rolador || !doc.querySelector("#navInfraBarraNavegacao")) return;
     rolador.addEventListener("scroll", avaliar, { passive: true });
+    // Mede a barra a cada mudança de tamanho (inclusive quadro a quadro durante a transição de altura).
+    const nav = doc.querySelector("#navInfraBarraNavegacao");
+    medir = () => {
+      if (nav) raiz.style.setProperty(VAR_FIM, `${nav.getBoundingClientRect().bottom}px`);
+    };
+    medir();
+    if (nav && typeof ResizeObserver === "function") {
+      observador = new ResizeObserver(medir);
+      observador.observe(nav);
+    }
   };
   if (doc.readyState === "loading") doc.addEventListener("DOMContentLoaded", ligar, { once: true });
   else ligar();
@@ -39,6 +56,8 @@ export function iniciarNavbarCompacta(doc: Document): () => void {
   return () => {
     ligado = false;
     rolador?.removeEventListener("scroll", avaliar);
+    observador?.disconnect();
     raiz.removeAttribute(ATRIBUTO_COMPACTA);
+    raiz.style.removeProperty(VAR_FIM);
   };
 }
