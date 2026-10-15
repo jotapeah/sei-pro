@@ -1,10 +1,10 @@
-import { ATRIBUTO_COMPACTA, iniciarNavbarCompacta } from "../src/pagina/navbar";
+import { ATRIBUTO_COMPACTA, ATRIBUTO_ORGAO, iniciarNavbarCompacta } from "../src/pagina/navbar";
 import { checar, disparar, instalarDom, secao } from "./util";
 
 export function verificarNavbar(): void {
   secao("barra superior com duas alturas");
   const doc = instalarDom(
-    '<html><head></head><body><nav id="navInfraBarraNavegacao"></nav><div id="divInfraAreaTelaD"></div></body></html>',
+    '<html><head></head><body><nav id="navInfraBarraNavegacao"><div id="divInfraBarraSistema"><h6 class="pl-3 d-none d-md-block">MINISTERIO TESTE</h6><div id="divInfraBarraSistemaPadraoE"><div class="align-self-center" id="logo"></div></div></div></nav><div id="divInfraAreaTelaD"></div></body></html>',
   );
   const rolador = doc.getElementById("divInfraAreaTelaD") as HTMLElement;
   const medidas = { scrollTop: 0, scrollHeight: 1000, clientHeight: 700 };
@@ -18,6 +18,7 @@ export function verificarNavbar(): void {
   };
 
   checar("no topo: expandida", !compacta());
+  checar("copia o nome do orgao para junto da logo", doc.getElementById("logo")?.getAttribute(ATRIBUTO_ORGAO) === "MINISTERIO TESTE");
   rolar(10);
   checar("rolagem pequena (abaixo de 24 px) nao compacta", !compacta());
   rolar(40);
@@ -35,6 +36,7 @@ export function verificarNavbar(): void {
   rolar(40);
   parar();
   checar("desligar remove o atributo", !compacta());
+  checar("desligar tira o nome do orgao da logo", !doc.getElementById("logo")?.hasAttribute(ATRIBUTO_ORGAO));
   rolar(80);
   checar("depois de desligar a rolagem nao mexe mais", !compacta());
 }

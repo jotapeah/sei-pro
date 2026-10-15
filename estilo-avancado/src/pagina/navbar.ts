@@ -7,6 +7,8 @@
  */
 
 export const ATRIBUTO_COMPACTA = "data-spro-nav-compacta";
+/** Onde o nome do órgão fica guardado para o CSS mostrar junto da logo. */
+export const ATRIBUTO_ORGAO = "data-spro-orgao";
 /** Onde a barra superior realmente termina (px, medido): a barra de ações fixa gruda nesse valor, sem depender de conta. */
 export const VAR_FIM = "--spro-nav-fim";
 const ROLADOR = "#divInfraAreaTelaD";
@@ -39,6 +41,10 @@ export function iniciarNavbarCompacta(doc: Document): () => void {
     rolador = doc.querySelector(ROLADOR);
     if (!rolador || !doc.querySelector("#navInfraBarraNavegacao")) return;
     rolador.addEventListener("scroll", avaliar, { passive: true });
+    // O nome do órgão (faixa de cima) também aparece junto da logo quando a barra compacta (CSS, data-spro-orgao).
+    const orgao = doc.querySelector("#divInfraBarraSistema > h6.d-md-block")?.textContent?.trim();
+    const logo = doc.querySelector("#divInfraBarraSistemaPadraoE > div.align-self-center");
+    if (orgao && logo) logo.setAttribute(ATRIBUTO_ORGAO, orgao);
     // Mede a barra a cada mudança de tamanho (inclusive quadro a quadro durante a transição de altura).
     const nav = doc.querySelector("#navInfraBarraNavegacao");
     medir = () => {
@@ -59,5 +65,6 @@ export function iniciarNavbarCompacta(doc: Document): () => void {
     observador?.disconnect();
     raiz.removeAttribute(ATRIBUTO_COMPACTA);
     raiz.style.removeProperty(VAR_FIM);
+    doc.querySelector(`[${ATRIBUTO_ORGAO}]`)?.removeAttribute(ATRIBUTO_ORGAO);
   };
 }

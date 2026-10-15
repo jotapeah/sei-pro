@@ -24,9 +24,51 @@
   --spro-nav-extra: 14px;
   --spro-nav-total: calc(var(--spro-nav-base) + var(--spro-nav-extra));
 }
+/* Compacta: some a faixa do órgão (4 + 15 px) e a barra fica só com a altura da linha principal */
 :root[data-spro-tema-ativo][data-spro-nav-compacta] {
   --spro-nav-extra: 0px;
+  --spro-nav-total: 50px;
 }
+/* A faixa com o nome do órgão: recolhe suave ao compactar (o nome passa para junto da logo) */
+:root[data-spro-tema-ativo] #divInfraBarraSistemaLinha,
+:root[data-spro-tema-ativo] #divInfraBarraSistema > h6.d-md-block {
+  max-height: 20px;
+  overflow: hidden;
+  transition:
+    max-height var(--spro-dur) var(--spro-curva),
+    opacity var(--spro-dur) var(--spro-curva);
+}
+:root[data-spro-tema-ativo][data-spro-nav-compacta] #divInfraBarraSistemaLinha,
+:root[data-spro-tema-ativo][data-spro-nav-compacta] #divInfraBarraSistema > h6.d-md-block {
+  max-height: 0;
+  opacity: 0;
+}
+/* O nome do órgão, ao lado da logo, só na barra compacta (navbar.ts copia o texto para data-spro-orgao) */
+:root[data-spro-tema-ativo][data-spro-nav-compacta] #divInfraBarraSistemaPadraoE > div[data-spro-orgao]::after {
+  content: attr(data-spro-orgao);
+  display: inline-block;
+  margin-left: 14px;
+  padding-left: 14px;
+  border-left: 1px solid color-mix(in srgb, var(--spro-barra-texto) 32%, transparent);
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 30vw;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--spro-barra-texto) 88%, transparent);
+  animation: spro-orgao-entra var(--spro-dur) var(--spro-curva);
+}
+@keyframes spro-orgao-entra {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+}
+
 :root[data-spro-tema-ativo] #navInfraBarraNavegacao {
   height: var(--spro-nav-total);
   min-height: var(--spro-nav-total);
