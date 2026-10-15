@@ -474,10 +474,17 @@
 :root[data-spro-tema-ativo] table.infraTable td {
   border-color: var(--spro-borda);
 }
-:root[data-spro-tema-ativo] tr.infraTrSelecionada,
 :root[data-spro-tema-ativo] tr.infraTrMarcada,
 :root[data-spro-tema-ativo] tr.infraTrAcessada {
   background-color: var(--spro-destaque-suave);
+}
+/* O hover do SEI marca a linha com infraTrSelecionada (via JS) e o esquema pinta #e5e5e5 com !important:
+   no tema, a linha ganha o destaque suave e o texto continua legível */
+:root[data-spro-tema-ativo] tr.infraTrSelecionada,
+:root[data-spro-tema-ativo] tr.infraTrSelecionada td,
+:root[data-spro-tema-ativo] td.infraTdSelecionada {
+  background-color: var(--spro-destaque-suave) !important;
+  color: var(--spro-texto);
 }
 :root[data-spro-tema-ativo] tr.infraTrClara:hover,
 :root[data-spro-tema-ativo] tr.infraTrEscura:hover {

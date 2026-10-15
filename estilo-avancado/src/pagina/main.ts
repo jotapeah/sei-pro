@@ -13,6 +13,7 @@ import { aplicarTema } from "./aplicar";
 import { gravarCache, lerCache } from "./cache";
 import { iniciarDicas } from "./dicas";
 import { iniciarRemapeamento } from "./documentos";
+import { iniciarRespiro } from "./respiro";
 
 const iconesCss = `${gerarCssIcones()}\n${gerarCssMenuPro()}`;
 const global = window as unknown as { __seiProEstilo2?: boolean };
@@ -28,6 +29,7 @@ if (!global.__seiProEstilo2) {
   const ehDocumentoDeLeitura = /[?&]acao=(documento_visualizar|documento_imprimir_web)\b/.test(location.search);
   let pararRemapeamento: (() => void) | null = null;
   let pararDicas: (() => void) | null = null;
+  let pararRespiro: (() => void) | null = null;
 
   const reaplicar = () => {
     if (!cfg) return;
@@ -37,6 +39,12 @@ if (!global.__seiProEstilo2) {
     if (ehDocumentoDeLeitura && cfg.ativo) document.documentElement.setAttribute("data-spro-papel", "");
     else document.documentElement.removeAttribute("data-spro-papel");
     const querRemapear = ehDocumentoDeLeitura && cfg.ativo && cfg.escurecerDocumentos && esquemaResolvido(cfg, sistemaEscuro) === "escuro";
+    // Respiro dos formularios internos: so com o tema ativo (desligar devolve a altura original).
+    if (cfg.ativo && !pararRespiro) pararRespiro = iniciarRespiro(document);
+    else if (!cfg.ativo && pararRespiro) {
+      pararRespiro();
+      pararRespiro = null;
+    }
     // Tooltips da casca: só com o tema ativo (desligar devolve cada title).
     if (cfg.ativo && !pararDicas) {
       const ligarDicas = () => {

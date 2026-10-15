@@ -203,6 +203,16 @@
   letter-spacing: 0.1px;
   color: var(--spro-suave);
 }
+/* Respiro entre rótulo e campo, e entre um campo e o rótulo seguinte (nas telas internas eles vinham colados) */
+:root[data-spro-tema-ativo] label.infraLabelObrigatorio:has(+ :is(input, select, textarea, .chosen-container, div.infraAreaDados)),
+:root[data-spro-tema-ativo] label.infraLabelOpcional:has(+ :is(input, select, textarea, .chosen-container, div.infraAreaDados)) {
+  display: inline-block;
+  margin-bottom: 6px;
+}
+:root[data-spro-tema-ativo] :is(input.infraText, select.infraSelect, textarea.infraTextarea, .chosen-container):has(+ label) {
+  margin-bottom: 16px;
+}
+
 /* Quadros de formulário viram cartões; a legenda vira uma etiqueta pequena */
 :root[data-spro-tema-ativo] fieldset.infraFieldset {
   padding: 16px 18px 14px;
