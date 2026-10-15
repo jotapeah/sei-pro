@@ -11,6 +11,7 @@ import controlesCss from "../../estatico/controles.css";
 import { gerarCssIcones, gerarCssMenuPro } from "../icones/css";
 import { aplicarTema } from "./aplicar";
 import { gravarCache, lerCache } from "./cache";
+import { iniciarDicas } from "./dicas";
 import { iniciarRemapeamento } from "./documentos";
 
 const iconesCss = `${gerarCssIcones()}\n${gerarCssMenuPro()}`;
@@ -26,6 +27,7 @@ if (!global.__seiProEstilo2) {
   // O editor e a edicao ficam de fora: o que ele grava nao pode carregar cor adaptada.
   const ehDocumentoDeLeitura = /[?&]acao=(documento_visualizar|documento_imprimir_web)\b/.test(location.search);
   let pararRemapeamento: (() => void) | null = null;
+  let pararDicas: (() => void) | null = null;
 
   const reaplicar = () => {
     if (!cfg) return;
@@ -35,6 +37,19 @@ if (!global.__seiProEstilo2) {
     if (ehDocumentoDeLeitura && cfg.ativo) document.documentElement.setAttribute("data-spro-papel", "");
     else document.documentElement.removeAttribute("data-spro-papel");
     const querRemapear = ehDocumentoDeLeitura && cfg.ativo && cfg.escurecerDocumentos && esquemaResolvido(cfg, sistemaEscuro) === "escuro";
+    // Tooltips da casca: só com o tema ativo (desligar devolve cada title).
+    if (cfg.ativo && !pararDicas) {
+      const ligarDicas = () => {
+        if (pararDicas === null) return;
+        pararDicas = iniciarDicas(document);
+      };
+      pararDicas = () => {};
+      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", ligarDicas, { once: true });
+      else ligarDicas();
+    } else if (!cfg.ativo && pararDicas) {
+      pararDicas();
+      pararDicas = null;
+    }
     if (querRemapear && !pararRemapeamento) {
       const ligar = () => {
         if (pararRemapeamento === null) return;

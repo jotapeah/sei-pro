@@ -99,6 +99,8 @@ export const MAPA_ICONES: EntradaIcone[] = [
   b("acao_lote", "camadas", { daExtensao: true }),
   b("doc_lote", "documento", { daExtensao: true }),
   b("compare_doc", "duplicar", { daExtensao: true }),
+  // Historico de Processos Visitados na barra de acoes: icone embutido (data URI) com a marca <!--spro-historico-->
+  { src: "spro-historico", icone: "historico", contexto: "barra" },
   // Ações das linhas das tabelas (consultar, alterar, desativar, excluir...) e paginação
   tb("consultar", "olho"),
   tb("pre_visualizar", "olho"),

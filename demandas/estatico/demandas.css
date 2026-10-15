@@ -10,8 +10,10 @@ body {
   font: 13px/1.45 var(--spro-fonte);
   -webkit-font-smoothing: antialiased;
 }
+/* Fundo transparente: a pagina do SEI (cinza claro, ou escuro) aparece por tras; os cartoes e grades do painel seguem com o proprio fundo. */
+html[data-modo="embutido"],
 html[data-modo="embutido"] body {
-  background: var(--spro-fundo);
+  background: transparent;
 }
 #app {
   padding: 4px 2px 10px;

@@ -44,6 +44,19 @@
   outline: 2px solid var(--spro-barra-texto);
   outline-offset: 1px;
 }
+/* O botão "Menu" tem texto: vira uma pílula com respiro, afastada da pesquisa */
+:root[data-spro-tema-ativo] #divInfraBarraSistemaPadrao a#lnkInfraMenuSistema {
+  display: flex;
+  align-items: center;
+  width: auto;
+  margin-right: 10px;
+  padding: 0 14px;
+}
+:root[data-spro-tema-ativo] #divInfraBarraSistemaPadrao a#lnkInfraMenuSistema > span {
+  padding: 0;
+  font-size: 14px;
+  letter-spacing: 0.2px;
+}
 /* Pesquisa rápida: pílula translúcida que vira superfície ao focar */
 :root[data-spro-tema-ativo] #txtPesquisaRapida {
   height: 36px;
@@ -246,7 +259,8 @@
 
 /* ============================== Tooltips ============================== */
 :root[data-spro-tema-ativo] div.infraTooltip,
-:root[data-spro-tema-ativo] div#divInfraTooltip {
+:root[data-spro-tema-ativo] div#divInfraTooltip,
+:root[data-spro-tema-ativo] div[data-spro-dica-caixa] {
   padding: 6px 10px;
   font-size: 12px;
   font-weight: 500;
@@ -256,6 +270,21 @@
   border: 0;
   border-radius: var(--spro-raio);
   box-shadow: var(--spro-sombra-3);
+}
+/* A caixa própria (botões que só tinham title): flutua sobre tudo e nunca captura o mouse */
+:root[data-spro-tema-ativo] div[data-spro-dica-caixa] {
+  position: fixed;
+  z-index: 2147483600;
+  max-width: 280px;
+  font-family: var(--spro-fonte);
+  pointer-events: none;
+  animation: spro-dica-entra var(--spro-dur) var(--spro-curva);
+}
+@keyframes spro-dica-entra {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
 }
 
 /* ============================== Árvore do processo ============================== */
