@@ -398,3 +398,25 @@
   background-repeat: no-repeat;
   background-size: 100% 1px;
 }
+
+/* ============================== Barra de ações fixa no topo ============================== */
+/* O legado cria uma cópia da barra (fica no fluxo, guardando o espaço) e fixa a original. A fixa gruda na barra
+   superior, sem vão e com os cantos de cima retos, como uma aba que desce dela; a cópia só segura o lugar. */
+:root[data-spro-tema-ativo]:has(#navInfraBarraNavegacao) div.barraBotoesSEI.fixed {
+  margin-top: 0;
+  border-top-color: transparent;
+  border-radius: 0 0 var(--spro-raio-g) var(--spro-raio-g);
+  box-shadow:
+    0 10px 24px -10px color-mix(in srgb, var(--spro-barra) 45%, transparent),
+    var(--spro-sombra-2);
+  animation: spro-barra-fixa var(--spro-dur) var(--spro-curva);
+}
+:root[data-spro-tema-ativo]:has(#navInfraBarraNavegacao) div.barraBotoesSEI:has(+ div.barraBotoesSEI.fixed) {
+  visibility: hidden;
+}
+@keyframes spro-barra-fixa {
+  from {
+    opacity: 0.6;
+    transform: translateY(-8px);
+  }
+}
