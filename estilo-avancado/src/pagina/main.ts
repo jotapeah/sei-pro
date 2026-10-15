@@ -9,6 +9,7 @@ import baseCss from "../../estatico/base.css";
 import cascaCss from "../../estatico/casca.css";
 import controlesCss from "../../estatico/controles.css";
 import { gerarCssIcones, gerarCssMenuPro } from "../icones/css";
+import { gravarTema } from "../opcoes/gravar";
 import { aplicarTema } from "./aplicar";
 import { gravarCache, lerCache } from "./cache";
 import { iniciarDicas } from "./dicas";
@@ -113,9 +114,7 @@ if (!global.__seiProEstilo2) {
 
   const deps = {
     ler: async () => (await chrome.storage.sync.get(CHAVE_TEMA))[CHAVE_TEMA],
-    gravar: async (c: ConfigTema) => {
-      await chrome.storage.sync.set({ [CHAVE_TEMA]: c });
-    },
+    gravar: gravarTema,
     sistemaEscuro: () => consulta?.matches ?? false,
   };
   // Eventos do interruptor e da paleta da barra do SEI (disparados no mundo da pagina, ouvidos aqui).

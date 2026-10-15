@@ -8,7 +8,7 @@ export function verificarNavbar(): void {
   );
   const rolador = doc.getElementById("divInfraAreaTelaD") as HTMLElement;
   const medidas = { scrollTop: 0, scrollHeight: 1000, clientHeight: 700 };
-  for (const [k, v] of Object.entries(medidas))
+  for (const k of Object.keys(medidas))
     Object.defineProperty(rolador, k, { get: () => (medidas as Record<string, number>)[k], configurable: true });
   const parar = iniciarNavbarCompacta(doc);
   const compacta = () => doc.documentElement.hasAttribute(ATRIBUTO_COMPACTA);

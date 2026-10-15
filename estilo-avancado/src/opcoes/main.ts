@@ -4,8 +4,9 @@
  * todos os pacotes. Grava em chrome.storage.sync; o content script de cada aba reage sozinho.
  */
 
-import { CHAVE_TEMA, type ConfigTema } from "@comum/tema/config";
+import { CHAVE_TEMA } from "@comum/tema/config";
 import { h } from "@comum/ui/dom";
+import { gravarTema } from "./gravar";
 import { CSS_APARENCIA, montarSecaoAparencia } from "./secao";
 
 async function iniciar(): Promise<void> {
@@ -17,9 +18,7 @@ async function iniciar(): Promise<void> {
   const consulta = matchMedia("(prefers-color-scheme: dark)");
   const secao = await montarSecaoAparencia({
     ler: async () => (await chrome.storage.sync.get(CHAVE_TEMA))[CHAVE_TEMA],
-    gravar: async (cfg: ConfigTema) => {
-      await chrome.storage.sync.set({ [CHAVE_TEMA]: cfg });
-    },
+    gravar: gravarTema,
     sistemaEscuro: () => consulta.matches,
   });
   document.head.append(h("style", {}, CSS_APARENCIA));
