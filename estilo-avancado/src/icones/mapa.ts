@@ -20,6 +20,8 @@ export interface EntradaIcone {
   daExtensao?: boolean;
   /** Cor semântica do ícone; sem isto ele herda a cor do contexto. */
   tom?: Tom;
+  /** Desenho multicolor próprio (proprios.ts), usado como o conteúdo da imagem em vez da máscara de uma cor. */
+  proprio?: boolean;
 }
 
 const m = (src: string, icone: string): EntradaIcone => ({ src: `menu/${src}.svg`, icone, contexto: "menu" });
@@ -70,45 +72,17 @@ export const MAPA_ICONES: EntradaIcone[] = [
   t("configuracao", "engrenagem"),
   t("usuario_topo", "pessoa"),
   t("sair", "saida"),
-  // Barras de ações do Controle e do processo
-  b("processo_enviar", "enviar", { tom: "ciano" }),
-  b("processo_atualizar_andamento", "atualizar", { tom: "ciano" }),
-  b("processo_atribuir", "pessoaMais", { tom: "azul" }),
-  b("bloco_incluir_protocolo", "blocoMais", { tom: "roxo" }),
-  b("processo_sobrestar", "pausa", { tom: "ambar" }),
-  b("processo_concluir", "concluir", { tom: "verde" }),
-  b("anotacao_cadastro", "nota", { tom: "ambar" }),
-  b("acompanhamento_especial_cadastro", "olho", { tom: "azul" }),
-  b("documento_incluir", "documentoMais", { tom: "verde" }),
-  b("marcador_adicionar", "etiquetaMais", { tom: "rosa" }),
-  b("marcador_remover", "etiquetaMenos", { tom: "rosa" }),
-  b("controle_prazo_gerenciar", "relogio", { tom: "ambar" }),
-  b("credencial_consultar", "chave", { tom: "azul" }),
-  b("comentario", "comentario", { tom: "ciano" }),
-  b("documento_alterar", "documentoLupa", { tom: "azul" }),
-  b("documento_editar_conteudo", "documentoLapis", { tom: "laranja" }),
-  b("documento_assinar", "assinar", { tom: "roxo" }),
-  b("documento_assinatura_externa", "link", { tom: "roxo" }),
-  b("documento_gerar_pdf", "gerarPdf", { tom: "laranja" }),
-  b("documento_modelo", "estrela", { tom: "ambar" }),
-  b("documento_versoes", "historico", { tom: "azul" }),
-  b("protocolo_excluir", "lixeira", { tom: "perigo" }),
-  b("ciencia", "polegar", { tom: "ambar" }),
-  b("documento_assinaturas_consultar", "selo", { tom: "roxo" }),
-  b("documento_cancelar", "documentoX", { tom: "perigo" }),
-  b("email_enviar", "email", { tom: "ciano" }),
-  // Botões do SEI Pro nas barras de ações (imagens da extensão)
-  b("favoritos", "alvo", { daExtensao: true, tom: "ambar" }),
-  b("ferramentas_pdf", "pdf", { daExtensao: true, tom: "laranja" }),
-  b("botpro_icon", "robo", { daExtensao: true, tom: "roxo" }),
-  b("fluxos", "fluxo", { daExtensao: true, tom: "ciano" }),
-  b("acao_lote", "camadas", { daExtensao: true, tom: "roxo" }),
-  b("doc_lote", "documento", { daExtensao: true, tom: "verde" }),
-  b("compare_doc", "duplicar", { daExtensao: true, tom: "ciano" }),
+  // Barras de ações: os ícones nativos do SEI ficam como são (o Agente de IA e o Estúdio de Fluxo também).
+  // Só os botões do SEI Pro abaixo ganham desenho próprio, multicolor como os nativos (ver proprios.ts).
+  b("favoritos", "alvo", { daExtensao: true, proprio: true }),
+  b("ferramentas_pdf", "pdf", { daExtensao: true, proprio: true }),
+  b("acao_lote", "camadas", { daExtensao: true, proprio: true }),
+  b("doc_lote", "documentos", { daExtensao: true, proprio: true }),
+  b("compare_doc", "comparar", { daExtensao: true, proprio: true }),
   // Historico de Processos Visitados na barra de acoes: icone embutido (data URI) com a marca <!--spro-historico-->
-  { src: "spro-historico", icone: "historico", contexto: "barra", tom: "azul" },
+  { src: "spro-historico", icone: "historico", contexto: "barra", proprio: true },
   // Gerar Certidao de Documento Oficial: botao do SEI Pro com PNG embutido, so se acha pelo id do link
-  { src: "#iconDocCertidao", seletor: "a#iconDocCertidao > img", icone: "certidao", contexto: "barra", tom: "verde" },
+  { src: "#iconDocCertidao", seletor: "a#iconDocCertidao > img", icone: "certidao", contexto: "barra", proprio: true },
   // Ações das linhas das tabelas (consultar, alterar, desativar, excluir...) e paginação
   tb("consultar", "olho"),
   tb("pre_visualizar", "olho"),

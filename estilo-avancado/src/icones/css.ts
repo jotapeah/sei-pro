@@ -1,6 +1,7 @@
 import { type Forma, ICONES } from "@comum/ui/dom";
 import { ICONES_EXTRAS } from "./extras";
 import { type ContextoIcone, type EntradaIcone, MAPA_ICONES, MAPA_MENU_PRO } from "./mapa";
+import { ICONES_PROPRIOS } from "./proprios";
 
 const TODOS: Record<string, Forma[]> = { ...(ICONES as Record<string, Forma[]>), ...ICONES_EXTRAS };
 
@@ -71,14 +72,23 @@ const seletor = (e: EntradaIcone) =>
 /** CSS gerado: uma regra base por contexto (mesma mecânica para todos) e uma regra por ícone (só a máscara). */
 export function gerarCssIcones(mapa: EntradaIcone[] = MAPA_ICONES): string {
   const partes: string[] = [];
+  const proprios = mapa.filter((e) => e.proprio);
+  if (proprios.length > 0) {
+    partes.push(`${proprios.map(seletor).join(",\n")} {\n  box-sizing: border-box;\n  padding: 4px;\n  background: none !important;\n}`);
+    for (const e of proprios) {
+      const desenho = ICONES_PROPRIOS[e.icone];
+      if (!desenho) throw new Error(`Ícone próprio desconhecido: ${e.icone}`);
+      partes.push(`${seletor(e)} {\n  content: ${uri(desenho)};\n}`);
+    }
+  }
   for (const ctx of ["menu", "topo", "barra", "tabela"] as ContextoIcone[]) {
-    const doCtx = mapa.filter((e) => e.contexto === ctx);
+    const doCtx = mapa.filter((e) => e.contexto === ctx && !e.proprio);
     if (doCtx.length === 0) continue;
     partes.push(
       `${doCtx.map(seletor).join(",\n")} {\n  content: ${GIF_TRANSPARENTE};\n  box-sizing: border-box;\n  ${TAMANHO[ctx] ?? ""}padding: ${RESPIRO[ctx]};\n  background-color: ${FUNDO[ctx]};\n  background-clip: content-box;${COR_BASE[ctx] ?? ""}\n  -webkit-mask-repeat: no-repeat;\n  -webkit-mask-position: center;\n  -webkit-mask-size: contain;\n  -webkit-mask-origin: content-box;\n  -webkit-mask-clip: content-box;\n}`,
     );
   }
-  for (const e of mapa) {
+  for (const e of mapa.filter((x) => !x.proprio)) {
     partes.push(
       `${seletor(e)} {\n  -webkit-mask-image: ${uri(svgDoIcone(e.icone, PREENCHIMENTO[e.contexto] ?? 0))};${e.tom ? `\n  color: var(--${e.tom === "perigo" ? "spro-perigo" : `spro-tom-${e.tom}`});` : ""}\n}`,
     );

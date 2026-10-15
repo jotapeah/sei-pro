@@ -1,12 +1,15 @@
 import { gerarCssIcones, gerarCssMenuPro, nomesDeIcones, svgDoIcone } from "../src/icones/css";
 import { engrenagem } from "../src/icones/extras";
 import { MAPA_ICONES, MAPA_MENU_PRO } from "../src/icones/mapa";
+import { ICONES_PROPRIOS } from "../src/icones/proprios";
 import { checar, secao } from "./util";
 
 export function verificarIcones(): void {
   secao("icones da casca");
   const nomes = new Set(nomesDeIcones());
-  const sem = MAPA_ICONES.filter((e) => !nomes.has(e.icone)).map((e) => `${e.src} -> ${e.icone}`);
+  const sem = MAPA_ICONES.filter((e) => !(e.proprio ? e.icone in ICONES_PROPRIOS : nomes.has(e.icone))).map(
+    (e) => `${e.src} -> ${e.icone}`,
+  );
   checar("todo icone do mapa existe no conjunto", sem.length === 0, sem);
   const dup = MAPA_ICONES.filter(
     (e, i) => MAPA_ICONES.findIndex((o) => o.src === e.src && !!o.daExtensao === !!e.daExtensao && o.contexto === e.contexto) !== i,
@@ -25,19 +28,26 @@ export function verificarIcones(): void {
   const css = gerarCssIcones();
   checar("css gerado so tem ASCII", !/[^\x00-\x7f]/.test(css));
   checar("css gerado sem recurso externo (so data:)", !/url\("(?!data:)/.test(css) && !/@import/.test(css));
-  checar("uma regra de mascara por icone mapeado", (css.match(/-webkit-mask-image:/g) ?? []).length === MAPA_ICONES.length);
+  checar(
+    "uma regra de mascara por icone mapeado",
+    (css.match(/-webkit-mask-image:/g) ?? []).length === MAPA_ICONES.filter((e) => !e.proprio).length,
+  );
   checar(
     "todo seletor fica no escopo do seu contexto",
     /#infraMenu img/.test(css) && /#divInfraBarraSistemaPadrao img/.test(css) && /div\.barraBotoesSEI/.test(css) && /table img/.test(css),
   );
   checar("todo seletor fica sob o tema ativo", (css.match(/^:root\[data-spro-tema-ativo\]/gm) ?? []).length >= MAPA_ICONES.length);
 
-  const semTom = MAPA_ICONES.filter((e) => e.contexto === "barra" && !e.tom).map((e) => e.src);
+  const semTom = MAPA_ICONES.filter((e) => e.contexto === "barra" && !e.tom && !e.proprio).map((e) => e.src);
   checar("todo icone das barras de acoes tem tom (cor por funcao)", semTom.length === 0, semTom);
   const menuComTom = MAPA_ICONES.filter((e) => e.contexto === "menu" && e.tom);
   checar("o menu lateral fica sem tom (uma cor so, como pedido)", menuComTom.length === 0);
-  const tonsUsados = new Set(MAPA_ICONES.filter((e) => e.contexto === "barra").map((e) => e.tom));
-  checar("a barra usa pelo menos 6 tons distintos", tonsUsados.size >= 6, [...tonsUsados]);
+  const proprios = MAPA_ICONES.filter((e) => e.proprio);
+  checar(
+    "os botoes do SEI Pro tem desenho multicolor proprio (conteudo da imagem, sem mascara)",
+    proprios.length >= 6 && proprios.every((e) => new Set(ICONES_PROPRIOS[e.icone]?.match(/fill="#[0-9a-f]+"/gi)).size >= 2),
+  );
+  checar("o Agente de IA e o Estudio de Fluxo ficam com o icone original", !MAPA_ICONES.some((e) => /botpro_icon|fluxos/.test(e.src)));
   const so = svgDoIcone("documento");
   const cheio = svgDoIcone("documento", 0.62);
   checar("sem preenchimento: so traco", !/fill-opacity/.test(so));
@@ -51,7 +61,8 @@ export function verificarIcones(): void {
   );
   checar(
     "as barras de acoes usam o preenchido e o menu nao",
-    /fill-opacity/.test(gerarCssIcones()) && !/fill-opacity/.test(gerarCssIcones(MAPA_ICONES.filter((e) => e.contexto === "menu"))),
+    /fill-opacity/.test(gerarCssIcones([{ src: "x.svg", icone: "documento", contexto: "barra" }])) &&
+      !/fill-opacity/.test(gerarCssIcones(MAPA_ICONES.filter((e) => e.contexto === "menu"))),
   );
   const pro = gerarCssMenuPro();
   checar(
