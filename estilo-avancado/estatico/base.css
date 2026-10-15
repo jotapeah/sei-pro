@@ -416,6 +416,45 @@
   background-color: color-mix(in srgb, var(--spro-barra-texto) 18%, transparent);
 }
 
+/* Menu suspenso dos documentos e do processo na árvore (jquery.toolbar do SEI Pro): o plugin força cores com !important */
+:root[data-spro-tema-ativo] .tool-container {
+  background-color: var(--spro-fundo);
+  border: 1px solid var(--spro-borda);
+  border-radius: 12px;
+  box-shadow: var(--spro-sombra-3);
+}
+:root[data-spro-tema-ativo] .tool-container .tool-item {
+  color: var(--spro-texto) !important;
+  border-radius: 8px;
+}
+:root[data-spro-tema-ativo] .tool-container .tool-item > .fa {
+  color: var(--spro-suave);
+}
+:root[data-spro-tema-ativo] .tool-container .tool-item .info {
+  color: var(--spro-texto);
+  font-size: 13px;
+}
+:root[data-spro-tema-ativo] .tool-container .tool-item:hover,
+:root[data-spro-tema-ativo] .tool-container .tool-item.selected {
+  background: var(--spro-destaque-suave);
+  color: var(--spro-texto) !important;
+  border-radius: 8px;
+}
+:root[data-spro-tema-ativo] .tool-container .tool-item:hover > .fa,
+:root[data-spro-tema-ativo] .tool-container .tool-item.selected > .fa {
+  color: var(--spro-destaque);
+}
+:root[data-spro-tema-ativo] .tool-container .tool-item:hover .info,
+:root[data-spro-tema-ativo] .tool-container .tool-item.selected .info {
+  color: var(--spro-texto);
+}
+:root[data-spro-tema-ativo] .tool-container.tool-bottom .arrow {
+  border-color: transparent transparent var(--spro-borda);
+}
+:root[data-spro-tema-ativo] .tool-container.tool-top .arrow {
+  border-color: var(--spro-borda) transparent transparent;
+}
+
 /* Links */
 :root[data-spro-tema-ativo] a,
 :root[data-spro-tema-ativo] a.ancoraPadraoAzul,

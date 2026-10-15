@@ -54,7 +54,9 @@ const uri = (svg: string) => `url("data:image/svg+xml,${encodeURIComponent(svg).
 const GIF_TRANSPARENTE = `url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7")`;
 
 const seletor = (e: EntradaIcone) =>
-  `:root[data-spro-tema-ativo] ${ESCOPO[e.contexto]} img${e.daExtensao ? '[src^="chrome-extension"]' : ""}[src*="${e.src}"]`;
+  e.seletor
+    ? `:root[data-spro-tema-ativo] ${ESCOPO[e.contexto]} ${e.seletor}`
+    : `:root[data-spro-tema-ativo] ${ESCOPO[e.contexto]} img${e.daExtensao ? '[src^="chrome-extension"]' : ""}[src*="${e.src}"]`;
 
 /** CSS gerado: uma regra base por contexto (mesma mecânica para todos) e uma regra por ícone (só a máscara). */
 export function gerarCssIcones(mapa: EntradaIcone[] = MAPA_ICONES): string {

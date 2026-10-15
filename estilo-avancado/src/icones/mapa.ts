@@ -11,6 +11,8 @@ export interface EntradaIcone {
   /** Nome no conjunto dos painéis (`ICONES`) ou em `ICONES_EXTRAS`. */
   icone: string;
   contexto: ContextoIcone;
+  /** Seletor próprio (relativo ao escopo do contexto), para quem não tem um arquivo reconhecível no src (PNG embutido). */
+  seletor?: string;
   /** Só aceita imagens da própria extensão (`src` começando por chrome-extension). */
   daExtensao?: boolean;
   /** Cor semântica do ícone; sem isto ele herda a cor do contexto. */
@@ -80,8 +82,9 @@ export const MAPA_ICONES: EntradaIcone[] = [
   b("controle_prazo_gerenciar", "relogio"),
   b("credencial_consultar", "chave"),
   b("comentario", "comentario"),
-  b("documento_alterar", "lapis"),
-  b("documento_assinar", "escudoCheck"),
+  b("documento_alterar", "documentoLupa"),
+  b("documento_editar_conteudo", "documentoLapis"),
+  b("documento_assinar", "assinar"),
   b("documento_assinatura_externa", "link"),
   b("documento_gerar_pdf", "gerarPdf"),
   b("documento_modelo", "estrela"),
@@ -101,6 +104,8 @@ export const MAPA_ICONES: EntradaIcone[] = [
   b("compare_doc", "duplicar", { daExtensao: true }),
   // Historico de Processos Visitados na barra de acoes: icone embutido (data URI) com a marca <!--spro-historico-->
   { src: "spro-historico", icone: "historico", contexto: "barra" },
+  // Gerar Certidao de Documento Oficial: botao do SEI Pro com PNG embutido, so se acha pelo id do link
+  { src: "#iconDocCertidao", seletor: "a#iconDocCertidao > img", icone: "certidao", contexto: "barra" },
   // Ações das linhas das tabelas (consultar, alterar, desativar, excluir...) e paginação
   tb("consultar", "olho"),
   tb("pre_visualizar", "olho"),

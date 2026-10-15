@@ -8,9 +8,9 @@ export function verificarIcones(): void {
   const nomes = new Set(nomesDeIcones());
   const sem = MAPA_ICONES.filter((e) => !nomes.has(e.icone)).map((e) => `${e.src} -> ${e.icone}`);
   checar("todo icone do mapa existe no conjunto", sem.length === 0, sem);
-  const dup = MAPA_ICONES.filter((e, i) => MAPA_ICONES.findIndex((o) => o.src === e.src && !!o.daExtensao === !!e.daExtensao) !== i).map(
-    (e) => e.src,
-  );
+  const dup = MAPA_ICONES.filter(
+    (e, i) => MAPA_ICONES.findIndex((o) => o.src === e.src && !!o.daExtensao === !!e.daExtensao && o.contexto === e.contexto) !== i,
+  ).map((e) => e.src);
   checar("nenhum src repetido no mapa", dup.length === 0, dup);
 
   let ruins = 0;
