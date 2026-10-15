@@ -115,3 +115,15 @@ export const MAPA_ICONES: EntradaIcone[] = [
   tb("paginacao_primeira", "paginaPrimeira"),
   tb("paginacao_ultima", "paginaUltima"),
 ];
+
+/**
+ * Itens que o SEI Pro injeta no menu lateral: não são <img> e sim <svg> inline com glifo preenchido,
+ * então a troca é pelo id do link (o desenho vira a máscara do próprio <svg>).
+ */
+export const MAPA_MENU_PRO: { id: string; icone: string }[] = [
+  { id: "seiProAgenteMenu", icone: "robo" },
+  { id: "pesquisaLinkPermanentePro", icone: "link" },
+  { id: "historicoProcessosPro", icone: "historico" },
+  { id: "ferramentasPdfPro", icone: "pdf" },
+  { id: "processosLotePro", icone: "camadas" },
+];

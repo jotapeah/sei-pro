@@ -1,6 +1,6 @@
-import { gerarCssIcones, nomesDeIcones, svgDoIcone } from "../src/icones/css";
+import { gerarCssIcones, gerarCssMenuPro, nomesDeIcones, svgDoIcone } from "../src/icones/css";
 import { engrenagem } from "../src/icones/extras";
-import { MAPA_ICONES } from "../src/icones/mapa";
+import { MAPA_ICONES, MAPA_MENU_PRO } from "../src/icones/mapa";
 import { checar, secao } from "./util";
 
 export function verificarIcones(): void {
@@ -32,6 +32,12 @@ export function verificarIcones(): void {
   );
   checar("todo seletor fica sob o tema ativo", (css.match(/^:root\[data-spro-tema-ativo\]/gm) ?? []).length >= MAPA_ICONES.length);
 
+  const pro = gerarCssMenuPro();
+  checar(
+    "itens do SEI Pro: um icone existente por id",
+    MAPA_MENU_PRO.every((e) => nomes.has(e.icone)) && (pro.match(/-webkit-mask-image:/g) ?? []).length === MAPA_MENU_PRO.length,
+  );
+  checar("itens do SEI Pro: so ASCII e sem recurso externo", !/[^\x00-\x7f]/.test(pro) && !/url\("(?!data:)/.test(pro));
   const g = engrenagem(8);
   const d = String((g[0] as [string, Record<string, string>])[1].d);
   checar("engrenagem: 8 dentes (32 vertices) e sem NaN", (d.match(/L/g) ?? []).length === 31 && !/NaN/.test(d), d.slice(0, 60));

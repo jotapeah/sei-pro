@@ -1,6 +1,6 @@
 import { type Forma, ICONES } from "@comum/ui/dom";
 import { ICONES_EXTRAS } from "./extras";
-import { type ContextoIcone, type EntradaIcone, MAPA_ICONES } from "./mapa";
+import { type ContextoIcone, type EntradaIcone, MAPA_ICONES, MAPA_MENU_PRO } from "./mapa";
 
 const TODOS: Record<string, Forma[]> = { ...(ICONES as Record<string, Forma[]>), ...ICONES_EXTRAS };
 
@@ -68,6 +68,21 @@ export function gerarCssIcones(mapa: EntradaIcone[] = MAPA_ICONES): string {
   }
   for (const e of mapa) {
     partes.push(`${seletor(e)} {\n  -webkit-mask-image: ${uri(svgDoIcone(e.icone))};${e.tom ? `\n  color: var(--spro-${e.tom});` : ""}\n}`);
+  }
+  return partes.join("\n");
+}
+
+/** Itens do SEI Pro no menu: esconde o glifo inline e pinta o desenho novo por máscara no próprio <svg>. */
+export function gerarCssMenuPro(mapa = MAPA_MENU_PRO): string {
+  const base = `:root[data-spro-tema-ativo] #infraMenu a.newLinksMenuPro > svg.iconMenuPro`;
+  const partes = [
+    `${base} {\n  box-sizing: border-box;\n  flex: none;\n  margin: 0 5px 0 6px !important;\n  background-color: currentColor;\n  -webkit-mask-repeat: no-repeat;\n  -webkit-mask-position: center;\n  -webkit-mask-size: contain;\n}`,
+    `${base} > * {\n  display: none;\n}`,
+  ];
+  for (const e of mapa) {
+    partes.push(
+      `:root[data-spro-tema-ativo] #infraMenu a#${e.id} > svg.iconMenuPro {\n  -webkit-mask-image: ${uri(svgDoIcone(e.icone))};\n}`,
+    );
   }
   return partes.join("\n");
 }

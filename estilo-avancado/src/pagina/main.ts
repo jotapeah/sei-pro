@@ -8,12 +8,12 @@ import { CHAVE_TEMA, type ConfigTema, esquemaResolvido, normalizarConfig } from 
 import baseCss from "../../estatico/base.css";
 import cascaCss from "../../estatico/casca.css";
 import controlesCss from "../../estatico/controles.css";
-import { gerarCssIcones } from "../icones/css";
+import { gerarCssIcones, gerarCssMenuPro } from "../icones/css";
 import { aplicarTema } from "./aplicar";
 import { gravarCache, lerCache } from "./cache";
 import { iniciarRemapeamento } from "./documentos";
 
-const iconesCss = gerarCssIcones();
+const iconesCss = `${gerarCssIcones()}\n${gerarCssMenuPro()}`;
 const global = window as unknown as { __seiProEstilo2?: boolean };
 
 if (!global.__seiProEstilo2) {
