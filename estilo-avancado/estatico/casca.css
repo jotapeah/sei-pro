@@ -17,6 +17,31 @@
 :root[data-spro-tema-ativo] #divInfraBarraSistemaPadrao a > img[src*="svg/"] {
   color: var(--spro-barra-texto);
 }
+/* Altura da barra: mais alta no topo da página, normal depois de rolar (navbar.ts liga data-spro-nav-compacta).
+   A barra de ações fixa acompanha por --spro-nav-total, com a mesma transição. */
+:root[data-spro-tema-ativo] {
+  --spro-nav-base: 65px;
+  --spro-nav-extra: 14px;
+  --spro-nav-total: calc(var(--spro-nav-base) + var(--spro-nav-extra));
+}
+:root[data-spro-tema-ativo][data-spro-nav-compacta] {
+  --spro-nav-extra: 0px;
+}
+:root[data-spro-tema-ativo] #navInfraBarraNavegacao {
+  height: var(--spro-nav-total);
+  min-height: var(--spro-nav-total);
+  transition:
+    height var(--spro-dur) var(--spro-curva),
+    min-height var(--spro-dur) var(--spro-curva);
+}
+:root[data-spro-tema-ativo] #divInfraBarraSistemaPadrao {
+  height: calc(50px + var(--spro-nav-extra));
+  min-height: calc(50px + var(--spro-nav-extra));
+  align-items: center;
+  transition:
+    height var(--spro-dur) var(--spro-curva),
+    min-height var(--spro-dur) var(--spro-curva);
+}
 /* Ícones da barra: botões redondos de 40 px */
 :root[data-spro-tema-ativo] #divInfraBarraSistemaPadrao a.align-self-center,
 :root[data-spro-tema-ativo] #lnkInfraMenuSistema,

@@ -684,3 +684,10 @@
 :root[data-spro-tema-ativo] #divRelacionados {
   border-top: 0 !important;
 }
+
+/* Barra de ações fixa: o legado grava o top inline (altura da barra no instante da rolagem); acompanha a altura atual. */
+:root[data-spro-tema-ativo]:has(#navInfraBarraNavegacao) #divComandos.fixed,
+:root[data-spro-tema-ativo]:has(#navInfraBarraNavegacao) #divBotoesControleProcessos.fixed {
+  top: var(--spro-nav-total) !important;
+  transition: top var(--spro-dur) var(--spro-curva);
+}

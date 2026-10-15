@@ -4,6 +4,7 @@ import { verificarBaseCss, verificarCascaCss } from "./verificar-base-css";
 import { verificarDicas } from "./verificar-dicas";
 import { verificarDocumentos } from "./verificar-documentos";
 import { verificarIcones } from "./verificar-icones";
+import { verificarNavbar } from "./verificar-navbar";
 import { verificarRespiro } from "./verificar-respiro";
 import { verificarSecao } from "./verificar-secao";
 
@@ -13,6 +14,7 @@ verificarCascaCss();
 verificarIcones();
 verificarDicas();
 verificarRespiro();
+verificarNavbar();
 await verificarDocumentos();
 await verificarSecao();
 resumo();

@@ -14,6 +14,7 @@ import { gravarCache, lerCache } from "./cache";
 import { iniciarDicas } from "./dicas";
 import { iniciarRemapeamento } from "./documentos";
 import { abrirModalAparencia } from "./modal";
+import { iniciarNavbarCompacta } from "./navbar";
 import { iniciarRespiro } from "./respiro";
 
 const iconesCss = `${gerarCssIcones()}\n${gerarCssMenuPro()}`;
@@ -38,6 +39,7 @@ if (!global.__seiProEstilo2) {
   let pararRemapeamento: (() => void) | null = null;
   let pararDicas: (() => void) | null = null;
   let pararRespiro: (() => void) | null = null;
+  let pararNavbar: (() => void) | null = null;
 
   /** O interruptor da barra do SEI acompanha o estado (ele e criado depois, pelo legado). */
   const sincronizarInterruptor = () => {
@@ -59,6 +61,12 @@ if (!global.__seiProEstilo2) {
     else if (!cfg.ativo && pararRespiro) {
       pararRespiro();
       pararRespiro = null;
+    }
+    // Barra superior mais alta no topo e normal ao rolar (so com o tema ativo).
+    if (cfg.ativo && !pararNavbar) pararNavbar = iniciarNavbarCompacta(document);
+    else if (!cfg.ativo && pararNavbar) {
+      pararNavbar();
+      pararNavbar = null;
     }
     // Tooltips da casca: só com o tema ativo (desligar devolve cada title).
     if (cfg.ativo && !pararDicas) {
