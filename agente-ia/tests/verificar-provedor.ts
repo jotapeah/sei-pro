@@ -4,7 +4,7 @@
  * `fetch` é substituído por um que grava o que recebeu.
  */
 
-import { Acumulador, criarProvedor, enderecoDoServico, lerSSE, limparAssinaturasDeOutro, listarModelos, parametroRecusado, serveParaConversar, SERVICOS, TEMPERATURA_PADRAO, enderecoLocal, esperaDaTentativa, mensagemDeErro, valeRepetir } from "../src/motor/provedor";
+import { Acumulador, criarProvedor, enderecoDoServico, lerSSE, limparAssinaturasDeOutro, listarModelos, parametroRecusado, serveParaConversar, SERVICOS, TEMPERATURA_PADRAO, campoModeloEhSelect, enderecoLocal, esperaDaTentativa, mensagemDeErro, valeRepetir } from "../src/motor/provedor";
 import { promptSistema } from "../src/motor/prompt";
 import type { ChamadaTool, PedidoLLM } from "../src/motor/tipos";
 import { checar, secao, lanca } from "./util";
@@ -437,4 +437,13 @@ export async function verificarErro403Local(): Promise<void> {
     }
     checar("Atualizar com 403 local tambem cita OLLAMA_ORIGINS", /OLLAMA_ORIGINS/.test(msg), msg);
   }
+}
+
+/** Com catálogo no compatível, o painel usa <select> (lista sempre aberta). */
+export async function verificarCampoModeloSelect(): Promise<void> {
+  secao("provedor: campo de modelo (select vs digitacao)");
+  checar("openrouter sempre select", campoModeloEhSelect("openrouter", false));
+  checar("openai sempre select", campoModeloEhSelect("openai", true));
+  checar("compativel sem catalogo: digitacao", !campoModeloEhSelect("compativel", false));
+  checar("compativel com catalogo: select", campoModeloEhSelect("compativel", true));
 }

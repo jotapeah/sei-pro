@@ -13,7 +13,7 @@
 import { Pseudonimos } from "@nucleo/privacidade/anonimizar";
 import { Motor, type TelaAtual } from "../motor/motor";
 import { promptSistema } from "../motor/prompt";
-import { COMPATIVEIS, conferirChave, criarProvedor, DOC_CHAVES, enderecoDoServico, listarModelos, MODELO_PADRAO, normalizarUrl, SERVICOS, TEMPERATURA_PADRAO, type Ajustes, type Servico } from "../motor/provedor";
+import { COMPATIVEIS, campoModeloEhSelect, conferirChave, criarProvedor, DOC_CHAVES, enderecoDoServico, listarModelos, MODELO_PADRAO, normalizarUrl, SERVICOS, TEMPERATURA_PADRAO, type Ajustes, type Servico } from "../motor/provedor";
 import { RegistroTools } from "../motor/tools";
 import type { DecisaoPlano, InterfaceMotor, Mensagem, PlanoPrevisto, Tarefa, Uso } from "../motor/tipos";
 import { PontePainel } from "../ponte/cliente";
@@ -951,12 +951,17 @@ class App {
      * é buscada quando a permissão já existe; nos demais casos quem dá o gesto
      * é o próprio usuário, trocando o serviço ou clicando em "Atualizar".
      */
+    /** Compatível: true depois de um /models bem-sucedido nesta abertura do modal. */
+    let catalogoCompativel = false;
+
     const carregarModelos = async (gesto: boolean): Promise<void> => {
       const svc = servico.value as Servico;
       const endereco = enderecoDoServico(svc, url.value);
       // Ler `modelo.value` aqui não serve: o select é reescrito enquanto carrega
       // (e chegou a gravar "Buscando modelos..." como se fosse o modelo).
-      const escolhido = (svc === "compativel" ? modeloLivre.value.trim() : modeloAtual) || SERVICOS[svc].modeloPadrao || "";
+      const escolhido = (
+        svc === "compativel" && !campoModeloEhSelect(svc, catalogoCompativel) ? modeloLivre.value.trim() : modeloAtual
+      ) || SERVICOS[svc].modeloPadrao || "";
       if (svc === "compativel" && !/^https?:\/\//.test(endereco)) return;
       const origens = [`${new URL(endereco).origin}/*`];
       const temPermissao = svc === "openrouter" || (await chrome.permissions.contains({ origins: origens }).catch(() => false));
@@ -1001,12 +1006,22 @@ class App {
           ),
         );
         modeloAtual = modelo.value || escolhido;
+        if (svc === "compativel") {
+          catalogoCompativel = true;
+          modeloLivre.value = modeloAtual;
+          ajustarServico();
+        }
         ajudaModelo.textContent = comPreco
           ? "S\u00F3 modelos que usam ferramentas; pre\u00E7os em d\u00F3lares por milh\u00E3o de tokens (entrada / sa\u00EDda)."
           : `${lista.length} modelo(s) do servi\u00E7o. A lista vem do pr\u00F3prio fabricante.`;
         status.textContent = "";
         status.className = "status";
       } catch (e) {
+        if (svc === "compativel") {
+          catalogoCompativel = false;
+          listaModelos.replaceChildren();
+          ajustarServico();
+        }
         modelo.replaceChildren(h("option", { value: escolhido, selected: true }, escolhido || "(sem modelo)"));
         ajudaModelo.textContent = "";
         status.className = "status erro";
@@ -1022,12 +1037,16 @@ class App {
       campoUrl.hidden = !comp;
       // O aviso de política de dados vale para tudo que não é OpenRouter.
       notaCompativel.hidden = svc === "openrouter";
-      // O seletor vale para os serviços com catálogo; num servidor próprio, que
-      // pode nem ter /models, o nome do modelo continua sendo digitado.
-      modelo.hidden = comp;
-      modeloAux.hidden = comp;
-      modeloAuxLivre.hidden = !comp;
-      linhaBuscar.hidden = !comp;
+      // Com catálogo (OpenRouter etc., ou compatível depois do Atualizar), o
+      // select abre sempre a lista inteira. Sem catálogo no compatível — servidor
+      // sem /models, ou ainda sem buscar — o nome continua digitável (input).
+      // O datalist filtrava pelo valor atual e escondia as opções com o campo
+      // já preenchido; por isso o select toma o lugar dele quando há lista.
+      const comSelect = campoModeloEhSelect(svc, catalogoCompativel);
+      modelo.hidden = !comSelect;
+      modeloAux.hidden = !comSelect;
+      modeloAuxLivre.hidden = comSelect;
+      linhaBuscar.hidden = comSelect || !comp;
       chave.placeholder = SERVICOS[svc].exemploChave;
       ajudaServico.replaceChildren(...ajudaDoServico(svc));
       const preset = COMPATIVEIS.find((c) => c.url === normalizarUrl(url.value));
@@ -1039,6 +1058,7 @@ class App {
       // Trocou de fabricante: o modelo do anterior não existe lá.
       if (svc !== servicoAtual) {
         modeloAtual = svc === this.config.servico ? this.config.modelo : sugestao;
+        catalogoCompativel = false;
         servicoAtual = svc;
       }
       modeloSugerido = sugestao;
@@ -1055,7 +1075,10 @@ class App {
       // O `change` É o gesto do usuário: dá para pedir a permissão e já listar.
       if (svc !== "compativel") void carregarModelos(true);
     });
-    url.addEventListener("input", ajustarServico);
+    url.addEventListener("input", () => {
+      catalogoCompativel = false;
+      ajustarServico();
+    });
     buscar.addEventListener("click", () => void carregarModelos(true));
     chave.addEventListener("change", () => {
       if ((servico.value as Servico) !== "compativel") void carregarModelos(false);
@@ -1436,7 +1459,7 @@ class App {
     const qtd2 = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
     atualizarResumos = () => {
       const svc = SERVICOS[(servico.value as Servico) ?? this.config.servico];
-      const nomeModelo = ((servico.value as Servico) === "compativel" ? modeloLivre.value : modelo.value) || this.config.modelo;
+      const nomeModelo = (campoModeloEhSelect(servico.value as Servico, catalogoCompativel) ? modelo.value : modeloLivre.value) || this.config.modelo;
       resumos.ia.textContent = `${svc.nome.replace(/ \(.*\)$/, "")} \u00B7 ${nomeModelo || "sem modelo"}`;
       const colecoes = this.colecoes.length ? `, ${qtd2(this.colecoes.length, "cole\u00E7\u00E3o", "cole\u00E7\u00F5es")}` : "";
       resumos.sabe.textContent = `${qtd2(this.skills.length, "skill", "skills")}${colecoes} \u00B7 mem\u00F3ria ${usarMemoria.checked ? `com ${qtd2(this.memoria.length, "lembran\u00E7a", "lembran\u00E7as")}` : "desligada"}`;
@@ -1604,7 +1627,9 @@ class App {
       const k = chave.value.trim();
       const enderecoLivre = comp ? normalizarUrl(url.value) : "";
       const endereco = enderecoDoServico(svc, enderecoLivre);
-      const m = comp ? modeloLivre.value.trim() : modelo.value || modeloAtual || SERVICOS[svc].modeloPadrao || MODELO_PADRAO;
+      const m = campoModeloEhSelect(svc, catalogoCompativel)
+        ? modelo.value || modeloAtual || SERVICOS[svc].modeloPadrao || MODELO_PADRAO
+        : modeloLivre.value.trim();
       if (!k) return erro("Informe a chave.");
       if (comp && !/^https?:\/\//.test(endereco)) return erro("Informe o endere\u00E7o do servi\u00E7o (come\u00E7ando com https://).");
       if (!m) return erro(comp ? "Informe o nome do modelo no servi\u00E7o." : "Escolha o modelo.");
@@ -1661,7 +1686,7 @@ class App {
         limites: { conversa: Math.max(0, Number(limiteConversa.value) || 0), dia: Math.max(0, Number(limiteDia.value) || 0) },
         cache: usarCache.checked,
         memoria: usarMemoria.checked,
-        modeloAuxiliar: (comp ? modeloAuxLivre.value : modeloAux.value).trim(),
+        modeloAuxiliar: (campoModeloEhSelect(svc, catalogoCompativel) ? modeloAux.value : modeloAuxLivre.value).trim(),
       });
       dlg.close();
     });

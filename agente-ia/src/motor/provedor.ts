@@ -222,6 +222,18 @@ export const SERVICOS: Record<Servico, ServicoInfo> = {
 };
 
 /** Atalhos de endereço para o serviço "compatível", para não decorar URL. */
+/**
+ * No serviço "compatível" o campo era um `<input list=datalist>`. O datalist
+ * do navegador SÓ sugere o que casa com o texto atual: com um modelo já
+ * escolhido, o chevron não reabre a lista (o usuário precisava apagar o
+ * campo). Com o catálogo carregado, usamos o mesmo `<select>` dos outros
+ * serviços — ele sempre mostra todas as opções. Sem catálogo (servidor sem
+ * /models, ou ainda sem clicar em Atualizar), o campo livre continua.
+ */
+export function campoModeloEhSelect(servico: Servico, catalogoCarregado: boolean): boolean {
+  return servico !== "compativel" || catalogoCarregado;
+}
+
 export const COMPATIVEIS: Array<{ nome: string; url: string; ajuda: string }> = [
   { nome: "NVIDIA", url: "https://integrate.api.nvidia.com/v1", ajuda: "Chave nvapi-... de build.nvidia.com. O plano gratuito \u00E9 de avalia\u00E7\u00E3o: os termos da NVIDIA n\u00E3o cobrem uso em produ\u00E7\u00E3o." },
   { nome: "Groq", url: "https://api.groq.com/openai/v1", ajuda: "Chave gsk_... de console.groq.com." },
