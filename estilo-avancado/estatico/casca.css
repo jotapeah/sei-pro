@@ -121,7 +121,8 @@
 }
 :root[data-spro-tema-ativo] #divInfraPesquisarMenu {
   background-color: var(--spro-fundo);
-  padding: 12px 12px 6px;
+  /* respiro antes e depois do campo: ele não cola na barra nem no primeiro item */
+  padding: 18px 12px 14px;
 }
 :root[data-spro-tema-ativo] #txtInfraPesquisarMenu {
   height: 38px;
@@ -137,7 +138,7 @@
   box-shadow: var(--spro-anel);
 }
 :root[data-spro-tema-ativo] #infraMenu {
-  padding: 6px 0 16px;
+  padding: 4px 0 16px;
 }
 :root[data-spro-tema-ativo] #infraMenu li > a {
   display: flex;

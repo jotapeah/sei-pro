@@ -30,7 +30,8 @@ export function converterTitulos(raiz: ParentNode): number {
   for (const el of raiz.querySelectorAll(SELETOR_TITULO)) {
     const texto = (el.getAttribute("title") ?? "").trim();
     el.removeAttribute("title");
-    if (!texto) continue;
+    // Campos de texto: o placeholder já diz o mesmo e o balão cobriria o que vem logo abaixo.
+    if (!texto || /^(input|textarea|select)$/i.test(el.tagName)) continue;
     el.setAttribute(ATRIBUTO_DICA, texto);
     // Quem só tem ícone precisa de nome acessível (o title fazia esse papel).
     if (!el.getAttribute("aria-label") && !(el.textContent ?? "").trim()) el.setAttribute("aria-label", texto);

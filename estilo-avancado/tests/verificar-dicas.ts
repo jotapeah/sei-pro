@@ -6,6 +6,7 @@ export function verificarDicas(): void {
   const html = `<html><head></head><body>
 <div id="divInfraBarraSistemaPadrao"><a id="a1" title="Controle de Processos"><img src="x.svg"></a><a id="a2" title="  ">vazio</a></div>
 <div class="barraBotoesSEI"><a id="c1" onmouseover="return infraTooltipMostrar('Historico')"><img id="c1img" title="Historico"></a><a id="b1" title="Atribuir Processo" onmouseover="return infraTooltipMostrar('Atribuir')"></a><a id="b2" title="Enviar" aria-label="Enviar processo"></a><a id="b3">sem titulo</a></div>
+<div id="infraMenu"><input id="campo" title="Pesquisar no Menu" placeholder="Pesquisar no Menu"></div>
 <div id="fora"><a id="f1" title="Fora da casca"></a></div>
 </body></html>`;
   const doc = instalarDom(html);
@@ -26,6 +27,7 @@ export function verificarDicas(): void {
     !g("b1").hasAttribute("title") && g("b1").getAttribute("onmouseover")?.includes("infraTooltipMostrar") === true,
   );
   checar("fora da casca o title fica intacto", g("f1").getAttribute("title") === "Fora da casca");
+  checar("campo de texto perde o title e nao ganha dica", !g("campo").hasAttribute("title") && !g("campo").hasAttribute(ATRIBUTO_DICA));
   checar("converter de novo nao duplica nem lanca", converterTitulos(doc) === 0);
 
   checar("title na <img> com tooltip do SEI no <a> pai: nao mostra o proprio", temTooltipDoSei(g("c1img")) && temTooltipDoSei(g("b1")));
