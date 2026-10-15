@@ -74,7 +74,7 @@ export function gerarCssIcones(mapa: EntradaIcone[] = MAPA_ICONES): string {
   const partes: string[] = [];
   const proprios = mapa.filter((e) => e.proprio);
   if (proprios.length > 0) {
-    partes.push(`${proprios.map(seletor).join(",\n")} {\n  box-sizing: border-box;\n  padding: 4px;\n  background: none !important;\n}`);
+    partes.push(`${proprios.map(seletor).join(",\n")} {\n  box-sizing: border-box;\n  padding: 0;\n  background: none !important;\n}`);
     for (const e of proprios) {
       const desenho = ICONES_PROPRIOS[e.icone];
       if (!desenho) throw new Error(`Ícone próprio desconhecido: ${e.icone}`);
