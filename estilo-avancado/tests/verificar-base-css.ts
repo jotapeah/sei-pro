@@ -35,7 +35,7 @@ export function verificarBaseCss(): void {
     .map((bloco) => bloco.split("{")[0]?.trim() ?? "");
   const proibidas = comImportante.filter(
     (sel) =>
-      !/\.infraCor|sparkling-modal-title|pesquisaPaginaSelecionada|infraAcaoBarraConjugada|body\.cke_editable|openNewTab|checkNaoAssinados|infraTrAtrasada|infraTdAtrasada|infraTrVermelha|infraTrAlerta|f5f6f7|infraMenu|data-ref|tool-item|infraTrSelecionada|infraTdSelecionada|table\.tablesorter|table\.infraTable|infraTrMarcada|infraTdMarcada|ed1c24|d8f5b9|tabelaOpcoes|tdOpcaoSigiloso|input-label-first|input-label-second/.test(
+      !/\.infraCor|sparkling-modal-title|pesquisaPaginaSelecionada|infraAcaoBarraConjugada|body\.cke_editable|openNewTab|checkNaoAssinados|infraTrAtrasada|infraTdAtrasada|infraTrVermelha|infraTrAlerta|f5f6f7|infraMenu|data-ref|tool-item|infraTrSelecionada|infraTdSelecionada|table\.tablesorter|table\.infraTable|infraTrMarcada|infraTdMarcada|ed1c24|d8f5b9|tabelaOpcoes|tdOpcaoSigiloso|input-label-first|input-label-second|divConsultarAndamento|panelDadosArvore|stickDadosArvore|divRelacionados/.test(
         sel,
       ),
   );

@@ -675,3 +675,12 @@
 :root[data-spro-tema-ativo] a.cke_button_on {
   background-image: none;
 }
+
+/* A borda superior das seções da árvore é inline (SEI Pro): zerada aqui; o fio degradê está em casca.css. */
+:root[data-spro-tema-ativo] #divConsultarAndamento,
+:root[data-spro-tema-ativo] .panelDadosArvore,
+:root[data-spro-tema-ativo] .panelDadosArvorePro,
+:root[data-spro-tema-ativo] .stickDadosArvore,
+:root[data-spro-tema-ativo] #divRelacionados {
+  border-top: 0 !important;
+}

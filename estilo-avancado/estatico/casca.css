@@ -303,3 +303,73 @@
   color: var(--spro-texto);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--spro-destaque) 45%, transparent);
 }
+
+/* ============================== Página do processo: divisor, selo da unidade e seções ============================== */
+/* Divisor vertical entre a árvore e o visualizador: fio fino com uma alça que acende ao passar o mouse. */
+:root[data-spro-tema-ativo] #divIframeArvore > .ui-resizable-e {
+  background: linear-gradient(var(--spro-borda), var(--spro-borda)) center / 1px 100% no-repeat var(--spro-pagina);
+  transition: background-color var(--spro-dur) var(--spro-curva);
+}
+:root[data-spro-tema-ativo] #divIframeArvore > .ui-resizable-e::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  background-color: var(--spro-borda-forte);
+  box-shadow: 0 0 0 2px var(--spro-pagina);
+  transition:
+    background-color var(--spro-dur) var(--spro-curva),
+    height var(--spro-dur) var(--spro-curva);
+}
+:root[data-spro-tema-ativo] #divIframeArvore > .ui-resizable-e:hover {
+  background: linear-gradient(var(--spro-destaque), var(--spro-destaque)) center / 2px 100% no-repeat var(--spro-pagina);
+}
+:root[data-spro-tema-ativo] #divIframeArvore > .ui-resizable-e:hover::before {
+  height: 64px;
+  background-color: var(--spro-destaque);
+}
+
+/* Selo da unidade ao lado de cada documento. */
+:root[data-spro-tema-ativo] a.infraArvoreInformacao > span {
+  display: inline-block;
+  padding: 1px 8px;
+  border: 0;
+  border-radius: 999px;
+  background-color: var(--spro-destaque-suave);
+  color: var(--spro-destaque);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--spro-destaque) 30%, transparent);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  transition:
+    background-color var(--spro-dur) var(--spro-curva),
+    color var(--spro-dur) var(--spro-curva);
+}
+:root[data-spro-tema-ativo] a.infraArvoreInformacao:hover > span {
+  background-color: var(--spro-destaque);
+  color: var(--spro-destaque-texto);
+}
+
+/* Divisores das seções da coluna da árvore: fio que some nas pontas, no lugar da linha cheia
+   (a linha cheia vem de estilo inline, zerada em base.css). */
+:root[data-spro-tema-ativo] #divConsultarAndamento,
+:root[data-spro-tema-ativo] .panelDadosArvore,
+:root[data-spro-tema-ativo] .panelDadosArvorePro,
+:root[data-spro-tema-ativo] .stickDadosArvore,
+:root[data-spro-tema-ativo] #divRelacionados {
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    var(--spro-borda-forte) 14%,
+    var(--spro-borda-forte) 86%,
+    transparent
+  );
+  background-position: top;
+  background-repeat: no-repeat;
+  background-size: 100% 1px;
+}
