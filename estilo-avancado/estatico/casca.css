@@ -121,8 +121,12 @@
 }
 :root[data-spro-tema-ativo] #divInfraPesquisarMenu {
   background-color: var(--spro-fundo);
-  /* respiro antes e depois do campo: ele não cola na barra nem no primeiro item */
-  padding: 18px 12px 14px;
+  /* respiro antes e depois do campo: ele não cola na barra nem no primeiro item.
+     O SEI fixa a altura do contêiner (36px, sticky): sem altura automática o campo vaza para fora dele. */
+  box-sizing: border-box;
+  height: auto;
+  min-height: 0;
+  padding: 18px 12px 16px;
 }
 :root[data-spro-tema-ativo] #txtInfraPesquisarMenu {
   height: 38px;
