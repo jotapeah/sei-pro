@@ -66,8 +66,8 @@ function chave(ativo: boolean, rotulo: string, aoMudar: (v: boolean) => void): H
   return h("label", { class: "chave" }, entrada, h("span", { class: "trilho" })) as HTMLLabelElement;
 }
 
-/** Monta a seção "Aparência". Grava a cada mudança (a prévia é ao vivo e o SEI aberto repinta sozinho). */
-export async function montarSecaoAparencia(deps: DepsAparencia): Promise<HTMLElement> {
+/** Conteúdo da aparência (sem a casca de `<details>`): usado na seção das opções e no modal da barra do SEI. */
+export async function montarCorpoAparencia(deps: DepsAparencia): Promise<{ conteudo: HTMLElement; atualizar: (novo: unknown) => void }> {
   let cfg = normalizarConfig(await deps.ler());
 
   const previa = h(
@@ -180,23 +180,38 @@ export async function montarSecaoAparencia(deps: DepsAparencia): Promise<HTMLEle
     h("div", { class: "spro-ap-rodape" }, restaurar),
   );
 
-  const secao = h(
+  const conteudo = h(
+    "div",
+    { class: "secao-corpo" },
+    linha(
+      "Ativar o Estilo Avançado 2",
+      "Visual novo do SEI, no mesmo estilo das telas do SEI Pro. As mudanças valem na hora, sem precisar salvar.",
+      chave(cfg.ativo, "Ativar o Estilo Avançado 2", (v) => void salvar({ ativo: v })),
+    ),
+    sub,
+  );
+  desenhar();
+  return {
+    conteudo,
+    atualizar: (novo: unknown) => {
+      cfg = normalizarConfig(novo);
+      desenhar();
+      const sw = conteudo.querySelectorAll<HTMLInputElement>('input[role="switch"]');
+      if (sw[0]) sw[0].checked = cfg.ativo;
+      if (sw[1]) sw[1].checked = cfg.escurecerDocumentos;
+    },
+  };
+}
+
+/** Monta a seção "Aparência". Grava a cada mudança (a prévia é ao vivo e o SEI aberto repinta sozinho). */
+export async function montarSecaoAparencia(deps: DepsAparencia): Promise<HTMLElement> {
+  const { conteudo } = await montarCorpoAparencia(deps);
+  return h(
     "details",
     { class: "secao", open: true, id: "secao-aparencia" },
     h("summary", {}, h("span", { class: "secao-titulo" }, "Aparência (Estilo Avançado 2)"), h("span", { class: "spro-ap-selo" }, "Novo")),
-    h(
-      "div",
-      { class: "secao-corpo" },
-      linha(
-        "Ativar o Estilo Avançado 2",
-        "Visual novo do SEI, no mesmo estilo das telas do SEI Pro. As mudanças desta seção valem na hora, sem precisar salvar.",
-        chave(cfg.ativo, "Ativar o Estilo Avançado 2", (v) => void salvar({ ativo: v })),
-      ),
-      sub,
-    ),
+    conteudo,
   );
-  desenhar();
-  return secao;
 }
 
 export { CHAVE_TEMA, CHAVE_TEMA_CACHE };

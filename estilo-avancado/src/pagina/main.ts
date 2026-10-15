@@ -13,6 +13,7 @@ import { aplicarTema } from "./aplicar";
 import { gravarCache, lerCache } from "./cache";
 import { iniciarDicas } from "./dicas";
 import { iniciarRemapeamento } from "./documentos";
+import { abrirModalAparencia } from "./modal";
 import { iniciarRespiro } from "./respiro";
 
 const iconesCss = `${gerarCssIcones()}\n${gerarCssMenuPro()}`;
@@ -20,6 +21,13 @@ const global = window as unknown as { __seiProEstilo2?: boolean };
 
 if (!global.__seiProEstilo2) {
   global.__seiProEstilo2 = true;
+
+  // Marca que o Estilo Avancado 2 existe neste pacote: o interruptor e a paleta da barra do SEI (sei-pro-all.js)
+  // passam a controla-lo, e o estilo antigo (localStorage.seiSlim) fica desativado. Roda antes dos scripts do legado.
+  document.documentElement.setAttribute("data-spro-estilo2", "");
+  try {
+    localStorage.removeItem("seiSlim");
+  } catch {}
 
   const consulta = typeof matchMedia === "function" ? matchMedia("(prefers-color-scheme: dark)") : null;
   let cfg: ConfigTema | null = null;
@@ -31,8 +39,15 @@ if (!global.__seiProEstilo2) {
   let pararDicas: (() => void) | null = null;
   let pararRespiro: (() => void) | null = null;
 
+  /** O interruptor da barra do SEI acompanha o estado (ele e criado depois, pelo legado). */
+  const sincronizarInterruptor = () => {
+    const caixa = document.getElementById("changeSlimPro") as HTMLInputElement | null;
+    if (caixa && cfg) caixa.checked = cfg.ativo;
+  };
+
   const reaplicar = () => {
     if (!cfg) return;
+    sincronizarInterruptor();
     const sistemaEscuro = consulta?.matches ?? false;
     aplicarTema(document, cfg, sistemaEscuro, `${baseCss}\n${cascaCss}\n${controlesCss}\n${iconesCss}`);
     // O documento de leitura ganha o visual de papel sobre uma tela cinza (o CSS fica em controles.css).
@@ -87,6 +102,23 @@ if (!global.__seiProEstilo2) {
     .get(CHAVE_TEMA)
     .then((r) => receber(r[CHAVE_TEMA]))
     .catch((e) => console.warn("[SEI Pro] estilo avancado 2:", e));
+
+  const deps = {
+    ler: async () => (await chrome.storage.sync.get(CHAVE_TEMA))[CHAVE_TEMA],
+    gravar: async (c: ConfigTema) => {
+      await chrome.storage.sync.set({ [CHAVE_TEMA]: c });
+    },
+    sistemaEscuro: () => consulta?.matches ?? false,
+  };
+  // Eventos do interruptor e da paleta da barra do SEI (disparados no mundo da pagina, ouvidos aqui).
+  document.addEventListener("spro-estilo2-alternar", () => {
+    const atual = normalizarConfig(cfg);
+    void deps.gravar({ ...atual, ativo: !atual.ativo });
+    receber({ ...atual, ativo: !atual.ativo });
+  });
+  document.addEventListener("spro-estilo2-paleta", () => void abrirModalAparencia(document, deps));
+  // O interruptor so existe depois que o legado monta a barra: confere quando a pagina termina de carregar.
+  window.addEventListener("load", () => setTimeout(sincronizarInterruptor, 1500));
 
   chrome.storage.onChanged.addListener((mudancas, area) => {
     if (area === "sync" && mudancas[CHAVE_TEMA]) receber(mudancas[CHAVE_TEMA].newValue);

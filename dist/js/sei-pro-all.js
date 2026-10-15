@@ -777,12 +777,16 @@ function observeUrlPage() {
     }
 }
 function initSlimPro() {
+    // Com o Estilo Avancado 2 no pacote (marca posta pelo init_estilo.js), o interruptor e a paleta controlam o 2
+    // e o estilo antigo fica desativado. O content script ouve os eventos abaixo e mantem o interruptor em dia.
+    var estilo2 = document.documentElement.hasAttribute('data-spro-estilo2');
+    var estiloLigado = estilo2 ? document.documentElement.hasAttribute('data-spro-tema-ativo') : !!localStorage.getItem('seiSlim');
     var htmlSlimPro =   '       <div data-ref="infraAcaoBarraSistema" style="display: inline-block;float: right;margin:3px 10px 0 0">'+
-                        '           <div class="infraAncoraSigla" style="display:inline-block;transform:scale(0.7)" onmouseout="return infraTooltipOcultar();" onmouseover="return infraTooltipMostrar(\''+(localStorage.getItem('seiSlim') ? 'Desativar estilo avan\u00E7ado' : 'Ativar estilo avan\u00E7ado')+'\')">'+
-                        '               <input type="checkbox" onchange="changeSlimPro(this)" name="infraAncoraSigla" class="infraLinkOrgao" id="changeSlimPro" tabindex="0" '+(localStorage.getItem('seiSlim') ? 'checked' : '')+'>'+
+                        '           <div class="infraAncoraSigla" style="display:inline-block;transform:scale(0.7)" onmouseout="return infraTooltipOcultar();" onmouseover="return infraTooltipMostrar(\''+(estiloLigado ? 'Desativar estilo avan\u00E7ado' : 'Ativar estilo avan\u00E7ado')+'\')">'+
+                        '               <input type="checkbox" onchange="'+(estilo2 ? "document.dispatchEvent(new CustomEvent('spro-estilo2-alternar'))" : 'changeSlimPro(this)')+'" name="infraAncoraSigla" class="infraLinkOrgao" id="changeSlimPro" tabindex="0" '+(estiloLigado ? 'checked' : '')+'>'+
                         '               <label class="infraAreaDados" for="changeSlimPro" style="border-color: #ffffff7a;"></label>'+
                         '           </div>'+
-                        '           <i onclick="openStyleBoxSlimPro()" onmouseout="return infraTooltipOcultar();" onmouseover="return infraTooltipMostrar(\''+(localStorage.getItem('seiSlim') ? 'Escolher cor principal' : 'Ativar estilo avan\u00E7ado')+'\')" class="fas fa-palette brancoColor" style="float: right;font-size: 16pt;cursor: pointer;"></i> '+
+                        '           <i onclick="'+(estilo2 ? "document.dispatchEvent(new CustomEvent('spro-estilo2-paleta'))" : 'openStyleBoxSlimPro()')+'" onmouseout="return infraTooltipOcultar();" onmouseover="return infraTooltipMostrar(\''+(estilo2 ? 'Personalizar a apar\u00EAncia' : (localStorage.getItem('seiSlim') ? 'Escolher cor principal' : 'Ativar estilo avan\u00E7ado'))+'\')" class="fas fa-palette brancoColor" style="float: right;font-size: 16pt;cursor: pointer;"></i> '+
                         '       </div>';
 
     var htmlDarkMode =   '           <i onclick="setDarkModePro(this)" id="iconDarkMode" onmouseout="return infraTooltipOcultar();" onmouseover="return infraTooltipMostrar(\''+(localStorage.getItem('darkModePro') ? 'Desativar modo noturno' : 'Ativar modo noturno')+'\')" class="fas fa-'+(localStorage.getItem('darkModePro') ? 'house-day' : 'house-night')+' brancoColor" style="font-size: 16pt;cursor: pointer;position: absolute;margin: 5px -35px;"></i> ';
