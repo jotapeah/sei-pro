@@ -13158,6 +13158,27 @@ function appendIconEstudioFluxo(loop = true) {
     }
     if (loop) { reagendarIconeBarraPro('appendIconEstudioFluxo', appendIconEstudioFluxo); }
 }
+// Icone de traco do Historico de Processos Visitados, embutido (data URI): vale em todas as versoes e
+// dispensa liberar um arquivo no manifest. A marca <!--spro-historico--> deixa o Estilo Avancado 2 troca-lo.
+function iconeHistoricoBarraPro() {
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#0b5f91" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><!--spro-historico--><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 4v4.5H8"/><path d="M12 7.5V12l3 1.8"/></svg>';
+    return 'data:image/svg+xml,' + encodeURIComponent(svg);
+}
+// Historico de Processos Visitados na barra de acoes DENTRO do processo, ao lado do Estudio de Fluxo.
+function insertIconHistoricoProcessos() {
+    waitLoadPro($($ifrVisualizacao).contents(), '#divArvoreAcoes', 'a[href*="controlador.php?acao="]', appendIconHistoricoProcessos);
+}
+function appendIconHistoricoProcessos(loop = true) {
+    var ifrVisualizacao = $($ifrVisualizacao).contents();
+    var titulo = 'Hist\u00F3rico de Processos Visitados';
+    var htmlIconHistorico =  '<a href="#" id="iconHistoricoProcessos" onclick="parent.getHistoryProcessosPro(); return false;" onmouseout="return infraTooltipOcultar();" onmouseover="return infraTooltipMostrar(\''+titulo+'\')" class="botaoSEI">'+
+                                '<img class="infraCorBarraSistema" tabindex="452" src="'+iconeHistoricoBarraPro()+'" alt="'+titulo+'" title="'+titulo+'">'+
+                                '</a>';
+    if (ifrVisualizacao.find('#iconHistoricoProcessos').length == 0) {
+        ifrVisualizacao.find('#divArvoreAcoes').append(htmlIconHistorico);
+    }
+    if (loop) { reagendarIconeBarraPro('appendIconHistoricoProcessos', appendIconHistoricoProcessos); }
+}
 function insertIconCompareDocs() {
     waitLoadPro($($ifrVisualizacao).contents(), '#divArvoreAcoes', 'a[href*="controlador.php?acao="]', appendIconCompareDocs);
 }
