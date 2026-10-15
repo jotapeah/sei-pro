@@ -11,7 +11,7 @@ export function verificarBaseCss(): void {
     "nenhuma cor literal (#hex, rgb(), hsl())",
     !/#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i.test(semComentario.replace(/\[[a-z-]+[*^$|~]?="[^"]*"(?:\s+[is])?\]/gi, "")),
   );
-  checar("sem recurso externo", !/@import|url\(/i.test(semComentario));
+  checar("sem recurso externo", !/@import|url\((?!\s*["']?data:)/i.test(semComentario));
   const seletores = semComentario
     .split("{")
     .slice(0, -1)
@@ -33,7 +33,7 @@ export function verificarBaseCss(): void {
     .map((bloco) => bloco.split("{")[0]?.trim() ?? "");
   const proibidas = comImportante.filter(
     (sel) =>
-      !/\.infraCor|sparkling-modal-title|pesquisaPaginaSelecionada|infraAcaoBarraConjugada|body\.cke_editable|openNewTab|checkNaoAssinados|infraTrAtrasada|infraTdAtrasada|infraTrVermelha|infraTrAlerta|f5f6f7|table\.tablesorter|table\.infraTable|infraTrMarcada|infraTdMarcada|ed1c24|d8f5b9|tabelaOpcoes|tdOpcaoSigiloso|input-label-first|input-label-second/.test(
+      !/\.infraCor|sparkling-modal-title|pesquisaPaginaSelecionada|infraAcaoBarraConjugada|body\.cke_editable|openNewTab|checkNaoAssinados|infraTrAtrasada|infraTdAtrasada|infraTrVermelha|infraTrAlerta|f5f6f7|infraMenu|table\.tablesorter|table\.infraTable|infraTrMarcada|infraTdMarcada|ed1c24|d8f5b9|tabelaOpcoes|tdOpcaoSigiloso|input-label-first|input-label-second/.test(
         sel,
       ),
   );
@@ -41,12 +41,16 @@ export function verificarBaseCss(): void {
 }
 
 export function verificarCascaCss(): void {
-  secao("folha da casca");
-  const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "estatico", "casca.css"), "utf8");
+  for (const arquivo of ["casca", "controles"]) verificarFolhaSemExcecoes(arquivo);
+}
+
+function verificarFolhaSemExcecoes(arquivo: string): void {
+  secao(`folha ${arquivo}`);
+  const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "estatico", `${arquivo}.css`), "utf8");
   const semComentario = css.replace(/\/\*[\s\S]*?\*\//g, "");
-  checar("casca: nenhuma cor literal", !/#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i.test(semComentario));
-  checar("casca: sem recurso externo", !/@import|url\(/i.test(semComentario));
-  checar("casca: sem !important", !/!important/.test(semComentario));
+  checar(`${arquivo}: nenhuma cor literal`, !/#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i.test(semComentario));
+  checar(`${arquivo}: sem recurso externo`, !/@import|url\((?!\s*["']?data:)/i.test(semComentario));
+  checar(`${arquivo}: sem !important`, !/!important/.test(semComentario));
   const seletores = semComentario
     .split("{")
     .slice(0, -1)
@@ -56,5 +60,5 @@ export function verificarCascaCss(): void {
     .map((s) => s.trim())
     .filter(Boolean);
   const fora = seletores.filter((s) => !s.startsWith(":root[data-spro-tema-ativo]"));
-  checar("casca: todo seletor fica sob o tema ativo", fora.length === 0, fora.slice(0, 3));
+  checar(`${arquivo}: todo seletor fica sob o tema ativo`, fora.length === 0, fora.slice(0, 3));
 }

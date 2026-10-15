@@ -274,13 +274,34 @@ Os prints de todas as telas e um `INDICE.md` ficam em `capturas-estilo-avancado-
 
 ## 12. Sub-projeto 2: a casca do SEI (14/10/2026)
 
-Escopo: o acabamento da barra superior, do menu lateral, da barra de ações e da árvore do processo, no vocabulário das telas novas (cantos, hover, foco, seleção). As cores base da barra e do menu já vinham da folha base; a casca só refina, num arquivo próprio (`estilo-avancado/estatico/casca.css`), concatenado ao da base no content script.
+### 12.1 Primeira passada (acabamento) e por que foi insuficiente
 
-Regras da camada (conferidas por teste): só `var(--spro-*)`, nenhuma cor literal, **nenhum `!important`**, todo seletor sob `:root[data-spro-tema-ativo]`.
+A primeira versão só refinava o que já existia (cantos, hover, foco, seleção). O usuário a achou **tímida** perto do redesign do Estilo Avançado antigo, que refazia menus, botões e ícones. A segunda passada (abaixo) é um redesenho de verdade.
 
-- **Barra superior:** ícones e `#lnkInfraMenuSistema` com cantos de 8 px e hover em branco a 16% sobre a cor da barra (`color-mix` do `--spro-barra-texto`); anel de foco visível; campo de pesquisa e botão da unidade com os raios do tema.
-- **Menu lateral:** `#infraMenu li > a` com raio, hover e anel de foco (sem mudar padding, para não deslocar o layout nem os indicadores de submenu); campo "Pesquisar no Menu" com raio.
-- **Barra de ações** (`div.barraBotoesSEI`): borda, raio de 12 px e sombra do tema; `a.botaoSEI` com hover em `--spro-destaque-suave`.
-- **Árvore:** hover do nó e nó selecionado (`span.infraArvoreNoSelecionado`, que o SEI pinta de azul-marinho `#0A246A`) com `--spro-destaque-medio` e um anel de 1 px na cor de destaque.
+### 12.2 Redesenho (14/10/2026)
 
-Verificado no SEI MJ 5.0.4 (claro e escuro): seleção da árvore no tema, barra de ações com borda e sombra, hover dos ícones da barra confirmado pelo estilo computado (`rgb(255 255 255 / 16%)`, raio 8 px). **Pendente:** validar no SEI SP 4.1.5 (a sessão do SP expirou durante o trabalho e depende do login do usuário).
+**Ícones.** Os ícones nativos do SEI (`<img src="menu/x.svg">` etc.) são trocados por **ícones de traço** do mesmo conjunto dos painéis, tematizáveis. Como o nome do arquivo identifica o ícone, a troca é CSS puro: `content: url(GIF transparente de 1 px)` na `<img>` (esconde o desenho original) e `background-color: currentColor` com `-webkit-mask` (o desenho novo, em SVG). Assim o ícone herda a cor do contexto e segue o tema, o modo escuro e a cor da barra.
+
+- `sei-comum/src/ui/dom.ts` passou a exportar `ICONES` e `Forma`.
+- `estilo-avancado/src/icones/extras.ts`: 30 ícones novos no mesmo traço (engrenagem gerada por geometria; livro, lista, pessoas, bandeira, avião de papel, selo, polegar, e-mail…).
+- `estilo-avancado/src/icones/mapa.ts`: nome do arquivo nativo → ícone, por contexto (`menu` 24 px, `topo` 24 px, `barra` 40 px com respiro de 7 px) e tom opcional (`perigo` para excluir/cancelar).
+- `estilo-avancado/src/icones/css.ts`: gera o CSS (uma regra base por contexto e uma de máscara por ícone). Teste: todo ícone do mapa existe, todo SVG é bem formado, o CSS é ASCII, sem recurso externo (só `data:`), e uma máscara por ícone.
+- Três armadilhas resolvidas: a `<img>` perde o tamanho natural quando o `content` vira um GIF de 1 px (o topo não traz `width/height`, então se fixa 24 px); `div.barraBotoesSEI img { background-color: unset !important }` do SEI Pro exige `!important` na máscara da barra de ações; `div.infraSidebarMenu span { color:#fff !important }` do SEI exige `!important` no rótulo do menu.
+- Ícones de documento da árvore (PDF, ZIP, imagem…) ficam como estão: a cor deles carrega significado.
+
+**Casca.**
+- *Barra superior:* brilho sutil sobre a cor escolhida e sombra; ícones em botões redondos de 40 px com hover e "press"; pesquisa em pílula translúcida que vira superfície ao focar, com a lupa num botão que fecha a pílula; unidade em pílula.
+- *Menu lateral:* superfície neutra (clara ou escura conforme o tema) em vez da barra colorida; itens de 42 px com raio de 12 px, ícone de traço, hover, foco e item atual com faixa de destaque; seta de submenu em chevron que gira; submenus recuados com guia lateral; pesquisa em pílula.
+- *Barra de ações:* cartão com borda e sombra; botões-ladrilho de 44 px que sobem 1 px no hover e ganham o destaque; tooltips escuros em "pílula".
+- *Títulos:* 24 px, peso 750.
+- *Árvore:* nó em hover e nó selecionado com o destaque e anel.
+
+**Controles** (`controles.css`).
+- Botões nativos de 36 px, raio de 10 px, peso 600, sobem no hover; o botão que envia o formulário é o primário, com gradiente, brilho interno e halo na cor de destaque.
+- Grupo Baixar/Copiar/Pesquisar e botões dos diálogos no mesmo padrão.
+- Campos de 36 px com raio de 10; rótulos em 13 px/600; quadros de formulário (`fieldset`) viram cartões com a legenda em pílula maiúscula; `accent-color` nas caixas de seleção.
+- Diálogos jQuery UI com raio de 16 px, sombra e rodapé em superfície; overlay com desfoque; barras de rolagem finas e arredondadas; cor de seleção do texto.
+- Tabelas no padrão de `.dem-tabela` (cabeçalho em maiúsculas esmaecidas, divisores suaves, hover no destaque, cantos arredondados pelas células das pontas).
+- **O documento como papel** (`data-spro-papel` no `<html>` das telas de leitura): o corpo vira uma folha centralizada de até 940 px, com borda, raio e sombra, sobre a tela de fundo do tema.
+
+**Verificado no SEI SP 4.1.5** (Controle, Marcadores, Novo Contato e processo com documento). Pendente: MJ (SEI 5.0.4), que depende de login.

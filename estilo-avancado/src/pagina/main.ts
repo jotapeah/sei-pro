@@ -7,10 +7,13 @@
 import { CHAVE_TEMA, type ConfigTema, esquemaResolvido, normalizarConfig } from "@comum/tema/config";
 import baseCss from "../../estatico/base.css";
 import cascaCss from "../../estatico/casca.css";
+import controlesCss from "../../estatico/controles.css";
+import { gerarCssIcones } from "../icones/css";
 import { aplicarTema } from "./aplicar";
 import { gravarCache, lerCache } from "./cache";
 import { iniciarRemapeamento } from "./documentos";
 
+const iconesCss = gerarCssIcones();
 const global = window as unknown as { __seiProEstilo2?: boolean };
 
 if (!global.__seiProEstilo2) {
@@ -27,7 +30,10 @@ if (!global.__seiProEstilo2) {
   const reaplicar = () => {
     if (!cfg) return;
     const sistemaEscuro = consulta?.matches ?? false;
-    aplicarTema(document, cfg, sistemaEscuro, `${baseCss}\n${cascaCss}`);
+    aplicarTema(document, cfg, sistemaEscuro, `${baseCss}\n${cascaCss}\n${controlesCss}\n${iconesCss}`);
+    // O documento de leitura ganha o visual de papel sobre uma tela cinza (o CSS fica em controles.css).
+    if (ehDocumentoDeLeitura && cfg.ativo) document.documentElement.setAttribute("data-spro-papel", "");
+    else document.documentElement.removeAttribute("data-spro-papel");
     const querRemapear = ehDocumentoDeLeitura && cfg.ativo && cfg.escurecerDocumentos && esquemaResolvido(cfg, sistemaEscuro) === "escuro";
     if (querRemapear && !pararRemapeamento) {
       const ligar = () => {

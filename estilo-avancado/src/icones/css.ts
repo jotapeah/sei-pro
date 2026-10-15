@@ -1,0 +1,73 @@
+import { type Forma, ICONES } from "@comum/ui/dom";
+import { ICONES_EXTRAS } from "./extras";
+import { type ContextoIcone, type EntradaIcone, MAPA_ICONES } from "./mapa";
+
+const TODOS: Record<string, Forma[]> = { ...(ICONES as Record<string, Forma[]>), ...ICONES_EXTRAS };
+
+/** Respiro do ícone dentro da imagem, por contexto: a barra de ações tem imagens de 40 px. */
+const RESPIRO: Record<ContextoIcone, string> = { menu: "0", topo: "0", barra: "7px", tabela: "2px" };
+/** A imagem original perde o tamanho natural quando o conteúdo vira um GIF de 1 px: o topo não traz width/height. */
+const TAMANHO: Partial<Record<ContextoIcone, string>> = {
+  topo: "width: 24px;\n  height: 24px;\n  ",
+  tabela: "width: 24px;\n  height: 24px;\n  ",
+};
+/** O SEI Pro zera o fundo das imagens da barra de ações com !important: só !important devolve a máscara. */
+const FUNDO: Record<ContextoIcone, string> = {
+  menu: "currentColor",
+  topo: "currentColor",
+  barra: "currentColor !important",
+  tabela: "currentColor",
+};
+/** Onde cada contexto vive: um ícone com o mesmo nome em outro lugar (a árvore, por exemplo) não é trocado. */
+const ESCOPO: Record<ContextoIcone, string> = {
+  menu: "#infraMenu",
+  topo: "#divInfraBarraSistemaPadrao",
+  barra: ":is(div.barraBotoesSEI, #divArvoreAcoes)",
+  tabela: "table",
+};
+/** Cor própria do contexto (a das linhas de tabela é a esmaecida; o resto herda do elemento). */
+const COR_BASE: Partial<Record<ContextoIcone, string>> = { tabela: "\n  color: var(--spro-suave);" };
+
+export function nomesDeIcones(): string[] {
+  return Object.keys(TODOS);
+}
+
+/** O desenho como SVG (só silhueta: a cor vem do `background-color` da imagem, pela máscara). */
+export function svgDoIcone(nome: string): string {
+  const formas = TODOS[nome];
+  if (!formas) throw new Error(`Ícone desconhecido: ${nome}`);
+  const corpo = formas
+    .map(([tag, attrs]) => {
+      const a = Object.entries(attrs)
+        .map(([k, v]) =>
+          k === "fill" && v === "currentColor" ? `fill="#000"` : k === "stroke" && v === "none" ? `stroke="none"` : `${k}="${v}"`,
+        )
+        .join(" ");
+      return `<${tag} ${a}/>`;
+    })
+    .join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${corpo}</svg>`;
+}
+
+const uri = (svg: string) => `url("data:image/svg+xml,${encodeURIComponent(svg).replace(/'/g, "%27").replace(/"/g, "%22")}")`;
+/** GIF transparente de 1 px: `content` na <img> troca o desenho original por ele, e a máscara pinta o novo. */
+const GIF_TRANSPARENTE = `url("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7")`;
+
+const seletor = (e: EntradaIcone) =>
+  `:root[data-spro-tema-ativo] ${ESCOPO[e.contexto]} img${e.daExtensao ? '[src^="chrome-extension"]' : ""}[src*="${e.src}"]`;
+
+/** CSS gerado: uma regra base por contexto (mesma mecânica para todos) e uma regra por ícone (só a máscara). */
+export function gerarCssIcones(mapa: EntradaIcone[] = MAPA_ICONES): string {
+  const partes: string[] = [];
+  for (const ctx of ["menu", "topo", "barra", "tabela"] as ContextoIcone[]) {
+    const doCtx = mapa.filter((e) => e.contexto === ctx);
+    if (doCtx.length === 0) continue;
+    partes.push(
+      `${doCtx.map(seletor).join(",\n")} {\n  content: ${GIF_TRANSPARENTE};\n  box-sizing: border-box;\n  ${TAMANHO[ctx] ?? ""}padding: ${RESPIRO[ctx]};\n  background-color: ${FUNDO[ctx]};\n  background-clip: content-box;${COR_BASE[ctx] ?? ""}\n  -webkit-mask-repeat: no-repeat;\n  -webkit-mask-position: center;\n  -webkit-mask-size: contain;\n  -webkit-mask-origin: content-box;\n  -webkit-mask-clip: content-box;\n}`,
+    );
+  }
+  for (const e of mapa) {
+    partes.push(`${seletor(e)} {\n  -webkit-mask-image: ${uri(svgDoIcone(e.icone))};${e.tom ? `\n  color: var(--spro-${e.tom});` : ""}\n}`);
+  }
+  return partes.join("\n");
+}

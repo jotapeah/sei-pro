@@ -34,11 +34,11 @@ export function h<K extends keyof HTMLElementTagNameMap>(
  * FontAwesome da página) e sem emoji, que muda de forma a cada sistema. O traço
  * usa `currentColor`, então acompanha a cor do botão e o modo escuro.
  */
-type Forma = [string, Record<string, string>];
+export type Forma = [string, Record<string, string>];
 const preenchido = { fill: "currentColor", stroke: "none" };
 const CONTORNO_ESTRELA = "M12 3.2l2.7 5.5 6 .9-4.35 4.25 1 6L12 17l-5.35 2.85 1-6L3.3 9.6l6-.9z";
 
-const ICONES = {
+export const ICONES = {
   estrela: [["path", { d: CONTORNO_ESTRELA }]],
   estrelaCheia: [["path", { d: CONTORNO_ESTRELA, fill: "currentColor" }]],
   // Processos Monitorados: o inativo é só o alvo; o ativo muda a silhueta (centro cheio e marcas de mira), não só a cor.

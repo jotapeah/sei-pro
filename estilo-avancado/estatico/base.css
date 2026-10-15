@@ -376,6 +376,18 @@
   border-color: var(--spro-borda);
 }
 
+/* O SEI pinta o rótulo do menu de branco com !important (div.infraSidebarMenu span); o menu agora é uma superfície neutra */
+:root[data-spro-tema-ativo] #infraMenu li > a {
+  color: var(--spro-texto) !important;
+}
+:root[data-spro-tema-ativo] #infraMenu li > a > span {
+  color: inherit !important;
+}
+:root[data-spro-tema-ativo] #infraMenu li > a.infraMenuSelecionado,
+:root[data-spro-tema-ativo] #infraMenu li > a[aria-current] {
+  color: var(--spro-destaque) !important;
+}
+
 /* Links */
 :root[data-spro-tema-ativo] a,
 :root[data-spro-tema-ativo] a.ancoraPadraoAzul,
@@ -392,23 +404,8 @@
   color: var(--spro-texto);
   border-color: var(--spro-borda);
 }
-:root[data-spro-tema-ativo] table.infraTable thead tr,
-:root[data-spro-tema-ativo] table.infraTable tr > th.infraTh,
-:root[data-spro-tema-ativo] th.infraTh {
-  background-color: var(--spro-fundo-3);
-  color: var(--spro-texto);
-  border-color: var(--spro-borda);
-}
 :root[data-spro-tema-ativo] table.infraTable td {
   border-color: var(--spro-borda);
-}
-:root[data-spro-tema-ativo] tr.infraTrClara,
-:root[data-spro-tema-ativo] td.infraTdClara {
-  background-color: var(--spro-fundo);
-}
-:root[data-spro-tema-ativo] tr.infraTrEscura,
-:root[data-spro-tema-ativo] td.infraTdEscura {
-  background-color: var(--spro-fundo-2);
 }
 :root[data-spro-tema-ativo] tr.infraTrSelecionada,
 :root[data-spro-tema-ativo] tr.infraTrMarcada,
@@ -477,13 +474,6 @@
 :root[data-spro-tema-ativo] button.infraButton:hover span,
 :root[data-spro-tema-ativo] input.infraButton:hover span {
   color: inherit;
-}
-:root[data-spro-tema-ativo] input.infraButton:hover,
-:root[data-spro-tema-ativo] button.infraButton:hover,
-:root[data-spro-tema-ativo] a.infraAnchorButton:hover {
-  background-color: var(--spro-destaque);
-  border-color: var(--spro-destaque);
-  color: var(--spro-destaque-texto);
 }
 :root[data-spro-tema-ativo] input.infraButton:focus-visible,
 :root[data-spro-tema-ativo] button.infraButton:focus-visible {
