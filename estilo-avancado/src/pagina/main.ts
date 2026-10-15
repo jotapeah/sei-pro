@@ -6,6 +6,7 @@
 
 import { CHAVE_TEMA, type ConfigTema, esquemaResolvido, normalizarConfig } from "@comum/tema/config";
 import baseCss from "../../estatico/base.css";
+import cascaCss from "../../estatico/casca.css";
 import { aplicarTema } from "./aplicar";
 import { gravarCache, lerCache } from "./cache";
 import { iniciarRemapeamento } from "./documentos";
@@ -26,7 +27,7 @@ if (!global.__seiProEstilo2) {
   const reaplicar = () => {
     if (!cfg) return;
     const sistemaEscuro = consulta?.matches ?? false;
-    aplicarTema(document, cfg, sistemaEscuro, baseCss);
+    aplicarTema(document, cfg, sistemaEscuro, `${baseCss}\n${cascaCss}`);
     const querRemapear = ehDocumentoDeLeitura && cfg.ativo && cfg.escurecerDocumentos && esquemaResolvido(cfg, sistemaEscuro) === "escuro";
     if (querRemapear && !pararRemapeamento) {
       const ligar = () => {

@@ -1,0 +1,78 @@
+/*
+ * Casca do SEI (sub-projeto 2): acabamento da barra superior, do menu lateral, da barra de ações e
+ * da árvore do processo: cantos, hover, foco e seleção, no mesmo vocabulário das telas novas
+ * (raios e sombras do tema). Só var(--spro-*): nenhuma cor literal e nenhum !important aqui.
+ * As cores base (barra, menu) vêm da folha base; este arquivo só refina.
+ */
+
+/* Barra superior: ícones e campos */
+:root[data-spro-tema-ativo] #divInfraBarraSistemaPadrao a.align-self-center,
+:root[data-spro-tema-ativo] #lnkInfraMenuSistema,
+:root[data-spro-tema-ativo] #lnkInfraMenuSistemaMovel {
+  border-radius: var(--spro-raio);
+  transition: background-color var(--spro-dur) var(--spro-curva);
+}
+:root[data-spro-tema-ativo] #divInfraBarraSistemaPadrao a.align-self-center:hover,
+:root[data-spro-tema-ativo] #lnkInfraMenuSistema:hover,
+:root[data-spro-tema-ativo] #lnkInfraMenuSistemaMovel:hover {
+  background-color: color-mix(in srgb, var(--spro-barra-texto) 16%, transparent);
+}
+:root[data-spro-tema-ativo] #divInfraBarraSistemaPadrao a:focus-visible,
+:root[data-spro-tema-ativo] #lnkInfraMenuSistema:focus-visible {
+  outline: 2px solid var(--spro-barra-texto);
+  outline-offset: 2px;
+}
+:root[data-spro-tema-ativo] #txtPesquisaRapida {
+  border-radius: var(--spro-raio) 0 0 var(--spro-raio);
+}
+:root[data-spro-tema-ativo] a#lnkInfraUnidade {
+  border-radius: var(--spro-raio-p);
+}
+
+/* Menu lateral */
+:root[data-spro-tema-ativo] #infraMenu li > a {
+  border-radius: var(--spro-raio);
+  transition: background-color var(--spro-dur) var(--spro-curva);
+}
+:root[data-spro-tema-ativo] #infraMenu li > a:hover {
+  background-color: color-mix(in srgb, var(--spro-menu-texto) 12%, transparent);
+}
+:root[data-spro-tema-ativo] #infraMenu li > a:focus-visible {
+  outline: 2px solid var(--spro-destaque);
+  outline-offset: -2px;
+}
+:root[data-spro-tema-ativo] #txtInfraPesquisarMenu {
+  border-radius: var(--spro-raio);
+}
+
+/* Barra de ações do processo e do Controle */
+:root[data-spro-tema-ativo] div.barraBotoesSEI {
+  border: 1px solid var(--spro-borda);
+  border-radius: var(--spro-raio-g);
+  box-shadow: var(--spro-sombra-2);
+}
+:root[data-spro-tema-ativo] a.botaoSEI {
+  border-radius: var(--spro-raio);
+  transition: background-color var(--spro-dur) var(--spro-curva);
+}
+:root[data-spro-tema-ativo] a.botaoSEI:hover {
+  background-color: var(--spro-destaque-suave);
+}
+:root[data-spro-tema-ativo] a.botaoSEI:focus-visible {
+  outline: 2px solid var(--spro-destaque);
+  outline-offset: 1px;
+}
+
+/* Árvore do processo: hover e nó selecionado */
+:root[data-spro-tema-ativo] a.infraArvoreNo span {
+  border-radius: var(--spro-raio-p);
+  transition: background-color var(--spro-dur) var(--spro-curva);
+}
+:root[data-spro-tema-ativo] a.infraArvoreNo:hover span {
+  background-color: var(--spro-destaque-suave);
+}
+:root[data-spro-tema-ativo] a.infraArvoreNo span.infraArvoreNoSelecionado {
+  background-color: var(--spro-destaque-medio);
+  color: var(--spro-texto);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--spro-destaque) 45%, transparent);
+}

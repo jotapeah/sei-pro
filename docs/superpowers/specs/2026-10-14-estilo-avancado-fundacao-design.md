@@ -271,3 +271,16 @@ Todas as correções vieram de regras fixas que o SEI ou o SEI Pro gravam, desco
 A lista de `!important` permitidos na folha base, conferida por teste, agora também cobre `table.tablesorter`, `table.infraTable`, `infraTrMarcada`, `tabelaOpcoes`, `tdOpcaoSigiloso`, `input-label-*`, `#ed1c24` e `d8f5b9`. O teste também passou a ignorar valores de cor que aparecem dentro de seletores de atributo (texto a casar, não cor aplicada).
 
 Os prints de todas as telas e um `INDICE.md` ficam em `capturas-estilo-avancado-2/` (fora do Git; 58 MB).
+
+## 12. Sub-projeto 2: a casca do SEI (14/10/2026)
+
+Escopo: o acabamento da barra superior, do menu lateral, da barra de ações e da árvore do processo, no vocabulário das telas novas (cantos, hover, foco, seleção). As cores base da barra e do menu já vinham da folha base; a casca só refina, num arquivo próprio (`estilo-avancado/estatico/casca.css`), concatenado ao da base no content script.
+
+Regras da camada (conferidas por teste): só `var(--spro-*)`, nenhuma cor literal, **nenhum `!important`**, todo seletor sob `:root[data-spro-tema-ativo]`.
+
+- **Barra superior:** ícones e `#lnkInfraMenuSistema` com cantos de 8 px e hover em branco a 16% sobre a cor da barra (`color-mix` do `--spro-barra-texto`); anel de foco visível; campo de pesquisa e botão da unidade com os raios do tema.
+- **Menu lateral:** `#infraMenu li > a` com raio, hover e anel de foco (sem mudar padding, para não deslocar o layout nem os indicadores de submenu); campo "Pesquisar no Menu" com raio.
+- **Barra de ações** (`div.barraBotoesSEI`): borda, raio de 12 px e sombra do tema; `a.botaoSEI` com hover em `--spro-destaque-suave`.
+- **Árvore:** hover do nó e nó selecionado (`span.infraArvoreNoSelecionado`, que o SEI pinta de azul-marinho `#0A246A`) com `--spro-destaque-medio` e um anel de 1 px na cor de destaque.
+
+Verificado no SEI MJ 5.0.4 (claro e escuro): seleção da árvore no tema, barra de ações com borda e sombra, hover dos ícones da barra confirmado pelo estilo computado (`rgb(255 255 255 / 16%)`, raio 8 px). **Pendente:** validar no SEI SP 4.1.5 (a sessão do SP expirou durante o trabalho e depende do login do usuário).
