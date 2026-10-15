@@ -3,6 +3,9 @@
  * `src` da imagem; o contexto diz onde ela aparece, porque o tamanho do ícone e o respiro mudam
  * (menu 24 px, barra superior 24 px, barras de ações 40 px, linhas de tabela 24 px).
  */
+/** Tons semânticos (tokens --spro-tom-*, com variante clara e escura): a cor diferencia a função, como no SEI original. */
+export type Tom = "perigo" | "azul" | "verde" | "ambar" | "laranja" | "roxo" | "rosa" | "ciano";
+
 export type ContextoIcone = "menu" | "topo" | "barra" | "tabela";
 
 export interface EntradaIcone {
@@ -16,7 +19,7 @@ export interface EntradaIcone {
   /** Só aceita imagens da própria extensão (`src` começando por chrome-extension). */
   daExtensao?: boolean;
   /** Cor semântica do ícone; sem isto ele herda a cor do contexto. */
-  tom?: "perigo";
+  tom?: Tom;
 }
 
 const m = (src: string, icone: string): EntradaIcone => ({ src: `menu/${src}.svg`, icone, contexto: "menu" });
@@ -68,44 +71,44 @@ export const MAPA_ICONES: EntradaIcone[] = [
   t("usuario_topo", "pessoa"),
   t("sair", "saida"),
   // Barras de ações do Controle e do processo
-  b("processo_enviar", "enviar"),
-  b("processo_atualizar_andamento", "atualizar"),
-  b("processo_atribuir", "pessoaMais"),
-  b("bloco_incluir_protocolo", "blocoMais"),
-  b("processo_sobrestar", "pausa"),
-  b("processo_concluir", "concluir"),
-  b("anotacao_cadastro", "nota"),
-  b("acompanhamento_especial_cadastro", "olho"),
-  b("documento_incluir", "documentoMais"),
-  b("marcador_adicionar", "etiquetaMais"),
-  b("marcador_remover", "etiquetaMenos"),
-  b("controle_prazo_gerenciar", "relogio"),
-  b("credencial_consultar", "chave"),
-  b("comentario", "comentario"),
-  b("documento_alterar", "documentoLupa"),
-  b("documento_editar_conteudo", "documentoLapis"),
-  b("documento_assinar", "assinar"),
-  b("documento_assinatura_externa", "link"),
-  b("documento_gerar_pdf", "gerarPdf"),
-  b("documento_modelo", "estrela"),
-  b("documento_versoes", "historico"),
+  b("processo_enviar", "enviar", { tom: "ciano" }),
+  b("processo_atualizar_andamento", "atualizar", { tom: "ciano" }),
+  b("processo_atribuir", "pessoaMais", { tom: "azul" }),
+  b("bloco_incluir_protocolo", "blocoMais", { tom: "roxo" }),
+  b("processo_sobrestar", "pausa", { tom: "ambar" }),
+  b("processo_concluir", "concluir", { tom: "verde" }),
+  b("anotacao_cadastro", "nota", { tom: "ambar" }),
+  b("acompanhamento_especial_cadastro", "olho", { tom: "azul" }),
+  b("documento_incluir", "documentoMais", { tom: "verde" }),
+  b("marcador_adicionar", "etiquetaMais", { tom: "rosa" }),
+  b("marcador_remover", "etiquetaMenos", { tom: "rosa" }),
+  b("controle_prazo_gerenciar", "relogio", { tom: "ambar" }),
+  b("credencial_consultar", "chave", { tom: "azul" }),
+  b("comentario", "comentario", { tom: "ciano" }),
+  b("documento_alterar", "documentoLupa", { tom: "azul" }),
+  b("documento_editar_conteudo", "documentoLapis", { tom: "laranja" }),
+  b("documento_assinar", "assinar", { tom: "roxo" }),
+  b("documento_assinatura_externa", "link", { tom: "roxo" }),
+  b("documento_gerar_pdf", "gerarPdf", { tom: "laranja" }),
+  b("documento_modelo", "estrela", { tom: "ambar" }),
+  b("documento_versoes", "historico", { tom: "azul" }),
   b("protocolo_excluir", "lixeira", { tom: "perigo" }),
-  b("ciencia", "polegar"),
-  b("documento_assinaturas_consultar", "selo"),
+  b("ciencia", "polegar", { tom: "ambar" }),
+  b("documento_assinaturas_consultar", "selo", { tom: "roxo" }),
   b("documento_cancelar", "documentoX", { tom: "perigo" }),
-  b("email_enviar", "email"),
+  b("email_enviar", "email", { tom: "ciano" }),
   // Botões do SEI Pro nas barras de ações (imagens da extensão)
-  b("favoritos", "alvo", { daExtensao: true }),
-  b("ferramentas_pdf", "pdf", { daExtensao: true }),
-  b("botpro_icon", "robo", { daExtensao: true }),
-  b("fluxos", "fluxo", { daExtensao: true }),
-  b("acao_lote", "camadas", { daExtensao: true }),
-  b("doc_lote", "documento", { daExtensao: true }),
-  b("compare_doc", "duplicar", { daExtensao: true }),
+  b("favoritos", "alvo", { daExtensao: true, tom: "ambar" }),
+  b("ferramentas_pdf", "pdf", { daExtensao: true, tom: "laranja" }),
+  b("botpro_icon", "robo", { daExtensao: true, tom: "roxo" }),
+  b("fluxos", "fluxo", { daExtensao: true, tom: "ciano" }),
+  b("acao_lote", "camadas", { daExtensao: true, tom: "roxo" }),
+  b("doc_lote", "documento", { daExtensao: true, tom: "verde" }),
+  b("compare_doc", "duplicar", { daExtensao: true, tom: "ciano" }),
   // Historico de Processos Visitados na barra de acoes: icone embutido (data URI) com a marca <!--spro-historico-->
-  { src: "spro-historico", icone: "historico", contexto: "barra" },
+  { src: "spro-historico", icone: "historico", contexto: "barra", tom: "azul" },
   // Gerar Certidao de Documento Oficial: botao do SEI Pro com PNG embutido, so se acha pelo id do link
-  { src: "#iconDocCertidao", seletor: "a#iconDocCertidao > img", icone: "certidao", contexto: "barra" },
+  { src: "#iconDocCertidao", seletor: "a#iconDocCertidao > img", icone: "certidao", contexto: "barra", tom: "verde" },
   // Ações das linhas das tabelas (consultar, alterar, desativar, excluir...) e paginação
   tb("consultar", "olho"),
   tb("pre_visualizar", "olho"),

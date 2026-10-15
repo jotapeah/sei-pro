@@ -32,6 +32,12 @@ export function verificarIcones(): void {
   );
   checar("todo seletor fica sob o tema ativo", (css.match(/^:root\[data-spro-tema-ativo\]/gm) ?? []).length >= MAPA_ICONES.length);
 
+  const semTom = MAPA_ICONES.filter((e) => e.contexto === "barra" && !e.tom).map((e) => e.src);
+  checar("todo icone das barras de acoes tem tom (cor por funcao)", semTom.length === 0, semTom);
+  const menuComTom = MAPA_ICONES.filter((e) => e.contexto === "menu" && e.tom);
+  checar("o menu lateral fica sem tom (uma cor so, como pedido)", menuComTom.length === 0);
+  const tonsUsados = new Set(MAPA_ICONES.filter((e) => e.contexto === "barra").map((e) => e.tom));
+  checar("a barra usa pelo menos 6 tons distintos", tonsUsados.size >= 6, [...tonsUsados]);
   const pro = gerarCssMenuPro();
   checar(
     "itens do SEI Pro: um icone existente por id",

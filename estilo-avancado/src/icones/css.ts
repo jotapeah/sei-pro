@@ -69,7 +69,9 @@ export function gerarCssIcones(mapa: EntradaIcone[] = MAPA_ICONES): string {
     );
   }
   for (const e of mapa) {
-    partes.push(`${seletor(e)} {\n  -webkit-mask-image: ${uri(svgDoIcone(e.icone))};${e.tom ? `\n  color: var(--spro-${e.tom});` : ""}\n}`);
+    partes.push(
+      `${seletor(e)} {\n  -webkit-mask-image: ${uri(svgDoIcone(e.icone))};${e.tom ? `\n  color: var(--${e.tom === "perigo" ? "spro-perigo" : `spro-tom-${e.tom}`});` : ""}\n}`,
+    );
   }
   return partes.join("\n");
 }

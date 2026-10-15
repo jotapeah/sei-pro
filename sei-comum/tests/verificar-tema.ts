@@ -1,5 +1,6 @@
 import { CONFIG_PADRAO, esquemaResolvido, normalizarConfig } from "../src/tema/config";
-import { gerarFolha } from "../src/tema/tokens";
+import { contraste } from "../src/tema/paleta";
+import { gerarFolha, gerarTokens } from "../src/tema/tokens";
 import { checar, secao } from "./util";
 
 export function verificarTema(): void {
@@ -29,6 +30,17 @@ export function verificarTema(): void {
     esquemaResolvido({ ...CONFIG_PADRAO, modo: "claro" }, true) === "claro" &&
       esquemaResolvido({ ...CONFIG_PADRAO, modo: "escuro" }, false) === "escuro",
   );
+
+  secao("tema/tons dos icones");
+  for (const esq of ["claro", "escuro"] as const) {
+    const t = gerarTokens(CONFIG_PADRAO, esq);
+    const nomes = Object.keys(t).filter((k) => k.startsWith("--spro-tom-"));
+    checar(`${esq}: 7 tons definidos`, nomes.length === 7, nomes);
+    const piores = nomes.map((n) => [n, contraste(t[n] as string, t["--spro-fundo"] as string)] as const).filter(([, c]) => c < 3);
+    checar(`${esq}: todo tom tem contraste >= 3:1 sobre a superficie da barra`, piores.length === 0, piores);
+    const sobreFundo3 = nomes.map((n) => [n, contraste(t[n] as string, t["--spro-fundo-3"] as string)] as const).filter(([, c]) => c < 3);
+    checar(`${esq}: e sobre o fundo de hover (fundo-3)`, sobreFundo3.length === 0, sobreFundo3);
+  }
 
   secao("tema/tokens");
   for (const esq of ["claro", "escuro"] as const) {

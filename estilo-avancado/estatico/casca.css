@@ -243,11 +243,8 @@
   transition: color var(--spro-dur) var(--spro-curva);
 }
 :root[data-spro-tema-ativo] a.botaoSEI:hover {
-  background-color: var(--spro-destaque-suave);
+  background-color: var(--spro-fundo-3);
   transform: translateY(-1px);
-}
-:root[data-spro-tema-ativo] a.botaoSEI:hover > img {
-  color: var(--spro-destaque);
 }
 :root[data-spro-tema-ativo] a.botaoSEI:active {
   transform: translateY(0) scale(0.96);
