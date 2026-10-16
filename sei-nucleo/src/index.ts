@@ -31,11 +31,15 @@ export {
   alterarDocumento,
   criarDocumento,
   tiposDocumento,
+  pesquisarContatos,
+  pesquisarAssuntos,
+  type AlteracaoDocumento,
   type ConteudoDocumento,
   type NovoDocumento,
   type TipoDocumento,
 } from "./dominio/documento";
 export type { OpcoesEscrita, ResultadoEscrita } from "./dominio/escrita";
+export { aplicarModo, linkAutoCompletar, type AlteracaoLista, type ModoLista } from "./dominio/lupas";
 export { abrirEditor, editarConteudo, lerEditor, textoDoHtml, type EdicaoConteudo, type EditorDocumento, type SecaoEditor } from "./dominio/editor";
 export { Pseudonimos, type Categoria, type OpcoesAnonimizacao } from "./privacidade/anonimizar";
 export { listarOpcoes, type ListaOpcoes, type OpcaoSei } from "./dominio/opcoes";

@@ -9,7 +9,8 @@
 
 import { acaoNaArvore, type Arvore, type DocumentoArvore } from "./arvore";
 import { hipotesesDoFormulario, mudanca, NIVEIS, NOME_NIVEL, type OpcoesEscrita, type ResultadoEscrita } from "./escrita";
-import { escolherItem, Formulario } from "../formulario/formulario";
+import { escolherItem, Formulario, type ItemLupa } from "../formulario/formulario";
+import { type AlteracaoLista, aplicarModo, linkAutoCompletar, pesquisarNoAutoCompletar } from "./lupas";
 import { linkDaAcao, parametros } from "../links/links";
 import { textoDe } from "../sessao/dom";
 import { ErroSei } from "../sessao/erros";
@@ -61,6 +62,12 @@ export interface AlteracaoDocumento {
   descricao?: string;
   nivel?: "publico" | "restrito";
   hipotese?: string;
+  /** Observações desta unidade (`txaObservacoes`). `undefined` mantém; "" esvazia. */
+  observacao?: string;
+  /** Interessados: acrescentar (sem duplicar), remover por id ou substituir a lista. */
+  interessados?: AlteracaoLista;
+  /** Classificação por assuntos, mesma semântica dos interessados. */
+  assuntos?: AlteracaoLista;
 }
 
 /** Aplica nível e hipótese no formulário de cadastro/alteração de documento. */
@@ -84,19 +91,44 @@ async function aplicarNivel(sei: Sei, form: Formulario, alt: AlteracaoDocumento,
   return m;
 }
 
-/** Altera descrição, nível de acesso e hipótese legal de um documento. */
-export async function alterarDocumento(sei: Sei, numero: string, alt: AlteracaoDocumento, op: OpcoesEscrita): Promise<ResultadoEscrita> {
-  const d = await localizarDocumento(sei, numero, { sinal: op.sinal });
+/** Tela "Alterar Documento" (interno ou externo), com a recusa de sigiloso. */
+async function telaAlteracao(sei: Sei, numero: string, sinal?: AbortSignal): Promise<{ d: DocumentoLocalizado; acao: string; form: Formulario }> {
+  const d = await localizarDocumento(sei, numero, { sinal });
   if (d.documento.nivel === "sigiloso") throw new ErroSei("SEI_SIGILOSO", "Documento sigiloso: o agente n\u00E3o atua nele.");
   const acao = d.documento.externo ? "documento_alterar_recebido" : "documento_alterar";
   const link = linkDaAcao(d.documento.acoes, acao) ?? linkDaAcao(d.documento.acoes, /^documento_alterar/);
   if (!link) throw new ErroSei("SEI_ACAO_INDISPONIVEL", `O documento ${d.documento.numero} n\u00E3o pode ser alterado por voc\u00EA (assinado por outra unidade, ou processo fechado).`);
-  const form = await Formulario.abrir(sei.http, link, "#frmDocumentoCadastro", { sinal: op.sinal });
+  const form = await Formulario.abrir(sei.http, link, "#frmDocumentoCadastro", { sinal });
+  return { d, acao, form };
+}
+
+const textos = (itens: ItemLupa[]) => itens.map((i) => i.texto).join("; ");
+
+/** Aplica o modo pedido a uma lupa do formulário; só mexe nela se a lista mudar. */
+function aplicarLista(form: Formulario, select: string, campo: string, alt: AlteracaoLista | undefined): ResultadoEscrita["mudancas"] {
+  if (!alt) return [];
+  const atuais = form.itensLupa(select);
+  const novos = aplicarModo(atuais, alt.modo, alt.itens);
+  if (atuais.map((i) => i.id).join(",") === novos.map((i) => i.id).join(",")) return [];
+  form.definirLupa(select, novos);
+  return [{ campo, antes: textos(atuais), depois: textos(novos) }];
+}
+
+/** Altera descrição, observação, interessados, assuntos, nível de acesso e hipótese legal de um documento. */
+export async function alterarDocumento(sei: Sei, numero: string, alt: AlteracaoDocumento, op: OpcoesEscrita): Promise<ResultadoEscrita> {
+  const { d, acao, form } = await telaAlteracao(sei, numero, op.sinal);
 
   const mudancas: ResultadoEscrita["mudancas"] = [];
   if (alt.descricao !== undefined) {
     mudancas.push(...mudanca("Descri\u00E7\u00E3o", form.valor("txtDescricao"), alt.descricao));
     form.definir({ txtDescricao: alt.descricao.slice(0, 250) });
+  }
+  mudancas.push(...aplicarLista(form, "selInteressados", "Interessados", alt.interessados));
+  mudancas.push(...aplicarLista(form, "selAssuntos", "Assuntos", alt.assuntos));
+  if (alt.observacao !== undefined) {
+    mudancas.push(...mudanca("Observa\u00E7\u00F5es da unidade", form.valor("txaObservacoes"), alt.observacao));
+    // A tela limita a 1000 caracteres (infraLimitarTexto).
+    form.definir({ txaObservacoes: alt.observacao.slice(0, 1000) });
   }
   mudancas.push(...(await aplicarNivel(sei, form, alt, op.sinal)));
 
@@ -112,6 +144,24 @@ export async function alterarDocumento(sei: Sei, numero: string, alt: AlteracaoD
   });
   sei.invalidar(d.arvore.idProcedimento);
   return { ...base, aplicado: true, resumo: `Documento ${d.documento.numero} alterado.` };
+}
+
+/** Autocompletar da tela de alteração do documento: link colhido do JS da tela. */
+async function pesquisarNaTela(sei: Sei, refDocumento: string, hdnId: string, nome: string, termo: string, sinal?: AbortSignal): Promise<ItemLupa[]> {
+  const { form } = await telaAlteracao(sei, refDocumento, sinal);
+  const link = linkAutoCompletar(form.pagina.html, hdnId);
+  if (!link) throw new ErroSei("SEI_VERSAO_NAO_SUPORTADA", `A tela de altera\u00E7\u00E3o do documento n\u00E3o tem a pesquisa de ${nome}.`);
+  return pesquisarNoAutoCompletar(sei, link, termo, sinal);
+}
+
+/** Contatos (para interessados) pelo autocompletar da tela "Alterar Documento" de `refDocumento`. */
+export async function pesquisarContatos(sei: Sei, refDocumento: string, termo: string, sinal?: AbortSignal): Promise<ItemLupa[]> {
+  return pesquisarNaTela(sei, refDocumento, "hdnIdInteressado", "contatos", termo, sinal);
+}
+
+/** Assuntos pelo autocompletar da tela "Alterar Documento" de `refDocumento`. */
+export async function pesquisarAssuntos(sei: Sei, refDocumento: string, termo: string, sinal?: AbortSignal): Promise<ItemLupa[]> {
+  return pesquisarNaTela(sei, refDocumento, "hdnIdAssunto", "assuntos", termo, sinal);
 }
 
 export interface TipoDocumento {
