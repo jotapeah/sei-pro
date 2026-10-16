@@ -8,13 +8,13 @@ Reúne numa única tabela **todos os documentos do processo** e permite **dar ci
 
 ### Como abrir
 
-Abra o processo e clique em **Ações em lote**, na barra de botões da árvore, ou use o mesmo item no menu rápido da árvore.
+Abra o processo e clique em **Ações em Lote**, na barra de botões da árvore, ou use o mesmo item no menu rápido da árvore.
 
 ### Escolher os documentos
 
 A janela lista os documentos do processo, com número SEI, nome, quem assinou, datas, unidade e nível de acesso. Marque os que deseja ou use a caixa do cabeçalho para marcar todos. Os **filtros** reduzem a lista e três atalhos marcam grupos de documentos de uma vez: **Não assinados da minha unidade**, **Assinados por mim** e **Externos**.
 
-> **Documentos e processos sigilosos ficam de fora.** Diferente da versão anterior, eles não entram na lista nem são alterados pela ferramenta.
+> **Documentos e processos sigilosos ficam de fora.** Diferente da versão anterior, a ferramenta nunca os altera: eles aparecem na tabela como **pulados**, com o motivo *Sigiloso: fora das Ações em Lote*.
 
 ### As 12 ações
 
@@ -43,7 +43,7 @@ Antes de executar, a **prévia** mostra o que será feito em cada documento. Aç
 
 ### Durante a execução
 
-* **Pausar / Continuar** e **Parar lote**: os botões ficam na janela de execução. **Parar lote** encerra a execução;
+* **Pausar / Continuar** e **Parar lote**: os botões ficam na janela de execução. **Parar lote** encerra a execução, e os documentos que faltavam ficam salvos para você retomar depois;
 * **Minimizar**: libera a tela do SEI para você seguir trabalhando;
 * **Retomar**: fechar a janela **pausa o lote**, que fica salvo; ao abrir a ferramenta de novo é possível continuar de onde parou;
 * **Teclado**: **Ctrl+Enter** (Cmd+Enter no Mac) avança da configuração para a prévia e da prévia para a execução. **Esc** fecha a janela; durante a execução, pausa o lote e pergunta antes de fechar. Com a janela minimizada, o Esc não faz nada.
@@ -73,8 +73,8 @@ Nos pacotes que ainda não têm a nova versão (oficial e Firefox), a ferramenta
 
 ### Como usar (janela anterior)
 
-1. Abra o processo e, na barra de botões, clique em **Ações em lote**;
-2. A janela **Ações em lote** lista os documentos, com número SEI, nome, quem assinou, datas, unidade e nível de acesso;
+1. Abra o processo e, na barra de botões, clique em **Ações em Lote**;
+2. A janela **Ações em Lote** lista os documentos, com número SEI, nome, quem assinou, datas, unidade e nível de acesso;
 3. Marque os documentos desejados — ou use a caixa do cabeçalho para selecionar todos;
 4. Clique no botão da ação, no alto da janela.
 

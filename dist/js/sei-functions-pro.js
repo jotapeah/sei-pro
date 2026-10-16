@@ -368,7 +368,7 @@ var iconsFlashMenu = [
                     {name: 'Copiar somente o n\u00FAmero', icon: 'fab fa-cuttlefish', alt: ''},
                     {name: 'Copiar link do processo', icon: 'fas fa-link', alt: ''},
                     {name: 'Enviar Documento Externo', icon: 'fa-upload', alt: ''},
-                    {name: 'A\u00E7\u00F5es em lote', icon: 'fa-cogs', alt: ''},
+                    {name: 'A\u00E7\u00F5es em Lote', icon: 'fa-cogs', alt: ''},
                     {name: 'Adicionar ou Remover Urg\u00EAncia', icon: 'fa-exclamation-circle', alt: 'Add/Remover Urg\u00EAncia'},
                     {name: 'Incluir Documento', icon: 'fas fa-file-alt', alt: 'Incluir Novo Documento'},
                     {name: 'Consultar/Alterar Processo', icon: 'fa-file-signature', alt: ''},
@@ -7022,7 +7022,7 @@ function configFlashMenuTrPro(value, color, state, mode) {
             '        </tr>';
 }
 function configFlashMenuPro(arrayLinksArvore) { 
-    var selectedItensMenu = ( typeof localStorageRestorePro('configViewFlashMenuPro') !== 'undefined' && !$.isEmptyObject(localStorageRestorePro('configViewFlashMenuPro')) ) ? localStorageRestorePro('configViewFlashMenuPro') : [['Incluir Documento'],['Consultar/Alterar Processo'],['Enviar Documento Externo'],['Atribuir Processo'],['Add/Remover Urg\u00EAncia']];
+    var selectedItensMenu = ( typeof localStorageRestorePro('configViewFlashMenuPro') !== 'undefined' && !$.isEmptyObject(localStorageRestorePro('configViewFlashMenuPro')) ) ? (function(l){ return Array.isArray(l) ? l.map(function(v){ return (v && v[0] == 'A\u00E7\u00F5es em lote') ? ['A\u00E7\u00F5es em Lote'] : v; }) : l; })(localStorageRestorePro('configViewFlashMenuPro')) : [['Incluir Documento'],['Consultar/Alterar Processo'],['Enviar Documento Externo'],['Atribuir Processo'],['Add/Remover Urg\u00EAncia']];
     var selectedItensDocMenu = ( typeof localStorageRestorePro('configViewFlashDocMenuPro') !== 'undefined' && !$.isEmptyObject(localStorageRestorePro('configViewFlashDocMenuPro')) ) ? localStorageRestorePro('configViewFlashDocMenuPro') : [['Copiar n\u00FAmero SEI'],['Copiar nome do documento'],['Copiar link do documento']];
     var selectedItensDocArvore = ( typeof localStorageRestorePro('configViewFlashDocArvorePro') !== 'undefined' && !$.isEmptyObject(localStorageRestorePro('configViewFlashDocArvorePro')) ) ? localStorageRestorePro('configViewFlashDocArvorePro') : [["Copiar n\u00FAmero SEI"],["Copiar link do documento"],["Duplicar documento"]];
     var selectedItensPanelArvore = ( typeof localStorageRestorePro('configViewFlashPanelArvorePro') !== 'undefined' && !$.isEmptyObject(localStorageRestorePro('configViewFlashPanelArvorePro')) ) ? localStorageRestorePro('configViewFlashPanelArvorePro') : [["Anota\u00E7\u00F5es"],["Marcador"],["Acompanhamento Especial"],["Tipo de Procedimento"],["Assuntos"],["Interessados"],["Atribui\u00E7\u00E3o"],["N\u00EDvel de Acesso"],["Observa\u00E7\u00F5es"]];
@@ -9988,7 +9988,7 @@ function getDocumentosActions() {
     dialogBoxPro = $('#dialogBoxPro')
         .html('<div class="dialogBoxDiv">'+htmlBox+'</div>')
         .dialog({
-            title: 'A\u00E7\u00F5es em lote',
+            title: 'A\u00E7\u00F5es em Lote',
             width: $('body').width()-300,
             height: 650,
             resize: function(event, ui) {
@@ -13132,8 +13132,8 @@ function insertIconBatchActions() {
 }
 function appendIconBatchActions(loop = true) {
     var ifrVisualizacao = $($ifrVisualizacao).contents();
-    var htmlIconbatchActions =  '<a href="#" id="iconBatchActions" onclick="parent.getDocumentosActions();" onmouseout="return infraTooltipOcultar();" onmouseover="return infraTooltipMostrar(\'A\u00E7\u00F5es em lote\')"  tabindex="452" class="botaoSEI">'+
-                                '<img class="infraCorBarraSistema" tabindex="452" src="'+URL_SPRO+'icons/menu/acao_lote.svg" alt="A\u00E7\u00F5es em lote" title="A\u00E7\u00F5es em lote">'+
+    var htmlIconbatchActions =  '<a href="#" id="iconBatchActions" onclick="parent.getDocumentosActions();" onmouseout="return infraTooltipOcultar();" onmouseover="return infraTooltipMostrar(\'A\u00E7\u00F5es em Lote\')"  tabindex="452" class="botaoSEI">'+
+                                '<img class="infraCorBarraSistema" tabindex="452" src="'+URL_SPRO+'icons/menu/acao_lote.svg" alt="A\u00E7\u00F5es em Lote" title="A\u00E7\u00F5es em Lote">'+
                                 '</a>';
     if (!ifrVisualizacao.find('#iconBatchActions').length) {
         ifrVisualizacao.find('#divArvoreAcoes').append(htmlIconbatchActions);
