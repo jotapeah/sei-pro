@@ -44,3 +44,21 @@ no SP: 99906.713-630.000023/2026-72 e ...024/2026-17 (tipo "Ata de reuniao"). Po
 3. `dist/js/link-permanente/app.js` gerado antes da Task 15: nao consome a entrada pendente. Rebuild de ambos.
 4. Numeros de processo com prefixo de 3 digitos classificados como "outros"; nº SEI seguido de ponto final de frase descartado.
 5. Armadilha do harness (nao do produto): a aba em segundo plano (`visibilityState: hidden`) nao dispara o evento `close` do `<dialog>`.
+
+## Etapa 2: modelos salvos e "Depois de criar" (validada em 16/10/2026)
+
+Build do commit `4ff6390` (extensao recarregada no Chrome de teste: o Chrome guarda em cache o content script descompactado, e uma pagina carregada
+antes da atualizacao devolve "Operacao desconhecida: posAcaoOpcoes"; um app novo falando com um content script antigo mostra a mensagem em vez de quebrar).
+
+| Prova | SP 4.1.5 | MJ 5.0.4 |
+|---|---|---|
+| Painel "Depois de criar" aparece so com processo de numero confirmado; listas (blocos internos, marcadores, grupos) carregam | ok | ok |
+| Incluir 2 processos em bloco interno (pela tela do Controle: `rel_bloco_protocolo_cadastrar`); conferido por leitura independente da tela do bloco | ok (bloco 16991, ids 161549 e 161550 presentes) | ok (bloco 408164, ids 40051461 e 40051462 presentes) |
+| Aplicar marcador (com texto): conferido na tela de marcadores do processo | resultado "aplicado" | ok (marcador Teste + texto "etapa 2") |
+| Acompanhar (grupo) | nao exercitado | resultado "aplicado" (nao conferido por leitura independente) |
+| Aplicar de novo: marcador e acompanhamento "ja estava", bloco nao reenviado | nao | ok ("2 feitas, 4 ja estavam") |
+| Modelos: salvar com nome (dialogo sem Cancelar), recarregar a pagina, aplicar (tipo e pausa voltam) | nao | ok |
+| Combo de tipos mostra "selecione o tipo de processo" depois de carregar; aviso de cautela num paragrafo so | ok | ok |
+
+Processos de teste desta etapa: MJ `00000.000018/2026-59` a `00000.000021/2026-72` (4), SP `99906.713-630.000025/2026-61` e `...026/2026-14`.
+Os de MJ `...018` e `...019`... e os `...020`, `...021` ficaram incluidos no bloco "teste" (408164); os do SP no bloco "TESTE ALINE" (16991).
