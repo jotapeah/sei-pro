@@ -31,6 +31,9 @@ const LINK_ALTERAR = urlDe(TELA);
 interface Post {
   url: string;
   pares: Array<[string, string]>;
+  /** Corpo cru, como saiu para o SEI (para conferir os bytes). */
+  corpo: string;
+  tipo: string;
 }
 
 function lerCorpo(corpo: string): Array<[string, string]> {
@@ -60,8 +63,10 @@ function montar(o: { sigiloso?: boolean } = {}) {
       if (/acao=documento_alterar/.test(u)) return resp(u, htmlDe(TELA));
       return resp(u, "<html><body>?</body></html>");
     }
-    const pares = lerCorpo(String(init.body ?? ""));
-    estado.posts.push({ url: u, pares });
+    const corpo = String(init.body ?? "");
+    const pares = lerCorpo(corpo);
+    const tipo = String((init.headers as Record<string, string> | undefined)?.["Content-Type"] ?? "");
+    estado.posts.push({ url: u, pares, corpo, tipo });
     if (/acao_ajax=contato_auto_completar/.test(u)) return resp(u, XML_CONTATOS);
     if (/acao_ajax=assunto_auto_completar/.test(u)) return resp(u, XML_ASSUNTOS);
     // Gravação: o SEI volta para a árvore.
@@ -218,6 +223,29 @@ export async function verificarDocumentoDados(): Promise<void> {
     const ajax = estado.posts.find((p) => p.url.includes("controlador_ajax.php"));
     checar("assuntos pelo autocompletar da tela", assuntos.length === 1 && assuntos[0].texto === "01.01 - Organização", assuntos);
     checar("assunto: acao do autocompletar de assunto", !!ajax && ajax.url.includes("acao_ajax=assunto_auto_completar_RI1223") && valorPost(ajax, "palavras_pesquisa") === "organiza", ajax);
+  }
+  secao("documento: pesquisa com acento vai como a tela do SEI envia (controlador_ajax decodifica UTF-8)");
+  {
+    // Assunto: prepararExecucao manda o valor cru; o infraAjaxPost codifica o corpo em UTF-8 (encodeURIComponent).
+    const { sei, estado } = montar();
+    await pesquisarAssuntos(sei, "0104100", "administra\u00E7\u00E3o");
+    const ajax = estado.posts.find((p) => p.url.includes("acao_ajax=assunto_auto_completar"));
+    checar("assunto: termo em UTF-8 uma vez", ajax?.corpo === "palavras_pesquisa=administra%C3%A7%C3%A3o", ajax?.corpo);
+    checar("assunto: Content-Type sem charset ISO", !!ajax && !/8859/i.test(ajax.tipo), ajax?.tipo);
+  }
+  {
+    // Contato: prepararExecucao ja aplica encodeURIComponent no valor e o infraAjaxPost codifica de novo;
+    // o PHP faz fromUTF8(urldecode(...)) depois do decodificarPost.
+    const { sei, estado } = montar();
+    await pesquisarContatos(sei, "0104100", "Jo\u00E3o da Silva");
+    const ajax = estado.posts.find((p) => p.url.includes("acao_ajax=contato_auto_completar"));
+    checar("contato: termo codificado duas vezes (como a tela)", ajax?.corpo === "palavras_pesquisa=Jo%25C3%25A3o%2520da%2520Silva", ajax?.corpo);
+  }
+  {
+    const { sei, estado } = montar();
+    await pesquisarAssuntos(sei, "0104100", "a\u2014b");
+    const ajax = estado.posts.find((p) => p.url.includes("acao_ajax=assunto_auto_completar"));
+    checar("fora do Latin-1 vira o equivalente antes de codificar", ajax?.corpo === "palavras_pesquisa=a-b", ajax?.corpo);
   }
   {
     const { sei } = montar({ sigiloso: true });

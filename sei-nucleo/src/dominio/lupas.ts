@@ -8,6 +8,7 @@
  */
 
 import type { ItemLupa } from "../formulario/formulario";
+import { paraLatin1Seguro } from "../sessao/codificacao";
 import { decodificarEntidades } from "../sessao/dom";
 import type { Sei } from "../sei";
 
@@ -42,8 +43,33 @@ export function linkAutoCompletar(html: string, hdnId: string): string | null {
   return m ? decodificarEntidades(m[1]) : null;
 }
 
-/** Pesquisa pelo autocompletar: o `prepararExecucao` da tela envia só `palavras_pesquisa`. */
-export async function pesquisarNoAutoCompletar(sei: Sei, link: string, termo: string, sinal?: AbortSignal): Promise<ItemLupa[]> {
-  const itens = await sei.ajax(link, [["palavras_pesquisa", termo]], { sinal });
+/**
+ * O `prepararExecucao` do autocompletar de `hdnId` já passa o valor por `encodeURIComponent` (o do interessado
+ * passa; o do assunto, não). Nesse caso o PHP faz `fromUTF8(urldecode(...))` e o valor tem de ir codificado duas
+ * vezes, como a tela manda.
+ */
+export function valorCodificadoNoAutoCompletar(html: string, hdnId: string): boolean {
+  const re = new RegExp(`(\\w+)\\s*=\\s*new\\s+infraAjaxAutoCompletar\\(\\s*['"]${escaparRegex(hdnId)}['"]`);
+  const nome = re.exec(html)?.[1];
+  if (!nome) return false;
+  const corpo = new RegExp(`\\b${escaparRegex(nome)}\\.prepararExecucao\\s*=\\s*function\\s*\\([^)]*\\)\\s*\\{([^}]*)\\}`).exec(html)?.[1];
+  return !!corpo && /encodeURIComponent\s*\(/.test(corpo);
+}
+
+/**
+ * Pesquisa pelo autocompletar: o `prepararExecucao` da tela envia só `palavras_pesquisa`. O corpo vai em UTF-8,
+ * como o `infraAjaxPost` (o `controlador_ajax.php` decodifica todo o POST de UTF-8; em Latin-1, "administração"
+ * chegava como "administra??o" e nada casava). `valorCodificado`: a tela já codifica o valor
+ * (`valorCodificadoNoAutoCompletar`), e ele vai codificado mais uma vez.
+ */
+export async function pesquisarNoAutoCompletar(
+  sei: Sei,
+  link: string,
+  termo: string,
+  sinal?: AbortSignal,
+  valorCodificado = false,
+): Promise<ItemLupa[]> {
+  const valor = valorCodificado ? encodeURIComponent(paraLatin1Seguro(termo)) : termo;
+  const itens = await sei.ajax(link, [["palavras_pesquisa", valor]], { sinal, utf8: true });
   return semRepetir(itens);
 }

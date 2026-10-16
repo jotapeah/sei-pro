@@ -10,7 +10,7 @@
 import { acaoNaArvore, type Arvore, type DocumentoArvore } from "./arvore";
 import { hipotesesDoFormulario, mudanca, NIVEIS, NOME_NIVEL, type OpcoesEscrita, type ResultadoEscrita } from "./escrita";
 import { escolherItem, Formulario, type ItemLupa } from "../formulario/formulario";
-import { type AlteracaoLista, aplicarModo, linkAutoCompletar, pesquisarNoAutoCompletar } from "./lupas";
+import { type AlteracaoLista, aplicarModo, linkAutoCompletar, pesquisarNoAutoCompletar, valorCodificadoNoAutoCompletar } from "./lupas";
 import { linkDaAcao, parametros } from "../links/links";
 import { textoDe } from "../sessao/dom";
 import { ErroSei } from "../sessao/erros";
@@ -151,7 +151,7 @@ async function pesquisarNaTela(sei: Sei, refDocumento: string, hdnId: string, no
   const { form } = await telaAlteracao(sei, refDocumento, sinal);
   const link = linkAutoCompletar(form.pagina.html, hdnId);
   if (!link) throw new ErroSei("SEI_VERSAO_NAO_SUPORTADA", `A tela de altera\u00E7\u00E3o do documento n\u00E3o tem a pesquisa de ${nome}.`);
-  return pesquisarNoAutoCompletar(sei, link, termo, sinal);
+  return pesquisarNoAutoCompletar(sei, link, termo, sinal, valorCodificadoNoAutoCompletar(form.pagina.html, hdnId));
 }
 
 /** Contatos (para interessados) pelo autocompletar da tela "Alterar Documento" de `refDocumento`. */
