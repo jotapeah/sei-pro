@@ -62,7 +62,9 @@ interface Opcoes {
   /** Lupa cujas linhas perderam a célula de Tipo (desalinhadas do cabeçalho). */
   lupaQuebrada?: boolean;
   /** Tela do bloco com controle de "próxima página". */
-  blocoPaginado?: boolean;
+  blocoPaginado?: "previa" | "resposta";
+  /** O POST sai e a rede cai antes da resposta. */
+  redeCaiNoPost?: boolean;
   /** Tela do bloco cujas linhas perderam a célula de Tipo. */
   blocoQuebrado?: boolean;
   /** Onde o usuário cancela: na conferência prévia ou no POST. */
@@ -81,7 +83,7 @@ function servidor(o: Opcoes = {}) {
   if (o.lupaPaginada) lupa = lupa.replace("</table>", `</table>${PAGINAR}`);
   if (o.lupaQuebrada) lupa = lupa.replace(/<td align="center">(Interno|Reunião)<\/td>\n/g, "");
   /** A tela do bloco com só as linhas dos processos que estão nele. */
-  const telaDoBloco = (idBloco: string) =>
+  const telaDoBloco = (idBloco: string, naResposta = false) =>
     ler("rel_bloco_protocolo_listar.html")
       .split("\n")
       .filter((l) => {
@@ -90,7 +92,7 @@ function servidor(o: Opcoes = {}) {
       })
       .join("\n")
       .replace(/Bloco Interno 41/g, `Bloco Interno ${idBloco}`)
-      .replace("</table>", o.blocoPaginado ? `</table>${PAGINAR}` : "</table>")
+      .replace("</table>", o.blocoPaginado === (naResposta ? "resposta" : "previa") ? `</table>${PAGINAR}` : "</table>")
       .replace(/<td>Tipo Exemplo<\/td>/g, o.blocoQuebrado ? "" : "<td>Tipo Exemplo</td>");
   const abortar = () => {
     throw new DOMException("cancelado", "AbortError");
@@ -119,6 +121,7 @@ function servidor(o: Opcoes = {}) {
     const pares = lerCorpo(String(init.body ?? ""));
     estado.posts.push({ url: u, pares });
     if (o.abortarEm === "post") abortar();
+    if (o.redeCaiNoPost) throw new TypeError("Failed to fetch");
     const idBloco = pares.find(([n]) => n === "hdnIdBloco")?.[1] ?? "";
     switch (o.resposta ?? "sucesso") {
       case "sessao":
@@ -137,7 +140,7 @@ function servidor(o: Opcoes = {}) {
         // "parcial": o SEI aceita o envio mas o ultimo processo nao entra.
         for (const [, v] of o.resposta === "parcial" ? caixas.slice(0, -1) : caixas) estado.noBloco.add(v);
         const url = urlDe("rel_bloco_protocolo_listar.html").replace("id_bloco=41", `id_bloco=${idBloco}`);
-        return resp(url, telaDoBloco(idBloco));
+        return resp(url, telaDoBloco(idBloco, true));
       }
     }
   }) as unknown as typeof globalThis.fetch;
@@ -272,9 +275,20 @@ export async function verificarBlocoProcessos(): Promise<void> {
   );
   checar("fora-da-pagina continua fora-da-pagina", r8[2]?.situacao === "fora-da-pagina", r8);
   const r8b = await incluirProcessosEmBlocoInterno(servidor({ resposta: "outra" }).sei, "41", ["700003"]);
-  checar("sem mensagem: erro dizendo que o SEI nao confirmou", r8b[0]?.situacao === "erro" && !!r8b[0]?.erro, r8b);
+  checar("sem mensagem e URL diferente: nao-confirmado (pode ter gravado)", r8b[0]?.situacao === "nao-confirmado" && /confira o bloco 41/.test(r8b[0]?.erro ?? ""), r8b);
   const r8c = await incluirProcessosEmBlocoInterno(servidor({ resposta: "excecao" }).sei, "41", ["700003"]);
-  checar("pagina de excecao => erro com a mensagem, sem lancar", r8c[0]?.situacao === "erro" && (r8c[0]?.erro ?? "").includes("Erro inesperado no bloco."), r8c);
+  checar(
+    "pagina de excecao depois do POST => nao-confirmado com a mensagem, sem lancar",
+    r8c[0]?.situacao === "nao-confirmado" && (r8c[0]?.erro ?? "").includes("Erro inesperado no bloco."),
+    r8c,
+  );
+  const s8e = servidor({ redeCaiNoPost: true });
+  const r8e = await incluirProcessosEmBlocoInterno(s8e.sei, "41", ["700003", "700004"]);
+  checar(
+    "rede cai no POST => nao-confirmado para todos, sem lancar",
+    s8e.estado.posts.length === 1 && r8e.every((r) => r.situacao === "nao-confirmado" && /confira o bloco 41/i.test(r.erro ?? "")),
+    r8e,
+  );
   const r8d = await incluirProcessosEmBlocoInterno(servidor({ resposta: "parcial" }).sei, "41", ["700003", "700004"]);
   checar("URL certa mas processo fora da tela do bloco => erro so para ele", r8d[0]?.situacao === "incluido" && r8d[1]?.situacao === "erro" && !!r8d[1]?.erro, r8d);
   const e8 = await lanca(() => incluirProcessosEmBlocoInterno(servidor({ resposta: "sessao" }).sei, "41", ["700003"]));
@@ -324,15 +338,26 @@ export async function verificarBlocoProcessos(): Promise<void> {
   checar("linhas da lupa sem as colunas do cabecalho: SEI_VERSAO_NAO_SUPORTADA", e13c?.codigo === "SEI_VERSAO_NAO_SUPORTADA", e13c);
 
   secao("bloco interno: tela do bloco paginada ou desalinhada");
-  const r14 = await incluirProcessosEmBlocoInterno(servidor({ resposta: "parcial", blocoPaginado: true }).sei, "41", ["700003", "700004"]);
+  const r14 = await incluirProcessosEmBlocoInterno(servidor({ resposta: "parcial", blocoPaginado: "resposta" }).sei, "41", ["700003", "700004"]);
   checar(
-    "ausente numa tela paginada: erro 'nao confirmado', com o bloco",
-    r14[0]?.situacao === "incluido" && r14[1]?.situacao === "erro" && /mais de uma p.*confira o bloco 41/.test(r14[1]?.erro ?? ""),
+    "ausente numa tela paginada depois do POST: nao-confirmado, com o bloco",
+    r14[0]?.situacao === "incluido" && r14[1]?.situacao === "nao-confirmado" && /mais de uma p.*confira o bloco 41/.test(r14[1]?.erro ?? ""),
     r14,
   );
   const s14 = servidor({ noBloco: ["700005"], blocoQuebrado: true });
   const e14 = await lanca(() => incluirProcessosEmBlocoInterno(s14.sei, "41", ["700003"]));
   checar("tela do bloco irreconhecivel antes do POST: lanca e nao posta", e14?.codigo === "SEI_VERSAO_NAO_SUPORTADA" && s14.estado.posts.length === 0, e14);
   const r14b = await incluirProcessosEmBlocoInterno(servidor({ blocoQuebrado: true, semMenuInternos: true }).sei, "41", ["700003"]);
-  checar("irreconhecivel depois do POST: erro por processo, sem lancar", r14b[0]?.situacao === "erro" && /confira o bloco 41/.test(r14b[0]?.erro ?? ""), r14b);
+  checar("irreconhecivel depois do POST: nao-confirmado por processo, sem lancar", r14b[0]?.situacao === "nao-confirmado" && /confira o bloco 41/.test(r14b[0]?.erro ?? ""), r14b);
+
+  secao("bloco interno: tela do bloco paginada ANTES do POST");
+  const s15 = servidor({ noBloco: ["700004"], blocoPaginado: "previa" });
+  const r15 = await incluirProcessosEmBlocoInterno(s15.sei, "41", ["700003", "700004"]);
+  checar("quem esta na primeira pagina: ja-estava", r15[1]?.situacao === "ja-estava", r15);
+  checar(
+    "quem nao esta: nao-confirmado ('confira antes de incluir')",
+    r15[0]?.situacao === "nao-confirmado" && /mais de uma p.*confira o bloco 41 antes de incluir/.test(r15[0]?.erro ?? ""),
+    r15,
+  );
+  checar("e nenhum POST as cegas", s15.estado.posts.length === 0, s15.estado.posts);
 }

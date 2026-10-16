@@ -34,9 +34,17 @@ export interface BlocoInterno {
   descricao: string;
 }
 
+/**
+ * - `incluido` / `ja-estava`: o processo está no bloco (visto na tela dele).
+ * - `fora-da-pagina`: não está na página do Controle; nada foi enviado.
+ * - `erro`: com GARANTIA de que nada foi incluído (o SEI recusou com mensagem,
+ *   sigiloso, ou o SEI confirmou e a tela inteira do bloco não o mostra).
+ * - `nao-confirmado`: o POST pode ter sido gravado (ou a tela do bloco não
+ *   deixou conferir); só olhando o bloco se sabe.
+ */
 export type ResultadoInclusao = {
   idProcedimento: string;
-  situacao: "incluido" | "ja-estava" | "fora-da-pagina" | "erro";
+  situacao: "incluido" | "ja-estava" | "fora-da-pagina" | "erro" | "nao-confirmado";
   erro?: string;
 };
 
@@ -220,6 +228,12 @@ async function telaDoBloco(sei: Sei, idBloco: string, fontes: Pagina[], op: Opco
  * pedido (sem repetição, na ordem pedida). Só lança o que impede tudo: sessão
  * expirada, Controle sem o formulário ou sem a ação, bloco que não está na lista
  * de blocos internos.
+ *
+ * Contrato de repetição: só `erro` é seguro repetir (nada foi incluído).
+ * `nao-confirmado` NÃO se repete às cegas: o usuário confere o bloco, porque o
+ * processo pode já estar nele (POST que caiu na rede ou devolveu exceção,
+ * tela do bloco paginada ou irreconhecível). `incluido` e `ja-estava` não
+ * pedem nada; `fora-da-pagina` pede o processo visível no Controle.
  */
 export async function incluirProcessosEmBlocoInterno(
   sei: Sei,
@@ -268,6 +282,18 @@ export async function incluirProcessosEmBlocoInterno(
         if (noBloco(linhas, id, mapa.get(id)?.protocolo ?? "")) resultado.set(id, { idProcedimento: id, situacao: "ja-estava" });
       }
       pendentes = pendentes.filter((id) => !resultado.has(id));
+      // Bloco com mais de uma página: o processo pode estar na seguinte, e
+      // incluir de novo às cegas duplicaria. Fica para o usuário conferir.
+      if (temPaginaSeguinte(atual)) {
+        for (const id of pendentes) {
+          resultado.set(id, {
+            idProcedimento: id,
+            situacao: "nao-confirmado",
+            erro: `N\u00E3o confirmado: o bloco tem mais de uma p\u00E1gina; confira o bloco ${bloco.numero} antes de incluir.`,
+          });
+        }
+        pendentes = [];
+      }
     }
   }
   if (!pendentes.length) return pedidos.map((id) => resultado.get(id) as ResultadoInclusao);
@@ -288,8 +314,8 @@ export async function incluirProcessosEmBlocoInterno(
   }
   form.definir(valores);
 
-  const falhar = (mensagem: string) => {
-    for (const id of pendentes) resultado.set(id, { idProcedimento: id, situacao: "erro", erro: mensagem });
+  const falhar = (situacao: "erro" | "nao-confirmado", mensagem: string) => {
+    for (const id of pendentes) resultado.set(id, { idProcedimento: id, situacao, erro: mensagem });
   };
   let resposta: Pagina | null = null;
   try {
@@ -297,7 +323,8 @@ export async function incluirProcessosEmBlocoInterno(
   } catch (e) {
     const erro = comoErroSei(e);
     if (fatal(erro)) throw erro;
-    falhar(`${erro.message} Confira o bloco ${bloco.numero} antes de repetir.`);
+    // O pedido saiu: rede caída ou página de exceção não dizem se foi gravado.
+    falhar("nao-confirmado", `N\u00E3o confirmado: ${erro.message} Confira o bloco ${bloco.numero} antes de repetir.`);
   }
   if (resposta) {
     const validacao = resposta.doc.querySelector("#txaInfraValidacao")?.textContent?.trim() ?? "";
@@ -305,20 +332,22 @@ export async function incluirProcessosEmBlocoInterno(
     const confirmou =
       p.get("acao") === "rel_bloco_protocolo_listar" && p.get("acao_origem") === "rel_bloco_protocolo_cadastrar" && p.get("id_bloco") === alvo;
     if (!confirmou) {
-      falhar(validacao || `O SEI n\u00E3o confirmou a inclus\u00E3o no bloco ${bloco.numero}.`);
+      // Com mensagem de validação o SEI recusou (nada gravado); sem ela, não se sabe.
+      if (validacao) falhar("erro", validacao);
+      else falhar("nao-confirmado", `N\u00E3o confirmado: o SEI n\u00E3o confirmou a inclus\u00E3o; confira o bloco ${bloco.numero}.`);
     } else {
       const linhas = linhasDoBloco(resposta);
       // Depois do POST não se lança: a inclusão pode ter acontecido, e quem chamou precisa saber de cada processo.
-      if (!linhas) falhar(`N\u00E3o confirmado: a tela do bloco ${bloco.numero} n\u00E3o foi reconhecida; confira o bloco ${bloco.numero}.`);
-      const ausente = temPaginaSeguinte(resposta)
-        ? `N\u00E3o confirmado: o bloco tem mais de uma p\u00E1gina; confira o bloco ${bloco.numero}.`
-        : validacao || `O SEI n\u00E3o mostrou o processo no bloco ${bloco.numero} depois da inclus\u00E3o.`;
+      if (!linhas) falhar("nao-confirmado", `N\u00E3o confirmado: a tela do bloco ${bloco.numero} n\u00E3o foi reconhecida; confira o bloco ${bloco.numero}.`);
+      const ausente: ResultadoInclusao = temPaginaSeguinte(resposta)
+        ? { idProcedimento: "", situacao: "nao-confirmado", erro: `N\u00E3o confirmado: o bloco tem mais de uma p\u00E1gina; confira o bloco ${bloco.numero}.` }
+        : { idProcedimento: "", situacao: "erro", erro: validacao || `O SEI n\u00E3o mostrou o processo no bloco ${bloco.numero} depois da inclus\u00E3o.` };
       for (const id of linhas ? pendentes : []) {
         resultado.set(
           id,
           noBloco(linhas ?? [], id, mapa.get(id)?.protocolo ?? "")
             ? { idProcedimento: id, situacao: "incluido" }
-            : { idProcedimento: id, situacao: "erro", erro: ausente },
+            : { ...ausente, idProcedimento: id },
         );
       }
     }
