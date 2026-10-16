@@ -18,6 +18,11 @@ import {
   type EnvelopeAgente,
   type Retrato,
 } from "../src/arquivo/envelope";
+import { adaptadorAgente } from "../src/arquivo/adaptador";
+import { mudancas, type FontesRetrato } from "../src/arquivo/retrato";
+import { areaMemoria } from "@comum/armazenamento/area";
+import { MENSAGENS_ARQUIVO, SincroniaArquivo, type ArquivoSync } from "@comum/sincronia/arquivo";
+import type { Regra } from "../src/painel/regras";
 import type { Conector } from "../src/mcp/conectores";
 import type { ConversaSalva } from "../src/painel/historico";
 import type { Config } from "../src/painel/main";
@@ -396,8 +401,145 @@ export function verificarArquivoAgente(): void {
   }
 }
 
+// ------------------------------------------------------------ adaptador com fontes falsas
+
+/** Um "computador": o retrato e o diário em memória, contando as aplicações. */
+function computador(inicial: Retrato, segredos = false): FontesRetrato & { r: Retrato; d: Diario; aplicacoes: number } {
+  const c = {
+    r: structuredClone(inicial),
+    d: {} as Diario,
+    aplicacoes: 0,
+    lerRetrato: async () => structuredClone(c.r),
+    aplicar: async (_antes: Retrato, depois: Retrato) => {
+      c.aplicacoes++;
+      c.r = structuredClone(depois);
+    },
+    lerDiario: async () => structuredClone(c.d),
+    gravarDiario: async (d: Diario) => {
+      c.d = structuredClone(d);
+    },
+    segredos: async () => segredos,
+  };
+  return c;
+}
+
+/** O arquivo em memória, contando as gravações. */
+function arquivoMemoria(texto = ""): ArquivoSync & { texto: string; gravacoes: number } {
+  const a = {
+    texto,
+    gravacoes: 0,
+    ler: async () => a.texto,
+    gravar: async (t: string) => {
+      a.gravacoes++;
+      a.texto = t;
+    },
+  };
+  return a;
+}
+
+const regra = (r: Partial<Regra> = {}): Regra =>
+  ({ id: "r1", nome: "Sem assinar", ativa: true, efeito: "bloquear", ferramentas: [], mensagem: "nao", ...r }) as Regra;
+
+function sincronia(f: FontesRetrato, arquivo: ArquivoSync, relogio: () => number) {
+  return new SincroniaArquivo({ area: areaMemoria(), chaveStatus: "st", arquivo, adaptador: adaptadorAgente(f, relogio) });
+}
+
+export async function verificarAdaptadorAgente(): Promise<void> {
+  secao("arquivo do agente: adaptador e sincronia");
+  let t = 1_000;
+  const relogio = () => (t += 1_000);
+
+  // arquivo vazio: grava o envelope com a skill daqui
+  {
+    const a = computador(retrato({ skills: [skill()] }));
+    const arq = arquivoMemoria();
+    const s = await sincronia(a, arq, relogio).sincronizar();
+    const env = lerEnvelope(JSON.parse(arq.texto));
+    checar("arquivo vazio: status ok", s.estado === "ok", s);
+    checar("arquivo vazio: grava o envelope com a skill", env?.registros.skills[0]?.id === "s1" && arq.gravacoes === 1, arq.texto.slice(0, 200));
+    checar("arquivo vazio: diario gravado", a.d.skills?.s1 !== undefined, a.d);
+
+    // segunda sincronização sem mudança: não regrava
+    const s2 = await sincronia(a, arq, relogio).sincronizar();
+    checar("sem mudanca: status ok", s2.estado === "ok", s2);
+    checar("sem mudanca: arquivo nao regravado", arq.gravacoes === 1, arq.gravacoes);
+    checar("sem mudanca: local nao reaplicado", a.aplicacoes === 0, a.aplicacoes);
+  }
+
+  // arquivo de outro módulo (Favoritos): ilegível, regravado, local intacto
+  {
+    const a = computador(retrato({ skills: [skill()] }));
+    const antes = JSON.stringify(a.r);
+    const arq = arquivoMemoria(JSON.stringify({ formato: "seipro-favoritos", versao: 1, donos: {} }));
+    const s = await sincronia(a, arq, relogio).sincronizar();
+    checar("outro formato: regravado com a mensagem", s.estado === "ok" && s.mensagem === MENSAGENS_ARQUIVO.regravado, s);
+    checar("outro formato: arquivo vira do agente", lerEnvelope(JSON.parse(arq.texto)) !== null && arq.gravacoes === 1);
+    checar("outro formato: retrato local intacto", JSON.stringify(a.r) === antes && a.aplicacoes === 0);
+  }
+
+  // versão mais nova: erro, arquivo intocado
+  {
+    const a = computador(retrato({ skills: [skill()] }));
+    const original = JSON.stringify({ formato: FORMATO, versao: 2, geradoEm: 1, registros: {} });
+    const arq = arquivoMemoria(original);
+    const s = await sincronia(a, arq, relogio).sincronizar();
+    checar("versao 2: status erro com maisNovo", s.estado === "erro" && s.mensagem === MENSAGENS_ARQUIVO.maisNovo, s);
+    checar("versao 2: arquivo nao gravado", arq.gravacoes === 0 && arq.texto === original);
+    checar("versao 2: local intacto", a.aplicacoes === 0);
+  }
+
+  // dois computadores e um arquivo: criar, propagar, apagar, propagar a exclusão
+  {
+    const arq = arquivoMemoria();
+    const A = computador(retrato({ regras: [regra()] }));
+    const B = computador(retrato());
+    await sincronia(A, arq, relogio).sincronizar();
+    await sincronia(B, arq, relogio).sincronizar();
+    checar("B recebe a regra de A", B.r.listas.regras.length === 1 && B.r.listas.regras[0].id === "r1", B.r.listas.regras);
+    B.r = { ...B.r, listas: { ...B.r.listas, regras: [] } };
+    await sincronia(B, arq, relogio).sincronizar();
+    const lapide = lerEnvelope(JSON.parse(arq.texto))?.registros.regras[0];
+    checar("B apaga: lapide no arquivo", lapide?.apagado === true, lapide);
+    await sincronia(A, arq, relogio).sincronizar();
+    checar("A perde a regra", A.r.listas.regras.length === 0, A.r.listas.regras);
+    const n = arq.gravacoes;
+    await sincronia(A, arq, relogio).sincronizar();
+    await sincronia(B, arq, relogio).sincronizar();
+    checar("depois de convergir, ninguem regrava", arq.gravacoes === n, arq.gravacoes - n);
+  }
+
+  // segredos: a caixa daqui decide; "remover" vale para uma gravação só
+  {
+    const arq = arquivoMemoria();
+    const a = computador(retrato({ conectores: [conector()] }), true);
+    const ad = adaptadorAgente(a, relogio);
+    const sinc = new SincroniaArquivo({ area: areaMemoria(), chaveStatus: "st", arquivo: arq, adaptador: ad });
+    await sinc.sincronizar();
+    checar("caixa marcada: segredos no arquivo", lerEnvelope(JSON.parse(arq.texto))?.segredos?.chave === "sk-aqui");
+    ad.removerSegredosNaProxima();
+    await sinc.sincronizar();
+    checar("remover: segredos fora do arquivo", lerEnvelope(JSON.parse(arq.texto))?.segredos === undefined && !arq.texto.includes("sk-aqui"));
+    await sinc.sincronizar();
+    checar("remover vale uma vez (caixa marcada grava de novo)", lerEnvelope(JSON.parse(arq.texto))?.segredos?.chave === "sk-aqui");
+  }
+
+  // mudancas: só o que mudou vai ser gravado
+  {
+    const antes = retrato({ skills: [skill()], conversas: [conversa(), conversa({ id: "v2" })] });
+    const depois = retrato({ skills: [skill()], regras: [regra()], conversas: [conversa({ titulo: "Outro" }), conversa({ id: "v3" })] });
+    const m = mudancas(antes, depois);
+    checar("mudancas: so as listas alteradas", JSON.stringify(m.listas) === JSON.stringify(["regras"]), m.listas);
+    checar("mudancas: conversas novas e alteradas", JSON.stringify(m.conversas.novas.map((c) => c.id).sort()) === JSON.stringify(["v1", "v3"]), m.conversas);
+    checar("mudancas: conversa removida", JSON.stringify(m.conversas.removidas) === JSON.stringify(["v2"]), m.conversas);
+    checar("mudancas: config e ignorados iguais", !m.config && !m.ignorados);
+    const m2 = mudancas(antes, { ...antes, config: { ...antes.config, instrucoes: "outra" } });
+    checar("mudancas: config alterada", m2.config && m2.listas.length === 0 && m2.conversas.novas.length === 0);
+  }
+}
+
 // Execução avulsa: `npx tsx tests/verificar-arquivo-agente.ts`.
 if (process.argv[1]?.endsWith("verificar-arquivo-agente.ts")) {
   verificarArquivoAgente();
+  await verificarAdaptadorAgente();
   resumo();
 }

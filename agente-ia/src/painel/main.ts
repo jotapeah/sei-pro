@@ -26,7 +26,8 @@ import { cotacaoDolar, type Cotacao } from "./cambio";
 import { sugestoesPara } from "./sugestoes";
 import { inversaDe, motivoSemDesfazer, type AcaoFeita, type ResultadoDeEscrita } from "./desfazer";
 import { avaliarRegras, guardarRegras, listarRegras, recadoDoBloqueio, REGRAS_SUGERIDAS, type Regra } from "./regras";
-import { cabeMaisUma, gastoDeHoje, somarGastoDoDia, SEM_LIMITE, type Limites } from "./gasto";
+import { CHAVE_CONFIG, configPadrao } from "./config";
+import { cabeMaisUma, gastoDeHoje, somarGastoDoDia, type Limites } from "./gasto";
 import { anotar, blocoDeMemoria, guardarMemoria, listarMemoria, MAX_TEXTO, type Lembranca } from "./memoria";
 import {
   alarmesDe,
@@ -119,7 +120,6 @@ type Item =
 
 type ItemAgente = { tipo: "agente"; texto: string; ms?: number };
 
-const CHAVE_CONFIG = "agenteIA_config";
 const CHAVE_SESSAO = "agenteIA_conversa";
 
 const PRIVACIDADE_CURTA =
@@ -186,7 +186,7 @@ function ajudaDoServico(svc: Servico): Node[] {
 class App {
   private readonly raiz = document.getElementById("app")!;
   private readonly ponte = new PontePainel();
-  private config: Config = { reais: true, guardar: true, dias: 30, servico: "openrouter", url: "", chave: "", modelo: MODELO_PADRAO, nomes: true, cnpj: false, ajustes: {}, instrucoes: "", limites: SEM_LIMITE, cache: true, memoria: true, modeloAuxiliar: "" };
+  private config: Config = configPadrao();
   private privacidade = new Pseudonimos();
   private motor: Motor | null = null;
   private transcricao: Item[] = [];
