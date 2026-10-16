@@ -94,7 +94,8 @@ interface ConfigPos {
 }
 
 interface Plano {
-  bloco: { cfg: NonNullable<ConfigPos["bloco"]>; itens: ItemProc[] } | null;
+  /** Uma chamada por bloco (o Aplicar tem um so; o "Tentar de novo" repete cada erro no bloco dele). */
+  blocos: Array<{ cfg: NonNullable<ConfigPos["bloco"]>; itens: ItemProc[] }>;
   processos: Entrada[];
 }
 
@@ -376,7 +377,7 @@ export class PainelPosAcao {
     if (this.rodada) return this.rodada;
     const cfg = this.lerConfig();
     if (!cfg) return Promise.resolve();
-    const plano: Plano = { bloco: null, processos: [] };
+    const plano: Plano = { blocos: [], processos: [] };
     let jaNoBloco = 0;
     let naoConfirmadosNoBloco = 0;
     if (cfg.bloco) {
@@ -395,7 +396,7 @@ export class PainelPosAcao {
         }
         return true;
       });
-      if (itens.length) plano.bloco = { cfg: b, itens };
+      if (itens.length) plano.blocos.push({ cfg: b, itens });
       this.usada.bloco = b;
     }
     const acoes: AcaoProcesso[] = [];
@@ -408,7 +409,7 @@ export class PainelPosAcao {
       this.usada.acompanhar = cfg.acompanhar;
     }
     if (acoes.length) plano.processos = this.alvos.map((item) => ({ item, acoes: [...acoes] }));
-    if (!plano.bloco && !plano.processos.length) {
+    if (!plano.blocos.length && !plano.processos.length) {
       const motivos: string[] = [];
       if (!this.alvos.length) motivos.push("nenhum processo criado com número confirmado");
       if (cfg.bloco && jaNoBloco)
@@ -428,15 +429,27 @@ export class PainelPosAcao {
   repetirFalhas(): Promise<void> {
     if (this.rodada) return this.rodada;
     const comErro = (acao: AcaoPos) => this.alvos.filter((i) => this.estado(i.indice, acao)?.situacao === "erro");
-    const plano: Plano = { bloco: null, processos: [] };
-    const b = this.usada.bloco;
-    const blocoErro = comErro("bloco");
-    if (b && blocoErro.length) plano.bloco = { cfg: b, itens: blocoErro };
+    const plano: Plano = { blocos: [], processos: [] };
+    // Cada erro de bloco volta SO ao bloco a que pertence (o do estado, nunca o ultimo escolhido), um POST por
+    // bloco, e nunca um par que ja ficou nao confirmado naquele bloco.
+    const porBloco = new Map<string, Plano["blocos"][number]>();
+    for (const i of comErro("bloco")) {
+      const e = this.estado(i.indice, "bloco");
+      if (!e?.idBloco || this.naoConfirmados.has(chavePar(e.idBloco, i))) continue;
+      const grupo = porBloco.get(e.idBloco) ?? { cfg: { id: e.idBloco, numero: e.numeroBloco ?? "" }, itens: [] };
+      grupo.itens.push(i);
+      porBloco.set(e.idBloco, grupo);
+    }
+    plano.blocos = [...porBloco.values()];
     for (const item of this.alvos) {
       const acoes = (["marcador", "acompanhar"] as const).filter((a) => this.usada[a] && this.estado(item.indice, a)?.situacao === "erro");
       if (acoes.length) plano.processos.push({ item, acoes });
     }
-    if (!plano.bloco && !plano.processos.length) return Promise.resolve();
+    if (!plano.blocos.length && !plano.processos.length) {
+      this.nota = "Nada a repetir: nenhuma falha que possa ser enviada de novo.";
+      this.desenhar();
+      return Promise.resolve();
+    }
     return this.executar(plano);
   }
 
@@ -452,7 +465,7 @@ export class PainelPosAcao {
     if (this.pendentes.length) {
       const processos = this.pendentes;
       this.pendentes = [];
-      return this.executar({ bloco: null, processos });
+      return this.executar({ blocos: [], processos });
     }
     return Promise.resolve();
   }
@@ -472,7 +485,7 @@ export class PainelPosAcao {
       for (const a of Object.keys(e) as AcaoPos[]) if (e[a]?.situacao === "aguardando") delete e[a];
       if (!Object.keys(e).length) this.estados.delete(indice);
     }
-    if (plano.bloco) for (const i of plano.bloco.itens) this.definir(i, "bloco", { situacao: "aguardando" });
+    for (const b of plano.blocos) for (const i of b.itens) this.definir(i, "bloco", { situacao: "aguardando" });
     for (const p of plano.processos) for (const a of p.acoes) this.definir(p.item, a, { situacao: "aguardando" });
     return this.acompanhar(this.correr(plano));
   }
@@ -490,8 +503,8 @@ export class PainelPosAcao {
   }
 
   private async correr(plano: Plano): Promise<void> {
-    if (plano.bloco) {
-      const parou = await this.rodarBloco(plano.bloco.cfg, plano.bloco.itens);
+    for (const b of plano.blocos) {
+      const parou = await this.rodarBloco(b.cfg, b.itens);
       if (this.destruido) return;
       if (parou) {
         this.motivo = MENSAGEM_SESSAO;

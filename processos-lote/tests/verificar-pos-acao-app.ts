@@ -538,6 +538,53 @@ export async function verificarPosAcaoApp(): Promise<void> {
     );
   }
 
+  secao("Fix 2: Tentar de novo repete cada erro de bloco só no bloco dele, nunca num par não confirmado");
+  {
+    // A=101, B=102. 12: A não confirmado, B erro. 13: A erro, B ok. 12 de novo: A pulado, B incluído.
+    // Tentar de novo: A volta só ao 13 (o bloco do erro), nunca ao 12 (último escolhido, par não confirmado).
+    const m = montarPainel([itemOk(0), itemOk(1)], {
+      bloco: (a, vez) => ({
+        resultados: (a.idsProcedimento as string[]).map((id) => {
+          if (vez === 1)
+            return id === "101"
+              ? { idProcedimento: id, situacao: "nao-confirmado", mensagem: "x" }
+              : { idProcedimento: id, situacao: "erro", mensagem: "falhou no 12" };
+          if (vez === 2)
+            return id === "101"
+              ? { idProcedimento: id, situacao: "erro", mensagem: "falhou no 13" }
+              : { idProcedimento: id, situacao: "incluido" };
+          return { idProcedimento: id, situacao: "incluido" };
+        }),
+      }),
+    });
+    await m.abrir();
+    escolherCombo(m.doc, "Bloco interno", "b7");
+    await m.aplicar();
+    escolherCombo(m.doc, "Bloco interno", "b8");
+    await m.aplicar();
+    escolherCombo(m.doc, "Bloco interno", "b7");
+    await m.aplicar();
+    const resumo = () => m.rpc.de("posAcaoBloco").map((c) => `${c.args.idBloco}:${(c.args.idsProcedimento as string[]).join(",")}`);
+    igual("12, 13, 12 só com B", resumo(), ["b7:101,102", "b8:101,102", "b7:102"]);
+    checar("A com erro no 13", m.p.estado(0, "bloco")?.situacao === "erro" && m.p.estado(0, "bloco")?.idBloco === "b8");
+    await m.repetir();
+    igual("retry: A só no 13", resumo(), ["b7:101,102", "b8:101,102", "b7:102", "b8:101"]);
+    const aNo12 = m.rpc.de("posAcaoBloco").filter((c) => c.args.idBloco === "b7" && (c.args.idsProcedimento as string[]).includes("101"));
+    checar("A no 12 só a primeira vez", aNo12.length === 1, aNo12.length);
+    checar(
+      "coluna de A: incluído no 13 e confira o 12",
+      m.p.depois(itemOk(0)) === "Bloco: ✔ incluído; Bloco: ? não confirmado: confira o bloco 12",
+      m.p.depois(itemOk(0)),
+    );
+    await m.p.repetirFalhas();
+    checar("retry vazio: nenhuma chamada", m.rpc.de("posAcaoBloco").length === 4);
+    checar(
+      "retry vazio troca a nota (sem Nada a enviar velho)",
+      m.texto().includes("Nada a repetir") && !m.texto().includes("Nada a enviar"),
+      m.raiz.querySelector(".pl-pos-status")?.textContent,
+    );
+  }
+
   secao("Fix 1: listas com sessão expirada não ficam guardadas");
   {
     const m = montarPainel([itemOk(0)], { opcoes: (_a, vez) => (vez === 1 ? { ...OPCOES, blocos: [], parar: true } : OPCOES) });
