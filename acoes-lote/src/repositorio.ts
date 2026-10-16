@@ -24,7 +24,9 @@ export class RepositorioAcoes {
   async doProcesso(idProcedimento: string): Promise<LoteAcoes | null> {
     const k = this.chave(idProcedimento);
     const v = (await this.area.obter(k))[k];
-    return v && typeof v === "object" ? (v as LoteAcoes) : null;
+    // Registro cortado ou de outra versão não pode derrubar quem retoma: vira "sem lote".
+    const o = v as Partial<LoteAcoes> | null | undefined;
+    return o && typeof o === "object" && typeof o.id === "string" && Array.isArray(o.planos) ? (o as LoteAcoes) : null;
   }
 
   /** Remove o lote com esse id, onde estiver (a chave é por processo; o id só se acha olhando os registros). */

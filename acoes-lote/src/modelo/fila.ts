@@ -58,8 +58,9 @@ export function validarFila(etapas: ParamsEtapa[]): string[] {
     if (e.acao === "assinar" && vazio(e.cargo)) erros.push("Escolha o cargo da assinatura.");
     if (e.acao === "alterar-dados") {
       const algo =
-        e.descricao !== undefined ||
-        e.observacao !== undefined ||
+        // Descrição e observação em branco significam "manter o atual": só preenchidas contam como mudança.
+        !vazio(e.descricao) ||
+        !vazio(e.observacao) ||
         e.nivel !== undefined ||
         (e.interessados?.itens.length ?? 0) > 0 ||
         (e.assuntos?.itens.length ?? 0) > 0;

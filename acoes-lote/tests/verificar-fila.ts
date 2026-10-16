@@ -59,6 +59,14 @@ export function verificarFila(): void {
   igual("alterar-dados com lista vazia", validarFila([{ acao: "alterar-dados", interessados: { modo: "acrescentar", itens: [] } }]), [
     "Nada para alterar.",
   ]);
+  for (const v of ["", "  "]) {
+    igual(`descrição em branco (${JSON.stringify(v)}) mantém o atual`, validarFila([{ acao: "alterar-dados", descricao: v }]), [
+      "Nada para alterar.",
+    ]);
+    igual(`observação em branco (${JSON.stringify(v)}) mantém o atual`, validarFila([{ acao: "alterar-dados", observacao: v }]), [
+      "Nada para alterar.",
+    ]);
+  }
   igual("alterar-dados com observação", validarFila([{ acao: "alterar-dados", observacao: "x" }]), []);
 
   secao("Fila: plano por documento");
@@ -95,14 +103,16 @@ export function verificarFila(): void {
   );
   const p5 = planejar([linha({ id: "5", assinado: false })], [cancAss], false);
   igual("sem assinar antes: pulado", p5[0]?.etapas[0]?.situacao, "pulado");
-  const p6 = planejar([linha({ id: "6", assinado: true })], [cancAss, assinar], false);
+  const p6 = planejar([linha({ id: "6", assinado: true })], [cancAss, cancAss], false);
   igual(
-    "cancelar-assinatura limpa o assinado (sem efeito em assinar)",
+    "cancelar-assinatura limpa o assinado: a segunda é pulada",
     p6[0]?.etapas.map((e) => e.situacao),
-    ["pendente", "pendente"],
+    ["pendente", "pulado"],
   );
-  const p7 = planejar([linha({ id: "7", assinado: true })], [cancAss, { acao: "alterar-nivel", nivel: "publico" }], false);
-  igual("plano guarda o documento original", p7[0]?.doc.assinado, true);
+  const p7 = planejar([linha({ id: "7", assinado: true })], [cancAss, ciencia], false);
+  igual("plano guarda o documento original, sem os efeitos", p7[0]?.doc.assinado, true);
+  const p7b = planejar([linha({ id: "7b", nivel: "restrito" })], [alterarNivel, ciencia], false);
+  igual("alterar-nivel não altera o doc do plano", p7b[0]?.doc.nivel, "restrito");
 
   const sel = [linha({ id: "a" }), linha({ id: "b", nivel: "sigiloso" })];
   const p8 = planejar(sel, [ciencia], false);

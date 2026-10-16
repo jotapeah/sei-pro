@@ -50,6 +50,10 @@ export async function verificarRepositorio(): Promise<void> {
   igual("outro login não vê", await new RepositorioAcoes(area, "sei.org", "bia").doProcesso("100"), null);
   await r.salvar({ ...lote("L1", "100"), atualizadoEm: 9 });
   igual("salvar substitui", (await r.doProcesso("100"))?.atualizadoEm, 9);
+  await area.gravar({ "acoes-lote/andamento/sei.org|ana/300": { id: "L3" } });
+  igual("registro sem planos vira null", await r.doProcesso("300"), null);
+  await area.gravar({ "acoes-lote/andamento/sei.org|ana/301": { planos: [] } });
+  igual("registro sem id vira null", await r.doProcesso("301"), null);
   await r.descartar("L1");
   igual("descartado", await r.doProcesso("100"), null);
   igual("o outro permanece", (await r.doProcesso("200"))?.id, "L2");
