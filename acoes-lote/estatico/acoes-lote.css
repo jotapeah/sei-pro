@@ -161,3 +161,92 @@ table.al-documentos tr.al-marcada td {
   opacity: 0.5;
   cursor: default;
 }
+
+/* ---------- Tela de configuracao ---------- */
+.al-config {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.al-etapas {
+  display: grid;
+  gap: 8px;
+}
+.al-etapa {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  background: var(--spro-fundo);
+  border: 1px solid var(--spro-borda);
+  border-radius: var(--spro-raio);
+}
+.al-etapa-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.al-etapa-acoes {
+  display: flex;
+  gap: 2px;
+}
+.al-etapa-acoes .spro-botao-icone:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.al-campo,
+.al-lista {
+  display: grid;
+  gap: 4px;
+}
+.al-radios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+.al-radio {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.al-aviso,
+.al-erro {
+  margin: 0;
+  color: var(--spro-perigo, #c62828);
+}
+.al-dica {
+  margin: 0;
+  color: var(--spro-suave);
+  font-size: 12px;
+}
+.al-resultados,
+.al-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.al-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px 2px 8px;
+  background: color-mix(in srgb, var(--spro-destaque) 12%, transparent);
+  border-radius: 999px;
+}
+.al-erros {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--spro-perigo, #c62828);
+}
+.al-erros:empty {
+  display: none;
+}
+.al-rodape {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.al-rodape .spro-botao:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

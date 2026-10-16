@@ -1,7 +1,7 @@
 /**
  * O app das Ações em Lote (a janela dentro do iframe): estado compartilhado entre as telas e a troca delas.
  * Não toca o navegador direto (aba do SEI e fechar chegam por `DepsApp`), e por isso roda inteiro nos testes
- * com linkedom. Nesta etapa só a seleção existe; a configuração é um marcador que a Task 8 substitui.
+ * com linkedom. Seleção e configuração existem; a prévia é um marcador que a Task 9 substitui.
  */
 
 import type { Rpc } from "@comum/ponte/rpc";
@@ -11,6 +11,7 @@ import type { LinhaDoc } from "../modelo/documentos";
 import type { ParamsEtapa, PlanoDoc } from "../modelo/fila";
 import type { Filtro } from "../modelo/filtros";
 import type { ContextoAcoes } from "../pagina/contexto";
+import { montarConfiguracao } from "./configuracao";
 import { montarSelecao } from "./selecao";
 
 export type Tela = "selecao" | "configuracao" | "previa" | "execucao" | "resultado";
@@ -159,10 +160,18 @@ export class AppAcoesLote {
         }),
       );
     } else if (tela === "configuracao") {
-      // Marcador: a Task 8 monta a configuração da fila aqui.
       this.conteudo.replaceChildren(
-        h("p", { class: "al-nota" }, "A configuração da fila será montada na próxima etapa."),
-        h("button", { type: "button", class: "spro-botao", onclick: () => this.mostrar("selecao") }, "Voltar"),
+        montarConfiguracao(this.raiz.ownerDocument, e, {
+          rpc: this.d.rpc,
+          voltar: () => this.mostrar("selecao"),
+          // A prévia é da Task 9: ela recebe a senha por aqui e a guarda só onde decidir (nunca em EstadoApp).
+          previa: () => this.mostrar("previa"),
+        }),
+      );
+    } else if (tela === "previa") {
+      this.conteudo.replaceChildren(
+        h("p", { class: "al-nota" }, "A prévia será montada na próxima etapa."),
+        h("button", { type: "button", class: "spro-botao", onclick: () => this.mostrar("configuracao") }, "Voltar"),
       );
     }
   }
