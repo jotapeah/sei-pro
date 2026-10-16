@@ -1,0 +1,9 @@
+/* Janela de Processos em Lote (html/processos-lote.html). Tokens vem de sei-comum/src/ui/base.css. */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  color: var(--spro-texto);
+  font: 13px / 1.45 var(--spro-fonte);
+  -webkit-font-smoothing: antialiased;
+}
