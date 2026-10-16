@@ -406,12 +406,19 @@ export async function verificarErro403Local(): Promise<void> {
   checar("127.0.0.1 e local", enderecoLocal("http://127.0.0.1:11434/v1"));
   checar("[::1] e local", enderecoLocal("http://[::1]:11434/v1"));
   checar("rede 192.168 e local", enderecoLocal("http://192.168.0.10:11434/v1"));
+  checar("host.docker.internal-like .internal e local", enderecoLocal("http://llm.corp.internal:11434/v1"));
+  checar("169.254 e local", enderecoLocal("http://169.254.1.5/v1"));
+  checar("IPv6 ULA e local", enderecoLocal("http://[fd12:3456::1]:11434/v1"));
+  checar("IPv6 publico nao e local", !enderecoLocal("http://[2001:db8::1]/v1"));
   checar("NVIDIA nao e local", !enderecoLocal("https://integrate.api.nvidia.com/v1"));
   checar("endereco invalido nao e local", !enderecoLocal("nada"));
   {
     const m = mensagemDeErro(403, "", "compativel", null, "http://localhost:11434/v1");
     checar("403 local cita OLLAMA_ORIGINS", /OLLAMA_ORIGINS/.test(m), m);
-    checar("403 local nao culpa a chave", !/chave do .* foi recusada/.test(m), m);
+    checar("403 local nao afirma que a chave foi recusada", !/chave do .* foi recusada/.test(m), m);
+    checar("403 local cobre o Firefox", /moz-extension/.test(m), m);
+    checar("403 local nao presume Ollama: manda conferir a chave se nao for", /Se n\u00E3o for o Ollama/.test(m), m);
+    checar("403 local aponta a documentacao", /CHAVEIA/.test(m), m);
   }
   checar("401 local continua falando da chave", /foi recusada/.test(mensagemDeErro(401, "", "compativel", null, "http://localhost:11434/v1")));
   checar("403 remoto continua falando da chave", /foi recusada/.test(mensagemDeErro(403, "", "compativel", null, "https://api.groq.com/openai/v1")));
@@ -446,6 +453,8 @@ export async function verificarCampoModeloSelect(): Promise<void> {
   checar("openai sempre select", campoModeloEhSelect("openai", true));
   checar("compativel sem catalogo: digitacao", !campoModeloEhSelect("compativel", false));
   checar("compativel com catalogo: select", campoModeloEhSelect("compativel", true));
+  checar("compativel com catalogo e Outro: volta a digitar", !campoModeloEhSelect("compativel", true, true));
+  checar("Outro nao afeta os demais servicos", campoModeloEhSelect("openrouter", true, true));
 }
 
 /** Atalhos de endereço: select em vez de datalist (lista sempre abre completa). */

@@ -13,7 +13,7 @@
 import { Pseudonimos } from "@nucleo/privacidade/anonimizar";
 import { Motor, type TelaAtual } from "../motor/motor";
 import { promptSistema } from "../motor/prompt";
-import { COMPATIVEIS, atalhoDeEndereco, campoModeloEhSelect, conferirChave, criarProvedor, DOC_CHAVES, enderecoDoServico, listarModelos, MODELO_PADRAO, normalizarUrl, SERVICOS, TEMPERATURA_PADRAO, valorSelectEndereco, type Ajustes, type Servico } from "../motor/provedor";
+import { COMPATIVEIS, ENDERECO_OUTRO, atalhoDeEndereco, campoModeloEhSelect, conferirChave, criarProvedor, DOC_CHAVES, enderecoDoServico, listarModelos, MODELO_OUTRO, MODELO_PADRAO, normalizarUrl, SERVICOS, TEMPERATURA_PADRAO, type Ajustes, type Servico } from "../motor/provedor";
 import { RegistroTools } from "../motor/tools";
 import type { DecisaoPlano, InterfaceMotor, Mensagem, PlanoPrevisto, Tarefa, Uso } from "../motor/tipos";
 import { PontePainel } from "../ponte/cliente";
@@ -930,11 +930,12 @@ class App {
       }
     };
 
+    // O modo do endere\u00E7o s\u00F3 muda por escolha no select, nunca pelo que se digita:
+    // se dependesse do texto, o campo sumiria no meio da digita\u00E7\u00E3o ao casar com um atalho.
+    let enderecoLivre = !atalhoDeEndereco(this.config.url);
     const sincronizarUrlAtalho = (): void => {
-      const atalho = atalhoDeEndereco(url.value);
-      urlAtalho.value = valorSelectEndereco(url.value);
-      url.hidden = Boolean(atalho);
-      if (atalho) url.value = atalho.url;
+      urlAtalho.value = enderecoLivre ? ENDERECO_OUTRO : (atalhoDeEndereco(url.value)?.url ?? ENDERECO_OUTRO);
+      url.hidden = !enderecoLivre;
     };
     const campoUrl = h(
       "div",
@@ -967,6 +968,12 @@ class App {
      */
     /** Compatível: true depois de um /models bem-sucedido nesta abertura do modal. */
     let catalogoCompativel = false;
+    /** Compat\u00EDvel com cat\u00E1logo: o usu\u00E1rio escolheu "Outro" para digitar um modelo fora da lista. */
+    let modeloOutro = false;
+    const invalidarCatalogo = (): void => {
+      catalogoCompativel = false;
+      modeloOutro = false;
+    };
 
     const carregarModelos = async (gesto: boolean): Promise<void> => {
       const svc = servico.value as Servico;
@@ -974,7 +981,7 @@ class App {
       // Ler `modelo.value` aqui não serve: o select é reescrito enquanto carrega
       // (e chegou a gravar "Buscando modelos..." como se fosse o modelo).
       const escolhido = (
-        svc === "compativel" && !campoModeloEhSelect(svc, catalogoCompativel) ? modeloLivre.value.trim() : modeloAtual
+        svc === "compativel" && !campoModeloEhSelect(svc, catalogoCompativel, modeloOutro) ? modeloLivre.value.trim() : modeloAtual
       ) || SERVICOS[svc].modeloPadrao || "";
       if (svc === "compativel" && !/^https?:\/\//.test(endereco)) return;
       const origens = [`${new URL(endereco).origin}/*`];
@@ -998,6 +1005,7 @@ class App {
         if (!lista.length) throw new Error("O servi\u00E7o n\u00E3o devolveu nenhum modelo.");
         const comPreco = svc === "openrouter";
         const temEscolhido = lista.some((m) => m.id === escolhido);
+        modeloOutro = false;
         modelo.replaceChildren(
           ...(temEscolhido || !escolhido ? [] : [h("option", { value: escolhido, selected: true }, `${escolhido} (atual)`)]),
           ...lista.map((m) =>
@@ -1007,6 +1015,7 @@ class App {
               comPreco ? `${m.nome} \u2014 US$ ${m.precoEntrada.toFixed(2)} / ${m.precoSaida.toFixed(2)}` : m.nome,
             ),
           ),
+          ...(svc === "compativel" ? [h("option", { value: MODELO_OUTRO }, "Outro (digitar o nome do modelo)")] : []),
         );
         listaModelos.replaceChildren(...lista.map((m) => h("option", { value: m.id })));
         modeloAux.replaceChildren(
@@ -1032,7 +1041,7 @@ class App {
         status.className = "status";
       } catch (e) {
         if (svc === "compativel") {
-          catalogoCompativel = false;
+          invalidarCatalogo();
           listaModelos.replaceChildren();
           ajustarServico();
         }
@@ -1057,10 +1066,11 @@ class App {
       // O datalist filtrava pelo valor atual e escondia as opções com o campo
       // já preenchido; por isso o select toma o lugar dele quando há lista.
       const comSelect = campoModeloEhSelect(svc, catalogoCompativel);
+      const modeloDigitado = !campoModeloEhSelect(svc, catalogoCompativel, modeloOutro);
       modelo.hidden = !comSelect;
       modeloAux.hidden = !comSelect;
       modeloAuxLivre.hidden = comSelect;
-      linhaBuscar.hidden = comSelect || !comp;
+      linhaBuscar.hidden = !modeloDigitado || !comp;
       chave.placeholder = SERVICOS[svc].exemploChave;
       ajudaServico.replaceChildren(...ajudaDoServico(svc));
       const preset = atalhoDeEndereco(url.value);
@@ -1073,7 +1083,7 @@ class App {
       // Trocou de fabricante: o modelo do anterior não existe lá.
       if (svc !== servicoAtual) {
         modeloAtual = svc === this.config.servico ? this.config.modelo : sugestao;
-        catalogoCompativel = false;
+        invalidarCatalogo();
         servicoAtual = svc;
       }
       modeloSugerido = sugestao;
@@ -1083,6 +1093,15 @@ class App {
     let modeloAtual = this.config.modelo;
     let servicoAtual: Servico = this.config.servico;
     modelo.addEventListener("change", () => {
+      if (modelo.value === MODELO_OUTRO) {
+        // "Outro": volta o campo livre, j\u00E1 com o modelo que estava escolhido.
+        modeloOutro = true;
+        modeloLivre.value = modeloAtual;
+        ajustarServico();
+        modeloLivre.focus();
+        modeloLivre.select();
+        return;
+      }
       if (modelo.value) modeloAtual = modelo.value;
     });
     servico.addEventListener("change", () => {
@@ -1091,19 +1110,18 @@ class App {
       if (svc !== "compativel") void carregarModelos(true);
     });
     urlAtalho.addEventListener("change", () => {
-      catalogoCompativel = false;
-      if (urlAtalho.value) {
-        url.value = urlAtalho.value;
-        url.hidden = true;
-      } else {
-        url.hidden = false;
+      invalidarCatalogo();
+      enderecoLivre = !urlAtalho.value;
+      if (enderecoLivre) {
         if (atalhoDeEndereco(url.value)) url.value = "";
-        url.focus();
+      } else {
+        url.value = urlAtalho.value;
       }
       ajustarServico();
+      if (enderecoLivre) url.focus();
     });
     url.addEventListener("input", () => {
-      catalogoCompativel = false;
+      invalidarCatalogo();
       ajustarServico();
     });
     buscar.addEventListener("click", () => void carregarModelos(true));
@@ -1486,7 +1504,7 @@ class App {
     const qtd2 = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
     atualizarResumos = () => {
       const svc = SERVICOS[(servico.value as Servico) ?? this.config.servico];
-      const nomeModelo = (campoModeloEhSelect(servico.value as Servico, catalogoCompativel) ? modelo.value : modeloLivre.value) || this.config.modelo;
+      const nomeModelo = (campoModeloEhSelect(servico.value as Servico, catalogoCompativel, modeloOutro) ? modelo.value : modeloLivre.value) || this.config.modelo;
       resumos.ia.textContent = `${svc.nome.replace(/ \(.*\)$/, "")} \u00B7 ${nomeModelo || "sem modelo"}`;
       const colecoes = this.colecoes.length ? `, ${qtd2(this.colecoes.length, "cole\u00E7\u00E3o", "cole\u00E7\u00F5es")}` : "";
       resumos.sabe.textContent = `${qtd2(this.skills.length, "skill", "skills")}${colecoes} \u00B7 mem\u00F3ria ${usarMemoria.checked ? `com ${qtd2(this.memoria.length, "lembran\u00E7a", "lembran\u00E7as")}` : "desligada"}`;
@@ -1654,7 +1672,7 @@ class App {
       const k = chave.value.trim();
       const enderecoLivre = comp ? normalizarUrl(url.value) : "";
       const endereco = enderecoDoServico(svc, enderecoLivre);
-      const m = campoModeloEhSelect(svc, catalogoCompativel)
+      const m = campoModeloEhSelect(svc, catalogoCompativel, modeloOutro)
         ? modelo.value || modeloAtual || SERVICOS[svc].modeloPadrao || MODELO_PADRAO
         : modeloLivre.value.trim();
       if (!k) return erro("Informe a chave.");

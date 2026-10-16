@@ -221,25 +221,27 @@ export const SERVICOS: Record<Servico, ServicoInfo> = {
   },
 };
 
-/** Atalhos de endereço para o serviço "compatível", para não decorar URL. */
 /**
- * No serviço "compatível" o campo era um `<input list=datalist>`. O datalist
- * do navegador SÓ sugere o que casa com o texto atual: com um modelo já
- * escolhido, o chevron não reabre a lista (o usuário precisava apagar o
- * campo). Com o catálogo carregado, usamos o mesmo `<select>` dos outros
- * serviços — ele sempre mostra todas as opções. Sem catálogo (servidor sem
- * /models, ou ainda sem clicar em Atualizar), o campo livre continua.
+ * No serviço "compatível" o campo de modelo era um `<input list=datalist>`. O
+ * datalist do navegador SÓ sugere o que casa com o texto atual: com um modelo
+ * já escolhido, a setinha não reabria a lista. Com o catálogo carregado usamos
+ * um `<select>`, que sempre mostra tudo; a opção "Outro" (`outro`) devolve o
+ * campo livre para um modelo fora da lista. Sem catálogo (servidor sem
+ * /models, ou ainda sem clicar em Atualizar) o campo livre continua.
  */
-export function campoModeloEhSelect(servico: Servico, catalogoCarregado: boolean): boolean {
-  return servico !== "compativel" || catalogoCarregado;
+export function campoModeloEhSelect(servico: Servico, catalogoCarregado: boolean, outro = false): boolean {
+  return servico !== "compativel" || (catalogoCarregado && !outro);
 }
 
+/** Valor da opção "Outro" no select de modelos (n\u00E3o \u00E9 id de modelo real). */
+export const MODELO_OUTRO = "__outro__";
+
+/** Atalhos de endereço para o serviço "compatível", para não decorar URL. */
 export const COMPATIVEIS: Array<{ nome: string; url: string; ajuda: string }> = [
   { nome: "NVIDIA", url: "https://integrate.api.nvidia.com/v1", ajuda: "Chave nvapi-... de build.nvidia.com. O plano gratuito \u00E9 de avalia\u00E7\u00E3o: os termos da NVIDIA n\u00E3o cobrem uso em produ\u00E7\u00E3o." },
   { nome: "Groq", url: "https://api.groq.com/openai/v1", ajuda: "Chave gsk_... de console.groq.com." },
-  { nome: "Ollama nesta m\u00E1quina", url: "http://localhost:11434/v1", ajuda: "Modelo rodando no pr\u00F3prio computador: nada sai da m\u00E1quina. A chave pode ser qualquer texto. Antes, libere a extens\u00E3o no Ollama: OLLAMA_ORIGINS=chrome-extension://* e reinicie o Ollama (sem isso a conversa falha com 403)." },
+  { nome: "Ollama nesta m\u00E1quina", url: "http://localhost:11434/v1", ajuda: "Modelo rodando no pr\u00F3prio computador: nada sai da m\u00E1quina. A chave pode ser qualquer texto. Antes, libere a extens\u00E3o no Ollama (OLLAMA_ORIGINS) e reinicie-o; sem isso a conversa falha com 403. Passo a passo na documenta\u00E7\u00E3o." },
 ];
-
 
 /** Valor do select de atalhos quando o usuário digita a URL à mão. */
 export const ENDERECO_OUTRO = "";
@@ -439,8 +441,9 @@ export function enderecoLocal(url: string | undefined): boolean {
     return false;
   }
   return (
-    host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") ||
-    host === "::1" || host === "0.0.0.0" || /^127\./.test(host) ||
+    host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal") ||
+    host === "::1" || host === "0.0.0.0" || /^127\./.test(host) || /^169\.254\./.test(host) ||
+    /^f[cd][0-9a-f]{2}:/.test(host) || /^fe[89ab][0-9a-f]:/.test(host) ||
     /^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host)
   );
 }
@@ -455,9 +458,9 @@ export function mensagemDeErro(status: number, corpo: string, servico: Servico =
   const onde = SERVICOS[servico]?.nome.replace(/ \(.*\)$/, "") ?? "servi\u00E7o de IA";
   if (status === 403 && servico === "compativel" && enderecoLocal(url)) {
     return (
-      `O servidor local (${url}) recusou o pedido (403) \u2014 n\u00E3o \u00E9 a chave: servidores locais como o Ollama n\u00E3o conferem chave. ` +
-      "O Ollama recusa pedidos vindos de extens\u00F5es do navegador at\u00E9 que a origem delas seja liberada. " +
-      "Defina OLLAMA_ORIGINS=chrome-extension://* (no Mac: launchctl setenv OLLAMA_ORIGINS \"chrome-extension://*\") e reinicie o Ollama."
+      `O servidor local (${url}) recusou o pedido (403). Se for o Ollama, a causa quase certa n\u00E3o \u00E9 a chave (ele n\u00E3o confere chave): ` +
+      "ele recusa extens\u00F5es do navegador at\u00E9 a origem delas ser liberada. Defina OLLAMA_ORIGINS=chrome-extension://*,moz-extension://* e reinicie o Ollama " +
+      `(passo a passo no Windows, Mac e Linux: ${DOC_CHAVES}#outro-servico-compativel). Se n\u00E3o for o Ollama, confira a chave e as regras de acesso do servidor.`
     );
   }
   if (status === 401 || status === 403) return `A chave do ${onde} foi recusada. Confira a chave nas configura\u00E7\u00F5es do agente.`;

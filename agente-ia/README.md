@@ -99,7 +99,9 @@ Com a permissão de host o Chrome não faz checagem de CORS, mas ainda manda
 `Origin: chrome-extension://<id>` no POST (no GET de `/models`, não). O Ollama
 devolve 403 para origem fora de `OLLAMA_ORIGINS` — e `chrome-extension://` não
 está no padrão. Por isso um 403 de endereço local vira, em `mensagemDeErro`,
-o aviso para liberar `OLLAMA_ORIGINS`, e não "chave recusada".
+o aviso para liberar `OLLAMA_ORIGINS` (com `moz-extension://*` também, no Firefox),
+e não "chave recusada". O aviso não presume Ollama: em endereço local pode ser
+outro servidor, e a mensagem manda conferir a chave nesse caso.
 
 ## Painel (UI)
 
