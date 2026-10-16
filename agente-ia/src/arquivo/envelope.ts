@@ -77,6 +77,12 @@ export interface Marca {
   em: number;
   h: string;
   apagado?: true;
+  /**
+   * Só em conversas: o `quando` da conversa. A poda do histórico apaga pela
+   * idade da CONVERSA, não pela data em que ela mudou neste diário — e é por
+   * aqui que `carimbar` reconhece a poda e não deixa lápide.
+   */
+  q?: number;
 }
 
 /** Tipo (`config`, `ignorados` ou um `TipoLista`) → id → marca. */
@@ -211,24 +217,27 @@ function limiteDaPoda(c: Config, agora: number): number | null {
  * hash DEPOIS da primeira vista é edição daqui.
  */
 function carimbarLista(
-  itens: Array<[string, unknown, number]>,
+  itens: Array<[string, unknown, number, number?]>,
   marcas: Record<string, Marca> | undefined,
   agora: number,
   podaAntesDe: number | null,
 ): Record<string, Marca> {
   const novo: Record<string, Marca> = {};
   const presentes = new Set<string>();
-  for (const [id, dado, primeiraVista] of itens) {
+  for (const [id, dado, primeiraVista, q] of itens) {
     presentes.add(id);
     const h = hash(dado);
     const antes = marcas?.[id];
-    novo[id] = !antes ? { em: primeiraVista, h } : !antes.apagado && antes.h === h ? antes : { em: agora, h };
+    const comQ = (m: Marca): Marca => (q === undefined ? m : { ...m, q });
+    novo[id] = comQ(!antes ? { em: primeiraVista, h } : !antes.apagado && antes.h === h ? antes : { em: agora, h });
   }
   for (const [id, marca] of Object.entries(marcas ?? {})) {
     if (presentes.has(id)) continue;
     // Poda local: a marca velha sai do diário sem deixar lápide.
-    if (podaAntesDe !== null && marca.em < podaAntesDe) continue;
-    novo[id] = marca.apagado ? marca : { em: agora, h: "", apagado: true };
+    // Poda local: a idade é a da conversa (`q`) quando conhecida, a mesma
+    // regra de `podar` no histórico; sem `q`, a do carimbo.
+    if (podaAntesDe !== null && (marca.q ?? marca.em) < podaAntesDe) continue;
+    novo[id] = marca.apagado ? marca : limpo({ em: agora, h: "", apagado: true as const, q: marca.q });
   }
   return novo;
 }
@@ -250,7 +259,10 @@ export function carimbar(r: Retrato, d: Diario, agora: number): Diario {
         // a primeira vista. Com 0, a marca de toda conversa nunca editada
         // ficaria abaixo do prazo da poda, e apagar a conversa não deixaria
         // lápide — o arquivo a devolveria na leitura seguinte.
-        r.listas.conversas.map((c) => [c.id, c, typeof c.quando === "number" ? c.quando : 0]),
+        r.listas.conversas.map((c) => {
+          const quando = typeof c.quando === "number" ? c.quando : undefined;
+          return [c.id, c, quando ?? 0, quando];
+        }),
         d.conversas,
         agora,
         limiteDaPoda(r.config, agora),
@@ -455,7 +467,9 @@ export function mesclar(
   for (const [tipo, vindos] of vindosPorTipo) {
     for (const item of listas[tipo]) {
       const em = vindos.get(idDe(item));
-      if (em !== undefined) diario[tipo] = { ...diario[tipo], [idDe(item)]: { em, h: hash(paraArquivo(tipo, item)) } };
+      if (em === undefined) continue;
+      const q = tipo === "conversas" ? (item as Partial<ConversaSalva>).quando : undefined;
+      diario[tipo] = { ...diario[tipo], [idDe(item)]: limpo({ em, h: hash(paraArquivo(tipo, item)), q: typeof q === "number" ? q : undefined }) };
     }
   }
   if (configVence) diario.config = { [UNICO]: { em: lido!.config!.em, h: hash(configParaSync(config)) } };

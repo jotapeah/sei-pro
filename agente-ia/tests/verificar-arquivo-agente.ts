@@ -202,6 +202,20 @@ export function verificarArquivoAgente(): void {
     const semPrazo = carimbar(retrato({ config: { dias: 0 } }), dConv, agora);
     checar("com dias=0 a exclusao velha tambem vira lapide", semPrazo.conversas?.v1?.apagado === true);
 
+    // poda pela idade da conversa (quando), não pela data do carimbo
+    const vista = carimbar(retrato({ conversas: [conversa({ quando: 0 })] }), diario(), 0);
+    const editadaDepois = carimbar(retrato({ conversas: [conversa({ quando: 1 * DIA, titulo: "editada" })] }), vista, 6 * DIA);
+    checar("edicao da conversa carimba a data da mescla", editadaDepois.conversas.v1.em === 6 * DIA && editadaDepois.conversas.v1.q === 1 * DIA, editadaDepois.conversas.v1);
+    const podadaPeloQuando = carimbar(retrato(), editadaDepois, 33 * DIA);
+    checar("conversa podada pelo quando nao vira lapide", podadaPeloQuando.conversas.v1 === undefined, podadaPeloQuando.conversas);
+    const apagadaDentroDoPrazo = carimbar(retrato(), editadaDepois, 20 * DIA);
+    checar("mas apagada dentro do prazo vira lapide", apagadaDentroDoPrazo.conversas.v1?.apagado === true);
+    // a mesma coisa quando a conversa veio do arquivo
+    const envConvLa = envelopeEm(retrato({ conversas: [conversa({ quando: 1 * DIA, titulo: "de la" })] }), 6 * DIA);
+    const veio = mesclar(retrato(), diarioEm(retrato(), 5), envConvLa, { agora: 6 * DIA, segredos: false });
+    checar("conversa do arquivo guarda o quando na marca", veio.diario.conversas.v1?.q === 1 * DIA && veio.diario.conversas.v1.em === 6 * DIA, veio.diario.conversas.v1);
+    checar("e e podada sem lapide", carimbar(retrato(), veio.diario, 33 * DIA).conversas.v1 === undefined);
+
     // g) guardar=false: não importa nem exporta as daqui
     const envConv = mesclar(retrato({ conversas: [conversa({ id: "la", quando: 900 })] }), diario(), null, { agora: 900, segredos: false }).envelope;
     // A config daqui tem data (editada em 950): senão a do arquivo, em 0, venceria e religaria o "guardar".
