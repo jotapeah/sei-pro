@@ -102,6 +102,15 @@ function retrato(p: Partial<Listas> & { config?: Partial<Config> } = {}): Retrat
 
 const diario = (): Diario => ({});
 
+/** O diário do retrato com todas as marcas no carimbo `em` (como se editadas em `em`). */
+function diarioEm(r: Retrato, em: number): Diario {
+  const d = carimbar(r, diario(), 0);
+  return Object.fromEntries(Object.entries(d).map(([t, marcas]) => [t, Object.fromEntries(Object.entries(marcas).map(([id, m]) => [id, { ...m, em }]))]));
+}
+
+/** O envelope que um computador com este retrato, tudo editado em `em`, gravaria. */
+const envelopeEm = (r: Retrato, em: number): EnvelopeAgente => mesclar(r, diarioEm(r, em), null, { agora: em, segredos: false }).envelope;
+
 export function verificarArquivoAgente(): void {
   secao("arquivo do agente: exportar, carimbar e lapides");
   // a) exportar do zero
@@ -115,9 +124,10 @@ export function verificarArquivoAgente(): void {
 
   // b) carimbar é idempotente
   const d1 = carimbar(retrato({ skills: [skill()] }), diario(), 100);
-  checar("carimbo estavel", carimbar(retrato({ skills: [skill()] }), d1, 200).skills.s1.em === 100);
+  checar("primeira vista carimba 0 (sem data conhecida)", d1.skills.s1.em === 0 && d1.config._.em === 0 && d1.ignorados._.em === 0, d1);
+  checar("carimbo estavel", carimbar(retrato({ skills: [skill()] }), d1, 200).skills.s1.em === 0);
   checar("edicao local carimba de novo", carimbar(retrato({ skills: [skill({ nome: "Outro" })] }), d1, 200).skills.s1.em === 200);
-  checar("carimbar nao altera o diario recebido", d1.skills.s1.em === 100 && !d1.skills.s1.apagado);
+  checar("carimbar nao altera o diario recebido", d1.skills.s1.em === 0 && !d1.skills.s1.apagado);
 
   // c) exclusão local vira lápide e o arquivo não ressuscita
   const r2 = mesclar(retrato({ skills: [] }), d1, r1.envelope, { agora: 300, segredos: false });
@@ -134,8 +144,8 @@ export function verificarArquivoAgente(): void {
   secao("arquivo do agente: mais recente vence");
   {
     // e) edição mais nova do arquivo vence; mais velha perde
-    const dLocal = carimbar(retrato({ skills: [skill()] }), diario(), 100);
-    const envNovo = mesclar(retrato({ skills: [skill({ nome: "De la" })] }), diario(), null, { agora: 500, segredos: false }).envelope;
+    const dLocal = diarioEm(retrato({ skills: [skill()] }), 100);
+    const envNovo = envelopeEm(retrato({ skills: [skill({ nome: "De la" })] }), 500);
     const vence = mesclar(retrato({ skills: [skill()] }), dLocal, envNovo, { agora: 600, segredos: false });
     checar("edicao mais nova do arquivo entra", vence.retrato.listas.skills[0]?.nome === "De la" && vence.mudouLocal);
     checar("diario fica com o carimbo do arquivo", vence.diario.skills.s1.em === 500);
@@ -145,16 +155,39 @@ export function verificarArquivoAgente(): void {
       mesclar(vence.retrato, vence.diario, vence.envelope, { agora: 700, segredos: false }).diario.skills.s1.em === 500,
     );
 
-    const envVelho = mesclar(retrato({ skills: [skill({ nome: "Antigo" })] }), diario(), null, { agora: 50, segredos: false }).envelope;
+    const envVelho = envelopeEm(retrato({ skills: [skill({ nome: "Antigo" })] }), 50);
     const perde = mesclar(retrato({ skills: [skill()] }), dLocal, envVelho, { agora: 600, segredos: false });
     checar("edicao mais velha do arquivo perde", perde.retrato.listas.skills[0]?.nome === "Despacho" && !perde.mudouLocal);
     checar("e o envelope leva a daqui", (perde.envelope.registros.skills[0]?.dado as SkillUsuario).nome === "Despacho" && perde.envelope.registros.skills[0]?.em === 100);
 
-    const empate = mesclar(retrato({ skills: [skill()] }), dLocal, mesclar(retrato({ skills: [skill({ nome: "Empate" })] }), diario(), null, { agora: 100, segredos: false }).envelope, { agora: 600, segredos: false });
+    const empate = mesclar(retrato({ skills: [skill()] }), dLocal, envelopeEm(retrato({ skills: [skill({ nome: "Empate" })] }), 100), { agora: 600, segredos: false });
     checar("empate fica com o local", empate.retrato.listas.skills[0]?.nome === "Despacho");
 
     const soLa = mesclar(retrato(), diario(), envNovo, { agora: 600, segredos: false });
     checar("registro que so existe no arquivo entra", soLa.retrato.listas.skills[0]?.id === "s1" && soLa.mudouLocal);
+  }
+
+  secao("arquivo do agente: primeira vista");
+  {
+    // 1) computador B recebeu s1 pelo storage.sync (sem texto) e nunca viu o arquivo
+    const envA = mesclar(retrato({ skills: [skill()] }), diario(), null, { agora: 100, segredos: false }).envelope;
+    checar("arquivo novo leva carimbo 0", envA.registros.skills[0]?.em === 0 && envA.config?.em === 0);
+    const b = mesclar(retrato({ skills: [skill({ texto: "" })] }), diario(), envA, { agora: 200, segredos: false });
+    checar("B recebe o texto da skill do arquivo", b.retrato.listas.skills[0]?.texto === "texto completo da skill" && b.mudouLocal, b.retrato.listas.skills[0]);
+    checar("e o arquivo nao perde o texto", (b.envelope.registros.skills[0]?.dado as SkillUsuario).texto === "texto completo da skill");
+    checar("mescla seguinte em B fica estavel", !mesclar(b.retrato, b.diario, b.envelope, { agora: 300, segredos: false }).mudouLocal);
+
+    // 2) computador novo, config padrao, diario vazio
+    const envX = mesclar(retrato({ config: { instrucoes: "X", chave: "sk-la" } }), diario(), null, { agora: 100, segredos: false }).envelope;
+    const novo = mesclar(retrato(), diario(), envX, { agora: 200, segredos: false });
+    checar("config do arquivo entra no computador novo", novo.retrato.config.instrucoes === "X");
+    checar("com a chave local preservada", novo.retrato.config.chave === "sk-aqui");
+
+    // 3) edição local depois da primeira vista vence o arquivo em 0
+    const d0 = carimbar(retrato({ skills: [skill()] }), diario(), 100);
+    const editado = mesclar(retrato({ skills: [skill({ nome: "Editado aqui" })] }), d0, envA, { agora: 400, segredos: false });
+    checar("edicao local carimba agora", editado.diario.skills.s1.em === 400);
+    checar("e vence o arquivo em 0", editado.retrato.listas.skills[0]?.nome === "Editado aqui" && (editado.envelope.registros.skills[0]?.dado as SkillUsuario).nome === "Editado aqui");
   }
 
   secao("arquivo do agente: conversas");
@@ -164,14 +197,16 @@ export function verificarArquivoAgente(): void {
     const agora = 1 + 40 * DIA;
     const podado = carimbar(retrato(), dConv, agora);
     checar("poda nao gera lapide", podado.conversas?.v1 === undefined, podado.conversas);
-    const exclusaoRecente = carimbar(retrato(), carimbar(retrato({ conversas: [conversa()] }), diario(), agora - DIA), agora);
-    checar("exclusao recente de conversa vira lapide", exclusaoRecente.conversas.v1.apagado === true);
+    const exclusaoRecente = carimbar(retrato(), carimbar(retrato({ conversas: [conversa({ quando: agora - DIA })] }), diario(), agora - DIA), agora);
+    checar("exclusao recente de conversa vira lapide", exclusaoRecente.conversas?.v1?.apagado === true);
     const semPrazo = carimbar(retrato({ config: { dias: 0 } }), dConv, agora);
-    checar("com dias=0 a exclusao velha tambem vira lapide", semPrazo.conversas.v1.apagado === true);
+    checar("com dias=0 a exclusao velha tambem vira lapide", semPrazo.conversas?.v1?.apagado === true);
 
     // g) guardar=false: não importa nem exporta as daqui
     const envConv = mesclar(retrato({ conversas: [conversa({ id: "la", quando: 900 })] }), diario(), null, { agora: 900, segredos: false }).envelope;
-    const naoGuarda = mesclar(retrato({ config: { guardar: false }, conversas: [conversa({ id: "aqui", quando: 900 })] }), diario(), envConv, {
+    // A config daqui tem data (editada em 950): senão a do arquivo, em 0, venceria e religaria o "guardar".
+    const semGuardar = retrato({ config: { guardar: false }, conversas: [conversa({ id: "aqui", quando: 900 })] });
+    const naoGuarda = mesclar(semGuardar, diarioEm(semGuardar, 950), envConv, {
       agora: 1000,
       segredos: false,
     });
@@ -187,7 +222,7 @@ export function verificarArquivoAgente(): void {
 
     // h) conversa do arquivo mais velha que o prazo daqui
     const envVelha = mesclar(retrato({ config: { dias: 0 }, conversas: [conversa({ id: "velha", quando: 1 })] }), diario(), null, { agora: 2, segredos: false }).envelope;
-    const prazo = mesclar(retrato(), diario(), envVelha, { agora: 1 + 40 * DIA, segredos: false });
+    const prazo = mesclar(retrato(), diarioEm(retrato(), 5), envVelha, { agora: 1 + 40 * DIA, segredos: false });
     checar("conversa velha do arquivo nao entra no retrato", prazo.retrato.listas.conversas.length === 0 && !prazo.mudouLocal);
     checar("mas fica no envelope", prazo.envelope.registros.conversas[0]?.id === "velha" && prazo.envelope.registros.conversas[0].dado !== undefined);
     const quemGuarda = mesclar(retrato({ config: { dias: 0 } }), diario(), envVelha, { agora: 1 + 40 * DIA, segredos: false });
@@ -217,7 +252,7 @@ export function verificarArquivoAgente(): void {
     checar("token do arquivo entra quando falta aqui", auth?.tipo === "token" && auth.valor === "Bearer segredo", auth);
 
     const viaSync = retrato({ config: { chave: "" }, conectores: [conector({ auth: { tipo: "nenhuma" } })] });
-    const volta = mesclar(viaSync, carimbar(viaSync, diario(), 300), com.envelope, { agora: 300, segredos: true });
+    const volta = mesclar(viaSync, diarioEm(viaSync, 300), com.envelope, { agora: 300, segredos: true });
     const auth2 = volta.retrato.listas.conectores[0]?.auth;
     checar("conector que chegou sem autenticacao volta a token", auth2?.tipo === "token" && auth2.cabecalho === "Authorization" && auth2.valor === "Bearer segredo", auth2);
 
@@ -236,11 +271,8 @@ export function verificarArquivoAgente(): void {
     checar("remover segredos tira do envelope", removido.envelope.segredos === undefined && !JSON.stringify(removido.envelope).includes("sk-aqui"));
 
     // o token do conector daqui sobrevive à versão do arquivo que vence
-    const dCon = carimbar(retrato({ conectores: [conector()] }), diario(), 100);
-    const envRenomeado = mesclar(retrato({ conectores: [conector({ nome: "Renomeado", auth: { tipo: "token", cabecalho: "Authorization", valor: "" } })] }), diario(), null, {
-      agora: 500,
-      segredos: false,
-    }).envelope;
+    const dCon = diarioEm(retrato({ conectores: [conector()] }), 100);
+    const envRenomeado = envelopeEm(retrato({ conectores: [conector({ nome: "Renomeado", auth: { tipo: "token", cabecalho: "Authorization", valor: "" } })] }), 500);
     const preservado = mesclar(retrato({ conectores: [conector()] }), dCon, envRenomeado, { agora: 600, segredos: false });
     const auth3 = preservado.retrato.listas.conectores[0];
     checar("versao do arquivo entra sem apagar o token daqui", auth3?.nome === "Renomeado" && auth3.auth.tipo === "token" && auth3.auth.valor === "Bearer segredo", auth3);
@@ -249,20 +281,20 @@ export function verificarArquivoAgente(): void {
   secao("arquivo do agente: config e ignorados");
   {
     // l) config: instruções mais novas do arquivo entram; chave local preservada
-    const dCfg = carimbar(retrato(), diario(), 100);
-    const envCfg = mesclar(retrato({ config: { instrucoes: "de la", chave: "sk-de-la" } }), diario(), null, { agora: 500, segredos: false }).envelope;
+    const dCfg = diarioEm(retrato(), 100);
+    const envCfg = envelopeEm(retrato({ config: { instrucoes: "de la", chave: "sk-de-la" } }), 500);
     const cfg = mesclar(retrato(), dCfg, envCfg, { agora: 600, segredos: false });
     checar("instrucoes mais novas do arquivo entram", cfg.retrato.config.instrucoes === "de la" && cfg.mudouLocal);
     checar("chave daqui preservada", cfg.retrato.config.chave === "sk-aqui");
     checar("a chave de la nao estava no arquivo", !JSON.stringify(envCfg).includes("sk-de-la"));
-    const cfgVelha = mesclar(retrato(), dCfg, mesclar(retrato({ config: { instrucoes: "velha" } }), diario(), null, { agora: 50, segredos: false }).envelope, {
+    const cfgVelha = mesclar(retrato(), dCfg, envelopeEm(retrato({ config: { instrucoes: "velha" } }), 50), {
       agora: 600,
       segredos: false,
     });
     checar("config mais velha do arquivo perde", cfgVelha.retrato.config.instrucoes === "assim");
 
     const ign = { f1: [{ etapaId: "e1", quando: 5 }] };
-    const envIgn = mesclar({ ...retrato(), ignorados: ign }, diario(), null, { agora: 500, segredos: false }).envelope;
+    const envIgn = envelopeEm({ ...retrato(), ignorados: ign }, 500);
     const comIgn = mesclar(retrato(), dCfg, envIgn, { agora: 600, segredos: false });
     checar("ignorados mais novos do arquivo entram", JSON.stringify(comIgn.retrato.ignorados) === JSON.stringify(ign));
   }

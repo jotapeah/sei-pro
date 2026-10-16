@@ -176,15 +176,29 @@ function limiteDaPoda(c: Config, agora: number): number | null {
   return c.dias > 0 ? agora - c.dias * DIA : null;
 }
 
-/** Uma lista contra o diário: hash diferente carimba; id que sumiu vira lápide. */
-function carimbarLista(itens: Array<[string, unknown]>, marcas: Record<string, Marca> | undefined, agora: number, podaAntesDe: number | null): Record<string, Marca> {
+/**
+ * Uma lista contra o diário: hash diferente carimba; id que sumiu vira lápide.
+ *
+ * Registro visto pela PRIMEIRA vez (sem marca no diário) não ganha `agora`,
+ * ganha `primeiraVista` — por padrão 0, "sem data conhecida". Sem isso, um
+ * item que acabou de chegar pelo `storage.sync` (skill sem o texto, rotina sem
+ * o histórico) venceria a versão completa do arquivo só por ter sido visto
+ * agora, e o outro computador perderia o que só ele tinha. Só uma mudança de
+ * hash DEPOIS da primeira vista é edição daqui.
+ */
+function carimbarLista(
+  itens: Array<[string, unknown, number]>,
+  marcas: Record<string, Marca> | undefined,
+  agora: number,
+  podaAntesDe: number | null,
+): Record<string, Marca> {
   const novo: Record<string, Marca> = {};
   const presentes = new Set<string>();
-  for (const [id, dado] of itens) {
+  for (const [id, dado, primeiraVista] of itens) {
     presentes.add(id);
     const h = hash(dado);
     const antes = marcas?.[id];
-    novo[id] = antes && !antes.apagado && antes.h === h ? antes : { em: agora, h };
+    novo[id] = !antes ? { em: primeiraVista, h } : !antes.apagado && antes.h === h ? antes : { em: agora, h };
   }
   for (const [id, marca] of Object.entries(marcas ?? {})) {
     if (presentes.has(id)) continue;
@@ -201,14 +215,18 @@ function carimbarLista(itens: Array<[string, unknown]>, marcas: Record<string, M
  */
 export function carimbar(r: Retrato, d: Diario, agora: number): Diario {
   const novo: Diario = { ...d };
-  novo.config = carimbarLista([[UNICO, configParaSync(r.config)]], d.config, agora, null);
-  novo.ignorados = carimbarLista([[UNICO, r.ignorados]], d.ignorados, agora, null);
+  novo.config = carimbarLista([[UNICO, configParaSync(r.config), 0]], d.config, agora, null);
+  novo.ignorados = carimbarLista([[UNICO, r.ignorados, 0]], d.ignorados, agora, null);
   for (const tipo of TIPOS) {
     if (tipo === "conversas") {
       // Sem guardar conversas, nada delas entra no diário (nem lápide).
       if (!guardaConversas(r.config)) continue;
       novo.conversas = carimbarLista(
-        r.listas.conversas.map((c) => [c.id, c]),
+        // A conversa tem data conhecida (`quando`, a última atualização): é ela
+        // a primeira vista. Com 0, a marca de toda conversa nunca editada
+        // ficaria abaixo do prazo da poda, e apagar a conversa não deixaria
+        // lápide — o arquivo a devolveria na leitura seguinte.
+        r.listas.conversas.map((c) => [c.id, c, typeof c.quando === "number" ? c.quando : 0]),
         d.conversas,
         agora,
         limiteDaPoda(r.config, agora),
@@ -217,7 +235,7 @@ export function carimbar(r: Retrato, d: Diario, agora: number): Diario {
     }
     const lista = r.listas[tipo] as unknown[];
     novo[tipo] = carimbarLista(
-      lista.map((item) => [idDe(item), paraArquivo(tipo, item)]),
+      lista.map((item) => [idDe(item), paraArquivo(tipo, item), 0]),
       d[tipo],
       agora,
       null,
@@ -237,7 +255,17 @@ interface ResultadoLista {
 }
 
 /**
- * Uma lista contra o arquivo, por id: vence o carimbo maior. A ORDEM é a de
+ * O arquivo vence quando o carimbo dele é maior. No empate fica o daqui, com
+ * uma exceção: os dois em 0 ("sem data conhecida", ver `carimbarLista`) —
+ * aí vence o arquivo, que é a cópia completa; o daqui pode ser só o recorte
+ * que o `storage.sync` trouxe.
+ */
+function venceOArquivo(emArquivo: number, marca: Marca | undefined): boolean {
+  return marca === undefined || emArquivo > marca.em || (emArquivo === 0 && marca.em === 0);
+}
+
+/**
+ * Uma lista contra o arquivo, por id: vence o carimbo maior (`venceOArquivo`). A ORDEM é a de
  * cá; o que só existe no arquivo entra no fim, na ordem de lá.
  */
 function mesclarLista(
@@ -258,7 +286,7 @@ function mesclarLista(
     const local = locaisPorId.get(id);
     const marca = marcas[id];
     const reg = doArq.get(id);
-    const venceArquivo = reg !== undefined && (marca === undefined || reg.em > marca.em);
+    const venceArquivo = reg !== undefined && venceOArquivo(reg.em, marca);
     if (venceArquivo) {
       registros.push(reg);
       if (!aceitar(reg)) {
@@ -309,14 +337,14 @@ export function mesclar(
   const listas = { ...local.listas } as Record<TipoLista, unknown[]>;
   const vindosPorTipo = new Map<TipoLista, Map<string, number>>();
 
-  // -- config e ignorados: um item só, vence o carimbo maior.
+  // -- config e ignorados: um item só, mesma regra das listas.
   const marcaConfig = carimbado.config[UNICO];
-  const configVence = lido?.config !== undefined && lido.config.em > marcaConfig.em;
+  const configVence = lido?.config !== undefined && venceOArquivo(lido.config.em, marcaConfig);
   let config = configVence ? configDoSync(lido!.config!.dado as unknown as Record<string, unknown>, local.config) : local.config;
   const envConfig: Unico<Omit<Config, "chave">> = configVence ? lido!.config! : { em: marcaConfig.em, dado: configParaSync(local.config) };
 
   const marcaIgn = carimbado.ignorados[UNICO];
-  const ignVence = lido?.ignorados !== undefined && lido.ignorados.em > marcaIgn.em;
+  const ignVence = lido?.ignorados !== undefined && venceOArquivo(lido.ignorados.em, marcaIgn);
   const ignorados = ignVence ? lido!.ignorados!.dado : local.ignorados;
   const envIgnorados: Unico<Ignorados> = ignVence ? lido!.ignorados! : { em: marcaIgn.em, dado: local.ignorados };
   if (ignVence) diario.ignorados = { [UNICO]: { em: lido!.ignorados!.em, h: hash(ignorados) } };
