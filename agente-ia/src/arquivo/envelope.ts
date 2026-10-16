@@ -85,7 +85,7 @@ export interface Marca {
   q?: number;
 }
 
-/** Tipo (`config`, `ignorados` ou um `TipoLista`) → id → marca. */
+/** Tipo (`config`, `ignorados`, `segredos` ou um `TipoLista`) → id → marca. */
 export type Diario = Record<string, Record<string, Marca>>;
 
 export interface Retrato {
@@ -221,6 +221,20 @@ function rotinaDoArquivo(vinda: Rotina, local: Rotina | undefined): Rotina {
 }
 
 const hash = (dado: unknown): string => JSON.stringify(dado);
+
+/**
+ * Resumo (FNV-1a de 32 bits) para a marca dos segredos no diário: o diário
+ * guarda o hash de cada registro como texto, e o dos segredos não pode ser o
+ * próprio segredo. Basta para saber se mudou; não serve para recuperá-lo.
+ */
+function resumoDoSegredo(texto: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < texto.length; i++) {
+    h ^= texto.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return `fnv1a:${h.toString(16)}:${texto.length}`;
+}
 
 const idDe = (item: unknown): string => (item as { id: string }).id;
 
@@ -497,7 +511,14 @@ export function mesclar(
   const marcaConfig = carimbado.config[UNICO];
   const configVence = lido?.config !== undefined && venceOArquivo(lido.config.em, marcaConfig);
   let config = configVence ? configDoArquivo(lido!.config!.dado as unknown as Record<string, unknown>, local.config) : local.config;
-  const envConfig: Unico<Omit<Config, "chave">> = configVence ? lido!.config! : { em: marcaConfig.em, dado: configParaSync(local.config) };
+  // Mesmo carimbo dos dois lados (a mesma regra de `mesclarLista`): a config
+  // daqui não mudou desde que veio do arquivo, e a diferença é só o que a
+  // entrada preserva aqui (serviço e endereço com a chave deste computador).
+  // O arquivo fica com a dele; senão dois computadores com serviços
+  // diferentes regravariam o arquivo a cada rodada.
+  const mesmoCarimboConfig = lido?.config !== undefined && lido.config.em === marcaConfig.em && marcaConfig.em !== 0;
+  const envConfig: Unico<Omit<Config, "chave">> =
+    configVence || mesmoCarimboConfig ? lido!.config! : { em: marcaConfig.em, dado: configParaSync(local.config) };
 
   const marcaIgn = carimbado.ignorados[UNICO];
   const ignVence = lido?.ignorados !== undefined && venceOArquivo(lido.ignorados.em, marcaIgn);
@@ -561,13 +582,21 @@ export function mesclar(
   if (configVence) diario.config = { [UNICO]: { em: lido!.config!.em, h: hash(configParaSync(config)) } };
 
   let segredos: Segredos | undefined;
-  if (o.removerSegredos) segredos = undefined;
-  else if (o.segredos) {
+  if (o.removerSegredos) {
+    segredos = undefined;
+    delete diario.segredos;
+  } else if (o.segredos) {
     const tokens = tokensDaqui(listas.conectores as Conector[]);
     const conteudo = limpo({ chave: config.chave || undefined, tokens: Object.keys(tokens).length ? tokens : undefined });
+    const h = resumoDoSegredo(hash(conteudo));
     // Segredos iguais mantêm o carimbo: senão o arquivo seria regravado a cada leitura.
     const iguais = lidoSeg !== undefined && hash(limpo({ chave: lidoSeg.chave, tokens: lidoSeg.tokens })) === hash(conteudo);
-    segredos = { em: iguais ? lidoSeg.em : agora, ...conteudo };
+    // Os segredos daqui só substituem os do arquivo quando MUDARAM aqui desde
+    // a última vez: dois computadores com a caixa marcada e chaves diferentes
+    // (cada um com a sua) não regravam o arquivo a cada rodada.
+    const mudouAqui = diario.segredos?.[UNICO]?.h !== h;
+    segredos = lidoSeg !== undefined && !iguais && !mudouAqui ? lidoSeg : { em: iguais ? lidoSeg.em : agora, ...conteudo };
+    diario.segredos = { [UNICO]: { em: segredos.em, h } };
   } else segredos = lidoSeg;
 
   const retrato: Retrato = { config, ignorados, listas: listas as unknown as Retrato["listas"] };

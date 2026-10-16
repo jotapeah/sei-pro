@@ -1056,6 +1056,106 @@ export async function verificarSyncNoMeio(): Promise<void> {
   }
 }
 
+/**
+ * Dois computadores que divergem de propósito (serviço de IA ou chave de cada
+ * um) convergem: o arquivo não é regravado a cada rodada (achados 4 e 5).
+ */
+export function verificarSemPinguePongue(): void {
+  secao("arquivo do agente: sem pingue-pongue entre dois computadores");
+
+  // config: cada um com o seu serviço (e a sua chave)
+  {
+    let CA = retrato({ config: { servico: "openai", instrucoes: "x" } });
+    let a = mesclar(CA, {}, null, { agora: 10, segredos: false });
+    let f = a.envelope;
+    let da = a.diario;
+    let b = mesclar(retrato({ config: { servico: "openrouter", instrucoes: "x" } }), {}, f, { agora: 20, segredos: false });
+    let db = b.diario;
+    let lb = b.retrato;
+    f = b.envelope;
+    CA = retrato({ config: { servico: "openai", instrucoes: "y" } });
+    a = mesclar(CA, da, f, { agora: 100, segredos: false });
+    da = a.diario;
+    f = a.envelope;
+    let escritas = 0;
+    let ass = assinatura(f);
+    for (let i = 0; i < 6; i++) {
+      const t = 200 + i * 100;
+      for (let k = 0; k < 2; k++) {
+        b = mesclar(lb, db, f, { agora: t, segredos: false });
+        db = b.diario;
+        lb = b.retrato;
+      }
+      if (assinatura(b.envelope) !== ass) {
+        escritas++;
+        f = b.envelope;
+        ass = assinatura(f);
+      }
+      for (let k = 0; k < 2; k++) {
+        a = mesclar(CA, da, f, { agora: t + 50, segredos: false });
+        da = a.diario;
+        CA = a.retrato;
+      }
+      if (assinatura(a.envelope) !== ass) {
+        escritas++;
+        f = a.envelope;
+        ass = assinatura(f);
+      }
+    }
+    checar("config: servicos diferentes nao regravam o arquivo", escritas === 0, escritas);
+    checar("config: B recebe as instrucoes e fica com o seu servico", lb.config.instrucoes === "y" && lb.config.servico === "openrouter", lb.config);
+    checar("config: A fica com o seu servico", CA.config.servico === "openai", CA.config);
+    // edição de verdade em B continua indo ao arquivo
+    lb = { ...lb, config: { ...lb.config, instrucoes: "z" } };
+    b = mesclar(lb, db, f, { agora: 5_000, segredos: false });
+    checar("config: edicao de B vai ao arquivo", (b.envelope.config?.dado as Partial<Config>).instrucoes === "z" && b.envelope.config?.em === 5_000, b.envelope.config);
+  }
+
+  // segredos: as duas caixas marcadas, uma chave em cada computador
+  {
+    const o = (agora: number) => ({ agora, segredos: true });
+    let A = retrato({ config: { chave: "chave-A" } });
+    let B = retrato({ config: { chave: "chave-B" } });
+    let a = mesclar(A, {}, null, o(10));
+    let da = a.diario;
+    let f = a.envelope;
+    let db: Diario = {};
+    let escritas = 0;
+    let ass = assinatura(f);
+    for (let i = 0; i < 6; i++) {
+      const t = 100 + i * 100;
+      const b = mesclar(B, db, f, o(t));
+      db = b.diario;
+      B = b.retrato;
+      if (assinatura(b.envelope) !== ass) {
+        escritas++;
+        f = b.envelope;
+        ass = assinatura(f);
+      }
+      a = mesclar(A, da, f, o(t + 50));
+      da = a.diario;
+      A = a.retrato;
+      if (assinatura(a.envelope) !== ass) {
+        escritas++;
+        f = a.envelope;
+        ass = assinatura(f);
+      }
+    }
+    checar("segredos: chaves diferentes regravam no maximo uma vez", escritas <= 1, escritas);
+    checar("segredos: cada um fica com a sua chave", A.config.chave === "chave-A" && B.config.chave === "chave-B", [A.config.chave, B.config.chave]);
+    checar("segredos: a marca do diario nao guarda o segredo", !JSON.stringify(da).includes("chave-A"), da.segredos);
+    // A troca a chave: o arquivo recebe a nova
+    A = { ...A, config: { ...A.config, chave: "chave-A2" } };
+    a = mesclar(A, da, f, o(9_000));
+    checar("segredos: chave trocada aqui vai ao arquivo", a.envelope.segredos?.chave === "chave-A2" && a.envelope.segredos?.em === 9_000, a.envelope.segredos);
+    // remover limpa a marca: marcar de novo grava outra vez
+    const rem = mesclar(A, a.diario, a.envelope, { agora: 9_100, segredos: true, removerSegredos: true });
+    checar("segredos: remover tira a marca do diario", rem.envelope.segredos === undefined && rem.diario.segredos === undefined, rem.diario.segredos);
+    const de = mesclar(A, rem.diario, rem.envelope, o(9_200));
+    checar("segredos: depois de remover, marcar grava de novo", de.envelope.segredos?.chave === "chave-A2", de.envelope.segredos);
+  }
+}
+
 // Execução avulsa: `npx tsx tests/verificar-arquivo-agente.ts`.
 if (process.argv[1]?.endsWith("verificar-arquivo-agente.ts")) {
   verificarArquivoAgente();
@@ -1063,5 +1163,6 @@ if (process.argv[1]?.endsWith("verificar-arquivo-agente.ts")) {
   await verificarGatilhoAgente();
   await verificarCoordenacaoArquivo();
   await verificarSyncNoMeio();
+  verificarSemPinguePongue();
   resumo();
 }
