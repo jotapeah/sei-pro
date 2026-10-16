@@ -64,6 +64,7 @@ import type { EnvelopeAgente } from "../arquivo/envelope";
 import { CHAVE_SEGREDOS, CHAVE_STATUS, fontesDoNavegador, type Mudancas } from "../arquivo/retrato";
 import { criarFila, deveAgendar, exportarBackup, fontesQueAvisam, importarBackup, NOME_DO_BACKUP, travarAdaptador } from "../arquivo/gatilho";
 import { espelharListas, lerListasDoLocal, trazerDoSync } from "./sincronia-listas";
+import { mudouParaOMotor, recarregarIntocados, type CampoDaConfig } from "./campos-config";
 import { aoAvisar, aplicarConfigDoSync, CHAVE_MIGRADO, espelharConfig } from "./espelho";
 import {
   baixarColecao,
@@ -246,6 +247,10 @@ class App {
   private redesenharConfig: Array<() => void> = [];
   /** Redesenho da seção "Backup em arquivo", enquanto a configuração está aberta. */
   private redesenharArquivo: (() => void) | null = null;
+  /** Os campos do diálogo aberto que o usuário não mexeu acompanham a config que mudou fora dele. */
+  private recarregarCamposConfig: (() => void) | null = null;
+  /** A config mudou fora do diálogo com o motor ocupado: refazer antes do próximo pedido. */
+  private motorDesatualizado = false;
 
   /** Backup em arquivo: o adaptador (Exportar/Importar valem em todo navegador). */
   private adaptadorArquivo: AdaptadorAgente | null = null;
@@ -307,16 +312,32 @@ class App {
   private async depoisDoArquivo(m: Mudancas): Promise<void> {
     if (m.config) {
       const salvo = (await chrome.storage.local.get(CHAVE_CONFIG))[CHAVE_CONFIG] as Partial<Config> | undefined;
+      const antes = this.config;
       this.config = { ...this.config, ...salvo };
       // A configuração do arquivo não passa por `aplicarConfig`: sem isto o
       // `sync` (velho) ganharia de volta na próxima sincronia.
       await espelharConfig(this.config);
+      this.configMudouDeFora(antes);
     }
     ({ skills: this.skills, colecoes: this.colecoes, regras: this.regras, memoria: this.memoria, rotinas: this.rotinas, conectores: this.conectores, fluxos: this.fluxos } =
       await lerListasDoLocal());
     this.fluxosIgnorados = await listarIgnorados();
     await espelharListas({ skills: this.skills, colecoes: this.colecoes, regras: this.regras, memoria: this.memoria, rotinas: this.rotinas, conectores: this.conectores, fluxos: this.fluxos });
     for (const redesenhar of this.redesenharConfig) redesenhar();
+  }
+
+  /**
+   * A config mudou fora do diálogo (o arquivo, outra janela): os campos do
+   * diálogo aberto que o usuário não mexeu passam a mostrar a nova — senão o
+   * "Salvar" gravaria a velha por cima —, e o motor é refeito como em
+   * `aplicarConfig` (mantendo a conversa e os pseudônimos), mas só se mudou
+   * algo que ele lê, e nunca no meio de um pedido.
+   */
+  private configMudouDeFora(antes: Config): void {
+    this.recarregarCamposConfig?.();
+    if (!this.motor || !mudouParaOMotor(antes, this.config)) return;
+    if (this.motor.ocupado || this.rotinaEmCurso) this.motorDesatualizado = true;
+    else this.refazerMotor();
   }
 
   /** Backup em arquivo: o que a seção da configuração chama. */
@@ -451,7 +472,9 @@ class App {
         const cfg = mud[CHAVE_CONFIG]?.newValue as Partial<Config> | undefined;
         if (cfg && JSON.stringify({ ...this.config, ...cfg }) !== JSON.stringify(this.config)) {
           // A configuração mudou fora deste painel (o arquivo a trouxe, ou outra janela).
+          const antes = this.config;
           this.config = { ...this.config, ...cfg };
+          this.configMudouDeFora(antes);
           for (const redesenhar of this.redesenharConfig) redesenhar();
         }
       }
@@ -1614,6 +1637,53 @@ class App {
     for (const el of [servico, modelo, modeloLivre, nomes, cnpj, usarCache, usarMemoria, guardar, dias, limiteConversa, limiteDia])
       el.addEventListener("change", atualizarResumos);
 
+    // A config que os campos mostram; quando ela muda fora do diálogo (o
+    // Importar logo acima, o arquivo escolhido, outra janela), os campos que o
+    // usuário não mexeu passam a mostrar a nova (ver `campos-config.ts`).
+    let mostrada: Config = structuredClone(this.config);
+    const texto = (e: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, de: (c: Config) => string): CampoDaConfig => ({
+      ler: () => e.value,
+      escrever: (v) => void (e.value = String(v)),
+      de,
+    });
+    const caixa = (e: HTMLInputElement, de: (c: Config) => boolean): CampoDaConfig => ({ ler: () => e.checked, escrever: (v) => void (e.checked = Boolean(v)), de });
+    const fino = (v: number | undefined): string => (v === undefined ? "" : String(v));
+    const camposDaConfig: CampoDaConfig[] = [
+      texto(servico, (c) => c.servico),
+      texto(url, (c) => c.url),
+      texto(chave, (c) => c.chave),
+      // O seletor de modelos é reescrito pelo catálogo: quem guarda a escolha é `modeloAtual`.
+      { ler: () => modeloAtual, escrever: (v) => void (modeloAtual = String(v)), de: (c) => c.modelo },
+      texto(modeloLivre, (c) => c.modelo),
+      texto(modeloAux, (c) => c.modeloAuxiliar),
+      texto(modeloAuxLivre, (c) => c.modeloAuxiliar),
+      caixa(nomes, (c) => c.nomes),
+      caixa(cnpj, (c) => c.cnpj),
+      caixa(guardar, (c) => c.guardar),
+      caixa(emReais, (c) => c.reais),
+      caixa(usarCache, (c) => c.cache),
+      caixa(usarMemoria, (c) => c.memoria),
+      texto(limiteConversa, (c) => (c.limites.conversa ? String(c.limites.conversa) : "")),
+      texto(limiteDia, (c) => (c.limites.dia ? String(c.limites.dia) : "")),
+      texto(dias, (c) => String(c.dias)),
+      texto(instrucoes, (c) => c.instrucoes),
+      texto(temperatura.campo, (c) => fino(c.ajustes.temperatura)),
+      texto(topP.campo, (c) => fino(c.ajustes.topP)),
+      texto(maxTokens.campo, (c) => fino(c.ajustes.maxTokens)),
+      texto(penFrequencia.campo, (c) => fino(c.ajustes.penalidadeFrequencia)),
+      texto(penPresenca.campo, (c) => fino(c.ajustes.penalidadePresenca)),
+    ];
+    this.recarregarCamposConfig = () => {
+      const servicoAntes = servico.value;
+      const trocados = recarregarIntocados(camposDaConfig, mostrada, this.config);
+      mostrada = structuredClone(this.config);
+      if (!trocados) return;
+      if (servico.value !== servicoAntes) ajustarServico();
+      // O seletor de modelos volta a mostrar a escolha (`modeloAtual`).
+      void carregarModelos(false);
+      atualizarResumos();
+    };
+
     const salvar = h("button", { class: "primario" }, obrigatorio ? "Salvar e come\u00E7ar" : "Salvar");
     const dlg = this.abrirModal({
       titulo: "Configura\u00E7\u00E3o",
@@ -1755,6 +1825,7 @@ class App {
       () => {
         this.redesenharConfig = [];
         this.redesenharArquivo = null;
+        this.recarregarCamposConfig = null;
       },
       { once: true },
     );
@@ -1895,6 +1966,7 @@ class App {
       return true;
     }
 
+    if (this.motorDesatualizado && !this.motor?.ocupado) this.refazerMotor();
     const antes = this.uso.custo;
     const curso = { rotina, escritas: [] as string[] };
     this.rotinaEmCurso = curso;
@@ -2527,13 +2599,19 @@ Voc\u00EA \u00E9 um AUXILIAR: recebeu uma tarefa de leitura de outro agente e n\
     await chrome.storage.local.set({ [CHAVE_CONFIG]: this.config });
     // A configuração acompanha a conta do navegador; a chave do serviço, não.
     void espelharConfig(this.config);
-    this.motor?.parar();
-    const historico = this.motor?.mensagens() ?? [];
-    this.motor = this.criarMotor(Pseudonimos.importar(this.privacidade.exportar(), { nomes: nova.nomes, cnpj: nova.cnpj }));
-    if (historico.length) this.motor.restaurar([...historico], this.uso);
+    this.refazerMotor();
     void this.atualizarCambio();
     this.redesenhar();
     this.elEntrada.focus();
+  }
+
+  /** Refaz o motor com a config atual, mantendo a conversa e os pseudônimos. */
+  private refazerMotor(): void {
+    this.motorDesatualizado = false;
+    this.motor?.parar();
+    const historico = this.motor?.mensagens() ?? [];
+    this.motor = this.criarMotor(Pseudonimos.importar(this.privacidade.exportar(), { nomes: this.config.nomes, cnpj: this.config.cnpj }));
+    if (historico.length) this.motor.restaurar([...historico], this.uso);
   }
 
   // ------------------------------------------------------------- conversa
@@ -2605,6 +2683,7 @@ Voc\u00EA \u00E9 um AUXILIAR: recebeu uma tarefa de leitura de outro agente e n\
   private async enviar(texto: string): Promise<void> {
     const t = texto.trim();
     if (!t || !this.motor || this.motor.ocupado) return;
+    if (this.motorDesatualizado) this.refazerMotor();
     if (!this.config.chave) {
       this.abrirConfig(true);
       return;

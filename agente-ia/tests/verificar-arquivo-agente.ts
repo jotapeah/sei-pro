@@ -23,6 +23,7 @@ import { adaptadorAgente } from "../src/arquivo/adaptador";
 import { CHAVES_DO_AGENTE, criarFila, deveAgendar, exportarBackup, fontesQueAvisam, importarBackup, MSG_IMPORTADO, MSG_NAO_E_BACKUP, travarAdaptador } from "../src/arquivo/gatilho";
 import { espelharListas, lerListasDoLocal, trazerDoSync, type ListasEspelhadas } from "../src/painel/sincronia-listas";
 import { ESPELHOS } from "../src/painel/espelho";
+import { mudouParaOMotor, recarregarIntocados, type CampoDaConfig } from "../src/painel/campos-config";
 import { fontesDoNavegador, lerListas, mudancas, type FontesRetrato } from "../src/arquivo/retrato";
 import { MAX_LEMBRANCAS } from "../src/painel/memoria";
 import { validarItem } from "../src/arquivo/validar";
@@ -1185,6 +1186,44 @@ export function verificarEstadoDaMaquina(): void {
   checar("maquina: depois de receber, nada a regravar", assinatura(b2.envelope) === assinatura(b.envelope) && !b2.mudouLocal);
 }
 
+/**
+ * O diálogo da configuração aberto durante o Importar (achado 3) e o motor
+ * refeito com a config de fora (achado 7). O diálogo é DOM; aqui vai a regra
+ * que ele usa (`campos-config.ts`), com campos falsos.
+ */
+export function verificarCamposDaConfig(): void {
+  secao("arquivo do agente: dialogo da configuracao depois do Importar");
+  const campo = (inicial: string | boolean, de: (c: Config) => string | boolean): CampoDaConfig & { v: string | boolean } => {
+    const c = { v: inicial, ler: () => c.v, escrever: (v: string | boolean) => void (c.v = v), de };
+    return c;
+  };
+  // computador novo: diálogo obrigatório aberto com a config padrão, sem chave
+  const padrao = configPadrao({ chave: "", instrucoes: "", limites: { conversa: 0, dia: 0 } as Config["limites"] });
+  const importada = configPadrao({ chave: "sk-do-arquivo", instrucoes: "do arquivo", limites: { conversa: 5, dia: 0 } as Config["limites"], cache: false });
+  const instr = campo(padrao.instrucoes, (c) => c.instrucoes);
+  const chave = campo(padrao.chave, (c) => c.chave);
+  const limite = campo("", (c) => (c.limites.conversa ? String(c.limites.conversa) : ""));
+  const cache = campo(padrao.cache, (c) => c.cache);
+  const modelo = campo("modelo digitado", (c) => c.modelo); // o usuário já mexeu
+  const n = recarregarIntocados([instr, chave, limite, cache, modelo], padrao, importada);
+  checar("dialogo: campos intocados passam a mostrar a config importada", instr.v === "do arquivo" && chave.v === "sk-do-arquivo" && limite.v === "5" && cache.v === false, [instr.v, chave.v, limite.v, cache.v]);
+  checar("dialogo: o que o usuario digitou fica", modelo.v === "modelo digitado", modelo.v);
+  checar("dialogo: conta os trocados", n === 4, n);
+  checar("dialogo: de novo com a mesma config, nada troca", recarregarIntocados([instr, chave, limite, cache, modelo], importada, importada) === 0);
+  // o Salvar, que remonta a config dos campos, grava a importada (não a padrão):
+  const salva = { ...importada, instrucoes: String(instr.v), chave: String(chave.v), cache: Boolean(cache.v) };
+  const d = carimbar(retrato({ config: importada }), {}, 0);
+  const d2 = carimbar(retrato({ config: salva }), d, 9_999);
+  checar("dialogo: Salvar depois do Importar nao vira edicao nova", d2.config._.em === d.config._.em, d2.config);
+  const comCamposVelhos = { ...importada, instrucoes: padrao.instrucoes, limites: padrao.limites, cache: padrao.cache };
+  const d3 = carimbar(retrato({ config: comCamposVelhos }), d, 9_999);
+  checar("dialogo: sem recarregar os campos, o Salvar seria edicao nova com a config velha (controle)", d3.config._.em === 9_999, d3.config);
+
+  checar("motor: instrucoes mudaram", mudouParaOMotor(padrao, { ...padrao, instrucoes: "outra" }));
+  checar("motor: modelo mudou", mudouParaOMotor(padrao, { ...padrao, modelo: "outro" }));
+  checar("motor: guarda de conversas nao refaz o motor", !mudouParaOMotor(padrao, { ...padrao, dias: 7, guardar: false, reais: false }));
+}
+
 // Execução avulsa: `npx tsx tests/verificar-arquivo-agente.ts`.
 if (process.argv[1]?.endsWith("verificar-arquivo-agente.ts")) {
   verificarArquivoAgente();
@@ -1194,5 +1233,6 @@ if (process.argv[1]?.endsWith("verificar-arquivo-agente.ts")) {
   await verificarSyncNoMeio();
   verificarSemPinguePongue();
   verificarEstadoDaMaquina();
+  verificarCamposDaConfig();
   resumo();
 }
