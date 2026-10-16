@@ -159,7 +159,8 @@ export class AppAcoesLote {
         class: "spro-botao-icone",
         "aria-label": "Atualizar",
         title: "Reler a árvore do processo",
-        onclick: () => void this.carregar(true),
+        // No resultado, reler é começar outra seleção: a anterior não pode ficar marcada sem o usuário perceber.
+        onclick: () => void (this.tela === "resultado" ? this.novaSelecao() : this.carregar(true)),
       },
       icone("atualizar", 18),
     );
@@ -302,10 +303,15 @@ export class AppAcoesLote {
     this.desenharPastilha();
   }
 
-  private async carregar(forcar: boolean): Promise<void> {
+  /** Depois do resultado: árvore relida (o lote mudou o processo), seleção, filtros e etapas do zero. */
+  private novaSelecao(): Promise<void> {
+    return this.carregar(true, true);
+  }
+
+  private async carregar(forcar: boolean, limpar = false): Promise<void> {
     try {
       const a = await this.d.rpc.chamar<RespostaArvore>("arvore", forcar ? { forcar: true } : undefined);
-      this.estado = criarEstado(this.d.ctx, a, this.estado ?? undefined);
+      this.estado = criarEstado(this.d.ctx, a, limpar ? undefined : (this.estado ?? undefined));
       this.subtitulo.textContent = this.estado.protocolo;
       this.mostrar("selecao");
     } catch (e) {
@@ -316,7 +322,7 @@ export class AppAcoesLote {
   private mostrar(tela: Tela): void {
     this.tela = tela;
     // Reler a árvore no meio da execução trocaria a tela e perderia o controle do lote.
-    this.atualizar.hidden = tela === "execucao" || tela === "resultado" || tela === "retomada";
+    this.atualizar.hidden = tela === "execucao" || tela === "retomada";
     if (tela !== "execucao") this.telaExecucao = null;
     const e = this.estado;
     if (!e) return;
@@ -361,6 +367,7 @@ export class AppAcoesLote {
             void c.repetirFalhas();
             this.mostrar("execucao");
           },
+          novaSelecao: () => void this.novaSelecao(),
           baixar: this.d.baixar ?? baixar,
           interrompido: c.estado === "cancelado",
           ...(this.d.clip ? { clip: this.d.clip } : {}),

@@ -67,6 +67,8 @@ export function linhasDoResultado(e: EstadoApp): { linhas: LinhaResultado[]; col
 
 export interface DepsResultado {
   repetirFalhas(): void;
+  /** Volta à seleção, limpa, com a árvore relida. */
+  novaSelecao?(): void;
   baixar(nome: string, conteudo: string, tipo: string): void;
   clip?: { write?: (i: ClipboardItem[]) => Promise<void>; writeText(t: string): Promise<void> };
   ItemClip?: typeof ClipboardItem;
@@ -125,7 +127,8 @@ export function montarResultado(doc: Document, e: EstadoApp, d: DepsResultado): 
     h(
       "div",
       { class: "al-rodape" },
-      falhas ? botao("Tentar de novo só as falhas", "atualizar", () => d.repetirFalhas(), "primario") : null,
+      d.novaSelecao ? botao("Nova seleção", "documento", () => d.novaSelecao?.(), "primario") : null,
+      falhas ? botao("Tentar de novo só as falhas", "atualizar", () => d.repetirFalhas()) : null,
       botao("Copiar", "copiar", () => void copiar()),
       botao("Baixar CSV", "baixar", () => d.baixar("acoes-em-lote.csv", resultadoComoCsv(linhas, colunas), "text/csv;charset=utf-8")),
     ),

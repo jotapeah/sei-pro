@@ -1011,4 +1011,51 @@ export async function verificarAppExecucao(): Promise<void> {
     await tique(5);
     checar("Copiar entrega o texto, sem infra_hash", copiado.includes("5001") && !copiado.includes("infra_hash"), copiado);
   }
+
+  secao("Resultado: Nova seleção e Atualizar relêem a árvore e voltam à seleção limpa");
+  for (const via of ["Nova seleção", "Atualizar"] as const) {
+    const doc = instalarDom('<html><body><div id="r"></div></body></html>');
+    const f = rpcFalso({
+      arvore: () => ({ protocolo: "00001.000001/2026-11", sigiloso: false, linhas: [linha(1), linha(2), linha(3)] }),
+      executar: () => ok(),
+    });
+    const app = new AppAcoesLote(doc.getElementById("r")!, {
+      rpc: f.rpc,
+      ctx: CTX,
+      fechar: () => undefined,
+      repo: repoEspiao().repo,
+      aba: "aba-1",
+      agora: () => AGORA,
+      esperar: async () => undefined,
+    });
+    await app.iniciar();
+    const e = app.estado!;
+    e.selecionados = new Set(e.linhas.map((l) => l.id));
+    e.filtro = { texto: "Despacho", assinatura: "assinados" };
+    e.etapas = [{ acao: "ciencia" }];
+    e.planos = planejar(e.linhas, e.etapas, false);
+    app.executar();
+    await tique(20);
+    igual(`${via}: no resultado`, app.tela, "resultado");
+    const raiz = doc.getElementById("r")!;
+    const nova = botao(raiz, "Nova seleção");
+    checar(`${via}: botão Nova seleção primário`, !!nova && nova.classList.contains("primario"));
+    const atualizar = raiz.querySelector<HTMLButtonElement>('button[aria-label="Atualizar"]');
+    checar(`${via}: Atualizar visível no resultado`, !!atualizar && !atualizar.hidden);
+    const antes = f.de("arvore").length;
+    (via === "Nova seleção" ? nova : atualizar)!.click();
+    await tique(10);
+    igual(
+      `${via}: releu a árvore forçando`,
+      f
+        .de("arvore")
+        .slice(antes)
+        .map((c) => c.args.forcar),
+      [true],
+    );
+    igual(`${via}: de volta à seleção`, app.tela, "selecao");
+    igual(`${via}: seleção limpa`, app.estado!.selecionados.size, 0);
+    igual(`${via}: filtros limpos`, app.estado!.filtro, {});
+    app.destruir();
+  }
 }
