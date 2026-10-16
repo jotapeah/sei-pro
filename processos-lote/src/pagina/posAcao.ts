@@ -4,8 +4,8 @@
  * fala com o SEI pelo nucleo.
  *
  * Regras (as mesmas da criacao):
- * - Nunca se toca uma linha incerta: sem `idProcedimento` (ou sem protocolo) o pedido e recusado ANTES de qualquer
- *   requisicao. O app so manda processos `ok` com numero confirmado; isto e a segunda barreira.
+ * - Nunca se toca uma linha incerta: sem `idProcedimento` (ou sem protocolo) aquela entrada e recusada ANTES de
+ *   qualquer requisicao. O app so manda processos `ok` com numero confirmado; isto e a segunda barreira.
  * - Tudo volta como JSON simples (`situacao`, `mensagem`, `parar`); nenhuma excecao atravessa a ponte. Sessao
  *   expirada vira `parar: true`, para o app nao seguir errando processo a processo.
  * - Marcador e acompanhamento sao idempotentes no nucleo (o mesmo valor de novo da "Nada a alterar"), entao um erro
@@ -71,6 +71,7 @@ const texto = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 const ERRO_LINHA_INCERTA = "Processo sem número confirmado: a ação não foi aplicada.";
 const ERRO_SEM_BLOCO = "Bloco interno não informado.";
 const FORA_DA_PAGINA = "O processo não está na página do Controle de Processos; nada foi enviado para ele.";
+const SEM_RESULTADO_DO_NUCLEO = "O SEI não informou o resultado deste processo: confira o bloco antes de repetir.";
 
 function erroDe(e: unknown): ResultadoPosAcao {
   const r: ResultadoPosAcao = { situacao: "erro", mensagem: mensagem(e) };
@@ -101,35 +102,37 @@ export function tratadoresPosAcao(sei: Sei, injetadas: Partial<ChamadasPosAcao> 
   /**
    * As tres listas, uma de cada vez e independentes: a que falha vem vazia com um aviso. Sessao expirada para as
    * seguintes (falhariam igual) e sobe `parar`. Marcadores e grupos sao lidos de um processo da unidade, por isso
-   * o `protocolo` (qualquer processo criado); sem ele nada e pedido.
+   * o `protocolo` (qualquer processo criado); sem ele so essas duas ficam de fora, com aviso. Os blocos vem da tela
+   * do Controle (so leitura, nenhum processo envolvido) e sao listados sempre.
    */
   const posAcaoOpcoes = async (args: unknown): Promise<OpcoesPosAcao> => {
     const protocolo = texto((args as { protocolo?: unknown } | undefined)?.protocolo);
     const r: OpcoesPosAcao = { marcadores: [], grupos: [], blocos: [], avisos: [] };
-    if (!protocolo) {
-      r.avisos.push("Nenhum processo criado com número confirmado: as listas não foram carregadas.");
-      return r;
+    const etapas: Array<[string, () => Promise<void>]> = [];
+    if (protocolo) {
+      etapas.push(
+        [
+          "marcadores",
+          async () => {
+            r.marcadores = (await c.listarOpcoes(sei, "marcadores", protocolo)).map((o) => ({ id: o.id, nome: o.nome }));
+          },
+        ],
+        [
+          "grupos de acompanhamento",
+          async () => {
+            r.grupos = (await c.listarOpcoes(sei, "grupos_acompanhamento", protocolo)).map((o) => ({ id: o.id, nome: o.nome }));
+          },
+        ],
+      );
+    } else {
+      r.avisos.push("Nenhum processo criado com número confirmado: os marcadores e os grupos de acompanhamento não foram carregados.");
     }
-    const etapas: Array<[string, () => Promise<void>]> = [
-      [
-        "marcadores",
-        async () => {
-          r.marcadores = (await c.listarOpcoes(sei, "marcadores", protocolo)).map((o) => ({ id: o.id, nome: o.nome }));
-        },
-      ],
-      [
-        "grupos de acompanhamento",
-        async () => {
-          r.grupos = (await c.listarOpcoes(sei, "grupos_acompanhamento", protocolo)).map((o) => ({ id: o.id, nome: o.nome }));
-        },
-      ],
-      [
-        "blocos internos",
-        async () => {
-          r.blocos = (await c.listarBlocosInternosParaProcessos(sei)).map((b) => ({ id: b.id, numero: b.numero, descricao: b.descricao }));
-        },
-      ],
-    ];
+    etapas.push([
+      "blocos internos",
+      async () => {
+        r.blocos = (await c.listarBlocosInternosParaProcessos(sei)).map((b) => ({ id: b.id, numero: b.numero, descricao: b.descricao }));
+      },
+    ]);
     for (const [nome, carregar] of etapas) {
       try {
         await carregar();
@@ -174,30 +177,48 @@ export function tratadoresPosAcao(sei: Sei, injetadas: Partial<ChamadasPosAcao> 
    * Inclui todos os processos num bloco interno com UMA chamada (um POST). O resultado do nucleo passa 1:1
    * (`nao-confirmado` e `fora-da-pagina` ficam distintos). Se o nucleo lancar, a falha pode ter vindo depois do
    * POST: todos ficam `nao-confirmado`, nunca `erro` (que o app trataria como repetivel).
+   *
+   * Id vazio (linha incerta, que o app nao devia mandar) nao vai ao nucleo: vira `erro` na propria entrada, e os
+   * outros seguem. Id enviado que o nucleo nao devolveu: nao se sabe o que houve no POST, entao `nao-confirmado`.
    */
   const posAcaoBloco = async (args: unknown): Promise<ResultadoPosAcaoBloco> => {
     const a = (args ?? {}) as Record<string, unknown>;
     if (!Array.isArray(a.idsProcedimento)) return { resultados: [] };
     const brutos = a.idsProcedimento.map(texto);
-    const ids = [...new Set(brutos)];
-    if (!ids.length) return { resultados: [] };
+    // A ordem do pedido: cada id valido uma vez, cada vazio na sua posicao.
+    const ordem: string[] = [];
+    const vistos = new Set<string>();
+    for (const id of brutos) {
+      if (!id) ordem.push("");
+      else if (!vistos.has(id)) {
+        vistos.add(id);
+        ordem.push(id);
+      }
+    }
+    const ids = [...vistos];
+    if (!ordem.length) return { resultados: [] };
     const idBloco = texto(a.idBloco);
-    // Qualquer linha incerta recusa o pedido inteiro: e sinal de que o app montou mal a selecao.
-    const recusa = !idBloco ? ERRO_SEM_BLOCO : brutos.some((id) => !id) ? ERRO_LINHA_INCERTA : "";
-    if (recusa) return { resultados: ids.map((id) => ({ idProcedimento: id, situacao: "erro", mensagem: recusa })) };
+    if (!idBloco) return { resultados: ordem.map((id) => ({ idProcedimento: id, situacao: "erro", mensagem: ERRO_SEM_BLOCO })) };
+    const montar = (porId: Map<string, ResultadoBlocoItem>): ResultadoBlocoItem[] =>
+      ordem.map((id) => (id ? porId.get(id)! : { idProcedimento: "", situacao: "erro", mensagem: ERRO_LINHA_INCERTA }));
+    if (!ids.length) return { resultados: montar(new Map()) };
     try {
       const r = await c.incluirProcessosEmBlocoInterno(sei, idBloco, ids);
-      return {
-        resultados: r.map((x) => {
-          const item: ResultadoBlocoItem = { idProcedimento: x.idProcedimento, situacao: x.situacao };
-          const msg = x.erro ?? (x.situacao === "fora-da-pagina" ? FORA_DA_PAGINA : undefined);
-          if (msg) item.mensagem = msg;
-          return item;
-        }),
-      };
+      const porId = new Map<string, ResultadoBlocoItem>();
+      for (const x of r) {
+        if (!vistos.has(x.idProcedimento) || porId.has(x.idProcedimento)) continue;
+        const item: ResultadoBlocoItem = { idProcedimento: x.idProcedimento, situacao: x.situacao };
+        const msg = x.erro ?? (x.situacao === "fora-da-pagina" ? FORA_DA_PAGINA : undefined);
+        if (msg) item.mensagem = msg;
+        porId.set(x.idProcedimento, item);
+      }
+      for (const id of ids)
+        if (!porId.has(id)) porId.set(id, { idProcedimento: id, situacao: "nao-confirmado", mensagem: SEM_RESULTADO_DO_NUCLEO });
+      return { resultados: montar(porId) };
     } catch (e) {
       const msg = `Não confirmado: ${mensagem(e)} Confira o bloco antes de repetir.`;
-      const r: ResultadoPosAcaoBloco = { resultados: ids.map((id) => ({ idProcedimento: id, situacao: "nao-confirmado", mensagem: msg })) };
+      const porId = new Map(ids.map((id) => [id, { idProcedimento: id, situacao: "nao-confirmado" as const, mensagem: msg }]));
+      const r: ResultadoPosAcaoBloco = { resultados: montar(porId) };
       if (sessaoExpirada(e)) r.parar = true;
       return r;
     }

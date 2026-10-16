@@ -124,8 +124,12 @@ export class PainelPosAcao {
   private carregando: Promise<void> | null = null;
   private rodada: Promise<void> | null = null;
   private executor: ExecutorLote<Entrada, null> | null = null;
-  /** Processos que ficaram para depois quando a sessao caiu na inclusao em bloco (antes do laco comecar). */
-  private pendentes: Entrada[] = [];
+  /**
+   * O que ficou para depois quando a sessao caiu numa inclusao em bloco: os blocos seguintes do mesmo plano (o
+   * "Tentar de novo" faz um por bloco) e os processos do marcador/acompanhamento, que o laco nem comecou. Os itens
+   * ficam "aguardando" (nao enviados) e o Continuar os envia; uma rodada nova os descarta com aviso.
+   */
+  private pendentes: Plano | null = null;
   /** A configuracao com que cada acao rodou por ultimo: o "Tentar de novo as falhas" repete com ela. */
   private readonly usada: ConfigPos = {};
   private motivo: string | null = null;
@@ -462,23 +466,24 @@ export class PainelPosAcao {
       this.nota = null;
       return this.acompanhar(e.continuar());
     }
-    if (this.pendentes.length) {
-      const processos = this.pendentes;
-      this.pendentes = [];
-      return this.executar({ blocos: [], processos });
+    const p = this.pendentes;
+    if (p) {
+      this.pendentes = null;
+      return this.executar(p, true);
     }
     return Promise.resolve();
   }
 
-  private executar(plano: Plano): Promise<void> {
+  /** `retomada`: o plano e o que ficou pendente (Continuar), entao os "aguardando" dele nao sao "nao enviados". */
+  private executar(plano: Plano, retomada = false): Promise<void> {
     this.motivo = null;
     this.nota = null;
     // Uma rodada nova substitui a pausada: o que ela nao chegou a enviar sai da fila (nao e resultado), e o
     // usuario fica sabendo.
     const naoEnviados = [...this.estados.values()].filter((e) => Object.values(e).some((x) => x?.situacao === "aguardando")).length;
-    if (naoEnviados)
+    if (naoEnviados && !retomada)
       this.nota = `${naoEnviados} ${naoEnviados === 1 ? "processo da execução pausada não foi enviado" : "processos da execução pausada não foram enviados"}.`;
-    this.pendentes = [];
+    this.pendentes = null;
     this.executor?.cancelar();
     this.executor = null;
     for (const [indice, e] of this.estados) {
@@ -503,12 +508,14 @@ export class PainelPosAcao {
   }
 
   private async correr(plano: Plano): Promise<void> {
-    for (const b of plano.blocos) {
+    for (const [k, b] of plano.blocos.entries()) {
       const parou = await this.rodarBloco(b.cfg, b.itens);
       if (this.destruido) return;
       if (parou) {
         this.motivo = MENSAGEM_SESSAO;
-        this.pendentes = plano.processos;
+        // Os blocos seguintes (ainda "aguardando") e os processos ficam para o Continuar, nunca presos.
+        const resto: Plano = { blocos: plano.blocos.slice(k + 1), processos: plano.processos };
+        if (resto.blocos.length || resto.processos.length) this.pendentes = resto;
         return;
       }
     }
@@ -667,7 +674,7 @@ export class PainelPosAcao {
     this.botaoAplicar.disabled = rodando || !pronto || !this.lerConfig();
     const erros = this.contar("erro");
     this.botaoRepetir.hidden = rodando || erros === 0;
-    this.botaoContinuar.hidden = rodando || !(this.executor?.estado === "pausado" || this.pendentes.length > 0);
+    this.botaoContinuar.hidden = rodando || !(this.executor?.estado === "pausado" || this.pendentes !== null);
     this.motivoEl.hidden = !this.motivo;
     this.motivoEl.replaceChildren(...(this.motivo ? [icone("alerta", 16), this.motivo] : []));
     const status = rodando ? this.textoAndamento() : this.textoFinal();

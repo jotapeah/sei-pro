@@ -214,8 +214,15 @@ export async function verificarPosAcao(): Promise<void> {
   }
   {
     const { t, chamadas } = montar({ incluirProcessosEmBlocoInterno: async () => [] });
-    const r1 = (await t.posAcaoBloco({ idBloco: "9", idsProcedimento: ["55", ""] })) as { resultados: Array<Record<string, unknown>> };
-    checar("um id vazio => tudo erro", r1.resultados.length === 2 && r1.resultados.every((x) => x.situacao === "erro" && !!x.mensagem), r1);
+    const r1 = (await t.posAcaoBloco({ idBloco: "9", idsProcedimento: ["", " "] })) as { resultados: Array<Record<string, unknown>> };
+    checar(
+      "so ids vazios => um erro por entrada, nada enviado",
+      r1.resultados.length === 2 &&
+        r1.resultados.every(
+          (x) => x.idProcedimento === "" && x.situacao === "erro" && String(x.mensagem).includes("Processo sem número confirmado"),
+        ),
+      r1,
+    );
     const r2 = (await t.posAcaoBloco({ idBloco: "", idsProcedimento: ["55"] })) as { resultados: Array<Record<string, unknown>> };
     igual(
       "bloco vazio => erro",
@@ -227,6 +234,23 @@ export async function verificarPosAcao(): Promise<void> {
     const r4 = (await t.posAcaoBloco({ idBloco: "9", idsProcedimento: "55" })) as { resultados: unknown[] };
     igual("ids que nao sao lista => nada", r4.resultados, []);
     igual("zero chamadas ao nucleo", chamadas.length, 0);
+  }
+  {
+    // Id vazio no meio: so os validos vao ao nucleo; o vazio vira erro e continua na resposta.
+    const { t, chamadas } = montar({ incluirProcessosEmBlocoInterno: async () => [{ idProcedimento: "55", situacao: "incluido" }] });
+    const r = (await t.posAcaoBloco({ idBloco: "9", idsProcedimento: ["55", "", "56"] })) as { resultados: Array<Record<string, unknown>> };
+    igual("so os ids nao vazios vao ao nucleo", (chamadas[0]?.args as unknown[] | undefined)?.slice(1), ["9", ["55", "56"]]);
+    igual(
+      "vazio vira erro; o que o nucleo nao devolveu vira nao-confirmado",
+      r.resultados.map((x) => [x.idProcedimento, x.situacao]),
+      [
+        ["55", "incluido"],
+        ["", "erro"],
+        ["56", "nao-confirmado"],
+      ],
+    );
+    checar("erro do vazio diz por que", String(r.resultados[1]?.mensagem).includes("Processo sem número confirmado"), r.resultados[1]);
+    checar("lacuna do nucleo tem mensagem", typeof r.resultados[2]?.mensagem === "string" && !!r.resultados[2]?.mensagem, r.resultados[2]);
   }
   {
     const { t } = montar({
@@ -347,13 +371,25 @@ export async function verificarPosAcao(): Promise<void> {
     );
   }
   {
-    const { t, chamadas } = montar({ listarOpcoes: async () => [], listarBlocosInternosParaProcessos: async () => [] });
+    const { t, chamadas } = montar({
+      listarOpcoes: async () => [],
+      listarBlocosInternosParaProcessos: async () => [{ id: "9", numero: "12", descricao: "B" }],
+    });
     const r = (await t.posAcaoOpcoes({ protocolo: "" })) as Record<string, unknown> & { avisos: string[] };
+    igual("protocolo vazio => os blocos vem (nao precisam de processo)", r.blocos, [{ id: "9", numero: "12", descricao: "B" }]);
     checar(
-      "protocolo vazio => listas vazias e aviso",
-      r.avisos.length === 1 && JSON.stringify([r.marcadores, r.grupos, r.blocos]) === "[[],[],[]]",
+      "marcadores e grupos vazios, um aviso so deles",
+      r.avisos.length === 1 &&
+        /marcadores/i.test(r.avisos[0]) &&
+        /grupos/i.test(r.avisos[0]) &&
+        !/blocos/i.test(r.avisos[0]) &&
+        JSON.stringify([r.marcadores, r.grupos]) === "[[],[]]",
       r,
     );
-    igual("zero chamadas ao nucleo", chamadas.length, 0);
+    igual(
+      "so a lista de blocos foi pedida",
+      chamadas.map((c) => c.nome),
+      ["listarBlocosInternosParaProcessos"],
+    );
   }
 }

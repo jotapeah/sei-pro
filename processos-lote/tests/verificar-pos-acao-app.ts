@@ -585,6 +585,51 @@ export async function verificarPosAcaoApp(): Promise<void> {
     );
   }
 
+  secao("Task 21: sessão expirada entre blocos do Tentar de novo: os blocos seguintes ficam para o Continuar");
+  {
+    // A=101, B=102. b7: A não confirmado, B erro. b8: A erro, B não confirmado. b7 de novo: A pulado, B erro.
+    // Tentar de novo: b8 com A (a sessão cai) e b7 com B, que não pode ficar preso em "aguardando".
+    const m = montarPainel([itemOk(0), itemOk(1)], {
+      bloco: (a, vez) => {
+        const ids = a.idsProcedimento as string[];
+        const r = (id: string, situacao: string) => ({ idProcedimento: id, situacao, mensagem: `${situacao} ${vez}` });
+        if (vez === 1) return { resultados: ids.map((id) => r(id, id === "101" ? "nao-confirmado" : "erro")) };
+        if (vez === 2) return { resultados: ids.map((id) => r(id, id === "101" ? "erro" : "nao-confirmado")) };
+        if (vez === 3) return { resultados: ids.map((id) => r(id, "erro")) };
+        if (vez === 4) return { resultados: ids.map((id) => r(id, "nao-confirmado")), parar: true };
+        return { resultados: ids.map((id) => ({ idProcedimento: id, situacao: "incluido" })) };
+      },
+    });
+    await m.abrir();
+    escolherCombo(m.doc, "Bloco interno", "b7");
+    await m.aplicar();
+    escolherCombo(m.doc, "Bloco interno", "b8");
+    await m.aplicar();
+    escolherCombo(m.doc, "Bloco interno", "b7");
+    await m.aplicar();
+    const resumo = () => m.rpc.de("posAcaoBloco").map((c) => `${c.args.idBloco}:${(c.args.idsProcedimento as string[]).join(",")}`);
+    igual("preparo: b7, b8, b7 só com B", resumo(), ["b7:101,102", "b8:101,102", "b7:102"]);
+    await m.repetir();
+    igual("a sessão cai no primeiro bloco do retry", resumo(), ["b7:101,102", "b8:101,102", "b7:102", "b8:101"]);
+    checar("mensagem da sessão", m.texto().includes(MENSAGEM_SESSAO));
+    checar("Continuar visível para o bloco que faltou", m.visivel("Continuar"));
+    disparar(botao(m.raiz, "Continuar")!, "click");
+    await ate(() => !m.p.rodando);
+    igual("Continuar envia só o bloco que faltou", resumo(), ["b7:101,102", "b8:101,102", "b7:102", "b8:101", "b7:102"]);
+    checar(
+      "B incluído no b7",
+      m.p.estado(1, "bloco")?.situacao === "ok" && m.p.estado(1, "bloco")?.idBloco === "b7",
+      m.p.estado(1, "bloco"),
+    );
+    checar("nada fica aguardando", m.p.estado(0, "bloco")?.situacao !== "aguardando" && m.p.estado(1, "bloco")?.situacao !== "aguardando");
+    checar(
+      "Continuar não diz que algo da pausada deixou de ser enviado",
+      !m.texto().includes("execução pausada"),
+      m.raiz.querySelector(".pl-pos-status")?.textContent,
+    );
+    checar("Continuar some", !m.visivel("Continuar"));
+  }
+
   secao("Fix 1: listas com sessão expirada não ficam guardadas");
   {
     const m = montarPainel([itemOk(0)], { opcoes: (_a, vez) => (vez === 1 ? { ...OPCOES, blocos: [], parar: true } : OPCOES) });
