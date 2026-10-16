@@ -1102,7 +1102,13 @@ class App {
         modeloLivre.select();
         return;
       }
-      if (modelo.value) modeloAtual = modelo.value;
+      if (!modelo.value) return;
+      modeloAtual = modelo.value;
+      // Voltou a escolher da lista: o campo livre sai de cena.
+      if (modeloOutro) {
+        modeloOutro = false;
+        ajustarServico();
+      }
     });
     servico.addEventListener("change", () => {
       const svc = ajustarServico();
