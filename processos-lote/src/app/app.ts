@@ -17,12 +17,12 @@ import { h, icone } from "@comum/ui/dom";
 import { copiarResultado, resultadoComoCsv } from "@comum/ui/tabelaResultado";
 import { JANELA_OUTRA_ABA_MS } from "../modelo/constantes";
 import type { LinhaLote } from "../modelo/linhas";
-import type { RepositorioModelos } from "../modelos";
+import type { ModeloLote, RepositorioModelos } from "../modelos";
 import type { ContextoLote } from "../pagina/contexto";
 import type { LoteEmAndamento, RepositorioLote } from "../repositorio";
 import { type CacheConfig, criarConfirmarSemCancelar, type InfoFormTipo, TelaConfiguracao, type ValoresConfig } from "./configuracao";
 import { ExecucaoLote, MENSAGEM_ASSUMIDO, type ModoRodada, TelaExecucao } from "./execucao";
-import { elegivel, PainelPosAcao } from "./posAcao";
+import { elegivel, type ModeloPosAcao, PainelPosAcao } from "./posAcao";
 import { type PedidoPrevia, TelaPrevia } from "./previa";
 import { atualizarTabelaResultado, colunasDoResultado, linhasDoResultado, montarTelaResultado, numerosParaLink } from "./resultado";
 
@@ -79,6 +79,11 @@ export class AppProcessosLote {
   private telaExecucao: TelaExecucao | null = null;
   /** O painel "Depois de criar" da tela de resultado (so com processo criado e confirmado). */
   private posAcao: PainelPosAcao | null = null;
+  /**
+   * O modelo escolhido na configuracao quando ESTE lote comecou (pelo id do lote): o painel "Depois de criar" abre
+   * com as acoes dele e guarda nele as do painel. So em memoria: um lote retomado depois de fechar nao tem modelo.
+   */
+  private modeloDoLote: { idLote: string; idModelo: string } | null = null;
   private readonly parar: Array<() => void> = [];
   private readonly conteudo: HTMLElement;
   private readonly cabecalho: HTMLElement;
@@ -349,7 +354,29 @@ export class AppProcessosLote {
       return;
     }
     if (this.destruido) return;
+    const idModelo = this.valores.idModelo;
+    this.modeloDoLote = idModelo ? { idLote: lote.id, idModelo } : null;
     this.executar(lote, "pendentes");
+  }
+
+  /** O modelo deste lote como o painel o usa, lido de novo (pode ter mudado); null sem modelo ou se sumiu. */
+  private async modeloParaPainel(ex: ExecucaoLote): Promise<ModeloPosAcao | null> {
+    const ref = this.modeloDoLote;
+    if (!ref || ref.idLote !== ex.lote.id) return null;
+    let modelo: ModeloLote | undefined;
+    try {
+      modelo = (await this.d.modelos.listar()).find((m) => m.id === ref.idModelo);
+    } catch (e) {
+      console.warn("[SEI Pro] processos em lote: falha ao ler o modelo do lote", e);
+    }
+    if (!modelo) return null;
+    const id = modelo.id;
+    const saida: ModeloPosAcao = {
+      nome: modelo.nome,
+      guardar: async (p) => !!(await this.d.modelos.definirPosAcoes(id, p)),
+    };
+    if (modelo.posAcoes) saida.posAcoes = modelo.posAcoes;
+    return saida;
   }
 
   private novaExecucao(lote: LoteEmAndamento): ExecucaoLote {
@@ -426,14 +453,18 @@ export class AppProcessosLote {
     this.telaExecucao = null;
     const interrompido = ex.estado === "cancelado" || restantes > 0;
     // So com processo criado e confirmado: as linhas incertas nunca entram nas acoes.
+    const temAlvo = ex.itens.some(elegivel);
+    const modelo = temAlvo ? await this.modeloParaPainel(ex) : null;
+    if (this.destruido) return;
     let tela: HTMLElement | null = null;
-    const painel = ex.itens.some(elegivel)
+    const painel = temAlvo
       ? new PainelPosAcao(ex.itens, {
           rpc: this.d.rpc,
           esperar: this.d.esperar,
           aoMudar: () => {
             if (tela && !this.destruido) atualizarTabelaResultado(tela, ex.itens, painel);
           },
+          ...(modelo ? { modelo } : {}),
         })
       : null;
     tela = montarTelaResultado(

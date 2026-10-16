@@ -21,7 +21,7 @@ import { montarPrevia } from "@pl/modelo/previa";
 import { RepositorioModelos } from "@pl/modelos";
 import { NUMERO_INCERTO, type ResultadoCriar } from "@pl/pagina/executor";
 import { type LoteEmAndamento, RepositorioLote } from "@pl/repositorio";
-import { botao, checar, combo, disparar, escolherCombo, instalarDom, secao, tique } from "./util";
+import { botao, checar, combo, disparar, escolherCombo, igual, instalarDom, secao, tique } from "./util";
 
 const ESCOPO = "sei.x.gov.br|ana";
 const CHAVE_LOTE = `lote/${ESCOPO}/atual`;
@@ -30,6 +30,12 @@ const TIPOS = [
   { id: "20", nome: "Licitação: Pregão" },
 ];
 const HIPOTESES = [{ id: "7", nome: "Controle Interno (Art. 26, Lei 10.180/2001)" }];
+const OPCOES_POS = {
+  marcadores: [{ id: "m1", nome: "Urgente" }],
+  grupos: [{ id: "g1", nome: "Licitações" }],
+  blocos: [{ id: "b7", numero: "12", descricao: "Contratos de 2026" }],
+  avisos: [],
+};
 
 /** Resposta da aba para o `criar` de uma especificacao; `vezes` = quantas chamadas ja houve para ela. */
 type Roteiro = (esp: string, vezes: number, linha: LinhaLote) => ResultadoCriar | Error | Promise<ResultadoCriar | Error>;
@@ -108,6 +114,7 @@ function montar(o: OpcoesMontar = {}) {
           if (r.situacao === "ok") sucessos.set(esp, (sucessos.get(esp) ?? 0) + 1);
           return r;
         }
+        if (op === "posAcaoOpcoes") return OPCOES_POS;
         return true;
       }) as DepsApp["rpc"]["chamar"],
     },
@@ -1239,6 +1246,72 @@ export async function verificarApp(): Promise<void> {
       "apagar não mexe no formulário",
       textoCombo(m.raiz, "Tipo de processo").includes("Contrato: Gestão") && m.campo("pl-pausa").value === "700",
     );
+    m.app.destruir();
+  }
+
+  secao("Task 21: o modelo aplicado leva as ações ao Depois de criar e guarda as do painel");
+  {
+    const area = areaMemoria();
+    const repoM = new RepositorioModelos(area, ESCOPO);
+    const P = { idTipo: "10", nomeTipo: "Contrato: Gestão", nivelAcesso: "0" as const, hipoteseLegal: "", nomeHipotese: "", pausa: 500 };
+    const mod = await repoM.salvar("Contratos", P, { marcador: { id: "m1", nome: "Urgente", texto: "t" } });
+    const m = montar({ area });
+    await m.app.iniciar();
+    await ate(() => opcoesCombo(m.raiz, ROTULO_MODELO).length > 0);
+    escolherCombo(m.raiz, ROTULO_MODELO, mod.id);
+    await ate(() => !botao(m.raiz, "Ver prévia")?.disabled);
+    m.digitar("Alfa");
+    m.clicar("Ver prévia");
+    m.clicar("Iniciar");
+    await ate(() => !!m.raiz.querySelector(".pl-resultado"));
+    await ate(() => m.chamadas.some((c) => c.op === "posAcaoOpcoes"));
+    await tique(10);
+    checar(
+      "painel aberto com o marcador do modelo ligado",
+      m.raiz.querySelector<HTMLInputElement>('input[data-acao="marcador"]')?.checked === true,
+    );
+    checar("marcador do modelo escolhido", textoCombo(m.raiz, "Marcador").includes("Urgente"));
+    checar("nada aplicado sozinho", !m.chamadas.some((c) => c.op === "posAcao" || c.op === "posAcaoBloco"));
+    escolherCombo(m.raiz, "Bloco interno", "b7");
+    m.clicar("Guardar estas ações no modelo");
+    await ate(() => m.textoVisivel("Ações guardadas no modelo"));
+    const salvo = (await repoM.listar()).find((x) => x.id === mod.id);
+    igual("modelo aplicado recebeu as ações do painel", salvo?.posAcoes, {
+      marcador: { id: "m1", nome: "Urgente", texto: "t" },
+      bloco: { id: "b7", descricao: "Contratos de 2026" },
+    });
+    igual("parâmetros do modelo intactos", salvo?.parametros, P);
+    m.app.destruir();
+
+    // Salvar como modelo com o mesmo nome (parametros novos) mantém as ações guardadas.
+    const n = montar({ area });
+    await n.app.iniciar();
+    await ate(() => opcoesCombo(n.raiz, ROTULO_MODELO).length > 0);
+    escolherCombo(n.raiz, ROTULO_MODELO, mod.id);
+    await ate(() => !botao(n.raiz, "Ver prévia")?.disabled);
+    n.preencher("pl-pausa", "800");
+    n.clicar("Salvar como modelo…");
+    const d = dialogo(n.doc)!;
+    disparar(botao(d, "Salvar modelo")!, "click");
+    await ate(() => !dialogo(n.doc));
+    const resalvo = (await repoM.listar()).find((x) => x.id === mod.id);
+    checar("salvar de novo: pausa nova", resalvo?.parametros.pausa === 800, resalvo);
+    checar("salvar de novo: ações mantidas", JSON.stringify(resalvo?.posAcoes) === JSON.stringify(salvo?.posAcoes), resalvo);
+    n.app.destruir();
+  }
+  {
+    const m = montar();
+    await m.app.iniciar();
+    await m.configurar("Alfa");
+    m.clicar("Ver prévia");
+    m.clicar("Iniciar");
+    await ate(() => !!m.raiz.querySelector(".pl-resultado"));
+    await tique(10);
+    checar(
+      "sem modelo: painel recolhido, nada pedido",
+      !!m.raiz.querySelector(".pl-pos-corpo[hidden]") && !m.chamadas.some((c) => c.op === "posAcaoOpcoes"),
+    );
+    checar("sem modelo: sem o botão de guardar", !botao(m.raiz, "Guardar estas ações no modelo"));
     m.app.destruir();
   }
 }

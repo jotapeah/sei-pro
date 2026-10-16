@@ -58,6 +58,21 @@ export async function verificarModelos(): Promise<void> {
     marcador: { id: "1", nome: "Urgente", texto: "t" },
   });
 
+  secao("RepositorioModelos: definirPosAcoes (Task 21)");
+  {
+    const r = new RepositorioModelos(areaMemoria(), ESCOPO, () => 5);
+    const alvo = await r.salvar("Alvo", parametros());
+    const acoes = { acompanhar: { grupo: "", nomeGrupo: "", observacao: "ver" }, bloco: { id: "9", descricao: "Bloco 12" } };
+    const def = await r.definirPosAcoes(alvo.id, acoes);
+    igual("definirPosAcoes devolve o modelo com as ações", def?.posAcoes, acoes);
+    const lido = (await r.listar())[0];
+    igual("ações gravadas", lido?.posAcoes, acoes);
+    igual("parâmetros e nome intactos", [lido?.nome, lido?.parametros], ["Alvo", parametros()]);
+    const limpo = await r.definirPosAcoes(alvo.id, {});
+    checar("ações vazias tiram o campo", !!limpo && !("posAcoes" in limpo) && !("posAcoes" in ((await r.listar())[0] ?? {})));
+    igual("modelo que não existe mais devolve null", await r.definirPosAcoes("nao-existe", acoes), null);
+  }
+
   secao("RepositorioModelos: renomear e apagar");
   const ren = await repo.renomear(m.id, "Contratos 2026");
   igual("renomear devolve o novo nome", ren?.nome, "Contratos 2026");

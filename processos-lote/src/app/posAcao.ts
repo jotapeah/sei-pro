@@ -17,12 +17,18 @@
  *   "Tentar de novo"/"Continuar") a apaga, e ai o painel novo nao sabe do que ficou nao confirmado. Marcador e
  *   acompanhamento continuam seguros de repetir (idempotentes); a inclusao em bloco, nao: depois de um "confira
  *   o bloco", o usuario precisa conferir o bloco antes de aplicar de novo.
+ *
+ * Modelo do lote (o escolhido na configuracao quando o lote comecou): o botao "Guardar estas acoes no modelo"
+ * grava nele as acoes como estao no painel (so as ligadas; nenhuma ligada limpa). Se o modelo ja tem acoes, o
+ * painel abre com elas ESCOLHIDAS, nunca aplicadas: o usuario ainda clica Aplicar. Marcador, grupo ou bloco do
+ * modelo que nao esta nas listas carregadas deixa a acao desligada, com o aviso "nao existe mais nesta unidade".
  */
 
 import { ExecutorLote, type ItemLote, type SaidaItem } from "@comum/lote/executor";
 import type { Rpc } from "@comum/ponte/rpc";
 import { type Combo, criarCombo } from "@comum/ui/combobox";
 import { h, icone } from "@comum/ui/dom";
+import type { PosAcoes } from "../modelos";
 import { NUMERO_INCERTO, NUMERO_NAO_IDENTIFICADO } from "../pagina/executor";
 import type { OpcaoBloco, Opcao as OpcaoSei, OpcoesPosAcao, ResultadoPosAcao, ResultadoPosAcaoBloco } from "../pagina/posAcao";
 import { type ItemProc, MENSAGEM_SESSAO } from "./execucao";
@@ -104,11 +110,22 @@ interface Entrada {
   acoes: AcaoProcesso[];
 }
 
+/** O modelo escolhido na configuracao quando o lote comecou. */
+export interface ModeloPosAcao {
+  nome: string;
+  /** As acoes ja guardadas: o painel abre com elas escolhidas (nunca aplicadas sozinhas). */
+  posAcoes?: PosAcoes;
+  /** Grava as acoes no modelo; false se o modelo nao existe mais. */
+  guardar(p: PosAcoes): Promise<boolean>;
+}
+
 export interface DepsPosAcao {
   rpc: Pick<Rpc, "chamar">;
   /** A tabela do resultado redesenha a coluna "Depois de criar". */
   aoMudar(): void;
   esperar?(ms: number): Promise<void>;
+  /** Sem modelo, nao ha o botao de guardar nem acoes pre-escolhidas. */
+  modelo?: ModeloPosAcao;
 }
 
 export class PainelPosAcao {
@@ -142,6 +159,9 @@ export class PainelPosAcao {
   private readonly naoConfirmados = new Map<string, { indice: number; idBloco: string; numeroBloco: string }>();
   private destruido = false;
   private aberto = false;
+  /** As acoes do modelo ja foram postas no painel (uma vez, quando as listas chegam). */
+  private modeloAplicado = false;
+  private guardando = false;
 
   private readonly abrir: HTMLButtonElement;
   private readonly corpo: HTMLElement;
@@ -160,6 +180,9 @@ export class PainelPosAcao {
   private readonly botaoAplicar: HTMLButtonElement;
   private readonly botaoRepetir: HTMLButtonElement;
   private readonly botaoContinuar: HTMLButtonElement;
+  private readonly botaoGuardar: HTMLButtonElement | null;
+  /** Um aviso por acao do modelo que nao existe mais nas listas carregadas. */
+  private readonly avisosModelo: HTMLElement;
 
   constructor(
     itens: readonly ItemProc[],
@@ -222,6 +245,8 @@ export class PainelPosAcao {
     this.botaoAplicar = botao("Aplicar", "check", () => void this.aplicar(), "primario");
     this.botaoRepetir = botao("Tentar de novo as falhas", "atualizar", () => void this.repetirFalhas());
     this.botaoContinuar = botao("Continuar", "atualizar", () => void this.continuar());
+    this.botaoGuardar = d.modelo ? botao("Guardar estas ações no modelo", "camadas", () => void this.guardarNoModelo()) : null;
+    this.avisosModelo = h("div", { class: "pl-pos-avisos-modelo" });
     this.avisos = h("div", { class: "pl-pos-avisos" });
     this.carregandoEl = h("p", { class: "pl-nota", hidden: true }, "Carregando as listas do SEI...");
     this.motivoEl = h("p", { class: "pl-motivo", role: "alert", hidden: true });
@@ -257,12 +282,21 @@ export class PainelPosAcao {
         : null,
       this.carregandoEl,
       this.avisos,
+      this.avisosModelo,
       bloco("bloco", "Incluir em bloco interno", this.comboBloco.el, this.avisoBloco),
       bloco("marcador", "Aplicar marcador", this.comboMarcador.el, this.textoMarcador),
       bloco("acompanhar", "Acompanhar", this.comboGrupo.el, this.observacao),
       this.motivoEl,
       this.status,
-      h("div", { class: "pl-acoes" }, this.botaoAplicar, this.botaoRepetir, this.botaoContinuar),
+      h(
+        "div",
+        { class: "pl-acoes" },
+        this.botaoAplicar,
+        this.botaoRepetir,
+        this.botaoContinuar,
+        this.botaoGuardar ? h("span", { class: "pl-espaco" }) : null,
+        this.botaoGuardar,
+      ),
     );
     this.abrir = h(
       "button",
@@ -278,6 +312,8 @@ export class PainelPosAcao {
     );
     this.el = h("section", { class: "pl-pos-acao", "aria-label": "Depois de criar" }, this.abrir, this.corpo);
     this.desenhar();
+    // Modelo com acoes: o painel ja abre (e carrega as listas) para mostra-las escolhidas.
+    if (temAcoes(d.modelo?.posAcoes) && this.alvos.length) this.alternar();
   }
 
   /** Ha algo a mostrar na coluna "Depois de criar". */
@@ -347,7 +383,10 @@ export class PainelPosAcao {
         };
         // Sessao expirada: as listas vieram pela metade. Nao guarda; fechar e abrir o painel carrega de novo.
         if (r?.parar) this.motivo = MENSAGEM_SESSAO;
-        else this.opcoes = opcoes;
+        else {
+          this.opcoes = opcoes;
+          this.aplicarModelo();
+        }
         this.avisos.replaceChildren(...opcoes.avisos.map((a) => h("p", { class: "pl-motivo" }, icone("alerta", 16), a)));
       } catch (e) {
         if (this.destruido) return;
@@ -628,6 +667,96 @@ export class PainelPosAcao {
     }
   }
 
+  /* ------------------------------------------------------------ modelo */
+
+  /**
+   * Poe as acoes do modelo no painel, uma vez, com as listas ja carregadas: escolhe e liga cada uma que existe; a
+   * que nao existe mais fica desligada com aviso (nunca aplicada em silencio). Nada e enviado ao SEI aqui.
+   */
+  private aplicarModelo(): void {
+    const pos = this.d.modelo?.posAcoes;
+    if (this.modeloAplicado || !pos || !this.opcoes) return;
+    this.modeloAplicado = true;
+    const avisos: string[] = [];
+    const sumiu = (oQue: string, nome: string) =>
+      avisos.push(`${oQue} "${nome}" do modelo não existe mais nesta unidade; a ação ficou desligada.`);
+    if (pos.bloco) {
+      const b = this.opcoes.blocos.find((x) => x.id === pos.bloco!.id);
+      if (b) {
+        this.comboBloco.definir([b.id]);
+        this.liga.bloco.checked = true;
+      } else sumiu("O bloco interno", pos.bloco.descricao || pos.bloco.id);
+    }
+    if (pos.marcador) {
+      this.textoMarcador.value = pos.marcador.texto.slice(0, MAX_TEXTO_MARCADOR);
+      const m = this.opcoes.marcadores.find((x) => x.id === pos.marcador!.id);
+      if (m) {
+        this.comboMarcador.definir([m.id]);
+        this.liga.marcador.checked = true;
+      } else sumiu("O marcador", pos.marcador.nome || pos.marcador.id);
+    }
+    if (pos.acompanhar) {
+      this.observacao.value = pos.acompanhar.observacao.slice(0, MAX_OBSERVACAO);
+      const grupo = pos.acompanhar.grupo;
+      // Sem grupo e uma escolha valida (acompanhar sem grupo): nao ha o que sumir.
+      if (!grupo || this.opcoes.grupos.some((x) => x.id === grupo)) {
+        this.comboGrupo.definir(grupo ? [grupo] : []);
+        this.liga.acompanhar.checked = true;
+      } else sumiu("O grupo de acompanhamento", pos.acompanhar.nomeGrupo || grupo);
+    }
+    this.comboBloco.atualizar();
+    this.comboMarcador.atualizar();
+    this.comboGrupo.atualizar();
+    this.avisosModelo.replaceChildren(...avisos.map((a) => h("p", { class: "pl-motivo pl-pos-aviso-modelo" }, icone("alerta", 16), a)));
+  }
+
+  /** As acoes ligadas como o modelo as guarda; null se alguma ligada esta incompleta (ou as listas nao vieram). */
+  private lerPosAcoes(): PosAcoes | null {
+    if (!this.opcoes) return null;
+    const p: PosAcoes = {};
+    if (this.liga.marcador.checked) {
+      const m = this.opcoes.marcadores.find((x) => x.id === this.comboMarcador.valor()[0]);
+      if (!m) return null;
+      p.marcador = { id: m.id, nome: m.nome, texto: this.textoMarcador.value.trim().slice(0, MAX_TEXTO_MARCADOR) };
+    }
+    if (this.liga.acompanhar.checked) {
+      const grupo = this.comboGrupo.valor()[0] ?? "";
+      const nomeGrupo = grupo ? (this.opcoes.grupos.find((x) => x.id === grupo)?.nome ?? "") : "";
+      p.acompanhar = { grupo, nomeGrupo, observacao: this.observacao.value.trim().slice(0, MAX_OBSERVACAO) };
+    }
+    if (this.liga.bloco.checked) {
+      const b = this.opcoes.blocos.find((x) => x.id === this.comboBloco.valor()[0]);
+      if (!b) return null;
+      p.bloco = { id: b.id, descricao: b.descricao };
+    }
+    return p;
+  }
+
+  /** Grava no modelo as acoes como estao no painel. So grava; nada vai ao SEI. */
+  private async guardarNoModelo(): Promise<void> {
+    const modelo = this.d.modelo;
+    const p = this.lerPosAcoes();
+    if (!modelo || !p || this.guardando) return;
+    this.guardando = true;
+    this.desenhar();
+    let nota: string;
+    try {
+      const ok = await modelo.guardar(p);
+      nota = !ok
+        ? `O modelo "${modelo.nome}" não existe mais (talvez apagado em outra aba); nada foi guardado.`
+        : temAcoes(p)
+          ? `Ações guardadas no modelo "${modelo.nome}".`
+          : `O modelo "${modelo.nome}" ficou sem ações depois de criar.`;
+    } catch (e) {
+      nota = `Não foi possível guardar as ações no modelo: ${mensagem(e)}`;
+    } finally {
+      this.guardando = false;
+    }
+    if (this.destruido) return;
+    this.nota = nota;
+    this.desenhar();
+  }
+
   /* ------------------------------------------------------------ tela */
 
   /** Escolher numa lista liga a acao (o usuario ja disse o que quer). */
@@ -672,6 +801,7 @@ export class PainelPosAcao {
     const rodando = this.rodada !== null;
     const pronto = !!this.opcoes && !this.carregando;
     this.botaoAplicar.disabled = rodando || !pronto || !this.lerConfig();
+    if (this.botaoGuardar) this.botaoGuardar.disabled = this.guardando || !pronto || !this.lerPosAcoes();
     const erros = this.contar("erro");
     this.botaoRepetir.hidden = rodando || erros === 0;
     this.botaoContinuar.hidden = rodando || !(this.executor?.estado === "pausado" || this.pendentes !== null);
@@ -738,6 +868,8 @@ function numeroConfirmado(i: ItemProc): boolean {
   const n = i.resultado?.criado.numero;
   return !i.resultado?.incerto && !!n && n !== NUMERO_INCERTO && n !== NUMERO_NAO_IDENTIFICADO;
 }
+
+const temAcoes = (p: PosAcoes | undefined): boolean => !!p && !!(p.marcador || p.acompanhar || p.bloco);
 
 const chavePar = (idBloco: string, i: ItemProc): string => `${idBloco}|${i.resultado?.criado.idProcedimento.trim() ?? ""}`;
 

@@ -7,7 +7,8 @@
  * vazia tambem bloqueia, dizendo que nao carregou.
  *
  * Modelos salvos (linha "Modelo", acima do tipo): aplicar um modelo escolhe tipo, nivel, hipotese e pausa, nunca as
- * linhas. Tipo ou hipotese que nao existe mais na lista carregada NAO e aplicado em silencio: o campo fica como
+ * linhas. As acoes depois de criar do modelo nao aparecem aqui: o app leva o modelo escolhido ao painel do resultado
+ * (que as mostra e as guarda); salvar de novo com o mesmo nome as mantem. Tipo ou hipotese que nao existe mais na lista carregada NAO e aplicado em silencio: o campo fica como
  * estava e o aviso aparece no proprio formulario.
  */
 
@@ -222,7 +223,8 @@ export class TelaConfiguracao {
               {
                 type: "button",
                 class: "spro-botao",
-                title: "Guarda o tipo, o nível, a hipótese e a pausa (não as linhas)",
+                title:
+                  "Guarda o tipo, o nível, a hipótese e a pausa (não as linhas). As ações depois de criar são guardadas no modelo pelo painel do resultado.",
                 onclick: () => this.salvarModelo(),
               },
               icone("camadas", 15),
@@ -587,7 +589,9 @@ export class TelaConfiguracao {
           ? "Já existe um modelo com este nome; ele será substituído."
           : "",
       gravar: async (nome) => {
-        const m = await dm.repo.salvar(nome, parametros);
+        // Mesmo nome substitui so os parametros: as acoes depois de criar ja guardadas no modelo ficam.
+        const existente = this.modelos.find((x) => normalizarTexto(x.nome) === normalizarTexto(nome));
+        const m = await dm.repo.salvar(nome, parametros, existente?.posAcoes);
         await this.carregarModelos();
         if (this.destruida) return;
         this.modelo.definir([m.id]);

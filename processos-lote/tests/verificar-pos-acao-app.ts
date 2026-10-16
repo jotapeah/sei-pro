@@ -17,11 +17,11 @@ import {
   PRAZO_POS_ACAO_MS,
   TEXTO_FORA_DA_PAGINA,
 } from "@pl/app/posAcao";
-import { RepositorioModelos } from "@pl/modelos";
+import { type PosAcoes, RepositorioModelos } from "@pl/modelos";
 import { NUMERO_INCERTO, NUMERO_NAO_IDENTIFICADO } from "@pl/pagina/executor";
 import type { OpcoesPosAcao } from "@pl/pagina/posAcao";
 import { type LoteEmAndamento, RepositorioLote } from "@pl/repositorio";
-import { botao, checar, disparar, escolherCombo, igual, instalarDom, secao, tique } from "./util";
+import { botao, checar, combo, disparar, escolherCombo, igual, instalarDom, secao, tique } from "./util";
 
 const ESCOPO = "sei.x.gov.br|ana";
 
@@ -67,6 +67,8 @@ interface OpcoesMontar {
   opcoes?: Tratador;
   posAcao?: Tratador;
   bloco?: Tratador;
+  /** O modelo aplicado na configuracao (Task 21). */
+  modelo?: { nome: string; posAcoes?: PosAcoes; guardar(p: PosAcoes): Promise<boolean> };
 }
 
 async function ate(cond: () => boolean, limite = 300): Promise<void> {
@@ -122,6 +124,7 @@ function montarPainel(itens: ItemProc[], o: OpcoesMontar = {}) {
     esperar: async (ms) => {
       pausas.push(ms);
     },
+    modelo: o.modelo,
   });
   raiz.append(p.el);
   const abrir = async () => {
@@ -710,6 +713,161 @@ export async function verificarPosAcaoApp(): Promise<void> {
       "Continuar uma vez só",
       c.posDe("marcador").length === 2 && c.posDe("marcador")[1]?.args.idProcedimento === "102",
       c.posDe("marcador"),
+    );
+  }
+
+  secao("Task 21: modelo com ações abre o painel com elas ligadas (nada enviado sem Aplicar)");
+  {
+    const m = montarPainel([itemOk(0), itemOk(1)], {
+      modelo: {
+        nome: "Contratos",
+        posAcoes: {
+          bloco: { id: "b8", descricao: "Pregões" },
+          marcador: { id: "m2", nome: "Aguardando", texto: "ver" },
+          acompanhar: { grupo: "g1", nomeGrupo: "Licitações", observacao: "obs" },
+        },
+        guardar: async () => true,
+      },
+    });
+    await ate(() => m.rpc.de("posAcaoOpcoes").length > 0);
+    await tique(10);
+    const caixa = (a: string) => m.raiz.querySelector<HTMLInputElement>(`input[data-acao="${a}"]`)!;
+    checar("abre sozinho", !m.raiz.querySelector(".pl-pos-corpo[hidden]"));
+    checar(
+      "três ações ligadas",
+      ["bloco", "marcador", "acompanhar"].every((a) => caixa(a).checked),
+    );
+    checar(
+      "bloco escolhido",
+      (combo(m.raiz, "Bloco interno")?.textContent ?? "").includes("13"),
+      combo(m.raiz, "Bloco interno")?.textContent,
+    );
+    checar("marcador escolhido", (combo(m.raiz, "Marcador")?.textContent ?? "").includes("Aguardando"));
+    checar("grupo escolhido", (combo(m.raiz, "Grupo de acompanhamento")?.textContent ?? "").includes("Licitações"));
+    checar("texto do marcador", m.raiz.querySelector<HTMLInputElement>('input[aria-label="Texto do marcador"]')?.value === "ver");
+    checar("observação", m.raiz.querySelector<HTMLTextAreaElement>("textarea.pl-pos-observacao")?.value === "obs");
+    checar("sem aviso de opção sumida", !m.texto().includes("não existe mais"));
+    checar("nada enviado sem Aplicar", m.rpc.de("posAcao").length === 0 && m.rpc.de("posAcaoBloco").length === 0);
+    checar("Aplicar ligado", botao(m.raiz, "Aplicar")?.disabled === false);
+    await m.aplicar();
+    igual("Aplicar usa o bloco do modelo", m.rpc.de("posAcaoBloco")[0]?.args, { idBloco: "b8", idsProcedimento: ["101", "102"] });
+    igual(
+      "Aplicar usa o marcador e o texto do modelo",
+      [m.posDe("marcador")[0]?.args.marcador, m.posDe("marcador")[0]?.args.texto],
+      ["Aguardando", "ver"],
+    );
+    igual(
+      "Aplicar usa o grupo e a observação do modelo",
+      [m.posDe("acompanhar")[0]?.args.grupo, m.posDe("acompanhar")[0]?.args.observacao],
+      ["g1", "obs"],
+    );
+  }
+
+  secao("Task 21: ação do modelo cuja opção sumiu vem desligada, com aviso");
+  {
+    const m = montarPainel([itemOk(0)], {
+      modelo: {
+        nome: "Antigo",
+        posAcoes: {
+          bloco: { id: "b99", descricao: "Velho" },
+          marcador: { id: "m9", nome: "Extinto", texto: "" },
+          acompanhar: { grupo: "g9", nomeGrupo: "Grupo sumido", observacao: "" },
+        },
+        guardar: async () => true,
+      },
+    });
+    await ate(() => m.rpc.de("posAcaoOpcoes").length > 0);
+    await tique(10);
+    const caixa = (a: string) => m.raiz.querySelector<HTMLInputElement>(`input[data-acao="${a}"]`)!;
+    checar(
+      "as três desligadas",
+      ["bloco", "marcador", "acompanhar"].every((a) => !caixa(a).checked),
+    );
+    const avisos = [...m.raiz.querySelectorAll(".pl-pos-aviso-modelo")].map((x) => x.textContent ?? "");
+    checar(
+      "um aviso por ação, com o nome e 'não existe mais nesta unidade'",
+      avisos.length === 3 &&
+        avisos.every((a) => a.includes("não existe mais nesta unidade")) &&
+        ["Velho", "Extinto", "Grupo sumido"].every((n) => avisos.some((a) => a.includes(n))),
+      avisos,
+    );
+    checar("Aplicar desligado", botao(m.raiz, "Aplicar")?.disabled === true);
+    checar("nada enviado", m.rpc.de("posAcao").length === 0 && m.rpc.de("posAcaoBloco").length === 0);
+  }
+  {
+    // Acompanhar sem grupo: nao ha o que sumir.
+    const m = montarPainel([itemOk(0)], {
+      modelo: { nome: "S", posAcoes: { acompanhar: { grupo: "", nomeGrupo: "", observacao: "x" } }, guardar: async () => true },
+    });
+    await ate(() => m.rpc.de("posAcaoOpcoes").length > 0);
+    await tique(10);
+    checar(
+      "acompanhar sem grupo: ligado, sem aviso",
+      m.raiz.querySelector<HTMLInputElement>('input[data-acao="acompanhar"]')?.checked === true && !m.texto().includes("não existe mais"),
+    );
+  }
+
+  secao("Task 21: modelo sem ações deixa o painel como antes");
+  {
+    const m = montarPainel([itemOk(0)], { modelo: { nome: "Vazio", guardar: async () => true } });
+    await tique(10);
+    checar("recolhido e sem pedir nada", !!m.raiz.querySelector(".pl-pos-corpo[hidden]") && m.rpc.chamadas.length === 0);
+    await m.abrir();
+    checar(
+      "nenhuma ação ligada",
+      [...m.raiz.querySelectorAll<HTMLInputElement>("input.pl-pos-liga")].every((c) => !c.checked),
+    );
+    checar("sem aviso", !m.texto().includes("não existe mais"));
+    const s = montarPainel([itemOk(0)]);
+    await s.abrir();
+    checar("sem modelo: sem o botão de guardar", !botao(s.raiz, "Guardar estas ações no modelo"));
+  }
+
+  secao("Task 21: Guardar estas ações no modelo");
+  {
+    const guardadas: PosAcoes[] = [];
+    let existe = true;
+    const m = montarPainel([itemOk(0)], {
+      modelo: {
+        nome: "Contratos",
+        guardar: async (p) => {
+          guardadas.push(p);
+          return existe;
+        },
+      },
+    });
+    checar("botão presente", !!botao(m.raiz, "Guardar estas ações no modelo"));
+    checar("antes das listas: desligado", botao(m.raiz, "Guardar estas ações no modelo")?.disabled === true);
+    await m.abrir();
+    escolherCombo(m.doc, "Bloco interno", "b7");
+    m.ligar("marcador");
+    checar("ação ligada incompleta: desligado", botao(m.raiz, "Guardar estas ações no modelo")?.disabled === true);
+    escolherCombo(m.doc, "Marcador", "m1");
+    m.raiz.querySelector<HTMLInputElement>('input[aria-label="Texto do marcador"]')!.value = "  oi  ";
+    m.ligar("acompanhar");
+    m.raiz.querySelector<HTMLTextAreaElement>("textarea.pl-pos-observacao")!.value = "x";
+    disparar(botao(m.raiz, "Guardar estas ações no modelo")!, "click");
+    await ate(() => guardadas.length > 0);
+    await tique(5);
+    igual("guarda as três ações com ids e nomes", guardadas[0], {
+      marcador: { id: "m1", nome: "Urgente", texto: "oi" },
+      acompanhar: { grupo: "", nomeGrupo: "", observacao: "x" },
+      bloco: { id: "b7", descricao: "Contratos de 2026" },
+    });
+    checar(
+      "confirma no painel",
+      m.texto().includes('Ações guardadas no modelo "Contratos".'),
+      m.raiz.querySelector(".pl-pos-status")?.textContent,
+    );
+    checar("guardar não envia nada ao SEI", m.rpc.de("posAcao").length === 0 && m.rpc.de("posAcaoBloco").length === 0);
+    existe = false;
+    disparar(botao(m.raiz, "Guardar estas ações no modelo")!, "click");
+    await ate(() => guardadas.length > 1);
+    await tique(5);
+    checar(
+      "modelo apagado em outra aba: avisa",
+      m.texto().includes('O modelo "Contratos" não existe mais'),
+      m.raiz.querySelector(".pl-pos-status")?.textContent,
     );
   }
 

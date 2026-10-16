@@ -10,7 +10,10 @@ import type { Area } from "@comum/armazenamento/area";
 import { normalizarTexto } from "@comum/texto";
 import type { Parametros } from "./repositorio";
 
-/** Acoes depois da criacao guardadas no modelo. Preenchido na Task 21; aqui so o tipo. */
+/**
+ * Acoes depois da criacao guardadas no modelo (pelo botao do painel "Depois de criar"). Guardam id e nome: o id
+ * escolhe a opcao quando o painel abre; o nome e o que o aviso mostra quando ela nao existe mais na unidade.
+ */
 export interface PosAcoes {
   marcador?: { id: string; nome: string; texto: string };
   acompanhar?: { grupo: string; nomeGrupo: string; observacao: string };
@@ -168,6 +171,20 @@ export class RepositorioModelos {
       if (todos.some((m) => m.id !== id && normalizarTexto(m.nome) === chave))
         throw new ErroModelo("Já existe outro modelo com este nome.");
       const novo = { ...atual, nome: n };
+      await this.area.gravar({ [this.prefixo + id]: novo });
+      return novo;
+    });
+  }
+
+  /** As acoes depois de criar de um modelo existente; vazias tiram o campo. null se o modelo nao existe mais. */
+  definirPosAcoes(id: string, posAcoes: PosAcoes): Promise<ModeloLote | null> {
+    return this.enfileirar(async () => {
+      const atual = (await this.listar()).find((m) => m.id === id);
+      if (!atual) return null;
+      const { posAcoes: _antigas, ...resto } = atual;
+      const novo: ModeloLote = resto;
+      const pos = lerPosAcoes(posAcoes);
+      if (pos) novo.posAcoes = pos;
       await this.area.gravar({ [this.prefixo + id]: novo });
       return novo;
     });
