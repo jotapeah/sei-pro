@@ -15,6 +15,7 @@ import { avisar } from "@comum/ui/aviso";
 import type { AbrirModal } from "@comum/ui/dialogo";
 import { h, icone } from "@comum/ui/dom";
 import { copiarResultado, resultadoComoCsv } from "@comum/ui/tabelaResultado";
+import { JANELA_OUTRA_ABA_MS } from "../modelo/constantes";
 import type { LinhaLote } from "../modelo/linhas";
 import type { ContextoLote } from "../pagina/contexto";
 import type { LoteEmAndamento, RepositorioLote } from "../repositorio";
@@ -51,6 +52,10 @@ export interface DepsApp {
 }
 
 type Tela = "carregando" | "retomar" | "configuracao" | "previa" | "execucao" | "resultado";
+
+/** Linhas criadas que o usuario precisa conferir: incertas ou com aviso (ex.: numero nao identificado). */
+const aConferir = (ex: ExecucaoLote): number =>
+  ex.itens.filter((i) => i.situacao === "ok" && (i.resultado?.incerto || i.resultado?.aviso)).length;
 
 const mensagem = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 const novoId = (): string => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -130,7 +135,12 @@ export class AppProcessosLote {
       this.telaRetomar(lote);
       return;
     }
-    // Tudo criado (o app saiu antes de descartar): nada a retomar.
+    // Nada pendente, mas linha incerta (ou criada com aviso): e justamente o que o usuario precisa conferir.
+    if (lote && meu && lote.itens.some((i) => i.situacao === "ok" && (i.incerto || i.aviso))) {
+      void this.finalizar(this.novaExecucao(lote));
+      return;
+    }
+    // Tudo criado e confirmado (o app saiu antes de descartar): nada a retomar.
     if (lote && meu) await this.d.repo.descartar().catch(() => undefined);
     this.telaConfiguracao();
   }
@@ -182,6 +192,9 @@ export class AppProcessosLote {
   }
 
   private telaRetomar(lote: LoteEmAndamento): void {
+    // Escrita recente: o lote pode estar rodando em outra aba (minimizado, por exemplo). Continuar aqui duplicaria.
+    const desde = (this.d.agora ?? Date.now)() - (lote.atualizadoEm ?? 0);
+    const recente = desde < JANELA_OUTRA_ABA_MS;
     const ok = lote.itens.filter((i) => i.situacao === "ok").length;
     const incertos = lote.itens.filter((i) => i.situacao === "ok" && i.incerto).length;
     const total = lote.itens.length;
@@ -189,9 +202,28 @@ export class AppProcessosLote {
     const quando = new Date(lote.iniciadoEm);
     const data = Number.isFinite(quando.getTime()) ? quando.toLocaleString("pt-BR") : "";
     const erro = h("p", { class: "pl-erro", role: "alert", hidden: true });
+    const mesmoAssim = h(
+      "button",
+      { type: "button", class: "spro-botao perigo", hidden: true, onclick: () => void this.retomar(lote, mesmoAssim, erro) },
+      icone("atualizar", 15),
+      "Continuar mesmo assim",
+    );
     const continuar = h(
       "button",
-      { type: "button", class: "spro-botao primario", onclick: () => void this.retomar(lote, continuar, erro) },
+      {
+        type: "button",
+        class: "spro-botao primario",
+        onclick: () => {
+          // Lote recente: o primeiro clique so arma o segundo, explicito.
+          if (recente) {
+            continuar.hidden = true;
+            mesmoAssim.hidden = false;
+            mesmoAssim.focus?.({ preventScroll: true });
+            return;
+          }
+          void this.retomar(lote, continuar, erro);
+        },
+      },
       icone("atualizar", 15),
       "Continuar de onde parou",
     );
@@ -235,8 +267,16 @@ export class AppProcessosLote {
               `${incertos} ${incertos === 1 ? "linha ficou incerta" : "linhas ficaram incertas"} (o SEI não confirmou). Elas não serão repetidas: confira no Controle de Processos.`,
             )
           : null,
+        recente
+          ? h(
+              "p",
+              { class: "pl-motivo pl-outra-aba", role: "alert" },
+              icone("alerta", 16),
+              `Este lote foi atualizado há ${Math.max(0, Math.round(desde / 1000))} segundos e pode estar em execução em outra aba do SEI. Só continue se tiver certeza de que a outra execução parou.`,
+            )
+          : null,
         erro,
-        h("div", { class: "pl-acoes" }, descartar, h("span", { class: "pl-espaco" }), continuar),
+        h("div", { class: "pl-acoes" }, descartar, h("span", { class: "pl-espaco" }), continuar, mesmoAssim),
       ),
     );
   }
@@ -255,7 +295,22 @@ export class AppProcessosLote {
       return;
     }
     if (this.destruido) return;
-    this.executar(lote, "pendentes");
+    // Assume o lote com um id novo, a partir do registro FRESCO: outra aba que ainda o execute perde o `marcar` e
+    // para antes do proximo POST.
+    let assumido: LoteEmAndamento | null = null;
+    try {
+      assumido = await this.d.repo.assumir(lote.id, novoId());
+    } catch (e) {
+      console.warn("[SEI Pro] processos em lote: falha ao assumir o lote", e);
+    }
+    if (this.destruido) return;
+    if (!assumido) {
+      botao.disabled = false;
+      erro.hidden = false;
+      erro.textContent = "O lote mudou desde que esta janela abriu (outra aba o descartou ou assumiu). Feche e abra de novo.";
+      return;
+    }
+    this.executar(assumido, "pendentes");
   }
 
   /** Grava o lote inteiro ANTES do primeiro POST; sem a gravacao, nada sai. */
@@ -279,18 +334,22 @@ export class AppProcessosLote {
     this.executar(lote, "pendentes");
   }
 
-  private executar(lote: LoteEmAndamento, modo: ModoRodada): void {
-    const ex =
-      this.execucao && this.execucao.lote.id === lote.id
-        ? this.execucao
-        : new ExecucaoLote(lote, {
-            rpc: this.d.rpc,
-            repo: this.d.repo,
-            aoMudar: () => this.aoMudar(),
-            esperar: this.d.esperar,
-            agora: this.d.agora,
-          });
+  private novaExecucao(lote: LoteEmAndamento): ExecucaoLote {
+    const ex = new ExecucaoLote(lote, {
+      rpc: this.d.rpc,
+      repo: this.d.repo,
+      aoMudar: () => this.aoMudar(),
+      esperar: this.d.esperar,
+      agora: this.d.agora,
+    });
     this.execucao = ex;
+    return ex;
+  }
+
+  private executar(lote: LoteEmAndamento, modo: ModoRodada): void {
+    const ex = this.execucao && this.execucao.lote.id === lote.id ? this.execucao : this.novaExecucao(lote);
+    // Dois cliques (Tentar de novo, Continuar os que faltam): a rodada em curso e a mesma, nao abre outra tela.
+    if (ex.rodando) return;
     void this.rodar(() => ex.rodar(modo));
   }
 
@@ -302,7 +361,9 @@ export class AppProcessosLote {
         ex.pausar();
         this.aoMudar();
       },
-      continuar: () => void this.rodar(() => ex.continuar()),
+      continuar: () => {
+        if (!ex.rodando) void this.rodar(() => ex.continuar());
+      },
       cancelar: () => {
         ex.cancelar();
         // Pausado nao ha rodada para terminar: o resultado sai ja.
@@ -329,10 +390,14 @@ export class AppProcessosLote {
     this.desenharPastilha();
   }
 
-  /** Fim (concluido ou cancelado): sem nada pendente nem com erro, o registro some; senao fica, retomavel. */
+  /**
+   * Fim (concluido ou cancelado): sem nada pendente, com erro ou a conferir (incerto, aviso), o registro some;
+   * senao fica, retomavel ou para conferir ao reabrir.
+   */
   private async finalizar(ex: ExecucaoLote): Promise<void> {
     const { falhas, restantes } = ex.progresso;
-    if (falhas === 0 && restantes === 0) {
+    const conferir = aConferir(ex);
+    if (falhas === 0 && restantes === 0 && conferir === 0) {
       await this.d.repo.descartar().catch((e) => console.warn("[SEI Pro] processos em lote: falha ao descartar", e));
     }
     if (this.destruido) return;
@@ -346,6 +411,15 @@ export class AppProcessosLote {
         repetirFalhas: () => this.executar(ex.lote, "falhas"),
         continuarPendentes: () => this.executar(ex.lote, "pendentes"),
         gerarLinks: () => void this.gerarLinks(),
+        descartarENovo:
+          falhas === 0 && restantes === 0 && conferir > 0
+            ? async () => {
+                await this.d.repo.descartar().catch((e) => console.warn("[SEI Pro] processos em lote: falha ao descartar", e));
+                if (this.destruido) return;
+                this.execucao = null;
+                this.telaConfiguracao();
+              }
+            : undefined,
       }),
     );
   }
@@ -420,8 +494,15 @@ export class AppProcessosLote {
     if (!this.minimizado) return;
     const ex = this.execucao;
     const p = ex?.progresso ?? { feitos: 0, total: 0, falhas: 0, restantes: 0 };
+    // A parada com motivo (sessao, outra aba, incerto) vem antes do "Pausado" generico.
     const estado =
-      this.tela === "resultado" ? "Concluído" : ex?.estado === "pausado" && !ex.rodando ? "Pausado" : ex?.motivo ? "Parado" : "Criando";
+      this.tela === "resultado"
+        ? "Concluído"
+        : ex?.motivo
+          ? `Parado: ${ex.motivo}`
+          : ex?.estado === "pausado" && !ex.rodando
+            ? "Pausado"
+            : "Criando";
     this.pastilha.replaceChildren(
       h(
         "div",
@@ -430,7 +511,7 @@ export class AppProcessosLote {
         h(
           "span",
           { class: "pl-pastilha-conta", role: "status" },
-          `${estado}: ${p.feitos}/${p.total}`,
+          `${p.feitos}/${p.total} · ${estado}`,
           p.falhas ? ` (${p.falhas} com erro)` : "",
         ),
       ),

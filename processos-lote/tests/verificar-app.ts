@@ -10,8 +10,9 @@
 import { type Area, areaMemoria } from "@comum/armazenamento/area";
 import { ErroRpc } from "@comum/ponte/rpc";
 import { AppProcessosLote, type DepsApp } from "@pl/app/app";
+import { MENSAGEM_ASSUMIDO, MENSAGEM_GRAVAR } from "@pl/app/execucao";
 import { partesEnviadas } from "@pl/app/previa";
-import { CHAVE_ENTRADA_LINK } from "@pl/modelo/constantes";
+import { CHAVE_ENTRADA_LINK, JANELA_OUTRA_ABA_MS } from "@pl/modelo/constantes";
 import type { LinhaLote } from "@pl/modelo/linhas";
 import { montarPrevia } from "@pl/modelo/previa";
 import { NUMERO_INCERTO, type ResultadoCriar } from "@pl/pagina/executor";
@@ -42,13 +43,16 @@ interface OpcoesMontar {
   hipoteses?: typeof HIPOTESES;
   /** Chamado quando um `criar` chega a aba, antes da resposta (a prova age "no meio"). */
   aoCriar?: (esp: string, vezes: number) => void;
+  /** Relogio compartilhado (repositorio e app); avance `t` para envelhecer o lote gravado. */
+  relogio?: { t: number };
 }
 
 function montar(o: OpcoesMontar = {}) {
   const doc = instalarDom('<html><body><div id="app"></div></body></html>');
   const raiz = doc.getElementById("app")!;
   const area = o.area ?? areaMemoria();
-  const repo = new RepositorioLote(area, ESCOPO);
+  const relogio = o.relogio ?? { t: 1_000_000 };
+  const repo = new RepositorioLote(area, ESCOPO, () => relogio.t);
   /** Linha do tempo de tudo o que importa a ordem: gravacoes do lote, POSTs, fechar etc. */
   const eventos: string[] = [];
   const gravarOriginal = repo.gravar.bind(repo);
@@ -58,6 +62,8 @@ function montar(o: OpcoesMontar = {}) {
   };
   const chamadas: Array<{ op: string; args: unknown; prazo?: number }> = [];
   const porEsp = new Map<string, number>();
+  /** Respostas "ok" que a aba de fato devolveu, por especificacao (o que conta como processo criado). */
+  const sucessos = new Map<string, number>();
   const roteiro = o.roteiro ?? okSempre;
   const t = { fechou: 0, minimizou: [] as boolean[], entradaLink: [] as string[], pausas: [] as number[], avisos: [] as string[] };
   const baixados: Array<{ nome: string; conteudo: string }> = [];
@@ -82,6 +88,7 @@ function montar(o: OpcoesMontar = {}) {
           await tique(1);
           const r = await roteiro(esp, vezes, linha);
           if (r instanceof Error) throw r;
+          if (r.situacao === "ok") sucessos.set(esp, (sucessos.get(esp) ?? 0) + 1);
           return r;
         }
         return true;
@@ -109,6 +116,7 @@ function montar(o: OpcoesMontar = {}) {
       t.pausas.push(ms);
     },
     avisar: (texto) => void t.avisos.push(texto),
+    agora: () => relogio.t,
   };
   const app = new AppProcessosLote(raiz, deps);
 
@@ -160,6 +168,8 @@ function montar(o: OpcoesMontar = {}) {
     doc,
     raiz,
     app,
+    relogio,
+    sucessos,
     deps,
     area,
     repo,
@@ -244,10 +254,13 @@ export async function verificarApp(): Promise<void> {
     // Fechar (X) e reabrir: um app novo sobre a mesma area.
     a.clicar("Fechar");
     a.app.destruir();
-    const antes = a.chamadas.filter((c) => c.op === "criar");
-    const b = montar({ area, roteiro });
+    const sucessosA = new Map(a.sucessos);
+    // O lote parou ha mais que a janela de outra aba: a retomada nao pede confirmacao extra.
+    const relogio = { t: a.relogio.t + JANELA_OUTRA_ABA_MS + 1 };
+    const b = montar({ area, roteiro, relogio });
     await b.app.iniciar();
     checar("reaberto: oferece continuar", b.visivel("Continuar de onde parou") && b.visivel("Descartar"));
+    checar("lote parado há muito: sem aviso de outra aba", !b.textoVisivel("outra aba do SEI"));
     b.clicar("Continuar de onde parou");
     await ate(() => !!b.raiz.querySelector(".pl-resultado"));
     checar(
@@ -262,8 +275,7 @@ export async function verificarApp(): Promise<void> {
     checar("continuar não recria Alfa nem Beta", b.quantas("Alfa") === 0 && b.quantas("Beta") === 0);
     checar("continuar refaz Gamma e cria Delta, uma vez cada", b.quantas("Gamma") === 1 && b.quantas("Delta") === 1);
     // Sucessos por linha, somando os dois apps: exatamente 1 cada.
-    const okPorLinha = (esp: string) =>
-      (esp === "Gamma" ? 0 : antes.filter((c) => (c.args as { linha: LinhaLote }).linha.especificacao === esp).length) + b.quantas(esp);
+    const okPorLinha = (esp: string) => (sucessosA.get(esp) ?? 0) + (b.sucessos.get(esp) ?? 0);
     checar(
       "cada linha com exatamente 1 criar bem-sucedido",
       ["Alfa", "Beta", "Gamma", "Delta"].every((e) => okPorLinha(e) === 1),
@@ -308,7 +320,8 @@ export async function verificarApp(): Promise<void> {
       linhaBeta,
     );
     checar("sem falhas: Tentar de novo oculto", !m.visivel("Tentar de novo as falhas"));
-    checar("incerto conta como feito: concluído, registro descartado", (await m.lote()) === undefined);
+    checar("concluído com incerto: registro mantido para conferir", (await m.lote()) !== undefined);
+    checar("concluído com incerto: Descartar e começar outro", m.visivel("Descartar e começar outro"));
     m.app.destruir();
   }
 
@@ -577,5 +590,237 @@ export async function verificarApp(): Promise<void> {
       m.chamadas.map((c) => c.op),
     );
     m.app.destruir();
+  }
+
+  secao("Fix 1: lote recente pode estar em outra aba (aviso, segundo clique, a outra aba para)");
+  {
+    const area = areaMemoria();
+    const relogio = { t: 1_000_000 };
+    const s = segurar<ResultadoCriar>();
+    const a = montar({ area, relogio, roteiro: (esp) => (esp === "Beta" ? s.p : criado(esp, ++numeroSeq)) });
+    await a.app.iniciar();
+    await a.configurar("Alfa\nBeta\nGamma\nDelta");
+    a.clicar("Ver prévia");
+    a.clicar("Iniciar");
+    await ate(() => a.quantas("Beta") === 1);
+    a.clicar("Minimizar");
+    await tique();
+    relogio.t += 5000;
+    // Outra aba abre o modulo enquanto a primeira (minimizada) espera a resposta de Beta.
+    const b = montar({ area, relogio });
+    await b.app.iniciar();
+    checar(
+      "aviso de outra aba, com os segundos",
+      b.textoVisivel("Este lote foi atualizado há 5 segundos e pode estar em execução em outra aba do SEI."),
+    );
+    checar("Descartar continua disponível", b.visivel("Descartar"));
+    b.clicar("Continuar de onde parou");
+    await tique(10);
+    checar(
+      "primeiro clique não começa nada",
+      b.chamadas.every((c) => c.op !== "formTipo" && c.op !== "criar"),
+    );
+    checar("pede o segundo clique explícito", b.visivel("Continuar mesmo assim") && !b.visivel("Continuar de onde parou"));
+    b.clicar("Continuar mesmo assim");
+    await ate(() => !!b.raiz.querySelector(".pl-resultado"));
+    checar("a outra aba não repete Alfa nem a Beta em voo", b.quantas("Alfa") === 0 && b.quantas("Beta") === 0);
+    checar("a outra aba cria Gamma e Delta", b.quantas("Gamma") === 1 && b.quantas("Delta") === 1);
+    s.soltar(criado("Beta", ++numeroSeq));
+    await tique(30);
+    checar("a primeira aba para: nenhum criar depois de assumida", a.quantas("Gamma") === 0 && a.quantas("Delta") === 0);
+    const pastilha = a.raiz.querySelector(".pl-pastilha")?.textContent ?? "";
+    checar("a primeira aba mostra a parada na pastilha", pastilha.includes(`Parado: ${MENSAGEM_ASSUMIDO}`), pastilha);
+    a.app.destruir();
+    b.app.destruir();
+  }
+
+  secao("Fix 1: lote descartado por outra aba: a execução para sem POST");
+  {
+    const area = areaMemoria();
+    const relogio = { t: 1_000_000 };
+    const s = segurar<ResultadoCriar>();
+    const a = montar({ area, relogio, roteiro: (esp) => (esp === "Alfa" ? s.p : criado(esp, ++numeroSeq)) });
+    await a.app.iniciar();
+    await a.configurar("Alfa\nBeta\nGamma");
+    a.clicar("Ver prévia");
+    a.clicar("Iniciar");
+    await ate(() => a.quantas("Alfa") === 1);
+    const b = montar({ area, relogio });
+    await b.app.iniciar();
+    b.clicar("Descartar");
+    await ate(() => !!combo(b.raiz, "Tipo de processo"));
+    s.soltar(criado("Alfa", ++numeroSeq));
+    await tique(30);
+    checar("depois do descarte, zero criar", a.quantas("Beta") === 0 && a.quantas("Gamma") === 0);
+    checar("descartado continua descartado", (await a.lote()) === undefined);
+    a.app.destruir();
+    b.app.destruir();
+
+    // marcar recusado ANTES do POST: nada sai e a mensagem aparece.
+    const m = montar();
+    await m.app.iniciar();
+    await m.configurar("Alfa\nBeta");
+    m.repo.marcar = async () => false;
+    m.clicar("Ver prévia");
+    m.clicar("Iniciar");
+    await ate(() => m.textoVisivel(MENSAGEM_ASSUMIDO));
+    await tique(10);
+    checar(
+      "marcar recusado: zero criar e lote parado",
+      m.chamadas.filter((c) => c.op === "criar").length === 0 && m.textoVisivel(MENSAGEM_ASSUMIDO),
+    );
+    m.app.destruir();
+  }
+
+  secao("Fix 1: falha ao gravar antes e depois do POST pausa com MENSAGEM_GRAVAR");
+  {
+    const antes = montar();
+    await antes.app.iniciar();
+    await antes.configurar("Alfa\nBeta");
+    antes.repo.marcar = async () => {
+      throw new Error("cota");
+    };
+    antes.clicar("Ver prévia");
+    antes.clicar("Iniciar");
+    await ate(() => antes.textoVisivel(MENSAGEM_GRAVAR));
+    await tique(10);
+    checar(
+      "gravar antes falhou: zero criar, pausado",
+      antes.chamadas.filter((c) => c.op === "criar").length === 0 && antes.visivel("Continuar"),
+    );
+    antes.app.destruir();
+
+    const depois = montar();
+    await depois.app.iniciar();
+    await depois.configurar("Alfa\nBeta");
+    const original = depois.repo.marcar.bind(depois.repo);
+    let n = 0;
+    depois.repo.marcar = async (...args: Parameters<typeof original>) => {
+      n += 1;
+      if (n === 2) throw new Error("cota");
+      return original(...args);
+    };
+    depois.clicar("Ver prévia");
+    depois.clicar("Iniciar");
+    await ate(() => depois.textoVisivel(MENSAGEM_GRAVAR));
+    await tique(10);
+    checar("gravar depois falhou: Alfa uma vez, Beta não saiu", depois.quantas("Alfa") === 1 && depois.quantas("Beta") === 0);
+    const g = await depois.lote();
+    checar("Alfa fica incerta no registro (gravada antes do POST)", g?.itens[0]?.criado?.numero === NUMERO_INCERTO, g?.itens[0]);
+    depois.app.destruir();
+  }
+
+  secao("Fix 1: cliques duplos não abrem dois executores");
+  {
+    const m = montar({
+      roteiro: (esp, vezes) => (esp === "Beta" && vezes === 1 ? { situacao: "erro", erro: "x" } : criado(esp, ++numeroSeq)),
+    });
+    await m.app.iniciar();
+    await m.configurar("Alfa\nBeta\nGamma");
+    m.clicar("Ver prévia");
+    const iniciar = botao(m.raiz, "Iniciar")!;
+    disparar(iniciar, "click");
+    disparar(iniciar, "click");
+    await ate(() => !!m.raiz.querySelector(".pl-resultado"));
+    await tique(10);
+    checar("Iniciar duplo: cada linha uma vez", m.quantas("Alfa") === 1 && m.quantas("Beta") === 1 && m.quantas("Gamma") === 1);
+    checar("Iniciar duplo: um lote gravado", m.eventos.filter((e) => e === "repo.gravar").length === 1);
+    const repetir = botao(m.raiz, "Tentar de novo as falhas")!;
+    disparar(repetir, "click");
+    disparar(repetir, "click");
+    await ate(() => m.quantas("Beta") === 2 && !!m.raiz.querySelector(".pl-resultado"));
+    await tique(10);
+    checar("Tentar de novo duplo: Beta só mais uma vez", m.quantas("Beta") === 2 && m.quantas("Alfa") === 1);
+    m.app.destruir();
+
+    const c = montar({ roteiro: (esp) => (esp === "Alfa" ? { situacao: "erro", erro: "Sessão", parar: true } : criado(esp, ++numeroSeq)) });
+    await c.app.iniciar();
+    await c.configurar("Alfa\nBeta\nGamma");
+    c.clicar("Ver prévia");
+    c.clicar("Iniciar");
+    await ate(() => c.visivel("Continuar"));
+    const continuar = botao(c.raiz, "Continuar")!;
+    disparar(continuar, "click");
+    disparar(continuar, "click");
+    await ate(() => !!c.raiz.querySelector(".pl-resultado"));
+    await tique(10);
+    checar("Continuar duplo: Beta e Gamma uma vez cada", c.quantas("Beta") === 1 && c.quantas("Gamma") === 1);
+    c.app.destruir();
+  }
+
+  secao("Fix 1: Continuar os que faltam depois de Cancelar");
+  {
+    let m: ReturnType<typeof montar> | null = null;
+    m = montar({
+      aoCriar: (esp) => {
+        if (esp === "Beta") m?.clicar("Cancelar");
+      },
+    });
+    await m.app.iniciar();
+    await m.configurar("Alfa\nBeta\nGamma\nDelta");
+    m.clicar("Ver prévia");
+    m.clicar("Iniciar");
+    await ate(() => !!m?.raiz.querySelector(".pl-resultado"));
+    checar("cancelado: Gamma e Delta não saíram", m.quantas("Gamma") === 0 && m.quantas("Delta") === 0);
+    checar("cancelado: oferece continuar os que faltam", m.visivel("Continuar os que faltam"));
+    m.clicar("Continuar os que faltam");
+    await ate(() => m?.quantas("Delta") === 1 && !!m?.raiz.querySelector(".pl-resultado"));
+    await tique(10);
+    checar(
+      "continuar os que faltam: só Gamma e Delta, uma vez",
+      ["Alfa", "Beta", "Gamma", "Delta"].every((e) => m?.quantas(e) === 1),
+    );
+    checar("tudo criado: registro descartado", (await m.lote()) === undefined);
+    m.app.destruir();
+  }
+
+  secao("Fix 1: reabrir lote concluído com incerto mostra o resumo, não descarta");
+  {
+    const area = areaMemoria();
+    await new RepositorioLote(area, ESCOPO, () => 1).gravar({
+      id: "y",
+      host: "sei.x.gov.br",
+      login: "ana",
+      iniciadoEm: 1,
+      parametros: { idTipo: "10", nomeTipo: "Contrato", nivelAcesso: "0", hipoteseLegal: "", nomeHipotese: "", pausa: 500 },
+      linhas: [{ especificacao: "A" }, { especificacao: "B" }],
+      itens: [
+        { situacao: "ok", criado: { numero: "00001.000001/2026-11", idProcedimento: "1", url: "u" } },
+        { situacao: "ok", criado: { numero: NUMERO_INCERTO, idProcedimento: "", url: "" }, aviso: "sem confirmação", incerto: true },
+      ],
+    });
+    const m = montar({ area });
+    await m.app.iniciar();
+    await ate(() => !!m.raiz.querySelector(".pl-resultado"));
+    checar("mostra o resultado com a linha incerta", m.linhasResultado()[1]?.[0] === "Incerto", m.linhasResultado());
+    checar("contagem de incertos e dica", m.textoVisivel("1 linha ficou incerta") && m.textoVisivel("Controle de Processos"));
+    checar("registro mantido até o usuário descartar", (await m.lote()) !== undefined);
+    m.clicar("Baixar CSV");
+    checar("CSV disponível", m.baixados[0]?.nome === "processos-em-lote.csv");
+    m.clicar("Descartar e começar outro");
+    await ate(() => !!combo(m.raiz, "Tipo de processo"));
+    checar("descartado e de volta à configuração", (await m.lote()) === undefined && !!combo(m.raiz, "Tipo de processo"));
+    checar(
+      "nenhum criar",
+      m.chamadas.every((c) => c.op !== "criar"),
+    );
+    m.app.destruir();
+
+    // Sem incerto nem aviso: descarta em silêncio.
+    const area2 = areaMemoria();
+    await new RepositorioLote(area2, ESCOPO, () => 1).gravar({
+      id: "z",
+      host: "sei.x.gov.br",
+      login: "ana",
+      iniciadoEm: 1,
+      parametros: { idTipo: "10", nomeTipo: "Contrato", nivelAcesso: "0", hipoteseLegal: "", nomeHipotese: "", pausa: 500 },
+      linhas: [{ especificacao: "A" }],
+      itens: [{ situacao: "ok", criado: { numero: "00001.000001/2026-11", idProcedimento: "1", url: "u" } }],
+    });
+    const z = montar({ area: area2 });
+    await z.app.iniciar();
+    await ate(() => !!combo(z.raiz, "Tipo de processo"));
+    checar("tudo confirmado: descarta e vai à configuração", (await z.lote()) === undefined);
+    z.app.destruir();
   }
 }

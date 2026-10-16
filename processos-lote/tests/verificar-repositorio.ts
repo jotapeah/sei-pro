@@ -24,10 +24,12 @@ export async function verificarRepositorio(): Promise<void> {
   const escopo = "sei.exemplo.gov.br|ana";
 
   const area = areaMemoria();
-  const repo = new RepositorioLote(area, escopo);
+  let relogio = 5000;
+  const repo = new RepositorioLote(area, escopo, () => relogio);
   igual("vazio le null", await repo.ler(), null);
   await repo.gravar(exemplo());
-  igual("ida e volta", await repo.ler(), exemplo());
+  igual("ida e volta (com atualizadoEm da gravacao)", await repo.ler(), { ...exemplo(), atualizadoEm: 5000 });
+  relogio = 6000;
   checar("chave lote/<escopo>/atual", `lote/${escopo}/atual` in (await area.obter()));
 
   const criado = { numero: "1/2026", idProcedimento: "9", url: "u" };
@@ -39,6 +41,11 @@ export async function verificarRepositorio(): Promise<void> {
     ["pendente", "ok", "pendente", "pendente"],
   );
   igual("marcar guarda criado", l?.itens[1]?.criado, criado);
+  igual("marcar renova atualizadoEm", l?.atualizadoEm, 6000);
+  checar("marcar devolve true ao gravar", (await repo.marcar(2, { situacao: "pendente" }, "l1")) === true);
+  checar("marcar de outro lote (id) devolve false", (await repo.marcar(2, { situacao: "erro", erro: "x" }, "outro")) === false);
+  igual("marcar de outro lote nao grava", (await repo.ler())?.itens[2], { situacao: "pendente" });
+  checar("marcar indice fora devolve false", (await repo.marcar(9, { situacao: "pendente" })) === false);
 
   // Sequencial: a releitura enxerga o que a outra instancia gravou antes (nao prova corrida simultanea).
   const outra = new RepositorioLote(area, escopo);
@@ -61,8 +68,19 @@ export async function verificarRepositorio(): Promise<void> {
   await repo.descartar();
   igual("descartar", await repo.ler(), null);
   igual("descartar nao afeta outro escopo", (await new RepositorioLote(area, "sei.exemplo.gov.br|bia").ler())?.login, "bia");
-  await repo.marcar(0, { situacao: "ok" });
+  checar("marcar sem lote devolve false", (await repo.marcar(0, { situacao: "ok" })) === false);
   igual("marcar sem lote nao cria", await repo.ler(), null);
+
+  // Registro antigo, sem atualizadoEm: lido como 0 (parado ha muito), nao recusado.
+  const kAntigo = `lote/${escopo}/atual`;
+  igual("sem atualizadoEm le como 0", (await new RepositorioLote(areaMemoria({ [kAntigo]: exemplo() }), escopo).ler())?.atualizadoEm, 0);
+  // Assumir: troca o id se ainda for o esperado; o executor antigo perde o marcar.
+  const ass = new RepositorioLote(areaMemoria(), escopo, () => 7000);
+  await ass.gravar(exemplo());
+  igual("assumir de id errado devolve null", await ass.assumir("nao", "l2"), null);
+  igual("assumir troca o id", (await ass.assumir("l1", "l2"))?.id, "l2");
+  checar("depois de assumido, marcar do id antigo devolve false", (await ass.marcar(0, { situacao: "pendente" }, "l1")) === false);
+  checar("o novo id marca", (await ass.marcar(0, { situacao: "pendente" }, "l2")) === true);
 
   const k = `lote/${escopo}/atual`;
   const sem = exemplo() as unknown as Record<string, unknown>;

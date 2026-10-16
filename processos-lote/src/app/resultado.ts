@@ -78,6 +78,8 @@ export interface AcoesResultado {
   repetirFalhas(): void;
   continuarPendentes(): void;
   gerarLinks(): void;
+  /** So quando tudo terminou mas ha linha a conferir: o registro fica ate o usuario dizer que conferiu. */
+  descartarENovo?: () => void;
 }
 
 export function montarTelaResultado(itens: readonly ItemProc[], interrompido: boolean, a: AcoesResultado): HTMLElement {
@@ -111,6 +113,14 @@ export function montarTelaResultado(itens: readonly ItemProc[], interrompido: bo
       interrompido ? "Execução interrompida" : "Progresso finalizado!",
     ),
     h("p", { class: "pl-contagem" }, `${partesContagem.join(" — ")}.`),
+    incertos
+      ? h(
+          "p",
+          { class: "pl-motivo" },
+          icone("alerta", 16),
+          `${incertos} ${incertos === 1 ? "linha ficou incerta" : "linhas ficaram incertas"}: o SEI não confirmou a criação. Confira no Controle de Processos antes de abrir de novo.`,
+        )
+      : null,
     h(
       "div",
       { class: "pl-acoes" },
@@ -120,6 +130,7 @@ export function montarTelaResultado(itens: readonly ItemProc[], interrompido: bo
       h("span", { class: "pl-espaco" }),
       botao("Copiar com links", "copiar", a.copiar),
       botao("Baixar CSV", "baixar", a.baixarCsv),
+      a.descartarENovo ? botao("Descartar e começar outro", "lixeira", a.descartarENovo, "fantasma") : null,
     ),
     h("div", { class: "pl-tabela" }, tabela),
   );

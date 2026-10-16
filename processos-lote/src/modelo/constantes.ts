@@ -24,3 +24,8 @@ export const MAX_ESPECIFICACAO = 100;
 export const CHAVE_ENTRADA_LINK = "link-permanente/entrada";
 /** Prazo do `criar` pela ponte: a aba pode fazer 2 POSTs (refaz o formulario uma vez) num SEI lento. */
 export const PRAZO_CRIAR_MS = 60_000;
+/**
+ * Lote atualizado ha menos que isto pode estar rodando em outra aba: o maior intervalo entre duas escritas de uma
+ * execucao viva e um `criar` no prazo maximo mais a pausa maxima.
+ */
+export const JANELA_OUTRA_ABA_MS = PRAZO_CRIAR_MS + PAUSA_MAXIMA;

@@ -27,6 +27,8 @@ export const MENSAGEM_INCERTO =
 export const MENSAGEM_GRAVAR =
   "Não foi possível gravar o progresso do lote neste navegador. O lote está pausado para não perder o controle do que já foi criado.";
 
+export const MENSAGEM_ASSUMIDO = "O lote foi descartado ou assumido por outra aba. Execução parada.";
+
 export interface ResultadoItem {
   criado: Criado;
   aviso?: string;
@@ -180,7 +182,14 @@ export class ExecucaoLote {
       concorrencia: 1,
       pausaMs: () => this.ritmo.pausaMs(),
       processar: (linha, indice) => this.processar(linha, indice),
-      aoMudar: () => this.d.aoMudar(),
+      // Erro de desenho nao pode rejeitar a rodada (o lote ficaria preso em "Criando"): o laco segue.
+      aoMudar: () => {
+        try {
+          this.d.aoMudar();
+        } catch (e) {
+          console.warn("[SEI Pro] processos em lote: falha ao redesenhar", e);
+        }
+      },
       esperar: this.d.esperar,
     });
     return this.acompanhar(this.executor.iniciar());
@@ -214,12 +223,18 @@ export class ExecucaoLote {
   private async processar(linha: LinhaLote, indice: number): Promise<SaidaItem<ResultadoItem>> {
     const p = this.lote.parametros;
     // 1. Grava antes de postar. Sem a gravacao nao ha POST: e "erro" (nada saiu) e o lote para.
+    // `marcar` false = o registro sumiu ou e de outro lote (outra aba descartou ou assumiu): tambem nao posta.
+    let gravou: boolean;
     try {
-      await this.d.repo.marcar(indice, ITEM_EM_VOO);
+      gravou = await this.d.repo.marcar(indice, ITEM_EM_VOO, this.lote.id);
     } catch (e) {
       console.warn("[SEI Pro] processos em lote: falha ao gravar antes do POST", e);
       this.motivo = MENSAGEM_GRAVAR;
       return { situacao: "erro", erro: "Não foi possível gravar o progresso; nada foi enviado.", parar: true };
+    }
+    if (!gravou) {
+      this.motivo = MENSAGEM_ASSUMIDO;
+      return { situacao: "erro", erro: "Nada foi enviado: o lote foi descartado ou assumido por outra aba.", parar: true };
     }
 
     // 2. O POST, pela aba. Prazo esgotado ou ponte caida: o POST pode ter saido, entao e incerto e o lote para.
@@ -258,7 +273,10 @@ export class ExecucaoLote {
     if (saida.resultado) final.resultado = saida.resultado;
     if (saida.erro) final.erro = saida.erro;
     try {
-      await this.d.repo.marcar(indice, itemGravado(final));
+      if (!(await this.d.repo.marcar(indice, itemGravado(final), this.lote.id))) {
+        saida.parar = true;
+        this.motivo = MENSAGEM_ASSUMIDO;
+      }
     } catch (e) {
       // A linha fica INCERTA no registro (gravada no passo 1): seguro. Mas o registro nao acompanha mais: para.
       console.warn("[SEI Pro] processos em lote: falha ao gravar o desfecho", e);

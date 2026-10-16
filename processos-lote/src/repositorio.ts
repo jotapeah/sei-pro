@@ -22,6 +22,11 @@ export interface LoteEmAndamento {
   host: string;
   login: string;
   iniciadoEm: number;
+  /**
+   * Ultima escrita (ms), de `gravar` ou de `marcar`. Registro antigo sem o campo conta como 0 (parado ha muito).
+   * Serve para o app desconfiar de um lote que pode estar rodando em OUTRA aba do SEI.
+   */
+  atualizadoEm?: number;
   parametros: Parametros;
   linhas: LinhaLote[];
   /**
@@ -74,6 +79,7 @@ export class RepositorioLote {
   constructor(
     private readonly area: Area,
     escopo: string,
+    private readonly agora: () => number = Date.now,
   ) {
     const i = escopo.indexOf("|");
     if (!(i > 0 && i < escopo.length - 1)) throw new Error(`escopo invalido (esperado host|login): "${escopo}"`);
@@ -88,22 +94,47 @@ export class RepositorioLote {
   }
 
   gravar(l: LoteEmAndamento): Promise<void> {
-    return this.enfileirar(() => this.area.gravar({ [this.chave]: l }));
+    return this.enfileirar(() => this.area.gravar({ [this.chave]: { ...l, atualizadoEm: this.agora() } }));
   }
 
+  /** `atualizadoEm` ausente ou ilegivel volta como 0: o lote nao e recusado, so tido como parado ha muito. */
   async ler(): Promise<LoteEmAndamento | null> {
     const v = (await this.area.obter(this.chave))[this.chave];
-    return loteValido(v) ? v : null;
+    if (!loteValido(v)) return null;
+    const t = v.atualizadoEm;
+    return { ...v, atualizadoEm: typeof t === "number" && Number.isFinite(t) ? t : 0 };
   }
 
-  /** Rele antes de gravar e muda so o indice pedido; chamadas desta instancia rodam em fila. */
-  marcar(indice: number, item: Item): Promise<void> {
+  /**
+   * Rele antes de gravar e muda so o indice pedido; chamadas desta instancia rodam em fila.
+   *
+   * Devolve `false` (sem gravar) quando o registro sumiu (descartado, talvez por outra aba), o indice nao existe ou,
+   * com `idDoLote`, o registro e de OUTRO lote (assumido por outra aba). Quem esta executando trata `false` como
+   * "parar ja": sem a gravacao nao ha POST. Erro de armazenamento continua chegando como rejeicao.
+   */
+  marcar(indice: number, item: Item, idDoLote?: string): Promise<boolean> {
     return this.enfileirar(async () => {
       const atual = await this.ler();
-      if (!atual || indice < 0 || indice >= atual.itens.length) return;
+      if (!atual || indice < 0 || indice >= atual.itens.length) return false;
+      if (idDoLote !== undefined && atual.id !== idDoLote) return false;
       const itens = atual.itens.slice();
       itens[indice] = item;
-      await this.area.gravar({ [this.chave]: { ...atual, itens } });
+      await this.area.gravar({ [this.chave]: { ...atual, itens, atualizadoEm: this.agora() } });
+      return true;
+    });
+  }
+
+  /**
+   * Retomada: troca o `id` do lote gravado (se ainda for `idEsperado`) e devolve o registro fresco. Outra aba que
+   * ainda execute o lote antigo passa a receber `false` do `marcar` e para antes do proximo POST.
+   */
+  assumir(idEsperado: string, idNovo: string): Promise<LoteEmAndamento | null> {
+    return this.enfileirar(async () => {
+      const atual = await this.ler();
+      if (!atual || atual.id !== idEsperado) return null;
+      const novo = { ...atual, id: idNovo, atualizadoEm: this.agora() };
+      await this.area.gravar({ [this.chave]: novo });
+      return novo;
     });
   }
 
