@@ -19,7 +19,10 @@ import {
   type Retrato,
 } from "../src/arquivo/envelope";
 import { adaptadorAgente } from "../src/arquivo/adaptador";
-import { mudancas, type FontesRetrato } from "../src/arquivo/retrato";
+import { lerListas, mudancas, type FontesRetrato } from "../src/arquivo/retrato";
+import { validarItem } from "../src/arquivo/validar";
+import type { TipoLista } from "../src/arquivo/envelope";
+import type { Rotina } from "../src/painel/rotinas";
 import { areaMemoria } from "@comum/armazenamento/area";
 import { MENSAGENS_ARQUIVO, SincroniaArquivo, type ArquivoSync } from "@comum/sincronia/arquivo";
 import type { Regra } from "../src/painel/regras";
@@ -404,11 +407,16 @@ export function verificarArquivoAgente(): void {
 // ------------------------------------------------------------ adaptador com fontes falsas
 
 /** Um "computador": o retrato e o diário em memória, contando as aplicações. */
-function computador(inicial: Retrato, segredos = false): FontesRetrato & { r: Retrato; d: Diario; aplicacoes: number } {
+function computador(
+  inicial: Retrato,
+  segredos = false,
+): FontesRetrato & { r: Retrato; d: Diario; aplicacoes: number; preservar: Partial<Record<TipoLista, string[]>> } {
   const c = {
     r: structuredClone(inicial),
     d: {} as Diario,
     aplicacoes: 0,
+    preservar: {} as Partial<Record<TipoLista, string[]>>,
+    preservados: () => c.preservar,
     lerRetrato: async () => structuredClone(c.r),
     aplicar: async (_antes: Retrato, depois: Retrato) => {
       c.aplicacoes++;
@@ -521,6 +529,63 @@ export async function verificarAdaptadorAgente(): Promise<void> {
     checar("remover: segredos fora do arquivo", lerEnvelope(JSON.parse(arq.texto))?.segredos === undefined && !arq.texto.includes("sk-aqui"));
     await sinc.sincronizar();
     checar("remover vale uma vez (caixa marcada grava de novo)", lerEnvelope(JSON.parse(arq.texto))?.segredos?.chave === "sk-aqui");
+  }
+
+  // armazenamento local com um item que o normalizador recusa: não vira lápide
+  {
+    const valida = { id: "t1", nome: "Diaria", pergunta: "p", frequencia: "diaria", hora: "08:00", ativa: true, alcance: "leitura" };
+    const invalida = { id: "t2", nome: "Quebrada", frequencia: "nunca" };
+    const lido = lerListas({ agenteIA_rotinas: [valida, invalida] });
+    checar("leitor estrito: so a valida no retrato", lido.listas.rotinas.length === 1 && lido.listas.rotinas[0].id === "t1", lido.listas.rotinas);
+    checar("leitor estrito: invalida preservada pelo id", JSON.stringify(lido.preservar.rotinas) === JSON.stringify(["t2"]), lido.preservar);
+    let erro = "";
+    try {
+      lerListas({ agenteIA_regras: "quebrado" });
+    } catch (e) {
+      erro = String(e);
+    }
+    checar("leitor estrito: valor que nao e lista lanca", erro.includes("agenteIA_regras"), erro);
+
+    // A já tinha as duas no arquivo (as duas válidas); a t2 corrompe só aqui.
+    const arq = arquivoMemoria();
+    const rotina = (id: string) => ({ ...valida, id }) as unknown as Rotina;
+    const A = computador(retrato({ rotinas: [rotina("t1"), rotina("t2")] }));
+    await sincronia(A, arq, relogio).sincronizar();
+    A.r = { ...A.r, listas: { ...A.r.listas, rotinas: [rotina("t1")] } };
+    A.preservar = { rotinas: ["t2"] };
+    await sincronia(A, arq, relogio).sincronizar();
+    const regs = lerEnvelope(JSON.parse(arq.texto))?.registros.rotinas ?? [];
+    checar("item invalido local: sem lapide no arquivo", regs.every((r) => !r.apagado), regs);
+    checar("item invalido local: o registro do arquivo fica", regs.some((r) => r.id === "t2" && r.dado !== undefined), regs);
+    checar("item invalido local: marca do diario intacta", A.d.rotinas?.t2 !== undefined && !A.d.rotinas.t2.apagado, A.d.rotinas);
+  }
+
+  // registro do arquivo que não passa no normalizador não entra aqui
+  {
+    const env = {
+      formato: FORMATO,
+      versao: VERSAO,
+      geradoEm: 1,
+      registros: {
+        rotinas: [{ id: "x1", em: 1, dado: { id: "x1", nome: "Sem frequencia" } }],
+        regras: [{ id: "x2", em: 1, dado: { id: "x2", nome: "Efeito estranho", efeito: "liberar", ferramentas: [], mensagem: "" } }],
+        skills: [{ id: "x3", em: 1, dado: { nome: "sem id" } }],
+        conectores: [{ id: "x4", em: 1, dado: { id: "x4", nome: "sem url" } }],
+      },
+    };
+    const arq = arquivoMemoria(JSON.stringify(env));
+    const a = computador(retrato());
+    const s = await sincronia(a, arq, relogio).sincronizar();
+    checar("arquivo com registro invalido: sincroniza", s.estado === "ok", s);
+    checar("rotina invalida do arquivo nao gravada aqui", a.r.listas.rotinas.length === 0 && a.aplicacoes === 0, a.r.listas.rotinas);
+    checar("regra, skill e conector invalidos nao entram", a.r.listas.regras.length === 0 && a.r.listas.skills.length === 0 && a.r.listas.conectores.length === 0);
+    const regs = lerEnvelope(JSON.parse(arq.texto))?.registros;
+    checar("invalido do arquivo: sem lapide", (regs?.rotinas ?? []).every((r) => !r.apagado), regs?.rotinas);
+    checar("rotina valida do arquivo entra normalizada", (() => {
+      const b = computador(retrato());
+      const ok = { ...env, registros: { rotinas: [{ id: "x5", em: 1, dado: { id: "x5", nome: "Boa", frequencia: "diaria" } }] } };
+      return lerEnvelope(ok) !== null && mesclar(b.r, {}, lerEnvelope(ok), { agora: 10, segredos: false, validar: validarItem }).retrato.listas.rotinas[0]?.hora === "08:00";
+    })());
   }
 
   // mudancas: só o que mudou vai ser gravado

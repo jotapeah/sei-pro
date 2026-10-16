@@ -10,6 +10,7 @@
 import type { AdaptadorArquivo } from "@comum/sincronia/arquivo";
 import { assinatura, FORMATO, lerEnvelope, mesclar, VERSAO, type EnvelopeAgente } from "./envelope";
 import type { FontesRetrato } from "./retrato";
+import { validarItem } from "./validar";
 
 export type AdaptadorAgente = AdaptadorArquivo<EnvelopeAgente> & {
   /** O botão "Remover segredos do arquivo": vale para a próxima gravação só. */
@@ -22,7 +23,15 @@ export function adaptadorAgente(f: FontesRetrato, agora: () => number = Date.now
   /** Lê o local, mescla com o lido, aplica o que mudou aqui e guarda o diário. */
   async function rodar(lido: EnvelopeAgente | null, remover: boolean) {
     const [local, diario, segredos] = await Promise.all([f.lerRetrato(), f.lerDiario(), f.segredos()]);
-    const r = mesclar(local, diario, lido, { agora: agora(), segredos, removerSegredos: remover });
+    // `validar` sempre: o arquivo é de fora, e nada dele é gravado aqui sem
+    // passar pelos normalizadores de cada tipo.
+    const r = mesclar(local, diario, lido, {
+      agora: agora(),
+      segredos,
+      removerSegredos: remover,
+      validar: validarItem,
+      preservar: f.preservados?.() ?? {},
+    });
     if (r.mudouLocal) await f.aplicar(local, r.retrato);
     await f.gravarDiario(r.diario);
     return r;

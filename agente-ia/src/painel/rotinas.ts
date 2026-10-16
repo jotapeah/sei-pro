@@ -71,7 +71,8 @@ export interface Rotina {
   falhas?: number;
 }
 
-const CHAVE = "agenteIA_rotinas";
+export const CHAVE_ROTINAS = "agenteIA_rotinas";
+const CHAVE = CHAVE_ROTINAS;
 
 export const MAX_EXECUCOES = 10;
 

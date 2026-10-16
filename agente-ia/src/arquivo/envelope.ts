@@ -110,6 +110,18 @@ export interface OpcoesMescla {
   segredos: boolean;
   /** O botão "Remover segredos do arquivo". */
   removerSegredos?: boolean;
+  /**
+   * O item que o registro do arquivo vira aqui, já normalizado, ou `null` se
+   * não serve: aí não entra (nada é gravado, nada é apagado) e o registro
+   * fica no arquivo como estava. Sem `validar`, o dado entra como veio.
+   */
+  validar?: (tipo: TipoLista, dado: unknown) => unknown | null;
+  /**
+   * Ids que existem no armazenamento daqui mas não passaram na validação
+   * (ficaram fora do retrato): a ausência deles não é exclusão. A marca do
+   * diário fica como estava e o registro do arquivo também.
+   */
+  preservar?: Partial<Record<TipoLista, string[]>>;
 }
 
 const DIA = 86_400_000;
@@ -221,9 +233,12 @@ function carimbarLista(
   marcas: Record<string, Marca> | undefined,
   agora: number,
   podaAntesDe: number | null,
+  preservar: readonly string[] = [],
 ): Record<string, Marca> {
   const novo: Record<string, Marca> = {};
-  const presentes = new Set<string>();
+  // O que está aqui mas ficou fora do retrato (inválido) não é exclusão.
+  const presentes = new Set<string>(preservar);
+  for (const id of preservar) if (marcas?.[id]) novo[id] = marcas[id];
   for (const [id, dado, primeiraVista, q] of itens) {
     presentes.add(id);
     const h = hash(dado);
@@ -246,7 +261,7 @@ function carimbarLista(
  * O diário atualizado contra o retrato. Idempotente: carimbar o mesmo retrato
  * de novo, mais tarde, não muda nenhum carimbo.
  */
-export function carimbar(r: Retrato, d: Diario, agora: number): Diario {
+export function carimbar(r: Retrato, d: Diario, agora: number, preservar: Partial<Record<TipoLista, string[]>> = {}): Diario {
   const novo: Diario = { ...d };
   novo.config = carimbarLista([[UNICO, configParaSync(r.config), 0]], d.config, agora, null);
   novo.ignorados = carimbarLista([[UNICO, r.ignorados, 0]], d.ignorados, agora, null);
@@ -266,6 +281,7 @@ export function carimbar(r: Retrato, d: Diario, agora: number): Diario {
         d.conversas,
         agora,
         limiteDaPoda(r.config, agora),
+        preservar.conversas,
       );
       continue;
     }
@@ -275,6 +291,7 @@ export function carimbar(r: Retrato, d: Diario, agora: number): Diario {
       d[tipo],
       agora,
       null,
+      preservar[tipo],
     );
   }
   return novo;
@@ -310,6 +327,8 @@ function mesclarLista(
   marcas: Record<string, Marca>,
   lidos: Registro[],
   aceitar: (r: Registro) => boolean,
+  validar: OpcoesMescla["validar"],
+  preservados: ReadonlySet<string>,
 ): ResultadoLista {
   const doArq = new Map(lidos.map((r) => [r.id, r]));
   const locaisPorId = new Map(locais.map((item) => [idDe(item), item]));
@@ -325,15 +344,17 @@ function mesclarLista(
     const venceArquivo = reg !== undefined && venceOArquivo(reg.em, marca);
     if (venceArquivo) {
       registros.push(reg);
-      if (!aceitar(reg)) {
-        // Fica no arquivo, mas não entra aqui (conversa fora do prazo daqui).
+      const dado = reg.apagado || !validar ? reg.dado : validar(tipo, reg.dado);
+      if (!aceitar(reg) || (!reg.apagado && dado === null)) {
+        // Fica no arquivo, mas não entra aqui: conversa fora do prazo daqui,
+        // ou registro que não passa na validação (nada gravado, nada apagado).
         if (local !== undefined) itens.push(local);
         continue;
       }
       if (reg.apagado) {
         novasMarcas[id] = { em: reg.em, h: "", apagado: true };
       } else {
-        itens.push(doArquivo(tipo, reg.dado, local));
+        itens.push(doArquivo(tipo, dado, local));
         vindos.set(id, reg.em);
       }
       continue;
@@ -343,6 +364,9 @@ function mesclarLista(
       registros.push({ id, em: marca?.em ?? 0, dado: paraArquivo(tipo, local) });
     } else if (marca?.apagado) {
       registros.push({ id, em: marca.em, apagado: true });
+    } else if (reg !== undefined && preservados.has(id)) {
+      // Existe aqui mas ficou fora do retrato (inválido): o arquivo segue com o dele.
+      registros.push(reg);
     }
   }
   return { itens, marcas: novasMarcas, registros, vindos };
@@ -401,7 +425,7 @@ export function mesclar(
 ): { retrato: Retrato; diario: Diario; envelope: EnvelopeAgente; mudouLocal: boolean } {
   const { agora } = o;
   lido = lido && semFuturo(lido, agora);
-  const carimbado = carimbar(local, d, agora);
+  const carimbado = carimbar(local, d, agora, o.preservar);
   const diario: Diario = { ...carimbado };
   const registros = {} as Record<TipoLista, Registro[]>;
   const listas = { ...local.listas } as Record<TipoLista, unknown[]>;
@@ -432,7 +456,7 @@ export function mesclar(
       tipo === "conversas" && limite !== null
         ? (r: Registro) => r.apagado === true || ((r.dado as Partial<ConversaSalva> | undefined)?.quando ?? 0) >= limite
         : () => true;
-    const res = mesclarLista(tipo, local.listas[tipo] as unknown[], carimbado[tipo] ?? {}, lidos, aceitar);
+    const res = mesclarLista(tipo, local.listas[tipo] as unknown[], carimbado[tipo] ?? {}, lidos, aceitar, o.validar, new Set(o.preservar?.[tipo] ?? []));
     listas[tipo] = res.itens;
     registros[tipo] = res.registros;
     diario[tipo] = res.marcas;
