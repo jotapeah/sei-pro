@@ -3,7 +3,7 @@
  * o andamento da leitura de um PDF e o aviso antes de um OCR longo.
  */
 
-import { aplicarModo, type Anexo, type PlanoLeitura } from "./anexo";
+import { aplicarModo, faixas, type Anexo, type PlanoLeitura } from "./anexo";
 import { h, icone } from "./dom";
 import type { AbrirModal } from "./mcp-ui";
 import type { EtapaLeitura } from "./pdf";
@@ -25,7 +25,14 @@ export function chipDoAnexo(a: Anexo, acoes: { remover(): void; cortar(): void }
       h("button", { class: "icone pequeno", title: "Remover anexo", "aria-label": "Remover anexo", onclick: () => acoes.remover() }, icone("fechar", 14)),
     ),
     r.aviso ? h("div", { class: "anexo-aviso" }, r.aviso) : null,
+    a.naoLidas?.length ? h("div", { class: "anexo-aviso" }, textoNaoLidas(a.naoLidas, a.motivoNaoLidas)) : null,
   );
+}
+
+/** "4 páginas não foram lidas (2–4, 30): este navegador não faz OCR." */
+function textoNaoLidas(ns: number[], motivo?: string): string {
+  const inicio = ns.length === 1 ? "1 página não foi lida" : `${ns.length} páginas não foram lidas`;
+  return `${inicio} (${faixas(ns)})${motivo ? `: ${motivo}` : ""}.`;
 }
 
 function textoDaEtapa(e: EtapaLeitura): string {

@@ -7,7 +7,7 @@
  * página dizendo até onde o modelo leu — nunca em silêncio.
  */
 
-import { aplicarModo, LIMITE_CORTE, mensagemDeErroPdf, montarTexto, planejarLeitura, TETO_ANEXO } from "../src/painel/anexo";
+import { aplicarModo, LIMITE_CORTE, mensagemDeErroPdf, montarTexto, planejarLeitura, temCamadaDeTexto, TETO_ANEXO } from "../src/painel/anexo";
 import { checar, secao } from "./util";
 
 export function verificarAnexo(): void {
@@ -50,6 +50,13 @@ export function verificarAnexo(): void {
   checar("teto duro mesmo inteiro", enorme.texto.length <= TETO_ANEXO + 80 && /200\.000 de 300\.000 caracteres/.test(enorme.texto), enorme.texto.slice(-90));
   const txt = aplicarModo({ nome: "a.txt", texto: "z".repeat(70_000), modo: "cortado" });
   checar("texto sem páginas corta no limite e diz os caracteres", txt.texto.startsWith("z".repeat(LIMITE_CORTE)) && /60\.000 de 70\.000 caracteres/.test(txt.texto));
+
+  secao("Anexo: critério de camada de texto (o mesmo do ocrPdf)");
+  checar("só o número da página não é camada de texto", temCamadaDeTexto([{ str: "3" }]) === false);
+  checar("vazio não é camada", temCamadaDeTexto([{ str: "  " }, {}]) === false);
+  checar("palavra de verdade é camada", temCamadaDeTexto([{ str: "3" }, { str: "Of\u00EDcio" }]) === true);
+  const motivo = montarTexto([{ n: 1, texto: "a" }], { total: 3, naoLidas: [2, 3], motivo: "o OCR falhou neste navegador" });
+  checar("falha do OCR: diz o motivo", motivo.includes("[p\u00E1ginas n\u00E3o lidas: 2\u20133 (o OCR falhou neste navegador)]"), motivo);
 
   secao("Anexo: erro do PDF");
   checar("senha", mensagemDeErroPdf({ name: "PasswordException" }) === "Este PDF é protegido por senha.");

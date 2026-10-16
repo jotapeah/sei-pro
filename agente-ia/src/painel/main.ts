@@ -207,6 +207,8 @@ class App {
   private anexo: Anexo | null = null;
   /** Geração da leitura de anexo em curso: trocar ou remover o anexo invalida a anterior. */
   private geracaoAnexo = 0;
+  /** Há um PDF sendo lido (o envio espera). */
+  private lendoAnexo = false;
   private idConversa = crypto.randomUUID();
   /** Skills do usuário (configurações), disponíveis por `/slug` e por `skill_ler`. */
   private skills: SkillUsuario[] = [];
@@ -541,6 +543,7 @@ class App {
         const andamento = andamentoDoAnexo(f.name, () => this.removerAnexo());
         this.elAnexo.hidden = false;
         this.elAnexo.replaceChildren(andamento.elemento);
+        this.lendoAnexo = true;
         try {
           const lido = await lerPdfParaAnexo(bytes, {
             aoProgredir: (e) => geracao === this.geracaoAnexo && andamento.atualizar(e),
@@ -548,11 +551,13 @@ class App {
             confirmarOcr: (p) => confirmarOcrLongo((op) => this.abrirModal(op), p),
           });
           if (geracao !== this.geracaoAnexo) return;
-          this.mostrarAnexo({ nome: f.name, texto: lido.texto, paginas: lido.paginas, modo: "inteiro" });
+          this.mostrarAnexo({ nome: f.name, texto: lido.texto, paginas: lido.paginas, modo: "inteiro", naoLidas: lido.naoLidas, motivoNaoLidas: lido.motivoNaoLidas });
         } catch (e) {
           if (geracao !== this.geracaoAnexo) return;
           this.removerAnexo();
           if ((e as { name?: string } | null)?.name !== "OperacaoCancelada") this.adicionar({ tipo: "aviso", texto: mensagemDeErroPdf(e) });
+        } finally {
+          if (geracao === this.geracaoAnexo) this.lendoAnexo = false;
         }
         return;
       }
@@ -2704,6 +2709,11 @@ Voc\u00EA \u00E9 um AUXILIAR: recebeu uma tarefa de leitura de outro agente e n\
   private async enviar(texto: string): Promise<void> {
     const t = texto.trim();
     if (!t || !this.motor || this.motor.ocupado) return;
+    // Enviar agora iria sem o PDF que ainda está sendo lido — e cancelaria a leitura sem avisar.
+    if (this.lendoAnexo) {
+      this.adicionar({ tipo: "aviso", texto: "Aguarde a leitura do PDF terminar (ou cancele) antes de enviar." });
+      return;
+    }
     if (this.motorDesatualizado) this.refazerMotor();
     if (!this.config.chave) {
       this.abrirConfig(true);
@@ -3226,6 +3236,7 @@ Voc\u00EA \u00E9 um AUXILIAR: recebeu uma tarefa de leitura de outro agente e n\
   /** Tira o anexo e cancela a leitura de PDF em curso, se houver. */
   private removerAnexo(): void {
     this.geracaoAnexo += 1;
+    this.lendoAnexo = false;
     this.anexo = null;
     this.elAnexo.hidden = true;
     this.elAnexo.replaceChildren();

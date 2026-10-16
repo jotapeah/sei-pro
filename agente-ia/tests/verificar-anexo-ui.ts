@@ -32,6 +32,11 @@ export function verificarAnexoUi(): void {
   const cortado = chipDoAnexo({ nome: "parecer.pdf", texto: "x".repeat(312_000), paginas: 140, modo: "cortado" }, acoes);
   checar("chip cortado não oferece cortar de novo", !botao(cortado, "Cortar em 60 mil") && Boolean(cortado.textContent?.includes("Cortado")), cortado.textContent);
 
+  const naoLidas = chipDoAnexo({ nome: "scan.pdf", texto: "[p\u00E1gina 1]\nabc", paginas: 30, modo: "inteiro", naoLidas: [2, 3, 4, 30], motivoNaoLidas: "este navegador n\u00E3o faz OCR" }, acoes);
+  checar("chip diz as páginas não lidas e o motivo", Boolean(naoLidas.textContent?.includes("4 p\u00E1ginas n\u00E3o foram lidas (2\u20134, 30): este navegador n\u00E3o faz OCR.")), naoLidas.textContent);
+  const umaSo = chipDoAnexo({ nome: "scan.pdf", texto: "abc", paginas: 2, modo: "inteiro", naoLidas: [2] }, acoes);
+  checar("chip com uma página não lida", Boolean(umaSo.textContent?.includes("1 p\u00E1gina n\u00E3o foi lida (2).")), umaSo.textContent);
+
   secao("Anexo: andamento");
   let cancelou = 0;
   const a = andamentoDoAnexo("scan.pdf", () => void (cancelou += 1));

@@ -55,8 +55,18 @@ export function planejarLeitura(total: number, temTexto: (n: number) => boolean)
   return { total, comTexto, paraOcr, foraDoOcr, avisar: paraOcr.length > PAGINAS_AVISO_OCR };
 }
 
+/**
+ * A página tem camada de texto? O MESMO critério do `ocrPdf` (algum trecho com
+ * mais de 2 caracteres): se os dois discordassem, uma página digitalizada que
+ * só traz o número da página seria tratada aqui como "com texto" e o OCR dela
+ * seria jogado fora.
+ */
+export function temCamadaDeTexto(itens: Array<{ str?: unknown }>): boolean {
+  return itens.some((it) => typeof it.str === "string" && it.str.trim().length > 2);
+}
+
 /** [3, 4, 5, 7] → "3–5, 7" */
-function faixas(ns: number[]): string {
+export function faixas(ns: number[]): string {
   const ordenadas = [...new Set(ns)].sort((a, b) => a - b);
   const partes: string[] = [];
   for (let i = 0; i < ordenadas.length; ) {
@@ -68,13 +78,14 @@ function faixas(ns: number[]): string {
   return partes.join(", ");
 }
 
-export function montarTexto(paginas: PaginaLida[], extra: { total: number; naoLidas: number[]; semOcr?: boolean }): string {
+export function montarTexto(paginas: PaginaLida[], extra: { total: number; naoLidas: number[]; semOcr?: boolean; motivo?: string }): string {
   const ocr = paginas.filter((p) => p.ocr).length;
   const partes: string[] = [];
   if (ocr) partes.push(`[texto de ${ocr} página(s) obtido por OCR; pode conter erros de reconhecimento]`);
   for (const p of [...paginas].sort((a, b) => a.n - b.n)) partes.push(`[página ${p.n}${p.ocr ? " — OCR" : ""}]\n${p.texto}`);
   if (extra.naoLidas.length) {
-    partes.push(`[páginas não lidas: ${faixas(extra.naoLidas)}${extra.semOcr ? " (este navegador não faz OCR)" : ""}]`);
+    const motivo = extra.motivo ?? (extra.semOcr ? "este navegador não faz OCR" : "");
+    partes.push(`[páginas não lidas: ${faixas(extra.naoLidas)}${motivo ? ` (${motivo})` : ""}]`);
   }
   return partes.join("\n\n");
 }
@@ -87,6 +98,9 @@ export interface Anexo {
   /** Páginas do PDF (ausente no anexo de texto). */
   paginas?: number;
   modo: ModoAnexo;
+  /** Páginas que ficaram sem leitura (digitalizadas sem OCR, além dos tetos). */
+  naoLidas?: number[];
+  motivoNaoLidas?: string;
 }
 
 const milhar = (n: number) => n.toLocaleString("pt-BR");
