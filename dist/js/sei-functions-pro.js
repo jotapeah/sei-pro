@@ -9916,6 +9916,7 @@ function refreshDocumentosActionsPro() {
     mergeAllAndamentosProcesso(function(){ fillDocumentosActionsPro(); });
 }
 function getDocumentosActions() {
+    if (document.documentElement.hasAttribute('data-seipro-acoes-lote')) { document.dispatchEvent(new CustomEvent('spro-acoes-lote-abrir')); return; }
     getListDocumentosArvore($('#ifrArvore').contents());
     var dadosProcesso = pullDadosProcessoSession();
     var listDocumentos = (dadosProcesso) ? dadosProcesso.listDocumentos : dadosProcessoPro.listDocumentos;
@@ -13131,8 +13132,8 @@ function insertIconBatchActions() {
 }
 function appendIconBatchActions(loop = true) {
     var ifrVisualizacao = $($ifrVisualizacao).contents();
-    var htmlIconbatchActions =  '<a href="#" id="iconBatchActions" onclick="parent.getDocumentosActions();" onmouseout="return infraTooltipOcultar();" onmouseover="return infraTooltipMostrar(\'Iniciar a\u00E7\u00F5es em lote\')"  tabindex="452" class="botaoSEI">'+
-                                '<img class="infraCorBarraSistema" tabindex="452" src="'+URL_SPRO+'icons/menu/acao_lote.svg" alt="Iniciar a\u00E7\u00F5es em lote" title="Iniciar a\u00E7\u00F5es em lote">'+
+    var htmlIconbatchActions =  '<a href="#" id="iconBatchActions" onclick="parent.getDocumentosActions();" onmouseout="return infraTooltipOcultar();" onmouseover="return infraTooltipMostrar(\'A\u00E7\u00F5es em lote\')"  tabindex="452" class="botaoSEI">'+
+                                '<img class="infraCorBarraSistema" tabindex="452" src="'+URL_SPRO+'icons/menu/acao_lote.svg" alt="A\u00E7\u00F5es em lote" title="A\u00E7\u00F5es em lote">'+
                                 '</a>';
     if (!ifrVisualizacao.find('#iconBatchActions').length) {
         ifrVisualizacao.find('#divArvoreAcoes').append(htmlIconbatchActions);

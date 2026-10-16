@@ -1,0 +1,76 @@
+/*
+ * Janela das Ações em Lote (html/acoes-lote.html). Os tokens e a lista vem de
+ * sei-comum/src/ui/base.css e lista.css; aqui entra so o que e da janela.
+ *
+ * Tema: nada aqui. O app poe html[data-tema] "claro" ou "escuro" (segue o SEI) e
+ * html[data-cor-sei] com --spro-cor-sei; base.css troca os tokens --spro-*.
+ */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  color: var(--spro-texto);
+  font: 13px / 1.45 var(--spro-fonte);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- Modal (iframe transparente sobre a tela do SEI) ---------- */
+html[data-modo="modal"],
+html[data-modo="modal"] body {
+  background: transparent;
+  height: 100%;
+  overflow: hidden;
+}
+dialog.al-modal[open] {
+  width: min(980px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--spro-pagina);
+}
+dialog.al-modal:focus-visible {
+  outline: none;
+}
+dialog.al-modal::backdrop {
+  background: var(--spro-veu);
+}
+
+/* Minimizado: o iframe vira a pastilha do canto (320x64, sei-comum/src/ui/modalIframe.ts) e o dialogo a ocupa inteira. */
+html[data-minimizado] dialog.al-modal[open] {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--spro-borda);
+  border-radius: var(--spro-raio-g);
+  overflow: hidden;
+}
+html[data-minimizado] dialog.al-modal::backdrop {
+  background: transparent;
+}
+html[data-minimizado] #app {
+  padding: 0;
+  overflow: hidden;
+}
+
+#app {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 14px 16px 16px;
+  overflow-y: auto;
+}
+#app > * {
+  flex: none;
+}
+@media (max-width: 520px) {
+  #app {
+    padding: 10px;
+  }
+}
