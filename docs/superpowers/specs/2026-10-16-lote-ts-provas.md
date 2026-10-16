@@ -68,3 +68,10 @@ No MJ, os processos `...020` e `...021` ficaram incluidos no bloco "teste" (4081
 O legado fecha o menu suspenso antes de abrir o Historico (`getHistoryProcessosPro`, em `dist/js/sei-functions-pro.js`:
 `$(infraBarraS+'.barSuspenso').trigger('click')`). Os ganchos novos do Pesquisar Link Permanente e do Processos em Lote
 nao fazem esse clique. Estas provas nao registram se o menu suspenso cobre o modal novo no SP nem no MJ: não verificado: conferir antes do release.
+
+## Conferencias finais (build `3d6e7c4`, MJ 5.0.4, 16/10/2026)
+
+- Repasse Lote -> Link Permanente: a chave `link-permanente/entrada` gravada pelo Lote e lida pelo Link Permanente (caixa vem com os 2 numeros, painel "Reconhecidos: 2 processos") e a chave e consumida uma vez (nao sobra nada no storage). O build anterior do Link Permanente (anterior a Task 15) nao fazia isso: bundles regerados.
+- Clicar no item "Processos em Lote" do menu com o modal minimizado restaura a janela cheia (iframe em tela cheia, app fora da pastilha).
+- Historico (ja publicado) com o controle de modal agora vindo do `sei-comum`: abre pelo item do menu e fecha com Esc (rolagem devolvida).
+- Link Permanente e Historico fecham com um Esc, com a aba em primeiro plano e o app ja carregado (10 s). Com 6 s a primeira tecla nao fechou o Historico: o app ainda carregava (nao e regressao: comportamento do legado e do modulo ja publicado).
