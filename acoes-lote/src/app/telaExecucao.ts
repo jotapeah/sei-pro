@@ -87,9 +87,9 @@ export class TelaExecucao {
     const pct = total ? Math.round((feitos / total) * 100) : 0;
     this.barra.setAttribute("style", `width:${pct}%`);
     this.barra.parentElement?.setAttribute("aria-valuenow", String(feitos));
-    if (parando) this.texto.textContent = "Parando: aguardando o documento em andamento terminar…";
+    if (parando) this.texto.textContent = "Parando: aguardando a etapa em andamento terminar…";
     else if (pausado && this.c.rodando)
-      this.texto.textContent = `Pausando: aguardando o documento em andamento terminar… (${feitos} de ${total})`;
+      this.texto.textContent = `Pausando: aguardando a etapa em andamento terminar… (${feitos} de ${total})`;
     else if (pausado) this.texto.textContent = `Pausado: ${feitos} de ${total} documentos.`;
     else this.texto.textContent = `Executando ${Math.min(feitos + 1, total)} de ${total} documentos…`;
     this.falhas.textContent = falhas ? `${falhas} ${falhas === 1 ? "documento com erro" : "documentos com erro"} até agora.` : "";

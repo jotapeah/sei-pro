@@ -6,6 +6,7 @@
 import { type Area, areaMemoria } from "@comum/armazenamento/area";
 import { ErroRpc } from "@comum/ponte/rpc";
 import { resultadoComoCsv } from "@comum/ui/tabelaResultado";
+import type { Sei } from "@nucleo/sei";
 import { AppAcoesLote, type ContextoApp, type EstadoApp } from "../src/app/app";
 import {
   BLOCO_NAO_CONFIRMADO,
@@ -17,8 +18,10 @@ import {
 } from "../src/app/execucao";
 import { linhasDoResultado, montarResultado } from "../src/app/resultado";
 import { AVISO_OUTRA_ABA, textoRetomada } from "../src/app/retomada";
+import { TelaExecucao } from "../src/app/telaExecucao";
 import type { LinhaDoc } from "../src/modelo/documentos";
 import { type LoteAcoes, type ParamsEtapa, planejar } from "../src/modelo/fila";
+import { tratadoresAcoesLote } from "../src/pagina/executor";
 import { RepositorioAcoes } from "../src/repositorio";
 import { botao, checar, igual, instalarDom, secao, tique } from "./util";
 
@@ -439,6 +442,171 @@ export async function verificarAppExecucao(): Promise<void> {
     );
   }
 
+  secao("Falha com dados.bloco: a etapa vira {id} mesmo sem ok");
+  {
+    const { repo } = repoEspiao();
+    const f = rpcFalso({
+      executar: (a) => {
+        const et = a.etapa as Extract<ParamsEtapa, { acao: "incluir-bloco" }>;
+        if ("novo" in et.bloco) return { situacao: "erro", erro: "Documento já está no bloco.", dados: { bloco: "77" } };
+        return ok("Incluído.");
+      },
+    });
+    const e = estado([{ acao: "incluir-bloco", bloco: { novo: "Meu bloco" } }], 3);
+    const c = executarLote(e, undefined, deps(f.rpc, repo));
+    await c.rodada();
+    const esperado = { acao: "incluir-bloco", bloco: { id: "77", texto: "Meu bloco" } };
+    igual("etapa regravada", e.etapas[0], esperado);
+    igual(
+      "os seguintes usam o id",
+      f
+        .de("executar")
+        .slice(1)
+        .map((x) => x.args.etapa),
+      [esperado, esperado],
+    );
+    igual("o 1 fica com o erro", e.planos[0]!.etapas[0]!.situacao, "erro");
+  }
+  {
+    // Inclusão incerta num bloco que foi criado: também regrava (o bloco existe).
+    const { repo } = repoEspiao();
+    const f = rpcFalso({
+      executar: (a) => {
+        const et = a.etapa as Extract<ParamsEtapa, { acao: "incluir-bloco" }>;
+        if ("novo" in et.bloco)
+          return { situacao: "ok", resumo: "O SEI não confirmou.", mudancas: [], incerto: true, dados: { bloco: "78" } };
+        return ok("Incluído.");
+      },
+    });
+    const e = estado([{ acao: "incluir-bloco", bloco: { novo: "B" } }], 2);
+    const c = executarLote(e, undefined, deps(f.rpc, repo));
+    await c.rodada();
+    igual("incerto com dados.bloco regrava", e.etapas[0], { acao: "incluir-bloco", bloco: { id: "78", texto: "B" } });
+    igual("e o 2 entra no bloco", [e.planos[1]!.etapas[0]!.situacao, f.de("executar").length], ["ok", 2]);
+  }
+
+  secao("Ponta a ponta com o executor real da aba: criação incerta nunca cria um segundo bloco");
+  {
+    const { repo } = repoEspiao();
+    let criacoes = 0;
+    const criarBloco = (async () => {
+      criacoes++;
+      if (criacoes === 1) throw new TypeError("Failed to fetch");
+      return { alvo: "", mudancas: [], aplicado: true, resumo: "Bloco criado.", dados: { bloco: "900" } };
+    }) as never;
+    const incluirNoBloco = (async () => ({ alvo: "", mudancas: [], aplicado: true, resumo: "Incluído." })) as never;
+    const ctxAba = { ...CTX, base: "https://x/b", linkArvore: "https://x/a" };
+    const novaAba = () => tratadoresAcoesLote({ sei: {} as Sei, ctx: ctxAba, chamadas: { criarBloco, incluirNoBloco } });
+    const rpcDe = (t: Record<string, (a: unknown) => unknown>, depois?: () => void) => ({
+      async chamar<T>(op: string, args?: unknown): Promise<T> {
+        if (op === "recarregarArvore" || op === "zipDescartar" || op === "minimizar") return true as T;
+        const r = (await t[op]!(args)) as T;
+        depois?.();
+        return r;
+      },
+    });
+    const etapas: ParamsEtapa[] = [{ acao: "incluir-bloco", bloco: { novo: "Meu bloco" } }];
+    // O usuário pausa logo depois do 1o: o lote fica salvo para a retomada.
+    let c: ControleExecucao | null = null;
+    const e = estado(etapas, 3);
+    c = executarLote(
+      e,
+      undefined,
+      deps(
+        rpcDe(novaAba(), () => c?.pausar()),
+        repo,
+      ),
+    );
+    await c.rodada();
+    igual("o 1 fica incerto (não volta a pendente)", e.planos[0]!.etapas[0]!.situacao, "incerto");
+    await c.continuar();
+    await c.continuar();
+    igual("Continuar não cria de novo nem trava em pausa", [criacoes, c.estado], [1, "concluido"]);
+    igual(
+      "os demais pulados com o motivo",
+      e.planos.slice(1).map((p) => p.etapas[0]!.mensagem),
+      [BLOCO_NAO_CONFIRMADO, BLOCO_NAO_CONFIRMADO],
+    );
+  }
+  {
+    // Reabertura: o modal fecha logo depois do 1o envio; outra instância dos tratadores retoma do lote salvo.
+    const { repo } = repoEspiao();
+    let criacoes = 0;
+    const criarBloco = (async () => {
+      criacoes++;
+      if (criacoes === 1) throw new TypeError("Failed to fetch");
+      return { alvo: "", mudancas: [], aplicado: true, resumo: "Bloco criado.", dados: { bloco: "900" } };
+    }) as never;
+    const incluirNoBloco = (async () => ({ alvo: "", mudancas: [], aplicado: true, resumo: "Incluído." })) as never;
+    const ctxAba = { ...CTX, base: "https://x/b", linkArvore: "https://x/a" };
+    const novaAba = () => tratadoresAcoesLote({ sei: {} as Sei, ctx: ctxAba, chamadas: { criarBloco, incluirNoBloco } });
+    const etapas: ParamsEtapa[] = [{ acao: "incluir-bloco", bloco: { novo: "Meu bloco" } }];
+    let c: ControleExecucao | null = null;
+    const t1 = novaAba();
+    const rpc1 = {
+      async chamar<T>(op: string, args?: unknown): Promise<T> {
+        if (op === "recarregarArvore" || op === "zipDescartar" || op === "minimizar") return true as T;
+        const r = (await t1[op]!(args)) as T;
+        c?.encerrar();
+        return r;
+      },
+    };
+    c = executarLote(estado(etapas, 3), undefined, deps(rpc1, repo));
+    await c.rodada();
+    const salvo = await repo.doProcesso("99");
+    checar("lote salvo", !!salvo);
+    const t2 = novaAba();
+    const rpc2 = {
+      async chamar<T>(op: string, args?: unknown): Promise<T> {
+        if (op === "recarregarArvore" || op === "zipDescartar" || op === "minimizar") return true as T;
+        return (await t2[op]!(args)) as T;
+      },
+    };
+    const e2 = estado(etapas, 3);
+    const c2 = executarLote(e2, undefined, deps(rpc2, repo, { lote: salvo! }));
+    await c2.rodada();
+    await c2.continuar();
+    igual("retomada não cria um segundo bloco", criacoes, 1);
+    igual("retomada termina", c2.estado, "concluido");
+  }
+
+  secao("Senha: Continuar depois de Pausar não pede de novo");
+  {
+    const { repo } = repoEspiao();
+    let c: ControleExecucao | null = null;
+    const f = rpcFalso({
+      executar: (a) => {
+        if (numeroDe(a) === "5001") c?.pausar();
+        return ok();
+      },
+    });
+    c = executarLote(estado([{ acao: "assinar", cargo: "Diretor" }], 3), SENHA, deps(f.rpc, repo));
+    await c.rodada();
+    igual("pausado com Assinar pendente", [c.estado, f.de("executar").length], ["pausado", 1]);
+    checar("o controle ainda tem a senha: não pede", !c.precisaSenha());
+    const doc = instalarDom('<html><body><div id="r"></div></body></html>');
+    const tela = new TelaExecucao(c, { minimizar: () => undefined });
+    doc.getElementById("r")!.append(tela.el);
+    checar("campo de senha escondido", tela.el.querySelector("label.al-campo")!.hasAttribute("hidden"));
+    botao(tela.el, "Continuar")!.click();
+    await tique(10);
+    await c.rodada();
+    igual(
+      "continuou com a senha guardada",
+      f.de("executar").map((x) => x.args.senha),
+      [SENHA, SENHA, SENHA],
+    );
+    checar("sem pedir senha", !(tela.el.textContent ?? "").includes("Digite a senha da assinatura."));
+  }
+  {
+    // Senha errada: o controle esquece a senha e pede de novo.
+    const { repo } = repoEspiao();
+    const f = rpcFalso({ executar: () => ({ situacao: "erro", erro: TEXTO_SENHA, parar: true }) });
+    const c = executarLote(estado([{ acao: "assinar", cargo: "Diretor" }], 2), SENHA, deps(f.rpc, repo));
+    await c.rodada();
+    checar("senha errada: pede de novo", c.precisaSenha());
+  }
+
   secao("Tentar de novo só as falhas depois de Parar lote: só os documentos com erro");
   {
     const { repo } = repoEspiao();
@@ -776,6 +944,12 @@ export async function verificarAppExecucao(): Promise<void> {
       { minimizado: false },
     );
     botao(raiz, "Pausar")!.click();
+    await tique(2);
+    checar(
+      "pausando espera a etapa em andamento",
+      (raiz.textContent ?? "").includes("Pausando: aguardando a etapa em andamento terminar"),
+      raiz.textContent,
+    );
     (soltar as unknown as () => void)();
     await tique(20);
     igual("pausado após o em voo", f.de("executar").length, 1);

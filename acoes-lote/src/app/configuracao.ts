@@ -119,10 +119,12 @@ export function montarConfiguracao(_doc: Document, e: EstadoApp, acoes: AcoesCon
   const rotulado = (texto: string, ...filhos: Array<Node | string>): HTMLElement =>
     h("div", { class: "al-campo" }, h("span", { class: "al-rotulo" }, texto), ...filhos);
 
-  function texto(rotulo: string, valor: string, aoMudar: (v: string) => void, area = false): HTMLElement {
+  /** `max`: o limite do próprio SEI (o núcleo corta no mesmo ponto), para a prévia mostrar o que será gravado. */
+  function texto(rotulo: string, valor: string, aoMudar: (v: string) => void, area = false, max?: number): HTMLElement {
+    const limite = max ? { maxlength: String(max) } : {};
     const c = area
-      ? h("textarea", { class: "spro-campo", rows: "2", "aria-label": rotulo, value: valor })
-      : h("input", { type: "text", class: "spro-campo", "aria-label": rotulo, value: valor });
+      ? h("textarea", { class: "spro-campo", rows: "2", "aria-label": rotulo, value: valor, ...limite })
+      : h("input", { type: "text", class: "spro-campo", "aria-label": rotulo, value: valor, ...limite });
     c.addEventListener("input", () => aoMudar(c.value));
     return rotulado(rotulo, c);
   }
@@ -469,8 +471,8 @@ export function montarConfiguracao(_doc: Document, e: EstadoApp, acoes: AcoesCon
       case "alterar-dados": {
         const nivel = et.nivel ?? "manter";
         return [
-          texto("Descrição", et.descricao ?? "", (v) => editar("alterar-dados", (x) => campoOpcional(x, "descricao", v)), false),
-          texto("Observação", et.observacao ?? "", (v) => editar("alterar-dados", (x) => campoOpcional(x, "observacao", v)), true),
+          texto("Descrição", et.descricao ?? "", (v) => editar("alterar-dados", (x) => campoOpcional(x, "descricao", v)), false, 250),
+          texto("Observação", et.observacao ?? "", (v) => editar("alterar-dados", (x) => campoOpcional(x, "observacao", v)), true, 1000),
           h("p", { class: "al-dica" }, "Em branco, a descrição e a observação continuam como estão."),
           campoLista(et, "interessados", "Interessados", "contatos"),
           campoLista(et, "assuntos", "Assuntos", "assuntos"),

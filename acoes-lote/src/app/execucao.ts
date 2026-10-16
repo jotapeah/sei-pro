@@ -18,7 +18,16 @@
 import { ExecutorLote, type ItemLote, RitmoAdaptativo, type SaidaItem } from "@comum/lote/executor";
 import type { Rpc } from "@comum/ponte/rpc";
 import { ACOES } from "../modelo/acoes";
-import { ANTERIOR, type EtapaDoc, type LoteAcoes, type ParamsEtapa, type PlanoDoc, proximaEtapa, registrar } from "../modelo/fila";
+import {
+  ANTERIOR,
+  BLOCO_NAO_CONFIRMADO,
+  type EtapaDoc,
+  type LoteAcoes,
+  type ParamsEtapa,
+  type PlanoDoc,
+  proximaEtapa,
+  registrar,
+} from "../modelo/fila";
 import type { RepositorioAcoes } from "../repositorio";
 import type { EstadoApp } from "./app";
 
@@ -39,7 +48,7 @@ const LEITURAS_EM_PARALELO = 3;
 
 type RespostaEtapa =
   | { situacao: "ok"; resumo: string; mudancas?: unknown[]; dados?: Record<string, string>; incerto?: boolean }
-  | { situacao: "pulado" | "erro"; erro: string; parar?: boolean };
+  | { situacao: "pulado" | "erro"; erro: string; parar?: boolean; dados?: Record<string, string> };
 
 const mensagem = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 const novoIdPadrao = (): string => globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
@@ -69,8 +78,7 @@ function normalizarRetomada(p: PlanoDoc): PlanoDoc {
   return { ...p, etapas: p.etapas.map((e, k) => (k > i && e.situacao === "pendente" ? pulaPorIncerto(e) : e)) };
 }
 
-export const BLOCO_NAO_CONFIRMADO =
-  "A criação do bloco não foi confirmada. Confira os blocos no SEI e inclua os documentos pelo bloco certo.";
+export { BLOCO_NAO_CONFIRMADO };
 
 /**
  * Bloco novo cuja criação ficou incerta: reenviar `{novo}` poderia criar um segundo bloco (o cache da aba não
@@ -115,13 +123,16 @@ export interface ControleExecucao {
   rodada(): Promise<void>;
   pausar(): void;
   continuar(senha?: string): Promise<void>;
-  /** "Parar lote": o documento em voo termina; o que falta fica salvo, retomável. */
+  /** "Parar lote": a etapa em voo termina; o que falta fica salvo, retomável. */
   cancelar(): void;
   repetirFalhas(): Promise<void>;
   /** Modal fechado: nada novo é disparado, e não há volta nesta instância. */
   encerrar(): void;
   progresso(): { feitos: number; total: number; falhas: number };
-  /** Há etapa Assinar pendente (continuar pede a senha). */
+  /**
+   * Continuar pede a senha: há etapa Assinar pendente e este controle não a tem (retomada depois de reabrir, ou
+   * pausa por senha errada). Depois de um simples Pausar, a senha guardada segue valendo.
+   */
   precisaSenha(): boolean;
 }
 
@@ -191,6 +202,7 @@ class Execucao implements ControleExecucao {
   }
 
   precisaSenha(): boolean {
+    if (this.senha) return false;
     return this.planos.some((p) => p.etapas.some((x) => x.acao === "assinar" && x.situacao === "pendente"));
   }
 
@@ -413,6 +425,8 @@ class Execucao implements ControleExecucao {
     } else if (r!.situacao === "ok") {
       if (r!.incerto) {
         this.definir(k, registrarIncerto(p, i, r!.resumo));
+        // Bloco criado e inclusão incerta: o bloco existe, os seguintes entram nele.
+        this.reescreverBloco(i, r!.dados);
         this.incertosSeguidos += 1;
         if (this.incertosSeguidos >= INCERTOS_PARA_PAUSAR) parar = MSG_SEM_RESPOSTA;
       } else {
@@ -426,9 +440,13 @@ class Execucao implements ControleExecucao {
         // O SEI recusou (sessão, captcha, senha): nada foi aplicado, a etapa volta a pendente.
         this.definir(k, registrar(p, i, { situacao: "pendente" }));
         parar = r!.erro;
+        // Assinatura recusada (senha errada, em geral): a senha guardada não serve mais; continuar pede outra.
+        if (etapa.acao === "assinar") this.senha = undefined;
       } else {
         this.definir(k, registrar(p, i, { situacao: r!.situacao, mensagem: r!.erro }));
       }
+      // Bloco novo criado e inclusão recusada: a etapa vira `{id}` mesmo assim, para ninguém criar outro bloco.
+      this.reescreverBloco(i, r!.dados);
     }
     // Criação de bloco incerta: os documentos seguintes não tentam de novo (nem aqui, nem ao continuar).
     barrarBlocoIncerto(this.lote);

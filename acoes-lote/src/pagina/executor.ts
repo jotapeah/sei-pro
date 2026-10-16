@@ -28,9 +28,10 @@ import { linkDaAcao } from "@nucleo/links/links";
 import type { Sei } from "@nucleo/sei";
 import { ehErroSei } from "@nucleo/sessao/erros";
 import type { Arquivo } from "@nucleo/sessao/http";
+import { documentoTopo } from "@nucleo/sessao/pagina";
 import { ACOES, type AcaoId } from "../modelo/acoes";
 import { type LinhaDoc, linhasDaArvore, MOTIVO_SIGILOSO } from "../modelo/documentos";
-import type { ItemLista, ParamsEtapa } from "../modelo/fila";
+import { BLOCO_NAO_CONFIRMADO, type ItemLista, type ParamsEtapa } from "../modelo/fila";
 import { AcumuladorZip, baixarBytes, extensaoDe, nomeArquivo } from "../sei/download";
 import type { ContextoAcoes } from "./contexto";
 
@@ -111,11 +112,14 @@ export interface DepsExecutor {
   chamadas?: Partial<ChamadasSei>;
   /** Entrega bytes ao usuário (`<a download>`); trocável nas provas. */
   baixar?: (bytes: Uint8Array, nome: string, tipo: string) => void;
+  /** Documento de topo da tela do SEI (onde mora o `#ifrArvore`); trocável nas provas. */
+  documento?: () => Document;
 }
 
 export type RespostaEtapa =
   | { situacao: "ok"; resumo: string; mudancas: ResultadoEscrita["mudancas"]; dados?: Record<string, string>; incerto?: boolean }
-  | { situacao: "pulado" | "erro"; erro: string; parar?: boolean };
+  /** `dados.bloco`: o bloco novo foi criado, mas a inclusão falhou; o app regrava a etapa como `{id}` mesmo assim. */
+  | { situacao: "pulado" | "erro"; erro: string; parar?: boolean; dados?: Record<string, string> };
 
 export type RespostaDestino =
   | { situacao: "ok"; destino: { protocolo: string; idProcedimento: string; tipo: string } }
@@ -157,8 +161,28 @@ export function mapearErro(e: unknown, o: { aplicou: boolean; assinatura?: boole
   return { situacao: "erro", erro: mensagem(e) };
 }
 
-function incerta(): RespostaEtapa {
-  return { situacao: "ok", resumo: TEXTO_INCERTO, mudancas: [], incerto: true };
+function incerta(resumo = TEXTO_INCERTO): RespostaEtapa {
+  return { situacao: "ok", resumo, mudancas: [], incerto: true };
+}
+
+/**
+ * Recarrega a árvore visível do processo (`#ifrArvore` da tela de topo) pelo endereço que ela já tem: nunca se
+ * monta URL. Se o `reload` for barrado, regrava o próprio `src`. Melhor esforço: sem árvore na tela, nada a fazer.
+ */
+export function recarregarArvoreVisivel(documento: () => Document): void {
+  let ifr: HTMLIFrameElement | null;
+  try {
+    ifr = documento().querySelector<HTMLIFrameElement>("#ifrArvore");
+  } catch {
+    return;
+  }
+  if (!ifr) return;
+  try {
+    ifr.contentWindow!.location.reload();
+  } catch {
+    const src = ifr.getAttribute("src");
+    if (src) ifr.setAttribute("src", src);
+  }
 }
 
 function ok(r: ResultadoEscrita): RespostaEtapa {
@@ -300,37 +324,15 @@ export function tratadoresAcoesLote(d: DepsExecutor): Record<string, Tratador> {
         );
       case "incluir-bloco": {
         if ("id" in etapa.bloco) return c.incluirNoBloco(d.sei, etapa.bloco.id, [numero], {}, op);
+        // Só a prévia chega aqui: a execução de `{novo}` vai por `incluirEmBlocoNovo`.
         const desc = etapa.bloco.novo.trim();
-        const chave = `${loteId}|${desc}`;
-        const feito = blocosCriados.get(chave);
-        if (!aplicar) {
-          return {
-            alvo: numero,
-            mudancas: [{ campo: "Bloco", antes: "", depois: `novo bloco de assinatura "${desc}" (criado uma vez para o lote)` }],
-            aplicado: false,
-            resumo: feito ? `Vai incluir o documento no bloco ${feito}.` : `Vai criar o bloco "${desc}" e incluir o documento nele.`,
-          };
-        }
-        if (feito === null) {
-          throw new ErroBlocoIncerto(desc);
-        }
-        let bloco = feito;
-        if (bloco === undefined) {
-          try {
-            const criado = await c.criarBloco(d.sei, { tipo: "assinatura", descricao: desc }, op);
-            const numeroBloco = criado.dados?.bloco;
-            if (!numeroBloco) throw new ErroBlocoIncerto(desc);
-            bloco = numeroBloco;
-            blocosCriados.set(chave, bloco);
-          } catch (e) {
-            if (!(e instanceof ErroBlocoIncerto) && !mapearEhIncerto(e)) throw e;
-            blocosCriados.set(chave, null);
-            throw new ErroBlocoIncerto(desc);
-          }
-        }
-        const r = await c.incluirNoBloco(d.sei, bloco, [numero], {}, op);
-        // O app regrava a etapa como `{id}` com este número, para uma retomada não criar outro bloco.
-        return { ...r, dados: { ...r.dados, bloco } };
+        const feito = blocosCriados.get(`${loteId}|${desc}`);
+        return {
+          alvo: numero,
+          mudancas: [{ campo: "Bloco", antes: "", depois: `novo bloco de assinatura "${desc}" (criado uma vez para o lote)` }],
+          aplicado: false,
+          resumo: feito ? `Vai incluir o documento no bloco ${feito}.` : `Vai criar o bloco "${desc}" e incluir o documento nele.`,
+        };
       }
       case "baixar":
       case "pdf":
@@ -343,6 +345,41 @@ export function tratadoresAcoesLote(d: DepsExecutor): Record<string, Tratador> {
     }
   };
 
+  /**
+   * Execução de "incluir em bloco novo". Desfechos:
+   * - criação sem confirmação: `incerto` (nunca `erro`, que o app repetiria) e a marca `null` no mapa;
+   * - marca `null` já no mapa: `pulado` com BLOCO_NAO_CONFIRMADO (não tenta criar de novo);
+   * - bloco criado e inclusão falhou (ou ficou incerta): a resposta leva `dados.bloco` para o app regravar `{id}`.
+   */
+  const incluirEmBlocoNovo = async (novo: string, numero: string, loteId: string): Promise<RespostaEtapa> => {
+    const desc = novo.trim();
+    const chave = `${loteId}|${desc}`;
+    let bloco = blocosCriados.get(chave);
+    if (bloco === null) return { situacao: "pulado", erro: BLOCO_NAO_CONFIRMADO };
+    if (bloco === undefined) {
+      try {
+        bloco = (await c.criarBloco(d.sei, { tipo: "assinatura", descricao: desc }, { aplicar: true })).dados?.bloco;
+      } catch (e) {
+        const r = mapearErro(e, { aplicou: true });
+        if (!(r.situacao === "ok" && r.incerto)) return r;
+        bloco = undefined;
+      }
+      if (!bloco) {
+        blocosCriados.set(chave, null);
+        return incerta(textoBlocoIncerto(desc));
+      }
+      blocosCriados.set(chave, bloco);
+    }
+    try {
+      const r = ok(await c.incluirNoBloco(d.sei, bloco, [numero], {}, { aplicar: true }));
+      // O app regrava a etapa como `{id}` com este número, para uma retomada não criar outro bloco.
+      return { ...r, dados: { ...(r.situacao === "ok" ? r.dados : undefined), bloco } };
+    } catch (e) {
+      const r = mapearErro(e, { aplicou: true });
+      return { ...r, dados: { ...(r.situacao === "ok" ? r.dados : undefined), bloco } };
+    }
+  };
+
   const rodar = async (args: unknown, aplicar: boolean): Promise<RespostaEtapa> => {
     const p = lerEtapa(args);
     if (typeof p === "string") return { situacao: "erro", erro: p };
@@ -352,12 +389,10 @@ export function tratadoresAcoesLote(d: DepsExecutor): Record<string, Tratador> {
     if (aplicar && etapa.acao === "assinar" && !senha) return { situacao: "erro", erro: "Informe a senha para assinar.", parar: true };
     if (aplicar && etapa.acao === "pdf") return { situacao: "erro", erro: "O PDF único é gerado pelo tratador pdf, não por executar." };
     if (aplicar && etapa.acao === "baixar") return etapa.modo === "zip" ? zipAdicionar({ numero, loteId }) : baixarArquivo({ numero });
+    if (aplicar && etapa.acao === "incluir-bloco" && "novo" in etapa.bloco) return incluirEmBlocoNovo(etapa.bloco.novo, numero, loteId);
     try {
       return ok(await passo(etapa, numero, senha, aplicar, loteId));
     } catch (e) {
-      if (e instanceof ErroBlocoIncerto) {
-        return { situacao: "erro", erro: e.message, parar: true };
-      }
       // Só a escrita de verdade pode ter gravado; a prévia falha sempre como erro comum.
       return mapearErro(e, { aplicou: aplicar && ACOES.find((a) => a.id === etapa.acao)?.escreve === true, assinatura });
     }
@@ -516,9 +551,11 @@ export function tratadoresAcoesLote(d: DepsExecutor): Record<string, Tratador> {
       return true;
     },
     pdf,
+    /** Fim do lote: esquece a árvore lida e recarrega, uma vez, a árvore que o usuário vê na tela. */
     recarregarArvore: async () => {
       cache = null;
       c.invalidar(d.sei, d.ctx.idProcedimento);
+      recarregarArvoreVisivel(d.documento ?? documentoTopo);
       return true;
     },
     fechar: () => {
@@ -534,17 +571,8 @@ export function tratadoresAcoesLote(d: DepsExecutor): Record<string, Tratador> {
   };
 }
 
-/** Criação do bloco sem confirmação: o lote para, porque tentar de novo poderia duplicar o bloco. */
-class ErroBlocoIncerto extends Error {
-  constructor(descricao: string) {
-    super(`A criação do bloco "${descricao}" não foi confirmada. Confira seus blocos de assinatura antes de continuar.`);
-  }
-}
-
-/** A falha de uma escrita pode ter gravado (não é erro comprovado do SEI)? Mesmas regras de `mapearErro`. */
-function mapearEhIncerto(e: unknown): boolean {
-  const r = mapearErro(e, { aplicou: true });
-  return r.situacao === "ok" && r.incerto === true;
-}
+/** Criação do bloco sem confirmação: o documento fica "Confira" e os demais não tentam criar outro bloco. */
+const textoBlocoIncerto = (descricao: string): string =>
+  `A criação do bloco "${descricao}" não foi confirmada. Confira seus blocos de assinatura no SEI.`;
 
 export type { AcaoId };

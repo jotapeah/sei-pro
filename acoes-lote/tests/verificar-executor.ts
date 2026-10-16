@@ -8,7 +8,7 @@ import type { ResultadoEscrita } from "@nucleo/dominio/escrita";
 import type { Sei } from "@nucleo/sei";
 import { ErroSei } from "@nucleo/sessao/erros";
 import { unzipSync } from "fflate";
-import type { ParamsEtapa } from "../src/modelo/fila";
+import { BLOCO_NAO_CONFIRMADO, type ParamsEtapa } from "../src/modelo/fila";
 import type { ContextoAcoes } from "../src/pagina/contexto";
 import { type ChamadasSei, type DepsExecutor, mapearErro, tratadoresAcoesLote } from "../src/pagina/executor";
 import { AcumuladorZip, nomeArquivo } from "../src/sei/download";
@@ -446,12 +446,69 @@ export async function verificarExecutor(): Promise<void> {
     const etapa: ParamsEtapa = { acao: "incluir-bloco", bloco: { novo: "B" } };
     const r1 = await exec(t, etapa);
     const r2 = await exec(t, etapa, "0000123");
-    checar("criacao incerta para o lote", r1.situacao === "erro" && r1.parar === true && r2.situacao === "erro" && r2.parar === true, [
-      r1,
-      r2,
-    ]);
+    igual(
+      "primeira criacao incerta: ok + incerto (nunca erro que o app repete)",
+      [r1.situacao, r1.incerto, r1.parar],
+      ["ok", true, undefined],
+    );
+    checar("o resumo fala do bloco", String(r1.resumo).includes('A criação do bloco "B" não foi confirmada'), r1);
+    igual("com a marca no cache: pulado com o motivo", r2, { situacao: "pulado", erro: BLOCO_NAO_CONFIRMADO });
     igual("nao tenta criar de novo", tentativas, 1);
     checar("nao incluiu", !log.some((x) => x.fn === "incluirNoBloco"));
+  }
+  {
+    // Criou o bloco, mas a inclusao falhou: a falha leva o numero do bloco (o app regrava a etapa como {id}).
+    const { t, log } = falso({ incluirNoBloco: falha(new ErroSei("SEI_VALIDACAO", "Documento ja esta no bloco.")) as never });
+    const etapa: ParamsEtapa = { acao: "incluir-bloco", bloco: { novo: "B" } };
+    igual("erro com dados.bloco", await exec(t, etapa), { situacao: "erro", erro: "Documento ja esta no bloco.", dados: { bloco: "456" } });
+    await exec(t, etapa, "0000123");
+    igual("o seguinte nao cria outro", log.filter((x) => x.fn === "criarBloco").length, 1);
+  }
+  {
+    const { t } = falso({ incluirNoBloco: falha(new TypeError("rede")) as never });
+    const r = await exec(t, { acao: "incluir-bloco", bloco: { novo: "B" } });
+    igual("inclusao incerta tambem leva dados.bloco", [r.situacao, r.incerto, r.dados], ["ok", true, { bloco: "456" }]);
+  }
+
+  secao("Executor: recarregarArvore recarrega a arvore visivel (uma vez, sem montar URL)");
+  {
+    const eventos: string[] = [];
+    const SRC = "controlador.php?acao=procedimento_visualizar&id_procedimento=55&infra_hash=yyy";
+    const iframe = (reload: () => void) => ({
+      contentWindow: { location: { reload } },
+      getAttribute: (n: string) => (n === "src" ? SRC : null),
+      setAttribute: (n: string, v: string) => eventos.push(`set:${n}=${v}`),
+    });
+    const docFalso = (ifr: unknown) => ({ querySelector: (sel: string) => (sel === "#ifrArvore" ? ifr : null) }) as unknown as Document;
+    const { t, log } = falso({}, { documento: () => docFalso(iframe(() => eventos.push("reload"))) });
+    igual("devolve true", await t.recarregarArvore(undefined), true);
+    igual("recarregou o iframe uma vez", eventos, ["reload"]);
+    igual("e limpou o cache do nucleo", log.filter((x) => x.fn === "invalidar").length, 1);
+    eventos.length = 0;
+    const { t: t2 } = falso(
+      {},
+      {
+        documento: () =>
+          docFalso(
+            iframe(() => {
+              throw new Error("bloqueado");
+            }),
+          ),
+      },
+    );
+    await t2.recarregarArvore(undefined);
+    igual("reload falhou: regrava o proprio src", eventos, [`set:src=${SRC}`]);
+    const { t: t3 } = falso({}, { documento: () => docFalso(null) });
+    igual("sem #ifrArvore nao quebra", await t3.recarregarArvore(undefined), true);
+    const { t: t4 } = falso(
+      {},
+      {
+        documento: () => {
+          throw new Error("sem topo");
+        },
+      },
+    );
+    igual("sem documento de topo nao quebra", await t4.recarregarArvore(undefined), true);
   }
 
   secao("Executor: listas de apoio");

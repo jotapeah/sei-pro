@@ -86,6 +86,9 @@ export interface PlanoDoc {
 
 /** Motivo das etapas derrubadas por um erro ou pulo anterior (a repetição das falhas as reabre). */
 export const ANTERIOR = "Etapa anterior não concluída";
+/** Bloco novo cuja criação ficou sem confirmação do SEI: os demais documentos não tentam criar outro. */
+export const BLOCO_NAO_CONFIRMADO =
+  "A criação do bloco não foi confirmada. Confira os blocos no SEI e inclua os documentos pelo bloco certo.";
 
 /** O que uma etapa deixa no documento, para a elegibilidade das seguintes (só estes efeitos). */
 function aplicarEfeito(l: LinhaDoc, e: ParamsEtapa): LinhaDoc {

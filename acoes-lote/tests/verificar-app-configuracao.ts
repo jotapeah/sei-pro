@@ -276,6 +276,14 @@ export async function verificarAppConfiguracao(): Promise<void> {
     igual("sem erros", erros(el), []);
     digitar(el.querySelector<HTMLInputElement>('[aria-label="Descrição"]')!, "");
     checar("em branco volta a manter", (e.etapas[0] as { descricao?: string }).descricao === undefined);
+    igual(
+      "limites do SEI no campo (a prévia mostra o que grava)",
+      [
+        el.querySelector('[aria-label="Descrição"]')!.getAttribute("maxlength"),
+        el.querySelector('[aria-label="Observação"]')!.getAttribute("maxlength"),
+      ],
+      ["250", "1000"],
+    );
   }
   {
     const e = estado([{ acao: "alterar-dados", observacao: "x" }]);
