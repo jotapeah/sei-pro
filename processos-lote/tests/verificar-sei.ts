@@ -12,9 +12,10 @@ import { fileURLToPath } from "node:url";
 import { Sei } from "@nucleo/sei";
 import { codificarLatin1 } from "@nucleo/sessao/codificacao";
 import { analisarHtml, definirAnalisador } from "@nucleo/sessao/dom";
+import { ErroSei } from "@nucleo/sessao/erros";
 import type { Http, OpcoesHttp, Pagina } from "@nucleo/sessao/http";
 import { DOMParser } from "linkedom";
-import { criarProcesso } from "../src/sei/criar";
+import { criacaoIncerta, criarProcesso, ErroProcessoCriado } from "../src/sei/criar";
 import { carregarFormTipo, type FormTipo, lerFormTipo } from "../src/sei/formularioTipo";
 import { listarTipos } from "../src/sei/tipos";
 import { checar, igual, lanca, secao } from "./util";
@@ -326,6 +327,64 @@ async function verificarCriacao(form: FormTipo): Promise<void> {
   ]);
   const sn = await criarProcesso(seiCom(semNumero), form, { especificacao: "A", nivelAcesso: "0", hipoteseLegal: "" });
   igual("<title> sem numero ('Processo' e descartado)", sn.numero, "");
+  igual("confirmado + id + sem numero: retorna com aviso", sn.aviso, "numero nao identificado");
+  igual("e o id segue", sn.idProcedimento, "4242");
+
+  // Confirmado (URL de prova) sem id: nem #ifrArvore nem id_procedimento na URL final.
+  const semId = (titulo: string) =>
+    httpFalso([
+      {
+        metodo: "POST",
+        contem: "acao=procedimento_gerar",
+        resposta: () => {
+          const p = fixture("criado.html");
+          const html = p.html
+            .replace(/<iframe id="ifrArvore"[^>]*><\/iframe>/, "")
+            .replace(/<title>[^<]*<\/title>/, `<title>${titulo}</title>`);
+          return pagina(p.url.replace("&id_procedimento=4242", ""), html);
+        },
+      },
+    ]);
+  const ec = await lanca(() =>
+    criarProcesso(seiCom(semId("Processo - 99906.000007/2026-11")), form, { especificacao: "A", nivelAcesso: "0", hipoteseLegal: "" }),
+  );
+  checar("confirmado sem id: ErroProcessoCriado", ec instanceof ErroProcessoCriado, ec);
+  checar(
+    "com criado === true e codigo SEI_RESPOSTA_INESPERADA",
+    ec instanceof ErroProcessoCriado && ec.criado === true && ec.codigo === "SEI_RESPOSTA_INESPERADA",
+    ec,
+  );
+  igual("e o numero do <title>", (ec as ErroProcessoCriado | null)?.numero, "99906.000007/2026-11");
+  const ec2 = await lanca(() =>
+    criarProcesso(seiCom(semId("SEI - Processo")), form, { especificacao: "A", nivelAcesso: "0", hipoteseLegal: "" }),
+  );
+  igual("confirmado sem id e sem numero: numero vazio", (ec2 as ErroProcessoCriado | null)?.numero, "");
+
+  secao("criacaoIncerta");
+  const falha = (codigo: "SEI_REDE" | "SEI_EXCECAO" | "SEI_VALIDACAO" | "SEI_SESSAO_EXPIRADA") =>
+    httpFalso([
+      {
+        metodo: "POST",
+        contem: "acao=procedimento_gerar",
+        resposta: () => {
+          throw new ErroSei(codigo, codigo);
+        },
+      },
+    ]);
+  const doEnvio = async (codigo: "SEI_REDE" | "SEI_EXCECAO" | "SEI_VALIDACAO" | "SEI_SESSAO_EXPIRADA") =>
+    lanca(() => criarProcesso(seiCom(falha(codigo)), form, { especificacao: "A", nivelAcesso: "0", hipoteseLegal: "" }));
+  checar("ErroProcessoCriado: incerta", criacaoIncerta(ec));
+  checar("SEI_REDE no envio: incerta", criacaoIncerta(await doEnvio("SEI_REDE")));
+  checar("SEI_EXCECAO no envio: incerta", criacaoIncerta(await doEnvio("SEI_EXCECAO")));
+  checar("SEI_VALIDACAO: nao criado", !criacaoIncerta(await doEnvio("SEI_VALIDACAO")));
+  checar("SEI_SESSAO_EXPIRADA: nao criado", !criacaoIncerta(await doEnvio("SEI_SESSAO_EXPIRADA")));
+  checar("nao confirmado (formulario de volta): nao criado", e !== null && !criacaoIncerta(e));
+  checar("erro que nao e ErroSei: nao criado", !criacaoIncerta(new Error("x")));
+  checar(
+    "detalhe do nao confirmado sem travessao",
+    !/\u2014/.test((e as ErroSei | null)?.detalhe ?? "\u2014"),
+    (e as ErroSei | null)?.detalhe,
+  );
 }
 
 export async function verificarSei(): Promise<void> {

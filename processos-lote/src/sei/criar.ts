@@ -74,6 +74,51 @@ function idDoProcesso(resposta: Pagina): string {
   return doIframe ?? parametros(resposta.url).get("id_procedimento") ?? "";
 }
 
+export const AVISO_SEM_NUMERO = "numero nao identificado";
+
+/**
+ * O SEI confirmou a criacao (URL final de `procedimento_trabalhar` vinda de `procedimento_gerar`), mas a resposta
+ * nao trouxe o id do processo. O processo EXISTE: quem chama nunca deve repetir a linha (duplicaria). O codigo
+ * continua `SEI_RESPOSTA_INESPERADA` para os tratadores genericos; a distincao e por `instanceof`.
+ */
+export class ErroProcessoCriado extends ErroSei {
+  /** Protocolo lido do `<title>` cru ("" se ausente). */
+  readonly numero: string;
+  readonly criado = true as const;
+
+  constructor(numero: string, detalhe?: string) {
+    super("SEI_RESPOSTA_INESPERADA", "Processo criado, mas o SEI n\u00E3o devolveu o identificador.", detalhe);
+    this.name = "ErroProcessoCriado";
+    this.numero = numero;
+  }
+}
+
+/**
+ * Depois de um erro de `criarProcesso`: o processo PODE ter sido criado? `true` = desfecho desconhecido ou
+ * criacao comprovada: NAO repetir a linha. `false` = comprovadamente nao criado (pode repetir/corrigir).
+ */
+export function criacaoIncerta(e: unknown): boolean {
+  if (e instanceof ErroProcessoCriado) return true;
+  if (e instanceof ErroSei) return e.codigo === "SEI_REDE" || e.codigo === "SEI_EXCECAO";
+  return false;
+}
+
+/**
+ * Cria UM processo. Contrato de falha (o envio e a primeira coisa que acontece; todo erro e no envio ou depois):
+ *
+ * Retorno normal = criado. `aviso` pode trazer "interessado ignorado" e/ou "numero nao identificado" (o SEI
+ * confirmou e deu o id, mas o `<title>` nao trouxe o protocolo: `numero` vem "", registrar como criado).
+ *
+ * NAO criado (garantido; `criacaoIncerta` = false):
+ * - `SEI_RESPOSTA_INESPERADA` que nao e `ErroProcessoCriado`: a URL final nao e a prova (o SEI devolveu o formulario);
+ * - `SEI_VALIDACAO`: o SEI recusou os dados (`#txaInfraValidacao`);
+ * - `SEI_SESSAO_EXPIRADA`: a requisicao caiu no login, nada foi gravado.
+ *
+ * DESCONHECIDO ou criado (NAO repetir; `criacaoIncerta` = true):
+ * - `ErroProcessoCriado`: confirmado sem id (traz `numero` quando o `<title>` tem);
+ * - `SEI_REDE`: a resposta se perdeu, o servidor pode ter gravado;
+ * - `SEI_EXCECAO`: pagina de erro ou HTTP 5xx, o servidor pode ter gravado antes de falhar.
+ */
 export async function criarProcesso(sei: Sei, form: FormTipo, p: DadosProcesso): Promise<Criado & { aviso?: string }> {
   const aceito = interessadoAceito(form, p.interessado);
   const resposta = await sei.http.enviar(form.action, montarCampos(form, p));
@@ -81,18 +126,20 @@ export async function criarProcesso(sei: Sei, form: FormTipo, p: DadosProcesso):
     throw new ErroSei(
       "SEI_RESPOSTA_INESPERADA",
       "O SEI n\u00E3o confirmou a cria\u00E7\u00E3o do processo.",
-      `${textoDe(resposta.doc.querySelector("title"))} \u2014 ${resposta.url.replace(/infra_hash=\w+/, "infra_hash=\u2026")}`,
+      `${textoDe(resposta.doc.querySelector("title"))}, ${resposta.url.replace(/infra_hash=\w+/, "infra_hash=...")}`,
     );
   }
+  const numero = numeroDoTitulo(resposta.html);
   const id = idDoProcesso(resposta);
-  if (!id) throw new ErroSei("SEI_RESPOSTA_INESPERADA", "Processo criado, mas o SEI n\u00E3o devolveu o identificador.");
+  if (!id) throw new ErroProcessoCriado(numero, resposta.url.replace(/infra_hash=\w+/, "infra_hash=..."));
   const criado: Criado & { aviso?: string } = {
-    numero: numeroDoTitulo(resposta.html),
+    numero,
     idProcedimento: id,
     // Entrada no processo sem assinatura: a unica que o SEI aceita (links.ts). Um link assinado guardado no
     // lote valeria so nesta sessao, e hash invalido desloga.
     url: sei.http.absoluta(`controlador.php?acao=procedimento_trabalhar&id_procedimento=${id}`),
   };
-  if (!aceito) criado.aviso = AVISO_INTERESSADO;
+  const avisos = [!aceito ? AVISO_INTERESSADO : "", !numero ? AVISO_SEM_NUMERO : ""].filter(Boolean);
+  if (avisos.length) criado.aviso = avisos.join("; ");
   return criado;
 }

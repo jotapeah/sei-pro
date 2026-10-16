@@ -6,6 +6,9 @@
  * (`infraAjaxMontarSelect` em `hipotese_legal_select_nome_base_legal`), pelo link que ela mesma assinou no
  * script -- por isso a URL e procurada no HTML CRU. Quem faz isso e `hipotesesDoFormulario` do nucleo; aqui so
  * se descarta o primeiro item `value="null"` e se mantem a tolerancia do legado: sem resposta, lista vazia.
+ *
+ * ATENCAO: `SEI_REDE`/`SEI_EXCECAO` tambem viram `[]`, indistinguivel de "orgao sem hipoteses". Quem monta o lote
+ * deve tratar lote RESTRITO sem lista de hipoteses carregada como validacao bloqueante (nao criar sem hipotese).
  */
 
 import { hipotesesDoFormulario } from "@nucleo/dominio/escrita";
