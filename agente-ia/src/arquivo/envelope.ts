@@ -133,8 +133,32 @@ function conectorParaArquivo(c: Conector): Conector {
   return limpo({ ...c, auth });
 }
 
-/** Remonta o conector do arquivo com o segredo que já existe aqui. */
-function conectorDoArquivo(vindo: Conector, local: Conector | undefined): Conector {
+/** A origem (`esquema://host:porta`) do endereço, ou `null` se não for URL. */
+function origem(url: unknown): string | null {
+  try {
+    return typeof url === "string" ? new URL(url).origin : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Os dois endereços são do mesmo servidor (URL inválida nunca é). */
+function mesmaOrigem(a: unknown, b: unknown): boolean {
+  const oa = origem(a);
+  return oa !== null && oa === origem(b);
+}
+
+/**
+ * Remonta o conector do arquivo com o segredo que já existe aqui.
+ *
+ * O arquivo mora numa pasta de nuvem que outra pessoa pode editar: um
+ * registro adulterado que troque o endereço do conector levaria o token
+ * daqui para outro servidor na próxima chamada. Então o segredo daqui só é
+ * reaproveitado quando a ORIGEM do endereço não mudou; se mudou, o conector
+ * chega sem segredo e o usuário digita de novo.
+ */
+function conectorDoArquivo(vindo: Conector, localQualquer: Conector | undefined): Conector {
+  const local = localQualquer && mesmaOrigem(vindo.url, localQualquer.url) ? localQualquer : undefined;
   const auth: Conector["auth"] =
     vindo.auth?.tipo === "token"
       ? {
@@ -147,7 +171,7 @@ function conectorDoArquivo(vindo: Conector, local: Conector | undefined): Conect
       : vindo.auth?.tipo === "oauth"
         ? local?.auth.tipo === "oauth"
           ? limpo({ ...vindo.auth, token: local.auth.token, refresh: local.auth.refresh, expiraEm: local.auth.expiraEm })
-          : vindo.auth
+          : limpo({ ...vindo.auth, token: undefined, refresh: undefined, expiraEm: undefined })
         : { tipo: "nenhuma" };
   return { ...vindo, auth };
 }
@@ -312,6 +336,39 @@ function mesclarLista(
   return { itens, marcas: novasMarcas, registros, vindos };
 }
 
+/**
+ * A config do arquivo aplicada à daqui. Além do que `configDoSync` já faz
+ * (serviço diferente com chave aqui preserva serviço, endereço e modelos), o
+ * ENDEREÇO diferente também preserva: um arquivo adulterado que troque só a
+ * `url` do serviço compatível mandaria a chave daqui para outro servidor.
+ */
+function configDoArquivo(bruto: Record<string, unknown>, local: Config): Config {
+  const junta = configDoSync(bruto, local);
+  const vindo = bruto as Partial<Config>;
+  const outroServico = vindo.servico !== undefined && vindo.servico !== local.servico;
+  const outraUrl = vindo.url !== undefined && vindo.url !== local.url;
+  if (!local.chave || !(outroServico || outraUrl)) return junta;
+  return { ...junta, servico: local.servico, url: local.url, modelo: local.modelo, modeloAuxiliar: local.modeloAuxiliar };
+}
+
+/**
+ * Carimbo do arquivo no futuro vale `agora`: senão um registro adulterado (ou
+ * de um relógio adiantado) com `em` enorme venceria para sempre toda edição
+ * daqui.
+ */
+function semFuturo(e: EnvelopeAgente, agora: number): EnvelopeAgente {
+  const teto = (em: number): number => Math.min(em, agora);
+  const registros = {} as Record<TipoLista, Registro[]>;
+  for (const tipo of TIPOS) registros[tipo] = (e.registros[tipo] ?? []).map((r) => (r.em > agora ? { ...r, em: agora } : r));
+  return limpo({
+    ...e,
+    config: e.config && { ...e.config, em: teto(e.config.em) },
+    ignorados: e.ignorados && { ...e.ignorados, em: teto(e.ignorados.em) },
+    segredos: e.segredos && { ...e.segredos, em: teto(e.segredos.em) },
+    registros,
+  });
+}
+
 /** Os tokens dos conectores deste computador, por id. */
 function tokensDaqui(conectores: Conector[]): Record<string, string> {
   const tokens: Record<string, string> = {};
@@ -331,6 +388,7 @@ export function mesclar(
   o: OpcoesMescla,
 ): { retrato: Retrato; diario: Diario; envelope: EnvelopeAgente; mudouLocal: boolean } {
   const { agora } = o;
+  lido = lido && semFuturo(lido, agora);
   const carimbado = carimbar(local, d, agora);
   const diario: Diario = { ...carimbado };
   const registros = {} as Record<TipoLista, Registro[]>;
@@ -340,7 +398,7 @@ export function mesclar(
   // -- config e ignorados: um item só, mesma regra das listas.
   const marcaConfig = carimbado.config[UNICO];
   const configVence = lido?.config !== undefined && venceOArquivo(lido.config.em, marcaConfig);
-  let config = configVence ? configDoSync(lido!.config!.dado as unknown as Record<string, unknown>, local.config) : local.config;
+  let config = configVence ? configDoArquivo(lido!.config!.dado as unknown as Record<string, unknown>, local.config) : local.config;
   const envConfig: Unico<Omit<Config, "chave">> = configVence ? lido!.config! : { em: marcaConfig.em, dado: configParaSync(local.config) };
 
   const marcaIgn = carimbado.ignorados[UNICO];
@@ -377,7 +435,9 @@ export function mesclar(
     const regsConector = new Map((lido?.registros.conectores ?? []).map((r) => [r.id, r]));
     listas.conectores = (listas.conectores as Conector[]).map((c) => {
       const token = tokens[c.id];
-      if (!token) return c;
+      // Só no conector do mesmo servidor do registro do arquivo: o token de lá
+      // nunca vai para um endereço que o arquivo não indicou para ele.
+      if (!token || !mesmaOrigem(c.url, (regsConector.get(c.id)?.dado as Partial<Conector> | undefined)?.url)) return c;
       if (c.auth.tipo === "token" && !c.auth.valor) return { ...c, auth: { ...c.auth, valor: token } };
       if (c.auth.tipo === "nenhuma") {
         // Chegou pelo `storage.sync` como "sem autenticação" (lá o token não

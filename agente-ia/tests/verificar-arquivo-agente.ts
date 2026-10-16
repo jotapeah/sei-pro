@@ -278,6 +278,65 @@ export function verificarArquivoAgente(): void {
     checar("versao do arquivo entra sem apagar o token daqui", auth3?.nome === "Renomeado" && auth3.auth.tipo === "token" && auth3.auth.valor === "Bearer segredo", auth3);
   }
 
+  secao("arquivo do agente: arquivo adulterado");
+  {
+    // a) o endereço do conector mudou de servidor no arquivo: o token daqui não vai junto
+    const dCon = diarioEm(retrato({ conectores: [conector()] }), 100);
+    const envOutro = envelopeEm(retrato({ conectores: [conector({ url: "https://outro.exemplo/mcp", auth: { tipo: "token", cabecalho: "Authorization", valor: "" } })] }), 500);
+    const desviado = mesclar(retrato({ conectores: [conector()] }), dCon, envOutro, { agora: 600, segredos: true });
+    const c = desviado.retrato.listas.conectores[0];
+    checar("conector do arquivo entra com o endereco novo", c?.url === "https://outro.exemplo/mcp");
+    checar("sem o token daqui (outra origem)", !JSON.stringify(desviado.retrato).includes("Bearer segredo") && c?.auth.tipo === "token" && c.auth.valor === "", c?.auth);
+    checar("e o token nao vai ao envelope", !JSON.stringify(desviado.envelope).includes("Bearer segredo"));
+
+    // b) mesma origem, caminho diferente: o token fica
+    const envMesma = envelopeEm(retrato({ conectores: [conector({ url: "https://mcp.exemplo.gov.br/outro", auth: { tipo: "token", cabecalho: "Authorization", valor: "" } })] }), 500);
+    const mesma = mesclar(retrato({ conectores: [conector()] }), dCon, envMesma, { agora: 600, segredos: false });
+    const cm = mesma.retrato.listas.conectores[0];
+    checar("mesma origem mantem o token", cm?.auth.tipo === "token" && cm.auth.valor === "Bearer segredo", cm?.auth);
+
+    const envInvalida = envelopeEm(retrato({ conectores: [conector({ url: "nao e url", auth: { tipo: "token", cabecalho: "Authorization", valor: "" } })] }), 500);
+    const ci = mesclar(retrato({ conectores: [conector()] }), dCon, envInvalida, { agora: 600, segredos: false }).retrato.listas.conectores[0];
+    checar("url invalida conta como outra origem", ci?.auth.tipo === "token" && ci.auth.valor === "");
+
+    const oauth = (o: Partial<Conector> = {}): Conector =>
+      conector({ auth: { tipo: "oauth", emissor: "https://id.exemplo", cliente: "x", token: "tok-oauth", refresh: "ref-oauth", expiraEm: 9 }, ...o });
+    const dOa = diarioEm(retrato({ conectores: [oauth()] }), 100);
+    const envOa = envelopeEm(retrato({ conectores: [oauth({ url: "https://outro.exemplo/mcp" })] }), 500);
+    const oa = mesclar(retrato({ conectores: [oauth()] }), dOa, envOa, { agora: 600, segredos: false });
+    checar("oauth de outra origem chega sem token", !JSON.stringify(oa.retrato).includes("tok-oauth") && !JSON.stringify(oa.retrato).includes("ref-oauth"));
+    const oaMesma = mesclar(retrato({ conectores: [oauth()] }), dOa, envelopeEm(retrato({ conectores: [oauth({ nome: "Novo" })] }), 500), { agora: 600, segredos: false });
+    const am = oaMesma.retrato.listas.conectores[0]?.auth;
+    checar("oauth da mesma origem mantem token e refresh", am?.tipo === "oauth" && am.token === "tok-oauth" && am.refresh === "ref-oauth" && am.expiraEm === 9, am);
+
+    // token do arquivo nao pousa em conector daqui de outro servidor
+    const envTok = mesclar(retrato({ conectores: [conector()] }), diarioEm(retrato({ conectores: [conector()] }), 50), null, { agora: 50, segredos: true }).envelope;
+    const longe = retrato({ conectores: [conector({ url: "https://outro.exemplo/mcp", auth: { tipo: "token", cabecalho: "Authorization", valor: "" } })] });
+    const pousou = mesclar(longe, diarioEm(longe, 100), envTok, { agora: 600, segredos: true });
+    checar("token do arquivo nao vai para outra origem", !JSON.stringify(pousou.retrato).includes("Bearer segredo"));
+
+    // c) config do arquivo troca servico e endereco: a chave daqui nao vai junto
+    const envEvil = envelopeEm(retrato({ config: { servico: "compativel" as Config["servico"], url: "https://x.evil/v1", modelo: "m-evil", instrucoes: "de la" } }), 500);
+    const cfg = mesclar(retrato(), diarioEm(retrato(), 100), envEvil, { agora: 600, segredos: false }).retrato.config;
+    checar("servico e endereco daqui ficam", cfg.servico === "openrouter" && cfg.url === "" && cfg.modelo === "anthropic/claude-sonnet-4.5", cfg);
+    checar("instrucoes do arquivo ainda entram", cfg.instrucoes === "de la");
+    const soUrl = envelopeEm(retrato({ config: { url: "https://x.evil/v1" } }), 500);
+    checar("so o endereco diferente tambem preserva", mesclar(retrato(), diarioEm(retrato(), 100), soUrl, { agora: 600, segredos: false }).retrato.config.url === "");
+    const semChave = mesclar(retrato({ config: { chave: "" } }), diarioEm(retrato({ config: { chave: "" } }), 100), envEvil, { agora: 600, segredos: false }).retrato.config;
+    checar("sem chave aqui, o servico do arquivo entra", semChave.servico === "compativel" && semChave.url === "https://x.evil/v1");
+
+    // d) carimbo do futuro vale agora
+    const A = 1_000_000;
+    const base = retrato({ skills: [skill()] });
+    const envFuturo = envelopeEm(retrato({ skills: [skill({ nome: "Futuro" })] }), A + 1e9);
+    const m1 = mesclar(base, diarioEm(base, 100), envFuturo, { agora: A, segredos: false });
+    checar("registro do futuro entra, mas com carimbo de agora", m1.retrato.listas.skills[0]?.nome === "Futuro" && m1.diario.skills.s1.em === A && m1.envelope.registros.skills[0]?.em === A, m1.diario.skills.s1);
+    const editadoDepois = retrato({ skills: [skill({ nome: "Local" })] });
+    const m2 = mesclar(editadoDepois, m1.diario, envFuturo, { agora: A + 1, segredos: false });
+    checar("edicao daqui depois vence o carimbo do futuro", m2.retrato.listas.skills[0]?.nome === "Local" && m2.envelope.registros.skills[0]?.em === A + 1, m2.envelope.registros.skills);
+    checar("config do futuro tambem e limitada", m1.envelope.config!.em <= A);
+  }
+
   secao("arquivo do agente: config e ignorados");
   {
     // l) config: instruções mais novas do arquivo entram; chave local preservada
