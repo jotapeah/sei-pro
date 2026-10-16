@@ -12,11 +12,15 @@ export const CONFIG_MODAL: ConfigModal = {
 };
 
 /**
- * Liga o modal so com a opcao `proclote` do legado ligada. Desligada, o item do menu nem existe
- * (sei-pro-all.js) e o modulo fica quieto: nem modal, nem aviso de "nao foi possivel abrir".
+ * Liga o modal so com a opcao `proclote` do legado ligada. Desligada, o item do menu normalmente nem existe
+ * (sei-pro-all.js), mas o legado le a opcao por outro caminho: se as duas leituras divergirem e o item
+ * aparecer, o clique nao pode sumir em silencio, entao `semOpcao` liga o aviso de "nao foi possivel abrir".
  */
-export async function armarSeLigado(opcaoLigada: () => Promise<boolean>, armar: () => void): Promise<boolean> {
-  if (!(await opcaoLigada())) return false;
+export async function armarSeLigado(opcaoLigada: () => Promise<boolean>, armar: () => void, semOpcao?: () => void): Promise<boolean> {
+  if (!(await opcaoLigada())) {
+    semOpcao?.();
+    return false;
+  }
   armar();
   return true;
 }

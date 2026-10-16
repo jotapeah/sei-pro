@@ -1,8 +1,8 @@
 /**
  * Content script do Processos em Lote (mundo isolado, document_start). Marca o documento de forma sincrona (o
  * `initProcLoteModal` do legado passa a so disparar o evento) e, so na janela de topo, com a opcao `proclote`
- * ligada e o login lido, liga o modal ao item do menu. Sem contexto, o clique no item mostra um aviso em vez de
- * sumir. Com a opcao desligada nao faz nada: o legado nem desenha o item.
+ * ligada e o login lido, liga o modal ao item do menu. Sem contexto ou com a opcao desligada, o clique no item
+ * (se o legado o desenhar) mostra um aviso em vez de sumir.
  */
 
 import { lerOpcaoLegada } from "@comum/opcoes/legadas";
@@ -40,6 +40,7 @@ if (window === window.top && !global.__seiProProcessosLote) {
           console.warn("[SEI Pro] processos em lote:", e);
           semModal();
         }),
+      semModal,
     ).catch((e) => {
       // Opcao ilegivel: o legado ja so dispara o evento, entao sem ninguem ouvindo o clique sumiria em silencio.
       console.warn("[SEI Pro] processos em lote: opcao ilegivel", e);

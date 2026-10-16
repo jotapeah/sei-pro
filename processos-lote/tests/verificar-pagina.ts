@@ -6,7 +6,7 @@
  */
 
 import { parDePortas } from "@comum/ponte/parDePortas";
-import { criarControleModal } from "@comum/ui/modalIframe";
+import { criarControleModal, ligarAvisoSemModal } from "@comum/ui/modalIframe";
 import { ErroSei } from "@nucleo/sessao/erros";
 import { ATRIBUTO_ATIVO, EVENTO_ABRIR } from "../src/modelo/constantes";
 import type { ContextoLote } from "../src/pagina/contexto";
@@ -16,7 +16,7 @@ import { armarSeLigado, CONFIG_MODAL } from "../src/pagina/modal";
 import type { Criado } from "../src/repositorio";
 import { ErroProcessoCriado } from "../src/sei/criar";
 import type { FormTipo } from "../src/sei/formularioTipo";
-import { checar, igual, instalarDom, secao } from "./util";
+import { checar, igual, instalarDom, lanca, secao } from "./util";
 
 const BASE = "https://sei.x.gov.br/sei/controlador.php?acao=procedimento_controlar&infra_hash=zzz";
 const CTX: ContextoLote = { host: "sei.x.gov.br", login: "ana", temaEscuro: false, base: BASE };
@@ -138,6 +138,13 @@ export async function verificarPagina(): Promise<void> {
     const { t, n } = falso([falha(new ErroSei("SEI_EXCECAO", "pagina de erro"))]);
     const r = (await t.criar(PEDIDO)) as { situacao: string; incerto?: boolean };
     checar("excecao: ok + incerto, 1 POST", r.situacao === "ok" && r.incerto === true && n.posts === 1, { r, n });
+    checar("excecao: 1 busca de formulario (sem refazer)", n.forms === 1, n);
+  }
+  {
+    const { t, n } = falso([falha(new ErroSei("CANCELADO", "cancelado"))]);
+    const r = (await t.criar(PEDIDO)) as { situacao: string; incerto?: boolean };
+    checar("cancelado: ok + incerto", r.situacao === "ok" && r.incerto === true, r);
+    checar("cancelado: exatamente 1 POST", n.posts === 1 && n.forms === 1, n);
   }
   {
     const { t, n } = falso([falha(new ErroProcessoCriado("00001.000009/2026-99"))]);
@@ -173,6 +180,7 @@ export async function verificarPagina(): Promise<void> {
   secao("Pagina: falha ao refazer o formulario");
   {
     let forms = 0;
+    let posts = 0;
     const t = tratadoresProcessosLote({
       sei: {} as never,
       ctx: CTX,
@@ -184,11 +192,13 @@ export async function verificarPagina(): Promise<void> {
           return formDe(id, forms);
         },
         criarProcesso: async () => {
+          posts++;
           throw new ErroSei("SEI_VALIDACAO", "x");
         },
       },
     });
     igual("sessao caiu ao refazer: parar", await t.criar(PEDIDO), { situacao: "erro", erro: "caiu", parar: true });
+    checar("sessao caiu ao refazer: exatamente 1 POST", posts === 1 && forms === 2, { posts, forms });
   }
 
   secao("Pagina: argumentos");
@@ -198,6 +208,56 @@ export async function verificarPagina(): Promise<void> {
     checar("sem tipo: erro sem POST", r.situacao === "erro" && n.posts === 0, { r, n });
     const r2 = (await t.criar({ idTipo: "1", linha: {} })) as { situacao: string };
     checar("sem especificacao: erro sem POST", r2.situacao === "erro" && n.posts === 0, { r2, n });
+    const rf = await lanca(() => t.formTipo({ idTipo: "" }));
+    checar("formTipo sem tipo: erro claro, sem buscar", !!rf && (rf.message ?? "").includes("Tipo de processo") && n.forms === 0, {
+      rf,
+      n,
+    });
+    const rf2 = await lanca(() => t.formTipo({ idTipo: 7 }));
+    checar("formTipo com tipo nao-texto: erro", !!rf2 && n.forms === 0, { rf2, n });
+  }
+
+  secao("Pagina: restrito exige hipotese legal");
+  for (const [nome, pedido] of [
+    ["linha restrita, lote publico, sem hipotese", { ...PEDIDO, linha: { especificacao: "x", nivelAcesso: "1" } }],
+    ["lote restrito com hipotese vazia", { ...PEDIDO, nivelAcesso: "1", hipoteseLegal: "" }],
+    ['lote restrito com hipotese "null"', { ...PEDIDO, nivelAcesso: "1", hipoteseLegal: "null" }],
+  ] as const) {
+    const { t, n } = falso([() => CRIADO]);
+    igual(`${nome}: erro`, await t.criar(pedido), {
+      situacao: "erro",
+      erro: "Linha restrita sem hipótese legal: escolha uma hipótese no lote.",
+    });
+    checar(`${nome}: zero POST e zero formulario`, n.posts === 0 && n.forms === 0, n);
+  }
+  {
+    let dados: unknown = null;
+    const { t, n } = falso([() => CRIADO]);
+    const t2 = tratadoresProcessosLote({
+      sei: {} as never,
+      ctx: CTX,
+      abrirLinkPermanente: () => {},
+      chamadas: {
+        carregarFormTipo: async (_s, id) => formDe(id, 1),
+        criarProcesso: async (_s, _f, p) => {
+          dados = p;
+          return CRIADO;
+        },
+      },
+    });
+    const pedido = { ...PEDIDO, linha: { especificacao: "x", nivelAcesso: "1" }, hipoteseLegal: "7" };
+    igual("restrito com hipotese: cria", await t2.criar(pedido), { situacao: "ok", criado: CRIADO });
+    checar(
+      "restrito com hipotese: POST com nivel 1 e a hipotese",
+      (dados as { nivelAcesso?: string; hipoteseLegal?: string } | null)?.nivelAcesso === "1" &&
+        (dados as { hipoteseLegal?: string }).hipoteseLegal === "7",
+      dados,
+    );
+    igual("restrito com hipotese (lote): cria", await t.criar({ ...PEDIDO, nivelAcesso: "1", hipoteseLegal: "7" }), {
+      situacao: "ok",
+      criado: CRIADO,
+    });
+    checar("restrito com hipotese (lote): 1 POST", n.posts === 1 && n.forms === 1, n);
   }
 
   secao("Pagina: fechar, minimizar e link permanente");
@@ -244,9 +304,17 @@ export async function verificarPagina(): Promise<void> {
   }
   {
     const dm = instalarDom();
-    checar("opcao desligada: nao arma", (await armarSeLigado(async () => false, armar(dm))) === false);
+    checar(
+      "opcao desligada: nao arma o modal",
+      (await armarSeLigado(
+        async () => false,
+        armar(dm),
+        () => ligarAvisoSemModal(dm, CONFIG_MODAL),
+      )) === false,
+    );
     evento(dm);
-    checar("opcao desligada: evento nao abre nada", !dm.querySelector("iframe") && !dm.querySelector(".spro-processos-lote-aviso"));
+    checar("opcao desligada: sem iframe", !dm.querySelector("iframe"));
+    checar("opcao desligada: clique no item do legado mostra o aviso", !!dm.querySelector(".spro-processos-lote-aviso"));
   }
   checar(
     "config do modal",

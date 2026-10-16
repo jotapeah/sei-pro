@@ -41,6 +41,7 @@ export type ResultadoCriar =
 /** No lugar do numero quando nao se sabe se o processo existe: a linha nao pode ser repetida as cegas. */
 export const NUMERO_INCERTO = "(incerto: confira no Controle de Processos)";
 export const NUMERO_NAO_IDENTIFICADO = "(numero nao identificado)";
+export const ERRO_SEM_HIPOTESE = "Linha restrita sem hipótese legal: escolha uma hipótese no lote.";
 export const AVISO_INCERTO =
   "O processo pode ter sido criado, mas o SEI não confirmou. Confira no Controle de Processos antes de repetir esta linha.";
 
@@ -87,10 +88,16 @@ interface PedidoCriar {
   hipoteseLegal: string;
 }
 
+const ERRO_SEM_TIPO = "Tipo de processo não informado.";
+
+function lerIdTipo(v: unknown): string {
+  return typeof v === "string" ? v.trim() : "";
+}
+
 function lerPedido(args: unknown): PedidoCriar | string {
   const a = (args ?? {}) as Record<string, unknown>;
-  const idTipo = typeof a.idTipo === "string" ? a.idTipo : "";
-  if (!idTipo) return "Tipo de processo não informado.";
+  const idTipo = lerIdTipo(a.idTipo);
+  if (!idTipo) return ERRO_SEM_TIPO;
   const l = (a.linha ?? {}) as Record<string, unknown>;
   if (typeof l.especificacao !== "string" || !l.especificacao.trim()) return "Linha sem especificação.";
   const linha: LinhaLote = { especificacao: l.especificacao };
@@ -124,6 +131,12 @@ export function tratadoresProcessosLote(d: DepsExecutor): Record<string, Tratado
       nivelAcesso: linha.nivelAcesso ?? pedido.nivelAcesso,
       hipoteseLegal: pedido.hipoteseLegal,
     };
+
+    // O legado recusava restrito sem hipotese: o SEI pode aceitar e gravar um processo restrito sem base legal.
+    // Barrado antes de qualquer requisicao (nem o formulario e buscado).
+    if (dados.nivelAcesso === "1" && (!dados.hipoteseLegal.trim() || dados.hipoteseLegal.trim() === "null")) {
+      return { situacao: "erro", erro: ERRO_SEM_HIPOTESE };
+    }
 
     let form = formularios.get(idTipo);
     if (!form) {
@@ -163,7 +176,8 @@ export function tratadoresProcessosLote(d: DepsExecutor): Record<string, Tratado
     },
     tipos: () => c.listarTipos(d.sei),
     formTipo: async (args) => {
-      const idTipo = String((args as { idTipo?: unknown } | undefined)?.idTipo ?? "");
+      const idTipo = lerIdTipo((args as { idTipo?: unknown } | undefined)?.idTipo);
+      if (!idTipo) throw new Error(ERRO_SEM_TIPO);
       const f = await buscarForm(idTipo);
       return { idTipo: f.idTipo, hipoteses: f.hipoteses, temAssuntos: f.assuntos !== "" };
     },
