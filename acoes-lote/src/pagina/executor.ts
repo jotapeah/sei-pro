@@ -54,8 +54,6 @@ export interface ChamadasSei {
   andamentos: typeof andamentos;
   /** Árvore do processo aberto, pelo link colhido da página. */
   abrirArvore(sei: Sei, link: string): Promise<Arvore>;
-  /** Árvore de OUTRO processo, pela referência (protocolo ou nº SEI); usada para conferir o sigilo do destino. */
-  arvoreDe(sei: Sei, referencia: string): Promise<Arvore>;
   invalidar(sei: Sei, idProcedimento: string): void;
   /** Conteúdo bruto do documento (arquivo do anexo ou HTML do documento interno), com a recusa de sigiloso. */
   conteudo(sei: Sei, numero: string): Promise<{ titulo: string; numero: string; arquivo?: Arquivo; html?: string }>;
@@ -82,7 +80,6 @@ export const chamadasPadrao: ChamadasSei = {
   criarBloco,
   andamentos,
   abrirArvore: (sei, link) => abrirArvore(sei.http, link),
-  arvoreDe: (sei, ref) => sei.arvore(ref),
   invalidar: (sei, id) => sei.invalidar(id),
   conteudo: async (sei, numero) => {
     const d = await localizarDocumento(sei, numero);
@@ -135,7 +132,6 @@ export interface RespostaArvore {
 export const TEXTO_SENHA = "Senha incorreta: o lote foi pausado para não bloquear sua conta.";
 export const TEXTO_INCERTO = "O SEI não confirmou. Confira o documento antes de repetir.";
 export const AVISO_DATAS = "Datas indisponíveis neste processo.";
-export const ERRO_DESTINO_SIGILOSO = "O processo de destino é sigiloso: fora das Ações em Lote.";
 export const ERRO_DESTINO_IGUAL = "O processo de destino é o próprio processo aberto.";
 
 const mensagem = (e: unknown): string => (e instanceof Error ? e.message : String(e));
@@ -205,15 +201,19 @@ export function tratadoresAcoesLote(d: DepsExecutor): Record<string, Tratador> {
   const c: ChamadasSei = { ...chamadasPadrao, ...d.chamadas };
   const entregar = d.baixar ?? baixarBytes;
   const zip = new AcumuladorZip();
+  /** Lote dono dos arquivos hoje no acumulador do ZIP; outro lote começa de um acumulador limpo. */
+  let loteDoZip = "";
   /**
    * Árvore já lida nesta aba (a do processo aberto). `recarregarArvore` e `arvore({forcar})` a refazem.
    * Também serve de lista numero -> id para o PDF e de referência (um documento qualquer) para as pesquisas.
    */
   let cache: RespostaArvore | null = null;
   /**
-   * Blocos criados por este lote: descrição -> número do bloco. Vive enquanto a página viver (o modal reabre sem
-   * recarregar), para o lote criar o bloco UMA vez e o documento seguinte só incluir nele. A prévia nunca cria.
+   * Blocos criados pelos lotes: `${loteId}|${descrição}` -> número do bloco. Cria o bloco UMA vez por lote e os
+   * documentos seguintes só incluem nele; outro lote com a mesma descrição cria o seu. A prévia nunca cria.
    * `null` marca criação incerta: os documentos seguintes não tentam criar de novo (evita bloco em duplicata).
+   * Os tratadores são refeitos a cada abertura do modal, então este mapa NÃO sobrevive a ela: quem retoma o lote
+   * deve regravar a etapa como `{id}` com o `dados.bloco` devolvido pelo item que criou (o app faz isso).
    */
   const blocosCriados = new Map<string, string | null>();
 
@@ -249,17 +249,17 @@ export function tratadoresAcoesLote(d: DepsExecutor): Record<string, Tratador> {
     return l.numero;
   };
 
-  const lerEtapa = (args: unknown): { etapa: ParamsEtapa; numero: string; senha: string } | string => {
+  const lerEtapa = (args: unknown): { etapa: ParamsEtapa; numero: string; senha: string; loteId: string } | string => {
     const a = (args ?? {}) as Record<string, unknown>;
     const etapa = a.etapa as ParamsEtapa | undefined;
     if (!etapa || typeof etapa !== "object" || !ACOES_CONHECIDAS.has(etapa.acao)) return "Ação desconhecida.";
     const numero = naoVazio(a.numero);
     if (!numero) return "Documento não informado.";
-    return { etapa, numero, senha: typeof a.senha === "string" ? a.senha : "" };
+    return { etapa, numero, senha: typeof a.senha === "string" ? a.senha : "", loteId: naoVazio(a.loteId) };
   };
 
   /** Um passo de escrita do núcleo, com `aplicar` já resolvido. */
-  const passo = async (etapa: ParamsEtapa, numero: string, senha: string, aplicar: boolean): Promise<ResultadoEscrita> => {
+  const passo = async (etapa: ParamsEtapa, numero: string, senha: string, aplicar: boolean, loteId: string): Promise<ResultadoEscrita> => {
     const op: OpcoesEscrita = { aplicar };
     switch (etapa.acao) {
       case "ciencia":
@@ -301,7 +301,8 @@ export function tratadoresAcoesLote(d: DepsExecutor): Record<string, Tratador> {
       case "incluir-bloco": {
         if ("id" in etapa.bloco) return c.incluirNoBloco(d.sei, etapa.bloco.id, [numero], {}, op);
         const desc = etapa.bloco.novo.trim();
-        const feito = blocosCriados.get(desc);
+        const chave = `${loteId}|${desc}`;
+        const feito = blocosCriados.get(chave);
         if (!aplicar) {
           return {
             alvo: numero,
@@ -320,14 +321,16 @@ export function tratadoresAcoesLote(d: DepsExecutor): Record<string, Tratador> {
             const numeroBloco = criado.dados?.bloco;
             if (!numeroBloco) throw new ErroBlocoIncerto(desc);
             bloco = numeroBloco;
-            blocosCriados.set(desc, bloco);
+            blocosCriados.set(chave, bloco);
           } catch (e) {
             if (!(e instanceof ErroBlocoIncerto) && !mapearEhIncerto(e)) throw e;
-            blocosCriados.set(desc, null);
+            blocosCriados.set(chave, null);
             throw new ErroBlocoIncerto(desc);
           }
         }
-        return c.incluirNoBloco(d.sei, bloco, [numero], {}, op);
+        const r = await c.incluirNoBloco(d.sei, bloco, [numero], {}, op);
+        // O app regrava a etapa como `{id}` com este número, para uma retomada não criar outro bloco.
+        return { ...r, dados: { ...r.dados, bloco } };
       }
       case "baixar":
       case "pdf":
@@ -343,13 +346,14 @@ export function tratadoresAcoesLote(d: DepsExecutor): Record<string, Tratador> {
   const rodar = async (args: unknown, aplicar: boolean): Promise<RespostaEtapa> => {
     const p = lerEtapa(args);
     if (typeof p === "string") return { situacao: "erro", erro: p };
-    const { etapa, numero, senha } = p;
+    const { etapa, numero, senha, loteId } = p;
+    if (aplicar && !loteId) return { situacao: "erro", erro: "Lote não informado." };
     const assinatura = etapa.acao === "assinar";
     if (aplicar && etapa.acao === "assinar" && !senha) return { situacao: "erro", erro: "Informe a senha para assinar.", parar: true };
     if (aplicar && etapa.acao === "pdf") return { situacao: "erro", erro: "O PDF único é gerado pelo tratador pdf, não por executar." };
-    if (aplicar && etapa.acao === "baixar") return etapa.modo === "zip" ? zipAdicionar({ numero }) : baixarArquivo({ numero });
+    if (aplicar && etapa.acao === "baixar") return etapa.modo === "zip" ? zipAdicionar({ numero, loteId }) : baixarArquivo({ numero });
     try {
-      return ok(await passo(etapa, numero, senha, aplicar));
+      return ok(await passo(etapa, numero, senha, aplicar, loteId));
     } catch (e) {
       if (e instanceof ErroBlocoIncerto) {
         return { situacao: "erro", erro: e.message, parar: true };
@@ -386,8 +390,14 @@ export function tratadoresAcoesLote(d: DepsExecutor): Record<string, Tratador> {
   const zipAdicionar = async (args: unknown): Promise<RespostaEtapa> => {
     const numero = naoVazio((args as { numero?: unknown } | undefined)?.numero);
     if (!numero) return { situacao: "erro", erro: "Documento não informado." };
+    const loteId = naoVazio((args as { loteId?: unknown } | undefined)?.loteId);
     try {
       const f = sanitizarNome(await c.conteudo(d.sei, numero));
+      // Um lote cancelado deixa arquivos aqui: outro lote nunca os herda.
+      if (loteId !== loteDoZip) {
+        zip.descartar();
+        loteDoZip = loteId;
+      }
       const nome = zip.adicionar(f.nome, f.bytes);
       return { situacao: "ok", resumo: `Guardado para o ZIP: ${nome}`, mudancas: [], dados: { arquivo: nome } };
     } catch (e) {
@@ -398,8 +408,9 @@ export function tratadoresAcoesLote(d: DepsExecutor): Record<string, Tratador> {
   const zipFechar = (args: unknown): RespostaEtapa => {
     const bruto = naoVazio((args as { nome?: unknown } | undefined)?.nome);
     const bytes = zip.fechar();
+    loteDoZip = "";
     if (!bytes) return { situacao: "erro", erro: "Nenhum arquivo foi guardado para o ZIP." };
-    const nome = `${nomeArquivo("", bruto || "documentos").replace(/\.zip$/i, "")}.zip`;
+    const nome = nomeArquivo("", (bruto || "documentos").replace(/\.zip$/i, ""), "zip");
     entregar(bytes, nome, "application/zip");
     return { situacao: "ok", resumo: `ZIP baixado: ${nome}`, mudancas: [], dados: { arquivo: nome } };
   };
@@ -445,14 +456,10 @@ export function tratadoresAcoesLote(d: DepsExecutor): Record<string, Tratador> {
     try {
       const alvo = await c.resolverProcessoDestino(d.sei, numero || (await documentoDeReferencia(undefined)), protocolo);
       if (alvo.idProcedimento === d.ctx.idProcedimento) return { situacao: "erro", erro: ERRO_DESTINO_IGUAL };
-      // O núcleo não informa o sigilo do destino: confere pela árvore dele. Sem conseguir conferir, não segue.
-      let arv: Arvore;
-      try {
-        arv = await c.arvoreDe(d.sei, alvo.protocolo);
-      } catch (e) {
-        return { situacao: "erro", erro: `Não foi possível conferir o nível de acesso do processo de destino: ${mensagem(e)}` };
-      }
-      if (arv.nivel === "sigiloso") return { situacao: "erro", erro: ERRO_DESTINO_SIGILOSO };
+      // De propósito NÃO se confere o sigilo do destino: o `protocolo_RI1023` não devolve o nível de acesso (só id,
+      // protocolo e tipo, e já recusa processo que o usuário não pode ver), e abrir a árvore do destino pode registrar
+      // "Processo recebido" em nome do usuário (ProcedimentoRN::receber) ou marcá-lo como visualizado. Uma etapa de
+      // configuração nunca faz isso; valem as regras do próprio SEI na hora de mover.
       return { situacao: "ok", destino: { protocolo: alvo.protocolo, idProcedimento: alvo.idProcedimento, tipo: alvo.tipo } };
     } catch (e) {
       const r = mapearErro(e, { aplicou: false });
@@ -503,6 +510,11 @@ export function tratadoresAcoesLote(d: DepsExecutor): Record<string, Tratador> {
     baixarArquivo,
     zipAdicionar,
     zipFechar,
+    zipDescartar: () => {
+      zip.descartar();
+      loteDoZip = "";
+      return true;
+    },
     pdf,
     recarregarArvore: async () => {
       cache = null;

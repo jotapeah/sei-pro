@@ -26,7 +26,8 @@ export function nomeArquivo(numero: string, titulo: string, ext = ""): string {
   const e = ext ? `.${limpar(ext.replace(/^\./, "")).replace(/\s/g, "")}` : "";
   const base = limpar([limpar(numero), limpar(titulo)].filter(Boolean).join(" - ")) || "documento";
   const corte = Math.max(1, MAX_NOME - e.length);
-  return `${base.slice(0, corte).trim()}${e}`;
+  // Por pontos de código: cortar no meio de um par substituto deixaria meio emoji no nome.
+  return `${[...base].slice(0, corte).join("").trim()}${e}`;
 }
 
 /** Extensão do nome devolvido pelo SEI (ou "" se não tiver). */

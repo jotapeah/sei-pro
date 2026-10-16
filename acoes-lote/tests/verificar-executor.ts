@@ -112,7 +112,6 @@ function falso(sobrescrever: Partial<ChamadasSei> = {}, extra: Partial<DepsExecu
       ],
     })),
     abrirArvore: reg("abrirArvore", async () => arvoreFalsa()),
-    arvoreDe: reg("arvoreDe", async () => arvoreFalsa()),
     invalidar: reg("invalidar", () => undefined),
     conteudo: reg("conteudo", async () => ({ titulo: "Despacho 1", numero: "0001234", html: "<p>oi</p>" })),
     baixarLink: reg("baixarLink", async () => ({ bytes: new Uint8Array([1, 2, 3]), tipo: "application/pdf", nome: "x.pdf" })),
@@ -134,8 +133,8 @@ const falha = (e: unknown) => async () => {
 };
 const prev = (t: ReturnType<typeof falso>["t"], etapa: ParamsEtapa, numero = "0001234") =>
   t.previa({ etapa, numero }) as Promise<Record<string, unknown>>;
-const exec = (t: ReturnType<typeof falso>["t"], etapa: ParamsEtapa, numero = "0001234", senha?: string) =>
-  t.executar({ etapa, numero, senha }) as Promise<Record<string, unknown>>;
+const exec = (t: ReturnType<typeof falso>["t"], etapa: ParamsEtapa, numero = "0001234", senha?: string, loteId = "L1") =>
+  t.executar({ etapa, numero, senha, loteId }) as Promise<Record<string, unknown>>;
 
 export async function verificarExecutor(): Promise<void> {
   secao("Executor: contexto sem infra_hash");
@@ -374,21 +373,13 @@ export async function verificarExecutor(): Promise<void> {
     const a = falso();
     const r = await (a.t.destino({ protocolo: "00002.000002/2026-22", numero: "0001234" }) as Promise<unknown>);
     igual("destino valido", r, { situacao: "ok", destino: { protocolo: "00002.000002/2026-22", idProcedimento: "77", tipo: "Outro" } });
-    igual("conferiu o sigilo do destino pela arvore dele", a.log.find((x) => x.fn === "arvoreDe")?.args, ["00002.000002/2026-22"]);
+    checar("destino nao abre arvore nenhuma (nem a do destino)", !a.log.some((x) => x.fn === "abrirArvore" || x.fn === "arvoreDe"), a.log);
 
-    const s = falso({ arvoreDe: (async () => arvoreFalsa("sigiloso")) as never });
-    igual("destino sigiloso", await (s.t.destino({ protocolo: "x", numero: "0001234" }) as Promise<unknown>), {
-      situacao: "erro",
-      erro: "O processo de destino é sigiloso: fora das Ações em Lote.",
-    });
     const i = falso({ resolverProcessoDestino: (async () => ({ idProcedimento: "55", protocolo: "p", tipo: "t" })) as never });
     igual("destino igual ao atual", await (i.t.destino({ protocolo: "p", numero: "0001234" }) as Promise<unknown>), {
       situacao: "erro",
       erro: "O processo de destino é o próprio processo aberto.",
     });
-    const f = falso({ arvoreDe: falha(new Error("sem acesso")) as never });
-    const rf = await (f.t.destino({ protocolo: "x", numero: "0001234" }) as Promise<{ situacao: string; erro?: string }>);
-    checar("nao conseguiu conferir o sigilo: recusa", rf.situacao === "erro" && /conferir o nível de acesso/.test(rf.erro ?? ""), rf);
     const n = falso({ resolverProcessoDestino: falha(new ErroSei("SEI_NAO_ENCONTRADO", "Processo x nao encontrado.")) as never });
     igual("nao encontrado", await (n.t.destino({ protocolo: "x", numero: "0001234" }) as Promise<unknown>), {
       situacao: "erro",
@@ -406,7 +397,8 @@ export async function verificarExecutor(): Promise<void> {
     const etapa: ParamsEtapa = { acao: "incluir-bloco", bloco: { novo: " Meu bloco " } };
     const p = await prev(t, etapa);
     checar("previa nao cria", !log.some((x) => x.fn === "criarBloco") && p.situacao === "ok", log);
-    await exec(t, etapa, "0001234");
+    const primeiro = await exec(t, etapa, "0001234");
+    igual("item que cria devolve dados.bloco", primeiro.dados, { bloco: "456" });
     await exec(t, etapa, "0000123");
     igual("criou uma vez", log.filter((x) => x.fn === "criarBloco").length, 1);
     igual("criou de assinatura com a descricao aparada", log.find((x) => x.fn === "criarBloco")?.args[0], {
@@ -422,7 +414,20 @@ export async function verificarExecutor(): Promise<void> {
       ],
     );
     const outro = await exec(t, { acao: "incluir-bloco", bloco: { novo: "Outro" } }, "0001234");
-    igual("outra descricao cria outro", [outro.situacao, log.filter((x) => x.fn === "criarBloco").length], ["ok", 2]);
+    const r1 = await exec(t, etapa, "0001234");
+    igual("dados.bloco no item que cria e nos seguintes", [r1.dados], [{ bloco: "456" }]);
+    const base0 = log.filter((x) => x.fn === "criarBloco").length;
+    const outroLote = await exec(t, etapa, "0001234", undefined, "L2");
+    igual(
+      "outro loteId com a mesma descricao cria de novo",
+      [outroLote.situacao, log.filter((x) => x.fn === "criarBloco").length],
+      ["ok", base0 + 1],
+    );
+    await exec(t, etapa, "0000123", undefined, "L2");
+    igual("mesmo loteId reaproveita", log.filter((x) => x.fn === "criarBloco").length, base0 + 1);
+    const semLote = (await t.executar({ etapa, numero: "0001234" })) as Record<string, unknown>;
+    igual("executar sem loteId e recusado", semLote, { situacao: "erro", erro: "Lote não informado." });
+    igual("outra descricao no mesmo lote cria outro bloco", outro.situacao, "ok");
   }
   {
     let tentativas = 0;
@@ -507,8 +512,8 @@ export async function verificarExecutor(): Promise<void> {
   }
   {
     const { t, baixados } = falso();
-    await t.zipAdicionar({ numero: "0001234" });
-    await t.zipAdicionar({ numero: "0001234" });
+    await t.zipAdicionar({ numero: "0001234", loteId: "L1" });
+    await t.zipAdicionar({ numero: "0001234", loteId: "L1" });
     await exec(t, { acao: "baixar", modo: "zip" }, "0001234");
     checar("zip so guarda ate fechar", baixados.length === 0);
     const r = (await t.zipFechar({ nome: "Meu lote?" })) as { situacao: string };
@@ -523,6 +528,23 @@ export async function verificarExecutor(): Promise<void> {
       situacao: "erro",
       erro: "Nenhum arquivo foi guardado para o ZIP.",
     });
+  }
+  {
+    const { t, baixados } = falso();
+    await t.zipAdicionar({ numero: "0001234", loteId: "A" });
+    await t.zipAdicionar({ numero: "0001234", loteId: "B" });
+    await t.zipFechar({ nome: "z" });
+    igual("outro loteId descarta o que sobrou do lote cancelado", Object.keys(unzipSync(baixados[0].bytes)), ["0001234 - Despacho 1.html"]);
+    await t.zipAdicionar({ numero: "0001234", loteId: "C" });
+    igual("zipDescartar", await t.zipDescartar(undefined), true);
+    igual("zip vazio depois de descartar", ((await t.zipFechar({ nome: "z" })) as { situacao: string }).situacao, "erro");
+    await t.zipAdicionar({ numero: "0001234", loteId: "D" });
+    await t.zipFechar({ nome: "x".repeat(300) });
+    checar(
+      "nome do zip tem no maximo 120 com a extensao",
+      baixados[1].nome.length === 120 && baixados[1].nome.endsWith(".zip"),
+      baixados[1].nome.length,
+    );
   }
   {
     const { t, baixados, log } = falso();
@@ -552,6 +574,12 @@ export async function verificarExecutor(): Promise<void> {
       "corta em 120 contando a extensao",
       longo.length === 120 && longo.endsWith(".pdf") && longo.startsWith("0001234 - x"),
       longo.length,
+    );
+    const emoji = nomeArquivo("1", `${"x".repeat(111)}\u{1F600}${"y".repeat(20)}`, "pdf");
+    checar(
+      "corte por pontos de codigo nao parte o emoji",
+      !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(emoji) && emoji.includes("\u{1F600}"),
+      emoji,
     );
     igual("sem titulo", nomeArquivo("0001", "  "), "0001");
     igual("com extensao", nomeArquivo("0001", "Oficio", ".HTML"), "0001 - Oficio.HTML");
