@@ -1,11 +1,11 @@
 # Ações em Lote da árvore (reformulação em TypeScript) — especificação de desenho
 
 Data: 16/10/2026. A partir do master (e75dc26), em worktree própria (`../sei-pro-acoes-lote`, branch `feat/acoes-lote-ts`), porque outra sessão trabalha no mesmo clone.
-Aprovado pelo autor em conversa: refatorar o "Iniciar ações em lote" para a stack TypeScript dos Projetos, Demandas, Favoritos e Processos em Lote, **com todas as melhorias levantadas na análise** ("acrescente tudo"), e validar no SEI SP e no SEI MJ com o autor logando.
+Aprovado pelo autor em conversa: refatorar o "Iniciar ações em lote" (que passa a se chamar só **"Ações em Lote"**) para a stack TypeScript dos Projetos, Demandas, Favoritos e Processos em Lote, **com todas as melhorias levantadas na análise** ("acrescente tudo"), e validar no SEI SP e no SEI MJ com o autor logando.
 
 ## 1. Objetivo
 
-Levar o "Iniciar ações em lote" (botão `#iconBatchActions` da barra da árvore e item "Ações em lote" do menu flash), hoje cerca de 1.250 linhas de jQuery em `dist/js/sei-functions-pro.js:9318-10215` e auxiliares, para um pacote TypeScript novo, `acoes-lote/`, no molde do `processos-lote/`. O pacote tem content script, modal iframe sobre o SEI e um app numa página da extensão. Tema claro e escuro, DOM seguro (`h()`), modal sem botão Cancelar (o X e o Esc fecham), tokens `--spro-*`, tudo em português.
+Levar as Ações em Lote (botão `#iconBatchActions` da barra da árvore e item "Ações em lote" do menu flash), hoje cerca de 1.250 linhas de jQuery em `dist/js/sei-functions-pro.js:9318-10215` e auxiliares, para um pacote TypeScript novo, `acoes-lote/`, no molde do `processos-lote/`. O pacote tem content script, modal iframe sobre o SEI e um app numa página da extensão. Tema claro e escuro, DOM seguro (`h()`), modal sem botão Cancelar (o X e o Esc fecham), tokens `--spro-*`, tudo em português.
 
 Critério de sucesso: paridade com as 7 ações do legado (com uma exceção deliberada: sigiloso, ver seção 5), mais as melhorias da seção 6, validadas no SEI SP (4.1.5, CK4) e no SEI MJ de homologação (5.0.4, CK5).
 
@@ -20,6 +20,8 @@ Critério de sucesso: paridade com as 7 ações do legado (com uma exceção del
 | Escopo de documentos | Os documentos do processo aberto na árvore, com todas as pastas, lidos por `abrirArvore` do `sei-nucleo` e não pelo DOM da árvore. |
 | Armazenamento | `chrome.storage.local`, uma chave por entidade, sem sincronizar, prefixo `acoes-lote/`. A senha **nunca** é gravada. |
 | Execução | O laço roda no app. Cada chamada ao SEI passa pela ponte RPC do content script da aba (a sessão do SEI está lá), como no Processos em Lote. Concorrência 1 para escrita, 3 para leitura (prévia e download). Usa o `ExecutorLote` e o `RitmoAdaptativo` do `sei-comum`. |
+
+Nome (decisão do autor): o recurso se chama **"Ações em Lote"** em todo lugar — título do modal, tooltip e `alt` do botão da árvore (hoje "Iniciar ações em lote", trocado também no legado, para todos os pacotes), página de ajuda e histórico.
 
 ## 3. Arquitetura
 
