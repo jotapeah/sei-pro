@@ -42,6 +42,15 @@ export type ResultadoInclusao = {
 
 const FORM_CONTROLE = "#frmProcedimentoControlar";
 
+/** Paginação nativa do infra (o mesmo detector de `blocos.ts`): há uma página seguinte. */
+const temPaginaSeguinte = (p: Pagina) => /infraAcaoPaginar\(\s*['"]\+['"]/.test(p.html);
+
+/** Quantas células tem o cabeçalho: linha com outra contagem é de outro desenho. */
+function largura(tabela: Element): number {
+  const cabecalho = [...tabela.querySelectorAll("tr")].find((tr) => tr.querySelector("th"));
+  return cabecalho?.querySelectorAll("th, td").length ?? 0;
+}
+
 /** Colunas pelo texto do cabeçalho ("Número", "Tipo", "Descrição"), nunca pela posição. */
 function colunas(tabela: Element): Record<string, number> {
   const mapa: Record<string, number> = {};
@@ -63,18 +72,28 @@ function lerBlocosDaLupa(pagina: Pagina): BlocoInterno[] {
   if (!tabela) {
     // Lista vazia o SEI mostra sem tabela; tabela sem as colunas esperadas é outra versão.
     if (!raiz.querySelector("input[name=chkInfraItem]")) return [];
-    throw new ErroSei("SEI_VERSAO_NAO_SUPORTADA", "A lista de blocos para incluir processos não foi reconhecida.");
+    throw new ErroSei("SEI_VERSAO_NAO_SUPORTADA", "A lista de blocos para incluir processos n\u00E3o foi reconhecida.");
   }
   const col = colunas(tabela);
+  const n = largura(tabela);
   const blocos: BlocoInterno[] = [];
+  let linhas = 0;
+  let reconhecidas = 0;
   for (const tr of tabela.querySelectorAll("tr")) {
     const radio = tr.querySelector("input[name=chkInfraItem]");
     const id = radio?.getAttribute("value")?.trim() ?? "";
     if (!id) continue;
+    linhas += 1;
     const tds = [...tr.querySelectorAll("td")];
+    // Célula a mais ou a menos desalinha as colunas: ler assim trocaria tipo por descrição.
+    if (tds.length !== n) continue;
+    reconhecidas += 1;
     const celula = (i: number | undefined) => (i === undefined ? "" : textoDe(tds[i]));
     if (normalizar(celula(col.tipo)) !== "interno") continue;
     blocos.push({ id, numero: celula(col.numero ?? col.n) || id, descricao: celula(col.descricao) });
+  }
+  if (linhas && !reconhecidas) {
+    throw new ErroSei("SEI_VERSAO_NAO_SUPORTADA", "As linhas da lista de blocos n\u00E3o t\u00EAm as colunas do cabe\u00E7alho.");
   }
   return blocos;
 }
@@ -84,18 +103,26 @@ async function abrirControle(sei: Sei, op: OpcoesHttp): Promise<Pagina> {
 }
 
 /** A lupa de blocos pelo link assinado que está no script do Controle (`objLupaBlocoPesquisa`). */
-async function abrirLupa(sei: Sei, controle: Pagina, op: OpcoesHttp): Promise<{ pagina: Pagina; blocos: BlocoInterno[] }> {
+async function abrirLupa(sei: Sei, controle: Pagina, op: OpcoesHttp): Promise<{ pagina: Pagina; blocos: BlocoInterno[]; paginada: boolean }> {
   const link =
     linkDaAcao(controle.html, "bloco_selecionar_processo", { id_object: "objLupaBlocoPesquisa" }) ??
     linkDaAcao(controle.html, "bloco_selecionar_processo");
-  if (!link) throw new ErroSei("SEI_ACAO_INDISPONIVEL", "O Controle de Processos não oferece incluir processos em bloco para este usuário.");
+  if (!link) throw new ErroSei("SEI_ACAO_INDISPONIVEL", "O Controle de Processos n\u00E3o oferece incluir processos em bloco para este usu\u00E1rio.");
   const pagina = await sei.http.obter(link, { sinal: op.sinal, aceitarValidacao: true });
-  return { pagina, blocos: lerBlocosDaLupa(pagina) };
+  return { pagina, blocos: lerBlocosDaLupa(pagina), paginada: temPaginaSeguinte(pagina) };
 }
 
-/** Blocos internos que a unidade oferece para receber processos (a lupa do Controle). */
+/**
+ * Blocos internos que a unidade oferece para receber processos (a lupa do
+ * Controle). A lupa paginada não é percorrida (o formulário dela não foi visto
+ * paginando num SEI real): falha alto em vez de devolver uma lista cortada.
+ */
 export async function listarBlocosInternosParaProcessos(sei: Sei, op: OpcoesHttp = {}): Promise<BlocoInterno[]> {
-  return (await abrirLupa(sei, await abrirControle(sei, op), op)).blocos;
+  const lupa = await abrirLupa(sei, await abrirControle(sei, op), op);
+  if (lupa.paginada) {
+    throw new ErroSei("SEI_VERSAO_NAO_SUPORTADA", "A lista de blocos tem mais de uma p\u00E1gina: use o Controle de Processos para escolher o bloco.");
+  }
+  return lupa.blocos;
 }
 
 interface NaPagina {
@@ -132,14 +159,28 @@ function processosDaPagina(form: Formulario): { listas: string[]; mapa: Map<stri
 }
 
 /**
- * O processo aparece na tela do bloco? Pelo `id_procedimento` de algum link da
- * linha ou pelo número do processo numa célula — a tela não tem um id por
- * linha garantido.
+ * Linhas de processo da tela do bloco, só as que têm as colunas do cabeçalho.
+ * `null` quando a tela tem linhas mas nenhuma reconhecível (outro desenho);
+ * bloco vazio (sem tabela, ou tabela sem linhas) dá lista vazia.
  */
-function noBloco(pagina: Pagina, id: string, protocolo: string): boolean {
-  const raiz = pagina.doc.querySelector("#tblProtocolosBlocos") ?? pagina.doc;
+function linhasDoBloco(pagina: Pagina): Element[] | null {
+  const tabela =
+    pagina.doc.querySelector("#tblProtocolosBlocos") ?? [...pagina.doc.querySelectorAll("table")].find((t) => colunas(t).processo !== undefined);
+  if (!tabela) return pagina.doc.querySelector("input[type=checkbox][name^=chkInfraItem]") ? null : [];
+  const n = largura(tabela);
+  const dados = [...tabela.querySelectorAll("tr")].filter((tr) => tr.querySelector("td"));
+  const certas = dados.filter((tr) => tr.querySelectorAll("td").length === n);
+  return dados.length && !certas.length ? null : certas;
+}
+
+/**
+ * O processo aparece entre as linhas do bloco? Pelo `id_procedimento` de algum
+ * link da linha ou pelo número do processo numa célula — a tela não tem um id
+ * por linha garantido.
+ */
+function noBloco(linhas: Element[], id: string, protocolo: string): boolean {
   const doId = new RegExp(`[?&]id_procedimento=${id}(?!\\d)`);
-  return [...raiz.querySelectorAll("tr")].some(
+  return linhas.some(
     (tr) =>
       [...tr.querySelectorAll("[href], [onclick]")].some((el) =>
         doId.test(`${el.getAttribute("href") ?? ""} ${el.getAttribute("onclick") ?? ""}`.replace(/&amp;/g, "&")),
@@ -195,10 +236,17 @@ export async function incluirProcessosEmBlocoInterno(
   const form = Formulario.de(controle, FORM_CONTROLE, sei.http);
   // Link do `finalizarSelecao` da lupa, no script: por isso o HTML cru.
   const link = linkDaAcao(controle.html, "rel_bloco_protocolo_cadastrar");
-  if (!link) throw new ErroSei("SEI_ACAO_INDISPONIVEL", "O Controle de Processos não oferece incluir processos em bloco para este usuário.");
+  if (!link) throw new ErroSei("SEI_ACAO_INDISPONIVEL", "O Controle de Processos n\u00E3o oferece incluir processos em bloco para este usu\u00E1rio.");
   const lupa = await abrirLupa(sei, controle, op);
   const bloco = lupa.blocos.find((b) => b.id === alvo);
-  if (!bloco) throw new ErroSei("SEI_NAO_ENCONTRADO", `O bloco interno ${alvo} não está entre os blocos que a unidade pode usar para processos.`);
+  if (!bloco) {
+    throw new ErroSei(
+      "SEI_NAO_ENCONTRADO",
+      lupa.paginada
+        ? `O bloco interno ${alvo} n\u00E3o est\u00E1 entre os blocos internos da primeira p\u00E1gina da lista de blocos.`
+        : `O bloco interno ${alvo} n\u00E3o est\u00E1 entre os blocos que a unidade pode usar para processos.`,
+    );
+  }
 
   const { listas, mapa } = processosDaPagina(form);
   // A tela recusa sigiloso no próprio JavaScript ("Operação não aplicável em processo sigiloso.").
@@ -206,15 +254,18 @@ export async function incluirProcessosEmBlocoInterno(
   const resultado = new Map<string, ResultadoInclusao>();
   for (const id of pedidos) {
     if (!mapa.has(id)) resultado.set(id, { idProcedimento: id, situacao: "fora-da-pagina" });
-    else if (sigilosos.has(id)) resultado.set(id, { idProcedimento: id, situacao: "erro", erro: "Processo sigiloso: o SEI não o inclui em bloco pelo Controle de Processos." });
+    else if (sigilosos.has(id)) resultado.set(id, { idProcedimento: id, situacao: "erro", erro: "Processo sigiloso: o agente n\u00E3o atua nele." });
   }
 
   let pendentes = pedidos.filter((id) => !resultado.has(id));
   if (pendentes.length) {
     const atual = await telaDoBloco(sei, alvo, [controle, lupa.pagina], op);
     if (atual) {
+      const linhas = linhasDoBloco(atual);
+      // Antes do POST ainda dá para parar sem efeito nenhum.
+      if (!linhas) throw new ErroSei("SEI_VERSAO_NAO_SUPORTADA", `A tela do bloco ${bloco.numero} n\u00E3o foi reconhecida; nada foi inclu\u00EDdo.`);
       for (const id of pendentes) {
-        if (noBloco(atual, id, mapa.get(id)?.protocolo ?? "")) resultado.set(id, { idProcedimento: id, situacao: "ja-estava" });
+        if (noBloco(linhas, id, mapa.get(id)?.protocolo ?? "")) resultado.set(id, { idProcedimento: id, situacao: "ja-estava" });
       }
       pendentes = pendentes.filter((id) => !resultado.has(id));
     }
@@ -231,7 +282,10 @@ export async function incluirProcessosEmBlocoInterno(
     }
   }
   valores.hdnIdBloco = alvo;
-  for (const id of pendentes) valores[mapa.get(id)?.campo ?? ""] = id;
+  for (const id of pendentes) {
+    const campo = mapa.get(id)?.campo;
+    if (campo) valores[campo] = id;
+  }
   form.definir(valores);
 
   const falhar = (mensagem: string) => {
@@ -251,14 +305,20 @@ export async function incluirProcessosEmBlocoInterno(
     const confirmou =
       p.get("acao") === "rel_bloco_protocolo_listar" && p.get("acao_origem") === "rel_bloco_protocolo_cadastrar" && p.get("id_bloco") === alvo;
     if (!confirmou) {
-      falhar(validacao || `O SEI não confirmou a inclusão no bloco ${bloco.numero}.`);
+      falhar(validacao || `O SEI n\u00E3o confirmou a inclus\u00E3o no bloco ${bloco.numero}.`);
     } else {
-      for (const id of pendentes) {
+      const linhas = linhasDoBloco(resposta);
+      // Depois do POST não se lança: a inclusão pode ter acontecido, e quem chamou precisa saber de cada processo.
+      if (!linhas) falhar(`N\u00E3o confirmado: a tela do bloco ${bloco.numero} n\u00E3o foi reconhecida; confira o bloco ${bloco.numero}.`);
+      const ausente = temPaginaSeguinte(resposta)
+        ? `N\u00E3o confirmado: o bloco tem mais de uma p\u00E1gina; confira o bloco ${bloco.numero}.`
+        : validacao || `O SEI n\u00E3o mostrou o processo no bloco ${bloco.numero} depois da inclus\u00E3o.`;
+      for (const id of linhas ? pendentes : []) {
         resultado.set(
           id,
-          noBloco(resposta, id, mapa.get(id)?.protocolo ?? "")
+          noBloco(linhas ?? [], id, mapa.get(id)?.protocolo ?? "")
             ? { idProcedimento: id, situacao: "incluido" }
-            : { idProcedimento: id, situacao: "erro", erro: validacao || `O SEI não mostrou o processo no bloco ${bloco.numero} depois da inclusão.` },
+            : { idProcedimento: id, situacao: "erro", erro: ausente },
         );
       }
     }

@@ -51,11 +51,35 @@ function paginaDe(html: string, url: string): Pagina {
 }
 
 /** Servidor falso: `noBloco` são os processos que o bloco 41 (ou outro) já tem. */
-function servidor(o: { noBloco?: string[]; resposta?: Resposta; semMenuInternos?: boolean; semLinkInclusao?: boolean } = {}) {
+interface Opcoes {
+  noBloco?: string[];
+  resposta?: Resposta;
+  semMenuInternos?: boolean;
+  semLinkInclusao?: boolean;
+  semSelecoes?: boolean;
+  /** Lupa de blocos com controle de "próxima página". */
+  lupaPaginada?: boolean;
+  /** Lupa cujas linhas perderam a célula de Tipo (desalinhadas do cabeçalho). */
+  lupaQuebrada?: boolean;
+  /** Tela do bloco com controle de "próxima página". */
+  blocoPaginado?: boolean;
+  /** Tela do bloco cujas linhas perderam a célula de Tipo. */
+  blocoQuebrado?: boolean;
+  /** Onde o usuário cancela: na conferência prévia ou no POST. */
+  abortarEm?: "previa" | "post";
+}
+
+const PAGINAR = `<a href="javascript:infraAcaoPaginar('+',1,'Infra', null);">Próxima</a>`;
+
+function servidor(o: Opcoes = {}) {
   const estado = { noBloco: new Set(o.noBloco ?? []), posts: [] as Post[], gets: [] as string[] };
   let controle = ler("controle_gerados.html");
   if (o.semMenuInternos) controle = controle.replace(/<li><a href="controlador\.php\?acao=bloco_interno_listar[^\n]*\n/, "");
   if (o.semLinkInclusao) controle = controle.replace(/rel_bloco_protocolo_cadastrar/g, "rel_bloco_protocolo_outro");
+  if (o.semSelecoes) controle = controle.replace(/<input[^>]*name="hdnInfraSelecoes"[^>]*>\n/, "");
+  let lupa = ler("bloco_selecionar_processo.html");
+  if (o.lupaPaginada) lupa = lupa.replace("</table>", `</table>${PAGINAR}`);
+  if (o.lupaQuebrada) lupa = lupa.replace(/<td align="center">(Interno|Reunião)<\/td>\n/g, "");
   /** A tela do bloco com só as linhas dos processos que estão nele. */
   const telaDoBloco = (idBloco: string) =>
     ler("rel_bloco_protocolo_listar.html")
@@ -65,7 +89,12 @@ function servidor(o: { noBloco?: string[]; resposta?: Resposta; semMenuInternos?
         return !id || !l.startsWith("<tr") || estado.noBloco.has(id);
       })
       .join("\n")
-      .replace(/Bloco Interno 41/g, `Bloco Interno ${idBloco}`);
+      .replace(/Bloco Interno 41/g, `Bloco Interno ${idBloco}`)
+      .replace("</table>", o.blocoPaginado ? `</table>${PAGINAR}` : "</table>")
+      .replace(/<td>Tipo Exemplo<\/td>/g, o.blocoQuebrado ? "" : "<td>Tipo Exemplo</td>");
+  const abortar = () => {
+    throw new DOMException("cancelado", "AbortError");
+  };
   const internos = `<html><body><table id="tblBlocos"><tr><th></th><th>Número</th><th>Descrição</th></tr>${["41", "43", "44"]
     .map(
       (n) =>
@@ -81,13 +110,15 @@ function servidor(o: { noBloco?: string[]; resposta?: Resposta; semMenuInternos?
     if (init?.method !== "POST") {
       estado.gets.push(u);
       if (acao === "procedimento_controlar") return resp(u, controle);
-      if (acao === "bloco_selecionar_processo") return resp(u, ler("bloco_selecionar_processo.html"));
+      if (acao === "bloco_selecionar_processo") return resp(u, lupa);
       if (acao === "bloco_interno_listar") return resp(u, internos);
+      if (acao === "rel_bloco_protocolo_listar" && o.abortarEm === "previa") abortar();
       if (acao === "rel_bloco_protocolo_listar") return resp(u, telaDoBloco(/[?&]id_bloco=(\d+)/.exec(u)?.[1] ?? ""));
       return resp(u, "<html><body>?</body></html>");
     }
     const pares = lerCorpo(String(init.body ?? ""));
     estado.posts.push({ url: u, pares });
+    if (o.abortarEm === "post") abortar();
     const idBloco = pares.find(([n]) => n === "hdnIdBloco")?.[1] ?? "";
     switch (o.resposta ?? "sucesso") {
       case "sessao":
@@ -214,7 +245,12 @@ export async function verificarBlocoProcessos(): Promise<void> {
   const s6 = servidor();
   const r6 = await incluirProcessosEmBlocoInterno(s6.sei, "41", ["700002", "700003"]);
   checar("sigiloso => erro sem POST para ele", r6[0]?.situacao === "erro" && /sigiloso/i.test(r6[0]?.erro ?? "") && r6[1]?.situacao === "incluido", r6);
-  checar("o sigiloso nao vai no POST", !(s6.estado.posts[0]?.pares ?? []).some(([, v]) => v.includes("700002") && v !== "700001,700002"), s6.estado.posts[0]?.pares);
+  const p6 = s6.estado.posts[0]?.pares ?? [];
+  checar(
+    "o sigiloso nao vai no POST",
+    !p6.some(([n]) => n === "chkRecebidosItem1") && p6.some(([n, v]) => n === "hdnRecebidosItensSelecionados" && v === ""),
+    p6,
+  );
 
   secao("bloco interno: nada elegivel, nenhum POST");
   const s7 = servidor({ noBloco: ["700003"] });
@@ -259,4 +295,44 @@ export async function verificarBlocoProcessos(): Promise<void> {
   const r10 = await incluirProcessosEmBlocoInterno(s10.sei, "41", ["700003", "700004"]);
   checar("pula a conferencia previa (nenhum GET da tela do bloco)", !s10.estado.gets.some((g) => g.includes("acao=rel_bloco_protocolo_listar")), s10.estado.gets);
   checar("e classifica pela tela da resposta", s10.estado.posts.length === 1 && r10.every((r) => r.situacao === "incluido"), r10);
+
+  secao("bloco interno: hdnInfraSelecoes ausente");
+  const s11 = servidor({ semSelecoes: true });
+  const r11 = await incluirProcessosEmBlocoInterno(s11.sei, "41", ["700001", "700004"]);
+  const esperado11 = paresEsperados({ recebidos: ["700001"], gerados: ["700004"], bloco: "41", caixas: [["chkRecebidosItem0", "700001"], ["chkGeradosItem1", "700004"]] }).filter(
+    ([n]) => n !== "hdnInfraSelecoes",
+  );
+  checar("cai para Recebidos e Gerados", igual(s11.estado.posts[0]?.pares, esperado11) && r11.every((r) => r.situacao === "incluido"), s11.estado.posts[0]?.pares);
+
+  secao("bloco interno: cancelamento propaga");
+  const s12 = servidor({ abortarEm: "previa" });
+  const e12 = await lanca(() => incluirProcessosEmBlocoInterno(s12.sei, "41", ["700003"]));
+  checar("cancelado na conferencia previa lanca CANCELADO, sem POST", e12?.codigo === "CANCELADO" && s12.estado.posts.length === 0, e12);
+  const e12b = await lanca(() => incluirProcessosEmBlocoInterno(servidor({ abortarEm: "post" }).sei, "41", ["700003"]));
+  checar("cancelado no POST lanca CANCELADO (nao vira erro por processo)", e12b?.codigo === "CANCELADO", e12b);
+
+  secao("bloco interno: lupa de blocos paginada ou desalinhada");
+  const e13 = await lanca(() => listarBlocosInternosParaProcessos(servidor({ lupaPaginada: true }).sei));
+  checar("listar falha alto quando a lupa tem mais paginas", e13?.codigo === "SEI_VERSAO_NAO_SUPORTADA" && /mais de uma p/.test(e13?.message ?? ""), e13);
+  const s13 = servidor({ lupaPaginada: true });
+  const r13 = await incluirProcessosEmBlocoInterno(s13.sei, "41", ["700003"]);
+  checar("incluir num bloco da primeira pagina funciona", r13[0]?.situacao === "incluido" && s13.estado.posts.length === 1, r13);
+  const e13b = await lanca(() => incluirProcessosEmBlocoInterno(servidor({ lupaPaginada: true }).sei, "99", ["700003"]));
+  checar("bloco fora da primeira pagina: a mensagem diz isso", e13b?.codigo === "SEI_NAO_ENCONTRADO" && /primeira p/.test(e13b?.message ?? ""), e13b);
+  checar("sem paginacao a mensagem nao fala em primeira pagina", !/primeira p/.test(e9?.message ?? ""), e9);
+  const e13c = await lanca(() => listarBlocosInternosParaProcessos(servidor({ lupaQuebrada: true }).sei));
+  checar("linhas da lupa sem as colunas do cabecalho: SEI_VERSAO_NAO_SUPORTADA", e13c?.codigo === "SEI_VERSAO_NAO_SUPORTADA", e13c);
+
+  secao("bloco interno: tela do bloco paginada ou desalinhada");
+  const r14 = await incluirProcessosEmBlocoInterno(servidor({ resposta: "parcial", blocoPaginado: true }).sei, "41", ["700003", "700004"]);
+  checar(
+    "ausente numa tela paginada: erro 'nao confirmado', com o bloco",
+    r14[0]?.situacao === "incluido" && r14[1]?.situacao === "erro" && /mais de uma p.*confira o bloco 41/.test(r14[1]?.erro ?? ""),
+    r14,
+  );
+  const s14 = servidor({ noBloco: ["700005"], blocoQuebrado: true });
+  const e14 = await lanca(() => incluirProcessosEmBlocoInterno(s14.sei, "41", ["700003"]));
+  checar("tela do bloco irreconhecivel antes do POST: lanca e nao posta", e14?.codigo === "SEI_VERSAO_NAO_SUPORTADA" && s14.estado.posts.length === 0, e14);
+  const r14b = await incluirProcessosEmBlocoInterno(servidor({ blocoQuebrado: true, semMenuInternos: true }).sei, "41", ["700003"]);
+  checar("irreconhecivel depois do POST: erro por processo, sem lancar", r14b[0]?.situacao === "erro" && /confira o bloco 41/.test(r14b[0]?.erro ?? ""), r14b);
 }
