@@ -76,6 +76,11 @@ var procLote_contarConvertidas = (linhas) => {
 
 /** Ponto de entrada, chamado pelo link do menu esquerdo. */
 function initProcLoteModal() {
+    // Com o content script novo ativo (marca no <html>), o modal novo assume: so dispara o evento.
+    if (document.documentElement.hasAttribute('data-seipro-processos-lote')) {
+        document.dispatchEvent(new CustomEvent('spro-processos-lote-abrir'));
+        return;
+    }
     procLote_form = false;
     procLote_criados = [];
     procLote_abortado = false;

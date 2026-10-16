@@ -1,0 +1,22 @@
+/** Configuracao do modal do Processos em Lote; a mecanica vive em `@comum/ui/modalIframe`. */
+import type { ConfigModal } from "@comum/ui/modalIframe";
+import { EVENTO_ABRIR } from "../modelo/constantes";
+
+export const CONFIG_MODAL: ConfigModal = {
+  evento: EVENTO_ABRIR,
+  titulo: "Processos em Lote",
+  atributoIframe: "data-spro-processos-lote-modal",
+  seletorItemMenu: "#processosLotePro",
+  classeAviso: "spro-processos-lote-aviso",
+  textoSemModal: "Não foi possível abrir o Processos em Lote nesta tela. Recarregue a página (F5) e tente de novo.",
+};
+
+/**
+ * Liga o modal so com a opcao `proclote` do legado ligada. Desligada, o item do menu nem existe
+ * (sei-pro-all.js) e o modulo fica quieto: nem modal, nem aviso de "nao foi possivel abrir".
+ */
+export async function armarSeLigado(opcaoLigada: () => Promise<boolean>, armar: () => void): Promise<boolean> {
+  if (!(await opcaoLigada())) return false;
+  armar();
+  return true;
+}
