@@ -304,7 +304,9 @@ export function montarConfiguracao(_doc: Document, e: EstadoApp, acoes: AcoesCon
       }
       dica.textContent = "";
       const minha = geracao;
-      espera = setTimeout(() => void buscar(termo, minha), ESPERA_BUSCA_MS);
+      espera = setTimeout(() => {
+        if (campoBusca.isConnected) void buscar(termo, minha);
+      }, ESPERA_BUSCA_MS);
     });
     mostrarAviso();
     desenharChips();
@@ -347,7 +349,9 @@ export function montarConfiguracao(_doc: Document, e: EstadoApp, acoes: AcoesCon
     });
     const resolver = async () => {
       const protocolo = campo.value.trim();
-      if (!protocolo || !numero || (et.destino.idProcedimento && et.destino.protocolo === protocolo)) return;
+      // A etapa atual, não a do desenho: `editar` troca o objeto a cada digitação.
+      const atual = e.etapas.find((x): x is EtapaDe<"mover"> => x.acao === "mover");
+      if (!protocolo || !numero || !atual || (atual.destino.idProcedimento && atual.destino.protocolo === protocolo)) return;
       const minha = ++geracao;
       statusDestino.set("mover", { texto: "Conferindo o processo…", erro: false });
       pintar();
@@ -355,7 +359,8 @@ export function montarConfiguracao(_doc: Document, e: EstadoApp, acoes: AcoesCon
         const r = await acoes.rpc.chamar<
           { situacao: "ok"; destino: { protocolo: string; idProcedimento: string; tipo: string } } | { situacao: "erro"; erro: string }
         >("destino", { protocolo, numero });
-        if (minha !== geracao) return;
+        // Resposta de um campo que já saiu da tela ou cujo texto mudou não vale.
+        if (minha !== geracao || !campo.isConnected || campo.value.trim() !== protocolo) return;
         if (r.situacao === "ok") {
           editar("mover", (x) => ({ ...x, destino: r.destino }));
           statusDestino.set("mover", { texto: `Destino: ${r.destino.protocolo} (${r.destino.tipo})`, erro: false });
@@ -363,7 +368,7 @@ export function montarConfiguracao(_doc: Document, e: EstadoApp, acoes: AcoesCon
           statusDestino.set("mover", { texto: r.erro, erro: true });
         }
       } catch (err) {
-        if (minha !== geracao) return;
+        if (minha !== geracao || !campo.isConnected || campo.value.trim() !== protocolo) return;
         statusDestino.set("mover", { texto: `Não foi possível conferir o processo: ${mensagem(err)}`, erro: true });
       }
       pintar();
@@ -537,6 +542,7 @@ export function montarConfiguracao(_doc: Document, e: EstadoApp, acoes: AcoesCon
           botaoIcone("Subir", "setaCima", i === 0, () => trocar(i - 1)),
           botaoIcone("Descer", "setaBaixo", i === e.etapas.length - 1, () => trocar(i + 1)),
           botaoIcone("Remover", "lixeira", false, () => {
+            if (et.acao === "assinar") senha.value = "";
             e.etapas.splice(i, 1);
             desenhar();
           }),

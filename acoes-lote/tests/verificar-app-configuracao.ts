@@ -381,6 +381,64 @@ export async function verificarAppConfiguracao(): Promise<void> {
     checar("previa bloqueada", botao(el, "Ver prévia")!.hasAttribute("disabled"));
   }
 
+  secao("configuracao: correcoes da revisao");
+  {
+    // 1) destino A resolvido, vira B, volta a A: precisa resolver de novo.
+    const A = "00002.000002/2026-22";
+    const e = estado([{ acao: "mover", destino: { protocolo: A, idProcedimento: "777", tipo: "Licitacao" }, motivo: "m" }], {
+      selecionados: new Set(["1002"]),
+    });
+    const { el, chamadas } = montar(e);
+    const campo = el.querySelector<HTMLInputElement>('[aria-label="Processo de destino"]')!;
+    digitar(campo, "00003.000003/2026-33");
+    digitar(campo, A, "change");
+    await tique();
+    igual("voltar ao destino anterior resolve de novo", chamadas.filter((c) => c.op === "destino").length, 1);
+    igual("destino de volta", (e.etapas[0] as { destino: { idProcedimento: string } }).destino.idProcedimento, "777");
+    igual("sem erros", erros(el), []);
+  }
+  {
+    // 2) resolucao em voo que sobrevive a um redesenho nao vale.
+    let liberar: () => void = () => undefined;
+    const e = estado([{ acao: "ciencia" }, { acao: "mover", destino: { protocolo: "", idProcedimento: "", tipo: "" }, motivo: "m" }], {
+      selecionados: new Set(["1002"]),
+    });
+    const { el } = montar(e, {
+      destino: (a) =>
+        new Promise((ok) => {
+          liberar = () => ok({ situacao: "ok", destino: { protocolo: a.protocolo, idProcedimento: "777", tipo: "T" } });
+        }),
+    });
+    const antigo = el.querySelector<HTMLInputElement>('[aria-label="Processo de destino"]')!;
+    digitar(antigo, "00002.000002/2026-22", "change");
+    await tique();
+    botao(cartao(el, "mover"), "Subir")!.click();
+    const novo = el.querySelector<HTMLInputElement>('[aria-label="Processo de destino"]')!;
+    digitar(novo, "00003.000003/2026-33");
+    liberar();
+    await tique();
+    igual("resultado de A nao aplicado", (e.etapas[0] as { destino: { idProcedimento: string } }).destino.idProcedimento, "");
+    checar("previa segue bloqueada", botao(el, "Ver prévia")!.hasAttribute("disabled"));
+  }
+  {
+    // 3) a busca pendente nao chama o SEI depois de a tela sair.
+    const e = estado([{ acao: "alterar-dados" }], { selecionados: new Set(["1002"]) });
+    const { doc, el, chamadas } = montar(e);
+    digitar(el.querySelector<HTMLInputElement>('[aria-label="Buscar interessados"]')!, "abcd");
+    doc.getElementById("r")!.replaceChildren();
+    await tique(380);
+    igual("nenhuma busca apos sair", chamadas.filter((c) => c.op === "contatos").length, 0);
+  }
+  {
+    // 4) remover a etapa Assinar limpa a senha.
+    const e = estado([{ acao: "assinar", cargo: "Chefe" }, { acao: "ciencia" }]);
+    const { el } = montar(e);
+    const s = el.querySelector<HTMLInputElement>('input[type="password"]')!;
+    digitar(s, "segredo");
+    botao(cartao(el, "assinar"), "Remover")!.click();
+    igual("senha limpa ao remover Assinar", s.value, "");
+  }
+
   secao("configuracao: via AppAcoesLote");
   {
     const doc = instalarDom('<html><body><div id="r"></div></body></html>');
