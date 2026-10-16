@@ -7,7 +7,7 @@ import { AppAcoesLote, type ContextoApp, type EstadoApp } from "../src/app/app";
 import { montarSelecao } from "../src/app/selecao";
 import type { AcaoId } from "../src/modelo/acoes";
 import type { LinhaDoc } from "../src/modelo/documentos";
-import { botao, checar, disparar, escolherCombo, igual, instalarDom, secao, tique } from "./util";
+import { botao, checar, combo, disparar, escolherCombo, igual, instalarDom, secao, tique } from "./util";
 
 const CTX: ContextoApp = {
   host: "sei.x.gov.br",
@@ -108,12 +108,43 @@ export async function verificarAppSelecao(): Promise<void> {
     igual("filtro por tipo deixa 3", idsVisiveis(el), ["1001", "1002", "1003"]);
     const todos = el.querySelector<HTMLElement>('[aria-label="Selecionar todos"]')!;
     clicar(todos);
-    igual("marca as 3 visiveis e mantem a que estava fora", [...e.selecionados].sort(), ["1001", "1002", "1003", "1006"]);
+    igual("filtrar poda a 1006 e marcar todos marca as 3 visiveis", [...e.selecionados].sort(), ["1001", "1002", "1003"]);
     checar("avisou a mudanca", chamadas.mudou > 0);
     checar("caixa de cima fica marcada", el.querySelector('[aria-label="Selecionar todos"]')!.getAttribute("aria-checked") === "true");
     clicar(el.querySelector<HTMLElement>('[aria-label="Selecionar todos"]')!);
-    igual("segundo clique desmarca so as visiveis", [...e.selecionados], ["1006"]);
+    igual("segundo clique desmarca as visiveis", [...e.selecionados], []);
     igual("o filtro fica no estado", e.filtro.tipos, ["Despacho"]);
+  }
+
+  secao("selecao: o filtro poda a selecao");
+  {
+    const e = estado({ selecionados: new Set(["1001", "1002", "1003", "1004", "1005"]) });
+    const { el, chamadas } = montar(e);
+    checar("antes: Assinar (4)", !!botao(el, "Assinar (4)"));
+    escolherCombo(el, "Tipo", "Oficio");
+    igual("so os visiveis ficam selecionados", [...e.selecionados], ["1004"]);
+    checar("contador reflete 1", !!botao(el, "Assinar (1)") && !!botao(el, "Baixar (1)"));
+    checar("avisou a mudanca", chamadas.mudou > 0);
+    clicar(caixas(el)[1]!);
+    igual("marcar um visivel", [...e.selecionados].sort(), ["1004", "1006"]);
+    botao(el, "Limpar filtros")!.click();
+    igual("limpar nao devolve o podado", [...e.selecionados].sort(), ["1004", "1006"]);
+    igual("tudo visivel de novo", idsVisiveis(el).length, 6);
+    const e2 = estado({ selecionados: new Set(["1001", "1004"]), filtro: { tipos: ["Despacho"] } });
+    montar(e2);
+    igual("filtro ativo na criacao poda (atualizar)", [...e2.selecionados], ["1001"]);
+  }
+
+  secao("selecao: atalho limpa o filtro");
+  {
+    const e = estado();
+    const { el } = montar(e);
+    escolherCombo(el, "Tipo", "Despacho");
+    botao(el, "Externos")!.click();
+    igual("filtro limpo", e.filtro, {});
+    igual("externo selecionado", [...e.selecionados], ["1005"]);
+    checar("todas as linhas visiveis", idsVisiveis(el).length === 6 && idsVisiveis(el).includes("1005"));
+    checar("combo de tipo voltou ao vazio", (combo(el, "Tipo")?.textContent ?? "").includes("Todos os tipos"));
   }
 
   secao("selecao: faixa com Shift");

@@ -1,7 +1,9 @@
 /**
  * Tela de seleção: filtros, três atalhos, tabela de documentos com caixas (Shift marca faixa), barra com um
  * botão por ação e o menu ⋯ de cada linha. Mexe só em `EstadoApp` (selecionados e filtro) e avisa por `aoMudar`.
- * Documentos escondidos pelo filtro continuam selecionados; "Selecionar todos" só age nos visíveis.
+ * A seleção só contém documentos visíveis: ao mudar o filtro (qualquer controle, "Limpar filtros" ou uma
+ * atualização com filtro ativo), o que o filtro esconde sai da seleção, para os contadores e as ações nunca
+ * valerem para linhas que o usuário não vê. Os atalhos são critério de seleção: limpam o filtro e marcam.
  */
 
 import { type Combo, criarCombo, type OpcaoCombo } from "@comum/ui/combobox";
@@ -40,7 +42,7 @@ function opcoesDe(linhas: LinhaDoc[], campo: "tipo" | "unidade"): OpcaoCombo[] {
   return [...cont].sort((a, b) => a[0].localeCompare(b[0], "pt-BR")).map(([valor, contagem]) => ({ valor, rotulo: valor, contagem }));
 }
 
-export function montarSelecao(doc: Document, e: EstadoApp, acoes: AcoesSelecao): HTMLElement {
+export function montarSelecao(_doc: Document, e: EstadoApp, acoes: AcoesSelecao): HTMLElement {
   if (e.sigiloso) {
     return h(
       "section",
@@ -58,6 +60,23 @@ export function montarSelecao(doc: Document, e: EstadoApp, acoes: AcoesSelecao):
     acoes.aoMudar();
     desenhar();
   };
+  /** Tira da seleção o que o filtro atual esconde; devolve se algo saiu. */
+  const podar = (): boolean => {
+    const vis = new Set(filtrar(e.linhas, e.filtro).map((l) => l.id));
+    let saiu = false;
+    for (const id of [...e.selecionados]) {
+      if (!vis.has(id)) {
+        e.selecionados.delete(id);
+        saiu = true;
+      }
+    }
+    if (e.ancora && !vis.has(e.ancora)) e.ancora = null;
+    return saiu;
+  };
+  const filtroMudou = () => {
+    if (podar()) acoes.aoMudar();
+    desenhar();
+  };
 
   // ---------- Filtros ----------
   const busca = h("input", {
@@ -69,7 +88,7 @@ export function montarSelecao(doc: Document, e: EstadoApp, acoes: AcoesSelecao):
       const t = busca.value.trim();
       if (t) e.filtro.texto = t;
       else delete e.filtro.texto;
-      desenhar();
+      filtroMudou();
     },
   });
   if (e.filtro.texto) busca.value = e.filtro.texto;
@@ -85,7 +104,7 @@ export function montarSelecao(doc: Document, e: EstadoApp, acoes: AcoesSelecao):
         const x = v[0] ?? "todos";
         // O valor vem da lista fechada acima.
         (e.filtro as Record<string, string>)[chave] = x;
-        desenhar();
+        filtroMudou();
       },
     });
   const lista = (rotulo: string, chave: "tipos" | "unidades", campo: "tipo" | "unidade"): Combo =>
@@ -99,7 +118,7 @@ export function montarSelecao(doc: Document, e: EstadoApp, acoes: AcoesSelecao):
       aoMudar: (v) => {
         if (v.length) e.filtro[chave] = v;
         else delete e.filtro[chave];
-        desenhar();
+        filtroMudou();
       },
     });
   const comboTipo = lista("Tipo", "tipos", "tipo");
@@ -130,7 +149,7 @@ export function montarSelecao(doc: Document, e: EstadoApp, acoes: AcoesSelecao):
       onchange: () => {
         if (i.value) e.filtro[chave] = i.value;
         else delete e.filtro[chave];
-        desenhar();
+        filtroMudou();
       },
     });
     if (e.filtro[chave]) i.value = e.filtro[chave]!;
@@ -148,18 +167,21 @@ export function montarSelecao(doc: Document, e: EstadoApp, acoes: AcoesSelecao):
     e.datasIndisponiveis ? h("span", { class: "al-nota" }, "Datas indisponíveis neste processo.") : null,
   );
 
+  const limparFiltros = () => {
+    e.filtro = {};
+    busca.value = "";
+    for (const c of [comboTipo, comboUnidade]) c.definir([]);
+    for (const c of [comboAssinatura, comboNivel, comboOrigem]) c.definir(["todos"]);
+    for (const i of periodo.querySelectorAll("input")) i.value = "";
+  };
   const limpar = h(
     "button",
     {
       type: "button",
       class: "spro-lista-limpar",
       onclick: () => {
-        e.filtro = {};
-        busca.value = "";
-        for (const c of [comboTipo, comboUnidade]) c.definir([]);
-        for (const c of [comboAssinatura, comboNivel, comboOrigem]) c.definir(["todos"]);
-        for (const i of periodo.querySelectorAll("input")) i.value = "";
-        desenhar();
+        limparFiltros();
+        filtroMudou();
       },
     },
     "Limpar filtros",
@@ -177,6 +199,7 @@ export function montarSelecao(doc: Document, e: EstadoApp, acoes: AcoesSelecao):
           class: "spro-botao",
           title: a.dica,
           onclick: () => {
+            limparFiltros();
             e.selecionados = new Set(aplicarAtalho(a.id, e.linhas, e.ctx));
             e.ancora = null;
             mudou();
@@ -238,7 +261,6 @@ export function montarSelecao(doc: Document, e: EstadoApp, acoes: AcoesSelecao):
           fazer: () => {
             e.selecionados = new Set([l.id]);
             e.ancora = l.id;
-            acoes.aoMudar();
             acoes.configurar(a.id);
           },
         }));
@@ -264,7 +286,6 @@ export function montarSelecao(doc: Document, e: EstadoApp, acoes: AcoesSelecao):
     for (const l of visiveis) {
       const marcada = e.selecionados.has(l.id);
       const caixa = h("input", { type: "checkbox", "aria-label": `Selecionar ${l.numero}`, onclick: (ev) => aoClicarCaixa(ev, l) });
-      if (marcada) caixa.setAttribute("checked", "");
       caixa.checked = marcada;
       const assinatura = l.cancelado ? "Cancelado" : l.assinado ? "Assinado" : l.externo ? "—" : "Sem assinatura";
       corpo.append(
@@ -327,7 +348,10 @@ export function montarSelecao(doc: Document, e: EstadoApp, acoes: AcoesSelecao):
     todos.setAttribute("aria-checked", ids.length > 0 && marcadas === ids.length ? "true" : marcadas > 0 ? "mixed" : "false");
     if (ids.length) todos.removeAttribute("disabled");
     else todos.setAttribute("disabled", "");
-    todos.replaceChildren(marcadas > 0 ? icone("check", 14) : "");
+    // Marcado: o check; misto: um traço (o mesmo ícone diria "todos"); nada: vazio.
+    todos.replaceChildren(
+      marcadas === ids.length && ids.length > 0 ? icone("check", 14) : marcadas > 0 ? h("span", { class: "al-traco" }, "–") : "",
+    );
     resumo.textContent = `${visiveis.length} de ${e.linhas.length} documento${e.linhas.length === 1 ? "" : "s"}`;
     desenharTabela();
     desenharBarra();
@@ -358,7 +382,7 @@ export function montarSelecao(doc: Document, e: EstadoApp, acoes: AcoesSelecao):
     tabela,
     barra,
   );
-  void doc;
+  podar();
   desenhar();
   return raiz;
 }
