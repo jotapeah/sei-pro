@@ -89,6 +89,37 @@ export function linhasDaEntrada(
   };
 }
 
+/**
+ * Confirmacao sem Cancelar (regra dos modais do SEI Pro: o X e o Esc ja fecham). So o botao da acao: o clique
+ * resolve `true`; fechar por X/Esc resolve `false`. A marca evita que o fechamento disparado pelo proprio clique
+ * resolva `false` (o `aoFechar` roda nos dois casos).
+ */
+export function criarConfirmarSemCancelar(abrirModal: AbrirModal): (texto: string, rotuloOk?: string) => Promise<boolean> {
+  return (texto, rotuloOk = "Confirmar") =>
+    new Promise<boolean>((ok) => {
+      let confirmado = false;
+      let modal: { fechar(): void } | null = null;
+      const botao = h(
+        "button",
+        {
+          type: "button",
+          class: "spro-botao perigo",
+          onclick: () => {
+            confirmado = true;
+            modal?.fechar();
+          },
+        },
+        rotuloOk,
+      );
+      modal = abrirModal({
+        titulo: "Confirmar",
+        icone: "alerta",
+        conteudo: h("div", {}, h("p", {}, texto), h("div", { class: "spro-dialogo-rodape" }, botao)),
+        aoFechar: () => ok(confirmado),
+      });
+    });
+}
+
 export interface DepsModelos {
   repo: RepositorioModelos;
   /** O nome do modelo e pedido num dialogo do app (sem Cancelar: o X e o Esc fecham). */
@@ -498,13 +529,13 @@ export class TelaConfiguracao {
     const vez = ++this.seqModelo;
     const p = m.parametros;
     this.limparErro();
-    for (const r of this.radios) r.checked = r.value === p.nivelAcesso;
-    this.pausa.value = String(limitarPausa(p.pausa));
+    // Tipo que nao existe mais: nada do modelo e aplicado (nem nivel nem pausa), so o aviso.
     if (!this.tipos.some((t) => t.id === p.idTipo)) {
-      this.atualizar();
       this.mostrarErro(ERROS.tipoDoModelo);
       return;
     }
+    for (const r of this.radios) r.checked = r.value === p.nivelAcesso;
+    this.pausa.value = String(limitarPausa(p.pausa));
     this.tipo.definir([p.idTipo]);
     await this.selecionarTipo(p.idTipo);
     if (vez !== this.seqModelo || this.destruida) return;
@@ -515,7 +546,8 @@ export class TelaConfiguracao {
         this.hipotese.definir([p.hipoteseLegal]);
         this.hipotese.atualizar();
       } else {
-        this.mostrarErro(ERROS.hipoteseDoModelo);
+        // Lista vazia e "nao carregou" (Task 12), nao "a hipotese sumiu": o aviso e o de sempre.
+        this.mostrarErro(this.form.hipoteses.length ? ERROS.hipoteseDoModelo : ERROS.hipotesesNaoCarregadas);
       }
     }
     this.atualizar();
@@ -591,7 +623,9 @@ export class TelaConfiguracao {
     try {
       await dm.repo.apagar(atual.id);
     } catch (e) {
-      this.mostrarErro(`Não foi possível apagar o modelo: ${mensagem(e)}`);
+      // Falhou: a escolha fica (o modelo continua gravado).
+      if (!this.destruida) this.mostrarErro(`Não foi possível apagar o modelo: ${mensagem(e)}`);
+      return;
     }
     if (this.destruida) return;
     this.modelo.definir([]);
@@ -644,7 +678,8 @@ export class TelaConfiguracao {
     };
     const botao = h("button", { type: "button", class: "spro-botao primario", onclick: () => void gravar() }, c.rotuloBotao);
     campo.addEventListener("keydown", (ev) => {
-      if (ev.key === "Enter") {
+      // Enter que fecha uma composicao (IME, acentos mortos) nao grava.
+      if (ev.key === "Enter" && !ev.isComposing) {
         ev.preventDefault();
         void gravar();
       }
@@ -661,6 +696,7 @@ export class TelaConfiguracao {
         h("div", { class: "spro-dialogo-rodape" }, botao),
       ),
     });
+    campo.focus?.({ preventScroll: true });
   }
 
   private mostrarErro(texto: string): void {

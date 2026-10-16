@@ -1,5 +1,5 @@
 import { resumo } from "./util";
-import { verificarApp } from "./verificar-app";
+import { verificarApp, verificarConfirmarSemCancelar } from "./verificar-app";
 import { verificarLinhas } from "./verificar-linhas";
 import { verificarModelos } from "./verificar-modelos";
 import { verificarPagina } from "./verificar-pagina";
@@ -14,4 +14,5 @@ await verificarModelos();
 await verificarSei();
 await verificarPagina();
 await verificarApp();
+await verificarConfirmarSemCancelar();
 resumo();

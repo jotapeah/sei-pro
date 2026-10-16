@@ -12,7 +12,7 @@ import { type Area, areaMemoria } from "@comum/armazenamento/area";
 import { ErroRpc } from "@comum/ponte/rpc";
 import { h } from "@comum/ui/dom";
 import { AppProcessosLote, type DepsApp } from "@pl/app/app";
-import { TelaConfiguracao } from "@pl/app/configuracao";
+import { criarConfirmarSemCancelar, TelaConfiguracao } from "@pl/app/configuracao";
 import { MENSAGEM_ASSUMIDO, MENSAGEM_GRAVAR } from "@pl/app/execucao";
 import { partesEnviadas } from "@pl/app/previa";
 import { CHAVE_ENTRADA_LINK, JANELA_OUTRA_ABA_MS } from "@pl/modelo/constantes";
@@ -81,6 +81,9 @@ function montar(o: OpcoesMontar = {}) {
     confirma: true,
   };
   const baixados: Array<{ nome: string; conteudo: string }> = [];
+  /** O `fechar` de cada dialogo aberto (o X/Esc das provas) e os campos que receberam foco. */
+  const dialogosAbertos: Array<() => void> = [];
+  const focados: HTMLElement[] = [];
   const copiados: string[] = [];
 
   const deps: DepsApp = {
@@ -116,13 +119,20 @@ function montar(o: OpcoesMontar = {}) {
     abrirModal: ({ titulo, conteudo, aoFechar }) => {
       const dlg = h("div", { class: "dlg-teste", "aria-label": titulo }, conteudo);
       doc.body.append(dlg);
-      return {
-        fechar: () => {
-          if (!dlg.isConnected) return;
-          dlg.remove();
-          aoFechar?.();
-        },
+      for (const el of dlg.querySelectorAll<HTMLElement>("input")) {
+        const original = el.focus?.bind(el);
+        el.focus = (o?: FocusOptions) => {
+          focados.push(el);
+          original?.(o);
+        };
+      }
+      const fechar = () => {
+        if (!dlg.isConnected) return;
+        dlg.remove();
+        aoFechar?.();
       };
+      dialogosAbertos.push(fechar);
+      return { fechar };
     },
     confirmar: async (texto) => {
       t.confirmacoes.push(texto);
@@ -199,6 +209,9 @@ function montar(o: OpcoesMontar = {}) {
     app,
     relogio,
     modelos,
+    focados,
+    /** Fecha o dialogo mais novo como o X ou o Esc. */
+    fecharDialogo: () => dialogosAbertos.pop()?.(),
     sucessos,
     deps,
     area,
@@ -1010,7 +1023,7 @@ export async function verificarApp(): Promise<void> {
     const sumiu = await repoM.salvar("Tipo extinto", {
       idTipo: "99",
       nomeTipo: "Extinto",
-      nivelAcesso: "0",
+      nivelAcesso: "1",
       hipoteseLegal: "",
       nomeHipotese: "",
       pausa: 1200,
@@ -1033,6 +1046,8 @@ export async function verificarApp(): Promise<void> {
     checar("tipo ausente: o tipo atual fica", textoCombo(m.raiz, "Tipo de processo").includes("Contrato: Gestão"));
     checar("tipo ausente: nenhum formTipo novo", m.chamadas.filter((c) => c.op === "formTipo").length === formsAntes);
     checar("tipo ausente: Ver prévia segue com o tipo atual", botao(m.raiz, "Ver prévia")?.disabled === false);
+    checar("tipo ausente: o nível não muda", m.raiz.querySelector<HTMLInputElement>('input[name="pl-nivel"][value="0"]')?.checked === true);
+    checar("tipo ausente: a pausa não muda", m.campo("pl-pausa").value === "500", m.campo("pl-pausa").value);
 
     escolherCombo(m.raiz, ROTULO_MODELO, semHip.id);
     await ate(() => m.textoVisivel(ERRO_HIPOTESE_MODELO));
@@ -1043,7 +1058,32 @@ export async function verificarApp(): Promise<void> {
       !textoCombo(m.raiz, "Hipótese legal").includes("Revogada") && textoCombo(m.raiz, "Hipótese legal").includes("selecione"),
     );
     checar("hipótese ausente: tipo de aviso antigo some", !m.textoVisivel(ERRO_TIPO_MODELO));
+    checar(
+      "hipótese ausente: o nível é aplicado",
+      m.raiz.querySelector<HTMLInputElement>('input[name="pl-nivel"][value="1"]')?.checked === true,
+    );
+    checar("hipótese ausente: a pausa é aplicada", m.campo("pl-pausa").value === "600");
     m.app.destruir();
+
+    // Lista de hipóteses vazia = não carregou: o aviso é o de sempre, não "não existe mais".
+    const areaV = areaMemoria();
+    const comHip = await new RepositorioModelos(areaV, ESCOPO).salvar("Com hipótese", {
+      idTipo: "20",
+      nomeTipo: "Licitação: Pregão",
+      nivelAcesso: "1",
+      hipoteseLegal: "7",
+      nomeHipotese: "Controle Interno",
+      pausa: 600,
+    });
+    const v = montar({ area: areaV, hipoteses: [] });
+    await v.app.iniciar();
+    await ate(() => opcoesCombo(v.raiz, ROTULO_MODELO).length > 0);
+    escolherCombo(v.raiz, ROTULO_MODELO, comHip.id);
+    await ate(() => v.textoVisivel("Não foi possível carregar as hipóteses legais"));
+    checar("hipóteses não carregadas: aviso de não carregou", v.textoVisivel("Não foi possível carregar as hipóteses legais"));
+    checar("hipóteses não carregadas: não diz 'não existe mais'", !v.textoVisivel(ERRO_HIPOTESE_MODELO));
+    checar("hipóteses não carregadas: tipo aplicado", textoCombo(v.raiz, "Tipo de processo").includes("Licitação: Pregão"));
+    v.app.destruir();
   }
 
   secao("Modelos: salvar, renomear e apagar refletem no combo");
@@ -1131,17 +1171,66 @@ export async function verificarApp(): Promise<void> {
         textoCombo(m.raiz, ROTULO_MODELO).includes("Pregões 2026"),
     );
 
-    // Apagar pede confirmação; recusar não apaga.
-    m.t.confirma = false;
-    m.clicar("Apagar");
+    // Renomear um modelo que sumiu (apagado em outra aba): erro no diálogo e o combo relista.
+    const sumido = (await m.modelos.listar()).find((x) => x.nome === "Pregões 2026")!;
+    await new RepositorioModelos(m.area, ESCOPO).apagar(sumido.id);
+    m.clicar("Renomear");
+    const d4 = dialogo(m.doc)!;
+    (d4.querySelector("input") as HTMLInputElement).value = "Qualquer";
+    disparar(botao(d4, "Renomear modelo")!, "click");
+    await ate(() => (d4.textContent ?? "").includes("não existe mais"));
+    checar("renomear modelo sumido: erro no diálogo", !!dialogo(m.doc) && (d4.textContent ?? "").includes("não existe mais"));
+    checar("renomear modelo sumido: combo relistado", opcoesCombo(m.raiz, ROTULO_MODELO).join() === "Contratos restritos");
+    m.fecharDialogo();
+    // Recria o modelo escolhido para as provas do Apagar (Enter grava).
+    m.clicar("Salvar como modelo…");
+    const d5 = dialogo(m.doc)!;
+    const nome5 = d5.querySelector("input") as HTMLInputElement;
+    checar("diálogo do nome: foco no campo", m.doc.activeElement === nome5 || m.focados.includes(nome5));
+    nome5.value = "Pregões 2026";
+    const Teclado = (m.doc.defaultView as unknown as { Event: typeof Event }).Event;
+    const compondo = new Teclado("keydown", { bubbles: true }) as KeyboardEvent;
+    Object.assign(compondo, { key: "Enter", isComposing: true });
+    nome5.dispatchEvent(compondo);
     await tique(5);
+    checar("Enter durante composição não grava", !!dialogo(m.doc) && (await m.modelos.listar()).length === 1);
+    const enter = new Teclado("keydown", { bubbles: true }) as KeyboardEvent;
+    Object.assign(enter, { key: "Enter", isComposing: false });
+    nome5.dispatchEvent(enter);
+    await ate(() => !dialogo(m.doc));
     checar(
-      "apagar pede confirmação com o nome",
-      m.t.confirmacoes.some((c) => c.includes("Pregões 2026")),
+      "Enter grava o modelo",
+      (await m.modelos.listar()).some((x) => x.nome === "Pregões 2026"),
     );
-    checar("confirmação recusada: nada apagado", (await m.modelos.listar()).length === 2);
-    m.t.confirma = true;
+    checar("Enter: modelo escolhido", textoCombo(m.raiz, ROTULO_MODELO).includes("Pregões 2026"));
+
+    // Apagar: confirmação sem Cancelar; fechar (X/Esc) não apaga.
     m.clicar("Apagar");
+    await ate(() => !!dialogo(m.doc));
+    const dc = dialogo(m.doc)!;
+    checar("apagar pede confirmação com o nome", (dc.textContent ?? "").includes("Pregões 2026"));
+    checar("confirmação: um só botão, sem Cancelar", dc.querySelectorAll("button").length === 1 && !botao(dc, "Cancelar"));
+    m.fecharDialogo();
+    await tique(5);
+    checar("confirmação fechada: nada apagado", (await m.modelos.listar()).length === 2);
+    checar("confirmação fechada: escolha mantida", textoCombo(m.raiz, ROTULO_MODELO).includes("Pregões 2026"));
+
+    // Falha ao apagar: a escolha fica e o erro aparece.
+    const apagarOriginal = m.modelos.apagar.bind(m.modelos);
+    m.modelos.apagar = async () => {
+      throw new Error("cota");
+    };
+    m.clicar("Apagar");
+    await ate(() => !!dialogo(m.doc));
+    disparar(botao(dialogo(m.doc)!, "Apagar")!, "click");
+    await ate(() => m.textoVisivel("Não foi possível apagar o modelo"));
+    checar("falha ao apagar: erro no formulário", m.textoVisivel("Não foi possível apagar o modelo: cota"));
+    checar("falha ao apagar: escolha mantida", textoCombo(m.raiz, ROTULO_MODELO).includes("Pregões 2026") && m.visivel("Apagar"));
+    m.modelos.apagar = apagarOriginal;
+
+    m.clicar("Apagar");
+    await ate(() => !!dialogo(m.doc));
+    disparar(botao(dialogo(m.doc)!, "Apagar")!, "click");
     await ate(() => opcoesCombo(m.raiz, ROTULO_MODELO).length === 1);
     checar("apagado some do combo", opcoesCombo(m.raiz, ROTULO_MODELO).join() === "Contratos restritos");
     checar("apagado: volta a sem modelo", textoCombo(m.raiz, ROTULO_MODELO).includes("sem modelo"));
@@ -1152,6 +1241,35 @@ export async function verificarApp(): Promise<void> {
     );
     m.app.destruir();
   }
+}
+
+export async function verificarConfirmarSemCancelar(): Promise<void> {
+  secao("Modelos: confirmação sem Cancelar");
+  const doc = instalarDom();
+  let aberto: { conteudo: HTMLElement; fechar(): void } | null = null;
+  const abrir: Parameters<typeof criarConfirmarSemCancelar>[0] = ({ conteudo, aoFechar }) => {
+    doc.body.append(conteudo);
+    const fechar = () => {
+      if (!conteudo.isConnected) return;
+      conteudo.remove();
+      aoFechar?.();
+    };
+    aberto = { conteudo, fechar };
+    return { fechar };
+  };
+  const confirmar = criarConfirmarSemCancelar(abrir);
+  const sim = confirmar("Apagar o modelo X?", "Apagar");
+  const corpo = (aberto as { conteudo: HTMLElement } | null)?.conteudo;
+  checar("um só botão", corpo?.querySelectorAll("button").length === 1);
+  checar("sem Cancelar", !!corpo && !botao(corpo, "Cancelar"));
+  checar("o botão é o rótulo pedido", !!corpo && !!botao(corpo, "Apagar"));
+  checar("mostra o texto", (corpo?.textContent ?? "").includes("Apagar o modelo X?"));
+  disparar(botao(corpo!, "Apagar")!, "click");
+  checar("clique resolve true", (await sim) === true);
+  checar("clique fecha o diálogo", !corpo?.isConnected);
+  const nao = confirmar("De novo?", "Apagar");
+  (aberto as { fechar(): void } | null)?.fechar();
+  checar("fechar (X/Esc) resolve false", (await nao) === false);
 }
 
 const ROTULO_MODELO = "Modelo do lote";

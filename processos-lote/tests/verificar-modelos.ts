@@ -95,6 +95,27 @@ export async function verificarModelos(): Promise<void> {
     ["Bom"],
   );
 
+  // posAcoes com forma errada: o membro ruim some, o modelo continua; nada lança.
+  const pa = (posAcoes: unknown) => ({ id: "p", nome: "P", criadoEm: 1, parametros: parametros(), posAcoes });
+  const lerPos = async (posAcoes: unknown) =>
+    (await new RepositorioModelos(areaMemoria({ [`${PREFIXO}p`]: pa(posAcoes) }), ESCOPO).listar())[0];
+  igual("posAcoes não-objeto: ausente", (await lerPos("x"))?.posAcoes, undefined);
+  igual("posAcoes array: ausente", (await lerPos([1]))?.posAcoes, undefined);
+  igual("posAcoes vazio: ausente", (await lerPos({}))?.posAcoes, undefined);
+  igual(
+    "posAcoes: membro sem campo de texto some, o bom fica",
+    (await lerPos({ marcador: { id: 1, nome: "x", texto: "t" }, bloco: { id: "9", descricao: "B", extra: 1 } }))?.posAcoes,
+    { bloco: { id: "9", descricao: "B" } },
+  );
+  igual(
+    "posAcoes: acompanhar válido lido",
+    (await lerPos({ acompanhar: { grupo: "g", nomeGrupo: "G", observacao: "" }, marcador: null }))?.posAcoes,
+    { acompanhar: { grupo: "g", nomeGrupo: "G", observacao: "" } },
+  );
+  checar("posAcoes ruim não derruba o modelo", (await lerPos({ marcador: "x" }))?.nome === "P");
+  const salvoRuim = await new RepositorioModelos(areaMemoria(), ESCOPO).salvar("R", parametros(), { marcador: { id: "1" } } as never);
+  igual("salvar com posAcoes ruim: não grava o membro ruim", salvoRuim.posAcoes, undefined);
+
   const outra = new RepositorioModelos(area, "sei.exemplo.gov.br|bia");
   igual("outro escopo começa vazio", await outra.listar(), []);
   await outra.salvar("Contratos 2026", parametros());

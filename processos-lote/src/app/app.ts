@@ -20,7 +20,7 @@ import type { LinhaLote } from "../modelo/linhas";
 import type { RepositorioModelos } from "../modelos";
 import type { ContextoLote } from "../pagina/contexto";
 import type { LoteEmAndamento, RepositorioLote } from "../repositorio";
-import { type CacheConfig, type InfoFormTipo, TelaConfiguracao, type ValoresConfig } from "./configuracao";
+import { type CacheConfig, criarConfirmarSemCancelar, type InfoFormTipo, TelaConfiguracao, type ValoresConfig } from "./configuracao";
 import { ExecucaoLote, MENSAGEM_ASSUMIDO, type ModoRodada, TelaExecucao } from "./execucao";
 import { type PedidoPrevia, TelaPrevia } from "./previa";
 import { COLUNAS, linhasDoResultado, montarTelaResultado, numerosParaLink } from "./resultado";
@@ -173,7 +173,8 @@ export class AppProcessosLote {
       {
         rpc: this.d.rpc,
         cache: this.cache,
-        modelos: { repo: this.d.modelos, abrirModal: this.d.abrirModal, confirmar: (t, r) => this.d.confirmar(t, r) },
+        // Confirmacao propria, sem Cancelar; o `confirmar` do app (descartar lote) fica como esta.
+        modelos: { repo: this.d.modelos, abrirModal: this.d.abrirModal, confirmar: criarConfirmarSemCancelar(this.d.abrirModal) },
         verPrevia: (p, v) => {
           this.valores = v;
           this.telaPrevia(p);

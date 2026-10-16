@@ -63,8 +63,26 @@ function lerModelo(id: string, v: unknown): ModeloLote | null {
   if (!parametros) return null;
   const criadoEm = typeof v.criadoEm === "number" && Number.isFinite(v.criadoEm) ? v.criadoEm : 0;
   const m: ModeloLote = { id, nome: v.nome, criadoEm, parametros };
-  if (ehObjeto(v.posAcoes)) m.posAcoes = v.posAcoes as PosAcoes;
+  const posAcoes = lerPosAcoes(v.posAcoes);
+  if (posAcoes) m.posAcoes = posAcoes;
   return m;
+}
+
+/** Copia so os campos de texto esperados; o membro que nao fecha some (nunca lanca). Nada valido = ausente. */
+function lerPosAcoes(v: unknown): PosAcoes | undefined {
+  if (!ehObjeto(v)) return undefined;
+  const ler = <K extends string>(o: unknown, campos: readonly K[]): Record<K, string> | undefined => {
+    if (!ehObjeto(o) || !campos.every((c) => typeof o[c] === "string")) return undefined;
+    return Object.fromEntries(campos.map((c) => [c, o[c]])) as Record<K, string>;
+  };
+  const saida: PosAcoes = {};
+  const marcador = ler(v.marcador, ["id", "nome", "texto"] as const);
+  if (marcador) saida.marcador = marcador;
+  const acompanhar = ler(v.acompanhar, ["grupo", "nomeGrupo", "observacao"] as const);
+  if (acompanhar) saida.acompanhar = acompanhar;
+  const bloco = ler(v.bloco, ["id", "descricao"] as const);
+  if (bloco) saida.bloco = bloco;
+  return Object.keys(saida).length ? saida : undefined;
 }
 
 function validarNome(nome: string): string {
@@ -132,7 +150,8 @@ export class RepositorioModelos {
       const existente = (await this.listar()).find((m) => normalizarTexto(m.nome) === chave);
       const agora = this.agora();
       const m: ModeloLote = { id: existente?.id ?? novoId(agora), nome: n, criadoEm: agora, parametros: p };
-      if (posAcoes) m.posAcoes = structuredClone(posAcoes);
+      const pos = lerPosAcoes(posAcoes);
+      if (pos) m.posAcoes = pos;
       await this.area.gravar({ [this.prefixo + m.id]: m });
       return m;
     });
