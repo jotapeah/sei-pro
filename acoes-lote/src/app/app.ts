@@ -137,6 +137,8 @@ export class AppAcoesLote {
   private telaExecucao: TelaExecucao | null = null;
   private minimizado = false;
   private destruido = false;
+  private perguntando = false;
+  private pararTeclado: () => void = () => undefined;
 
   constructor(
     private readonly raiz: HTMLElement,
@@ -174,6 +176,41 @@ export class AppAcoesLote {
     raiz.replaceChildren(cabecalho, this.conteudo, this.pastilha);
     this.conteudo.replaceChildren(h("p", { class: "al-nota" }, "Carregando…"));
     d.aoFechar?.(() => this.destruir());
+
+    // Esc fecha (na execução, pausa e pergunta; minimizado, nada: a página é do usuário); Ctrl/Cmd+Enter avança
+    // (configuração: Ver prévia; prévia: Executar). Um diálogo aberto por cima (confirmar) cuida do próprio teclado.
+    const teclado = (ev: KeyboardEvent) => {
+      if (ev.defaultPrevented || this.destruido) return;
+      const dialogo = (ev.target as HTMLElement | null)?.closest?.("dialog");
+      if (dialogo && !dialogo.contains(this.raiz)) return;
+      if (ev.key === "Escape") {
+        ev.preventDefault();
+        if (!this.minimizado) void this.aoEsc();
+      } else if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey) && !this.minimizado) {
+        if (this.tela !== "configuracao" && this.tela !== "previa") return;
+        ev.preventDefault();
+        this.conteudo.querySelector<HTMLButtonElement>(".al-rodape .spro-botao.primario:not(:disabled)")?.click();
+      }
+    };
+    const doc = raiz.ownerDocument;
+    doc.addEventListener("keydown", teclado);
+    this.pararTeclado = () => doc.removeEventListener("keydown", teclado);
+  }
+
+  /** Esc: em qualquer tela fecha; na execução pausa o lote e pergunta (o lote fica salvo e retomável). */
+  private async aoEsc(): Promise<void> {
+    if (this.tela !== "execucao" || !this.controle || !this.d.confirmar) {
+      this.d.fechar();
+      return;
+    }
+    if (this.perguntando) return;
+    this.perguntando = true;
+    this.controle.pausar();
+    try {
+      if (await this.d.confirmar("O lote foi pausado. Fechar as Ações em Lote?", "Fechar")) this.d.fechar();
+    } finally {
+      this.perguntando = false;
+    }
   }
 
   /** Primeira leitura da árvore; com lote parado neste processo, a retomada; senão, a seleção. */
@@ -198,6 +235,7 @@ export class AppAcoesLote {
   /** Modal fechado: nada novo é disparado; o lote fica salvo para a retomada. */
   destruir(): void {
     this.destruido = true;
+    this.pararTeclado();
     this.controle?.encerrar();
   }
 

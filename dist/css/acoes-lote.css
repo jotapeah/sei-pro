@@ -2096,3 +2096,11 @@ table.spro-resultado td a {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Selecionar todos em estado misto: o traço no lugar do check. */
+.al-traco {
+  display: inline-block;
+  color: var(--spro-destaque);
+  font-weight: 700;
+  line-height: 1;
+}

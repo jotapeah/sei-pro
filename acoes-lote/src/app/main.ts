@@ -9,7 +9,7 @@
 import { areaChrome } from "@comum/armazenamento/area";
 import { esperarConexaoDaAba } from "@comum/ponte/conexaoDaAba";
 import type { Rpc, Tratador } from "@comum/ponte/rpc";
-import { aplicarTemaDoContexto } from "@comum/tema/painel";
+import { acompanharTemaDoPainel, aplicarTemaDoContexto } from "@comum/tema/painel";
 import { criarAbrirModal, criarConfirmar } from "@comum/ui/dialogo";
 import { h } from "@comum/ui/dom";
 import { OP_RESTAURADO } from "@comum/ui/modalIframe";
@@ -50,7 +50,13 @@ async function iniciarModal(): Promise<void> {
   try {
     rpc = await conexao;
     const ctx = await rpc.chamar<ContextoApp>("contexto");
-    aplicarTemaDoContexto(document.documentElement, ctx);
+    // Segue o SEI (modo noturno do SEI Pro e cor da barra), como o Processos em Lote.
+    const html = document.documentElement;
+    aplicarTemaDoContexto(html, ctx);
+    const rpcAba = rpc;
+    acompanharTemaDoPainel(document, {
+      aoDesligar: async () => aplicarTemaDoContexto(html, await rpcAba.chamar<ContextoApp>("contexto")),
+    });
     const ponte = rpc;
     app = new AppAcoesLote(raiz, {
       rpc: ponte,
