@@ -56,6 +56,7 @@ import { montarDiagnostico, type Diagnostico } from "./diagnostico";
 import { cartaoDeErro } from "./erro-ui";
 import { envelopar } from "../seguranca/envelope";
 import { secaoRotinas } from "./rotinas-ui";
+import { secaoArquivo, type OpcoesArquivoUi } from "./arquivo-ui";
 import { aoAvisar, aplicarConfigDoSync, aplicarDoSync, CHAVE_MIGRADO, espelharConfig, ESPELHOS, unirNaPrimeiraVez } from "./espelho";
 import {
   baixarColecao,
@@ -236,6 +237,10 @@ class App {
 
   /** Redesenhos da configuração aberta, para o que vem do sync aparecer na hora. */
   private redesenharConfig: Array<() => void> = [];
+  /** Backup em arquivo: a Tarefa 4 liga ao controle real; `null` esconde a seção. */
+  private opcoesArquivoUi(): OpcoesArquivoUi | null {
+    return null;
+  }
 
   /** Servidores MCP que o usuário ligou (ver `mcp/conectores.ts`). */
   private conectores: Conector[] = [];
@@ -1196,9 +1201,11 @@ class App {
       pedirPermissaoDeAviso: () => this.pedirPermissaoDeAviso(),
     });
     const secaoRotinasEl = rotinasUI.elemento;
+    const arquivoUI = this.opcoesArquivoUi() ? secaoArquivo(this.opcoesArquivoUi()!) : null;
+    const secaoArquivoEl = arquivoUI?.elemento ?? null;
     // Enquanto a configuração está aberta, o que chega do sync redesenha as
     // listas; ao fechar, os redesenhos saem (o DOM deixou de existir).
-    this.redesenharConfig = [() => rotinasUI.redesenhar(), () => conectoresUI.redesenhar()];
+    this.redesenharConfig = [() => rotinasUI.redesenhar(), () => conectoresUI.redesenhar(), ...(arquivoUI ? [() => arquivoUI.redesenhar()] : [])];
 
     // ------------------------------------------------- memória da unidade
     const usarMemoria = h("input", { type: "checkbox", class: "switch", ...(this.config.memoria ? { checked: true } : {}) });
@@ -1569,7 +1576,7 @@ class App {
               h(
                 "span",
                 {},
-                "A configura\u00E7\u00E3o do agente acompanha a sua conta do navegador: instru\u00E7\u00F5es, regras, rotinas, mem\u00F3ria, conectores e fluxos aparecem nos seus outros computadores. Ficam S\u00D3 aqui a chave do servi\u00E7o de IA, os tokens dos conectores, o texto das skills coladas \u00E0 m\u00E3o (as do GitHub viajam pelo endere\u00E7o) e as conversas.",
+                "A configura\u00E7\u00E3o do agente acompanha a sua conta do navegador: instru\u00E7\u00F5es, regras, rotinas, mem\u00F3ria, conectores e fluxos aparecem nos seus outros computadores. Ficam S\u00D3 aqui a chave do servi\u00E7o de IA, os tokens dos conectores, o texto das skills coladas \u00E0 m\u00E3o (as do GitHub viajam pelo endere\u00E7o) e as conversas. Se o backup em arquivo estiver ligado, tudo isso vai para o arquivo (a chave e os tokens s\u00F3 se voc\u00EA marcar essa op\u00E7\u00E3o).",
               ),
             ),
             h(
@@ -1585,6 +1592,7 @@ class App {
           ),
           secaoRotinasEl,
         ),
+        secaoArquivoEl ? grupo("Backup em arquivo", h("small", {}, "Opcional"), secaoArquivoEl) : null,
         h("div", { class: "nota atencao rodape-modal" }, icone("alerta", 15), h("span", {}, RESPONSABILIDADE)),
       ],
       acoes: [status, obrigatorio ? null : h("button", { onclick: () => dlg.close() }, "Cancelar"), salvar],
