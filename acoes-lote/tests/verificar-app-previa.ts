@@ -287,6 +287,45 @@ export async function verificarAppPrevia(): Promise<void> {
     checar("sigiloso pulado", (linhaDe(el, "5001").textContent ?? "").includes("Sigiloso"));
   }
 
+  secao("previa: prévia atrasada depois do Voltar");
+  {
+    const e = estado([{ acao: "excluir" }], 3);
+    let solta!: () => void;
+    const porta = new Promise<void>((r) => {
+      solta = r;
+    });
+    const rpcLento = {
+      async chamar<T>(): Promise<T> {
+        await porta;
+        return { situacao: "pulado", erro: "Atrasado." } as T;
+      },
+    };
+    const doc = instalarDom('<html><body><div id="r"></div></body></html>');
+    const antiga = montarPrevia(
+      doc,
+      e,
+      { voltar: () => undefined, executar: () => undefined },
+      { rpc: rpcLento, confirmar: async () => true },
+    );
+    doc.getElementById("r")!.append(antiga);
+    await tique(10);
+    botao(antiga, "Voltar")!.click();
+    e.selecionados = new Set(["1002", "1003"]);
+    const nova = montarPrevia(
+      doc,
+      e,
+      { voltar: () => undefined, executar: () => undefined },
+      { rpc: rpcFalso(() => ok("ok")).rpc, confirmar: async () => true },
+    );
+    const planosNovos = e.planos;
+    await tique(40);
+    solta();
+    await tique(40);
+    checar("planos novos intactos", e.planos === planosNovos && e.planos.every((p) => p.etapas[0]!.situacao === "pendente"));
+    igual("confirmacao conta os 2", resumoConfirmacao(e.planos, e.etapas), "Excluir 2 documentos? Isso não pode ser desfeito.");
+    void nova;
+  }
+
   secao("previa: senha no app, fora do estado");
   {
     const doc = instalarDom('<html><body><div id="r"></div></body></html>');

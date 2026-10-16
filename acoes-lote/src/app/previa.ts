@@ -89,7 +89,10 @@ export function resumoConfirmacao(planos: PlanoDoc[], etapas: ParamsEtapa[]): st
 
 export function montarPrevia(doc: Document, e: EstadoApp, acoes: AcoesPrevia, deps: DepsPrevia): HTMLElement {
   const sel = e.linhas.filter((l) => e.selecionados.has(l.id));
-  e.planos = planejar(sel, e.etapas, e.sigiloso);
+  // Cópia local: uma prévia atrasada nunca escreve nos planos de outra montagem que reatribuiu `planos`.
+  const planos = planejar(sel, e.etapas, e.sigiloso);
+  e.planos = planos;
+  let executorAtual: { cancelar(): void } | null = null;
   /** Resposta de prévia já recebida, por id do documento. */
   const previas = new Map<string, { resumo: string; mudancas: Mudanca[] }>();
   let rodando = false;
@@ -135,7 +138,7 @@ export function montarPrevia(doc: Document, e: EstadoApp, acoes: AcoesPrevia, de
 
   function desenhar(): void {
     lista.replaceChildren(
-      ...e.planos.map((p) =>
+      ...planos.map((p) =>
         h(
           "section",
           { class: "al-previa-doc" },
@@ -144,19 +147,19 @@ export function montarPrevia(doc: Document, e: EstadoApp, acoes: AcoesPrevia, de
         ),
       ),
     );
-    const etapas = e.planos.reduce((n, p) => n + p.etapas.length, 0);
-    const pulados = e.planos.reduce((n, p) => n + p.etapas.filter((x) => x.situacao === "pulado").length, 0);
-    total.textContent = `${plural(e.planos.length, "documento", "documentos")} · ${plural(etapas, "etapa", "etapas")} · ${plural(pulados, "pulado", "pulados")}`;
+    const etapas = planos.reduce((n, p) => n + p.etapas.length, 0);
+    const pulados = planos.reduce((n, p) => n + p.etapas.filter((x) => x.situacao === "pulado").length, 0);
+    total.textContent = `${plural(planos.length, "documento", "documentos")} · ${plural(etapas, "etapa", "etapas")} · ${plural(pulados, "pulado", "pulados")}`;
     aviso.textContent = parou ?? "";
     novamente.hidden = !parou;
-    const algoParaFazer = e.planos.some((p) => proximaEtapa(p) !== null);
+    const algoParaFazer = planos.some((p) => proximaEtapa(p) !== null);
     executar.disabled = rodando || !!parou || !algoParaFazer || semSenha;
     dica.textContent = semSenha ? "Digite a senha da assinatura na configuração." : "";
   }
 
   /** Documentos que ainda pedem prévia: primeira etapa pendente com RPC e sem resposta. */
   const faltantes = (): number[] =>
-    e.planos.flatMap((p, k) => {
+    planos.flatMap((p, k) => {
       const i = proximaEtapa(p);
       return i !== null && !SEM_PREVIA.has(p.etapas[i]!.acao) && !previas.has(p.doc.id) ? [k] : [];
     });
@@ -172,7 +175,7 @@ export function montarPrevia(doc: Document, e: EstadoApp, acoes: AcoesPrevia, de
       pausaMs: () => 0,
       aoMudar: () => vivo && desenhar(),
       async processar(k) {
-        const p = e.planos[k]!;
+        const p = planos[k]!;
         const i = proximaEtapa(p)!;
         let r: RespostaPrevia;
         try {
@@ -189,10 +192,11 @@ export function montarPrevia(doc: Document, e: EstadoApp, acoes: AcoesPrevia, de
           executor.pausar();
           return { situacao: "erro", erro: r.erro, parar: true };
         }
-        e.planos[k] = registrar(p, i, { situacao: r.situacao, mensagem: r.erro });
+        if (vivo && e.planos === planos) planos[k] = registrar(p, i, { situacao: r.situacao, mensagem: r.erro });
         return { situacao: r.situacao === "pulado" ? "ok" : "erro", erro: r.erro };
       },
     });
+    executorAtual = executor;
     await executor.iniciar();
     rodando = false;
     if (vivo) desenhar();
@@ -201,13 +205,15 @@ export function montarPrevia(doc: Document, e: EstadoApp, acoes: AcoesPrevia, de
   novamente.addEventListener("click", () => void rodar());
   voltar.addEventListener("click", () => {
     vivo = false;
+    executorAtual?.cancelar();
     acoes.voltar();
   });
   async function aoExecutar(): Promise<void> {
     if (executar.disabled) return;
-    const texto = resumoConfirmacao(e.planos, e.etapas);
+    const texto = resumoConfirmacao(planos, e.etapas);
     if (texto !== null && !(await deps.confirmar(texto, "Executar"))) return;
     vivo = false;
+    executorAtual?.cancelar();
     acoes.executar();
   }
   executar.addEventListener("click", () => void aoExecutar());
