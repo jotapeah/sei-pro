@@ -3,6 +3,9 @@ import { TABELAS, GRUPOS, camposDaLinha, buscarCampo, type Contexto } from './le
 import { destacar, limpar } from './destaque';
 export const OCULTA = 'spro-pesquisa-oculta';
 export const LEGENDA = 'data-spro-filtro';
+/** Atributo do <html> lido pela grade do Controle (outro content script): a tabela nativa fica escondida com ela ativa. */
+export const ATRIBUTO_GRADE = 'data-spro-grade';
+export const ATRIBUTO_TERMO = 'data-spro-pesquisa-rapida';
 /** Linha oculta não pode continuar selecionada: Enviar/Concluir em lote atingiria um processo invisível. */
 function desmarcar(linha: Element) {
   for (const marca of linha.querySelectorAll<HTMLInputElement>('input[type="checkbox"]:checked')) {
@@ -21,6 +24,7 @@ export function iniciar(doc: Document, contexto: Contexto, campo = () => buscarC
   let timer: ReturnType<typeof setTimeout> | undefined;
   let procura: ReturnType<typeof setInterval> | undefined;
   const observer = doc.defaultView?.MutationObserver ? new doc.defaultView.MutationObserver(agendar) : null;
+  const observarGrade = doc.defaultView?.MutationObserver ? new doc.defaultView.MutationObserver(agendar) : null;
   function observar() {
     if (ligada && doc.body)
       observer?.observe(doc.body, {
@@ -66,8 +70,12 @@ export function iniciar(doc: Document, contexto: Contexto, campo = () => buscarC
     observer?.disconnect();
     if (ligada) adotarCampo();
     const termos = ligada ? tokens(input?.value ?? '') : [];
+    // Com a grade nova ativa, quem mostra os processos é ela: entrega o termo e deixa a tabela nativa intacta.
+    const naGrade = contexto === 'lista' && doc.documentElement.hasAttribute(ATRIBUTO_GRADE);
+    if (naGrade && termos.length) doc.documentElement.setAttribute(ATRIBUTO_TERMO, termos.join(' '));
+    else doc.documentElement.removeAttribute(ATRIBUTO_TERMO);
     if (contexto === 'lista') {
-      for (const tabela of doc.querySelectorAll(TABELAS)) {
+      for (const tabela of naGrade ? [] : doc.querySelectorAll(TABELAS)) {
         let grupo: Element[] = [];
         let temProcessos = false;
         let visivel = false;
@@ -104,10 +112,15 @@ export function iniciar(doc: Document, contexto: Contexto, campo = () => buscarC
         if (termos.length && total) legenda?.setAttribute(LEGENDA, `${mostradas} de ${total} já carregados`);
         else legenda?.removeAttribute(LEGENDA);
       }
-      if (!termos.length) for (const el of doc.querySelectorAll(`.${OCULTA}`)) el.classList.remove(OCULTA);
+      if (!termos.length || naGrade) {
+        for (const el of doc.querySelectorAll(`.${OCULTA}`)) el.classList.remove(OCULTA);
+        for (const el of doc.querySelectorAll(`[${LEGENDA}]`)) el.removeAttribute(LEGENDA);
+      }
     }
     destacar(doc, termos, contexto === 'lista');
     observar();
+    // A grade liga e desliga depois do módulo: reavalia quando a bandeira muda.
+    if (ligada) observarGrade?.observe(doc.documentElement, { attributes: true, attributeFilter: [ATRIBUTO_GRADE] });
   }
   function agendar() {
     if (!ligada || encerrado) return;
@@ -125,6 +138,7 @@ export function iniciar(doc: Document, contexto: Contexto, campo = () => buscarC
     clearTimeout(timer);
     clearInterval(procura);
     observer?.disconnect();
+    observarGrade?.disconnect();
     soltarCampo();
   }
   return {

@@ -85,6 +85,19 @@ await teste('app: a busca filtra e o chip aparece; remover o chip restaura', asy
   assert.equal(qa(app, '.spro-chip').length, 0);
   app.fechar();
 });
+await teste('app: o filtro externo (pesquisa rápida) soma-se à busca sem alterá-la nem criar chip, e vazio limpa', async () => {
+  const { app } = await montar();
+  assert.equal(linhas(app).length, 10);
+  app.definirFiltroExterno('bruno');
+  assert.equal(linhas(app).length, 1);
+  assert.equal(qa(app, '.spro-chip').length, 0);
+  assert.equal(q<HTMLInputElement>(app, '.spro-busca').value, '');
+  assert.match(q(app, '.spro-status').textContent!, /filtro da pesquisa rápida: bruno/);
+  app.definirFiltroExterno('');
+  assert.equal(linhas(app).length, 10);
+  assert.doesNotMatch(q(app, '.spro-status').textContent!, /pesquisa rápida/);
+  app.fechar();
+});
 await teste('app: filtro rápido liga e desliga o termo', async () => {
   const { app } = await montar();
   const atrasados = qa(app, '.spro-rapido').find((b) => b.textContent === 'Atrasados')!;

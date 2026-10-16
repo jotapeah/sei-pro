@@ -319,3 +319,23 @@ await teste('iframe oculto de checagem do SEI Pro não recebe o módulo', () => 
   });
   assert.equal(contextoDaPagina(oculto), null);
 });
+await teste('com a grade nova ativa o termo vai para o <html> e a tabela nativa fica intacta; sem ela, volta a filtrar', async () => {
+  const d = lista();
+  const c = iniciar(d, 'lista');
+  try {
+    d.documentElement.setAttribute('data-spro-grade', '');
+    c.configurar(true);
+    digitar(d, 'João');
+    await esperar();
+    assert.equal(d.documentElement.getAttribute('data-spro-pesquisa-rapida'), 'joao');
+    assert.equal(oculta(d, 'p2'), false);
+    assert.equal(oculta(d, 'g2'), false);
+    d.documentElement.removeAttribute('data-spro-grade');
+    digitar(d, 'João');
+    await esperar();
+    assert.equal(d.documentElement.hasAttribute('data-spro-pesquisa-rapida'), false);
+    assert.equal(oculta(d, 'p2'), true);
+  } finally {
+    c.fechar();
+  }
+});

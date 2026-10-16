@@ -186,7 +186,9 @@ export function criarApp(d: DepsApp) {
 
   // ---------- estado ----------
   const comId = (): Processo[] => comIdade(todos, idade);
-  const filtrados = (): Processo[] => filtrarPorBusca(comId(), visao.busca, ctx());
+  /** Termo da pesquisa rápida do SEI (módulo Pesquisa Rápida): soma-se à busca da visão sem alterá-la nem gravá-la. */
+  let filtroExterno = '';
+  const filtrados = (): Processo[] => filtrarPorBusca(comId(), `${visao.busca} ${filtroExterno}`.trim(), ctx());
   const ordenados = (): Processo[] => ordenar(filtrados(), visao.ordem, ctx());
 
   function alterar(p: Partial<Visao>) {
@@ -365,6 +367,7 @@ export function criarApp(d: DepsApp) {
 
   function renderStatus(n: number) {
     const partes = [`${n} de ${todos.length} processo${todos.length === 1 ? '' : 's'}`];
+    if (filtroExterno) partes.push(`filtro da pesquisa rápida: ${filtroExterno}`);
     const totalSei = d.inicial.totais.recebidos + d.inicial.totais.gerados;
     if (carregando && progresso) partes.push(`carregando ${progresso.grupo} (${progresso.paginasLidas}/${progresso.paginasTotal})…`);
     else if (!completo && totalSei > todos.length) partes.push(`o SEI informa ${totalSei}; os demais não foram carregados`);
@@ -649,6 +652,8 @@ export function criarApp(d: DepsApp) {
       raiz.classList.toggle('spro-escuro', escuro);
     },
     definirNomesCompletos: (v: boolean) => { nomesCompletos = v; render(); },
+    /** Filtro vindo da pesquisa rápida do SEI; vazio limpa. */
+    definirFiltroExterno: (texto: string) => { const novo = texto.trim(); if (novo === filtroExterno) return; filtroExterno = novo; render(); },
     sincronizar,
     /** So para os testes: registra o par de uma pagina como se o carregador a tivesse lido. */
     registrarSelecaoParaTeste: (g: Grupo | 'detalhado', n: number, sel: SelecaoDaPagina) => void selecoesPaginas.set(chavePagina(g, n), sel),

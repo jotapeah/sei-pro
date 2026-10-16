@@ -32,6 +32,7 @@ import cssGrade from './style.css';
 import cssPagina from './pagina.css';
 
 const OPCAO = 'gradecontrole';
+const ATRIBUTO_PESQUISA = 'data-spro-pesquisa-rapida';
 
 function noControle(): boolean {
   return new URL(location.href).searchParams.get('acao') === 'procedimento_controlar';
@@ -54,6 +55,7 @@ let remontagens = 0;
 let nomesCompletos = false;
 let vigiaHost: MutationObserver | null = null;
 let pararTema: (() => void) | null = null;
+let vigiaPesquisa: MutationObserver | null = null;
 let domPronto = document.readyState !== 'loading';
 
 function ancora(): Element | null {
@@ -139,6 +141,7 @@ function montar() {
     anotar: async (protocolo, a) => void (await definirAnotacao(sei, protocolo, a, { aplicar: true })),
   });
   app.definirNomesCompletos(nomesCompletos);
+  acompanharPesquisaRapida(app);
   // O tema do SEI pode mudar com a grade aberta (opcoes do Estilo Avancado 2, tema do sistema).
   pararTema?.();
   pararTema = aoMudarEsquemaSei(document, () => app?.definirTema(escuro()));
@@ -149,6 +152,18 @@ function montar() {
     vigia?.pronta();
     if (estaAtiva(document)) marcarPronta(document);
   }).catch((e) => voltarNativa(String(e)));
+}
+
+/**
+ * A Pesquisa Rápida (outro content script, mundo isolado próprio) não alcança as linhas da grade: com ela ativa a
+ * tabela nativa fica escondida. O termo digitado viaja por um atributo do `<html>`, o único canal comum aos dois mundos.
+ */
+function acompanharPesquisaRapida(alvo: App) {
+  vigiaPesquisa?.disconnect();
+  const ler = () => alvo.definirFiltroExterno(document.documentElement.getAttribute(ATRIBUTO_PESQUISA) ?? '');
+  ler();
+  vigiaPesquisa = new window.MutationObserver(ler);
+  vigiaPesquisa.observe(document.documentElement, { attributes: true, attributeFilter: [ATRIBUTO_PESQUISA] });
 }
 
 /**
@@ -171,6 +186,7 @@ function guardarHost() {
       remontagens += 1;
       app.fechar();
       app = null;
+      vigiaPesquisa?.disconnect(); vigiaPesquisa = null;
       for (const h of document.querySelectorAll('#spro-grade')) h.remove();
       if (estaAtiva(document) || ligada) montar();
     }, 150);
@@ -218,6 +234,7 @@ function configurar(valor: boolean) {
     gravarDica(localStorage, false);
     pararBotao?.(); pararBotao = null;
     vigiaHost?.disconnect();
+    vigiaPesquisa?.disconnect(); vigiaPesquisa = null;
     app?.fechar(); app = null;
     vigia?.pronta();
     desativar(document);
