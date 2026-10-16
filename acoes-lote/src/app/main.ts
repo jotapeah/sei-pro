@@ -9,6 +9,7 @@
 import { esperarConexaoDaAba } from "@comum/ponte/conexaoDaAba";
 import type { Rpc, Tratador } from "@comum/ponte/rpc";
 import { aplicarTemaDoContexto } from "@comum/tema/painel";
+import { criarAbrirModal, criarConfirmar } from "@comum/ui/dialogo";
 import { h } from "@comum/ui/dom";
 import { CANAL_ACOES_LOTE } from "../modelo/constantes";
 import { AppAcoesLote, type ContextoApp } from "./app";
@@ -40,7 +41,7 @@ async function iniciarModal(): Promise<void> {
     rpc = await conexao;
     const ctx = await rpc.chamar<ContextoApp>("contexto");
     aplicarTemaDoContexto(document.documentElement, ctx);
-    await new AppAcoesLote(raiz, { rpc, ctx, fechar: () => dlg.close() }).iniciar();
+    await new AppAcoesLote(raiz, { rpc, ctx, fechar: () => dlg.close(), confirmar: criarConfirmar(criarAbrirModal()) }).iniciar();
   } catch (e) {
     raiz.replaceChildren(
       h("p", { class: "spro-lista-erro" }, `Não foi possível abrir as Ações em Lote: ${e instanceof Error ? e.message : String(e)}`),

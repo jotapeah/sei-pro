@@ -1,7 +1,7 @@
 /**
  * O app das Ações em Lote (a janela dentro do iframe): estado compartilhado entre as telas e a troca delas.
  * Não toca o navegador direto (aba do SEI e fechar chegam por `DepsApp`), e por isso roda inteiro nos testes
- * com linkedom. Seleção e configuração existem; a prévia é um marcador que a Task 9 substitui.
+ * com linkedom. Seleção, configuração e prévia existem; a execução é um marcador que a Task 10 substitui.
  */
 
 import type { Rpc } from "@comum/ponte/rpc";
@@ -12,6 +12,7 @@ import type { ParamsEtapa, PlanoDoc } from "../modelo/fila";
 import type { Filtro } from "../modelo/filtros";
 import type { ContextoAcoes } from "../pagina/contexto";
 import { montarConfiguracao } from "./configuracao";
+import { montarPrevia } from "./previa";
 import { montarSelecao } from "./selecao";
 
 export type Tela = "selecao" | "configuracao" | "previa" | "execucao" | "resultado";
@@ -90,6 +91,8 @@ export interface DepsApp {
   rpc: Pick<Rpc, "chamar">;
   ctx: ContextoApp;
   fechar(): void;
+  /** Confirmação de ação destrutiva (modal com Confirmar). Sem ela, a execução nunca é confirmada. */
+  confirmar?(texto: string, rotuloOk?: string): Promise<boolean>;
 }
 
 const mensagem = (e: unknown): string => (e instanceof Error ? e.message : String(e));
@@ -97,6 +100,8 @@ const mensagem = (e: unknown): string => (e instanceof Error ? e.message : Strin
 export class AppAcoesLote {
   tela: Tela = "selecao";
   estado: EstadoApp | null = null;
+  /** Só na memória: vai da configuração à execução e nunca entra em EstadoApp, no lote nem em storage. */
+  private senha: string | undefined;
   private readonly conteudo: HTMLElement;
   private readonly subtitulo: HTMLElement;
 
@@ -164,16 +169,43 @@ export class AppAcoesLote {
         montarConfiguracao(this.raiz.ownerDocument, e, {
           rpc: this.d.rpc,
           voltar: () => this.mostrar("selecao"),
-          // A prévia é da Task 9: ela recebe a senha por aqui e a guarda só onde decidir (nunca em EstadoApp).
-          previa: () => this.mostrar("previa"),
+          previa: (senha) => this.abrirPrevia(senha),
         }),
       );
     } else if (tela === "previa") {
       this.conteudo.replaceChildren(
-        h("p", { class: "al-nota" }, "A prévia será montada na próxima etapa."),
-        h("button", { type: "button", class: "spro-botao", onclick: () => this.mostrar("configuracao") }, "Voltar"),
+        montarPrevia(
+          this.raiz.ownerDocument,
+          e,
+          {
+            voltar: () => {
+              this.senha = undefined;
+              this.mostrar("configuracao");
+            },
+            executar: () => this.executar(),
+          },
+          { rpc: this.d.rpc, senha: this.senha, confirmar: (t, r) => this.d.confirmar?.(t, r) ?? Promise.resolve(false) },
+        ),
       );
+    } else if (tela === "execucao") {
+      this.conteudo.replaceChildren(h("p", { class: "al-nota" }, "A execução será montada na próxima etapa."));
     }
+  }
+
+  /** A senha da assinatura digitada na configuração, para a execução (Task 10). */
+  get senhaAssinatura(): string | undefined {
+    return this.senha;
+  }
+
+  /** Configuração pronta: guarda a senha e mostra a prévia. */
+  abrirPrevia(senha?: string): void {
+    this.senha = senha;
+    this.mostrar("previa");
+  }
+
+  /** Prévia confirmada: a Task 10 troca o marcador pela tela de execução (lê `senhaAssinatura`). */
+  executar(): void {
+    this.mostrar("execucao");
   }
 
   private configurar(acao?: AcaoId): void {

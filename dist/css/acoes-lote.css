@@ -1955,3 +1955,36 @@ table.al-documentos tr.al-marcada td {
   opacity: 0.5;
   cursor: default;
 }
+.al-previa {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.al-previa-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 50vh;
+  overflow: auto;
+}
+.al-previa-doc {
+  padding: 6px 8px;
+  border: 1px solid var(--spro-borda);
+  border-radius: 6px;
+}
+.al-previa-titulo {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+.al-previa-etapas,
+.al-previa-mudancas {
+  margin: 0;
+  padding-left: 18px;
+}
+.al-previa-etapa[data-situacao="pulado"],
+.al-previa-etapa[data-situacao="erro"] {
+  color: var(--spro-perigo, #c62828);
+}
+.al-previa-aviso:empty {
+  display: none;
+}
