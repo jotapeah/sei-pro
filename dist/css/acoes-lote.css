@@ -1785,10 +1785,29 @@ html[data-minimizado] #app {
   margin: 0;
   color: var(--spro-suave);
 }
+/*
+ * align-items: start: item de grid esticado tem altura definida, e um filho com height em % (a busca do
+ * sei-comum) passava a medir a linha inteira dos filtros; a linha de datas transbordava para baixo dos Atalhos.
+ */
 .al-selecao {
   display: grid;
+  align-items: start;
   gap: 10px;
   min-width: 0;
+}
+/* A .spro-lista-busca foi feita para morar na .spro-lista-busca-caixa (height: 100%); aqui ela fica solta. */
+.al-filtros > .spro-lista-busca {
+  flex: 1 1 240px;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 10px;
+  background: var(--spro-fundo);
+  border: 1px solid var(--spro-borda-forte);
+  border-radius: var(--spro-raio);
+}
+.al-filtros > .spro-lista-busca:focus-visible {
+  border-color: var(--spro-destaque);
+  box-shadow: var(--spro-anel);
 }
 .al-filtros,
 .al-periodo,
