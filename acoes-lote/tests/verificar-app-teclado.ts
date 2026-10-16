@@ -107,6 +107,7 @@ export async function verificarAppTeclado(): Promise<void> {
     const doc = instalarDom('<html><body><div id="r"></div></body></html>');
     let fechou = 0;
     const textos: string[] = [];
+    const rotulos: Array<[string?, string?]> = [];
     let resposta = false;
     const rpc = {
       async chamar<T>(op: string): Promise<T> {
@@ -120,8 +121,9 @@ export async function verificarAppTeclado(): Promise<void> {
       rpc,
       ctx: CTX,
       fechar: () => void fechou++,
-      confirmar: async (t) => {
+      confirmar: async (t, ok, desistir) => {
         textos.push(t);
+        rotulos.push([ok, desistir]);
         return resposta;
       },
       agora: () => 1_000_000,
@@ -137,6 +139,7 @@ export async function verificarAppTeclado(): Promise<void> {
     tecla(doc, "Escape");
     await tique(5);
     igual("pergunta o texto combinado", textos, ["O lote foi pausado. Fechar as Ações em Lote?"]);
+    igual("botoes Fechar e Voltar", rotulos, [["Fechar", "Voltar"]]);
     igual("o lote foi pausado", (app as unknown as { controle: { estado: string } }).controle.estado, "pausado");
     igual("dispensar nao fecha", fechou, 0);
     igual("segue na execucao", app.tela, "execucao");

@@ -83,7 +83,7 @@ const ok = (resumo: string, mudancas: unknown[] = []) => ({ situacao: "ok", resu
 function montar(e: EstadoApp, previa: Resp, senha?: string, confirmaCom = true) {
   const doc = instalarDom('<html><body><div id="r"></div></body></html>');
   const f = rpcFalso(previa);
-  const ev = { voltou: 0, executou: 0, confirmacoes: [] as string[] };
+  const ev = { voltou: 0, executou: 0, confirmacoes: [] as string[], rotulos: [] as Array<[string?, string?]> };
   const el = montarPrevia(
     doc,
     e,
@@ -98,8 +98,9 @@ function montar(e: EstadoApp, previa: Resp, senha?: string, confirmaCom = true) 
     {
       rpc: f.rpc,
       senha,
-      confirmar: async (texto) => {
+      confirmar: async (texto, rotuloOk, rotuloDesistir) => {
         ev.confirmacoes.push(texto);
+        ev.rotulos.push([rotuloOk, rotuloDesistir]);
         return confirmaCom;
       },
     },
@@ -249,6 +250,7 @@ export async function verificarAppPrevia(): Promise<void> {
     botao(el, "Executar")!.click();
     await tique(5);
     igual("pediu confirmacao", ev.confirmacoes, ["Excluir 2 documentos? Isso não pode ser desfeito."]);
+    igual("botoes Executar e Voltar (nunca Cancelar, ambiguo com Cancelar a assinatura)", ev.rotulos, [["Executar", "Voltar"]]);
     igual("executou", ev.executou, 1);
     botao(el, "Voltar")!.click();
     igual("voltou", ev.voltou, 1);

@@ -74,8 +74,13 @@ export async function verificarDialogo(): Promise<void> {
     "rotulo padrao Confirmar, texto como texto",
     !!botao(doc.body, "Confirmar") && doc.querySelector("dialog p")?.textContent === "Texto <b>do</b> usuario",
   );
+  checar("padrao continua Cancelar no botao de desistir", !!botao(doc.body, "Cancelar") && !botao(doc.body, "Voltar"));
   botao(doc.body, "Confirmar")!.click();
   await padrao;
+  const volta = confirmar("Cancelar a assinatura de 1 documento?", "Executar", "Voltar");
+  checar("rotulo proprio do botao de desistir", !!botao(doc.body, "Voltar") && !botao(doc.body, "Cancelar"));
+  botao(doc.body, "Voltar")!.click();
+  checar("Voltar: false", (await volta) === false && !doc.querySelector("dialog"));
   restaurar();
 
   secao("dialogo: baixar e escolher arquivo");

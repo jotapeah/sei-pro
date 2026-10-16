@@ -99,8 +99,11 @@ export interface DepsApp {
   rpc: Pick<Rpc, "chamar">;
   ctx: ContextoApp;
   fechar(): void;
-  /** Confirmação de ação destrutiva (modal com Confirmar). Sem ela, a execução nunca é confirmada. */
-  confirmar?(texto: string, rotuloOk?: string): Promise<boolean>;
+  /**
+   * Confirmação de ação destrutiva (modal com Confirmar). Sem ela, a execução nunca é confirmada. O botão de
+   * desistir é sempre "Voltar": "Cancelar" seria ambíguo com "Cancelar a assinatura/o documento".
+   */
+  confirmar?(texto: string, rotuloOk?: string, rotuloDesistir?: string): Promise<boolean>;
   /** Lote em andamento (chrome.storage.local). Sem ele, um repositório em memória (nada sobrevive ao fechar). */
   repo?: RepositorioAcoes;
   /** Id desta instância (para o aviso de outra aba); gerado uma vez quando ausente. */
@@ -214,7 +217,7 @@ export class AppAcoesLote {
     this.perguntando = true;
     this.controle.pausar();
     try {
-      if (await this.d.confirmar("O lote foi pausado. Fechar as Ações em Lote?", "Fechar")) this.fechar();
+      if (await this.d.confirmar("O lote foi pausado. Fechar as Ações em Lote?", "Fechar", "Voltar")) this.fechar();
     } finally {
       this.perguntando = false;
     }
@@ -344,7 +347,7 @@ export class AppAcoesLote {
             },
             executar: () => this.executar(),
           },
-          { rpc: this.d.rpc, senha: this.senha, confirmar: (t, r) => this.d.confirmar?.(t, r) ?? Promise.resolve(false) },
+          { rpc: this.d.rpc, senha: this.senha, confirmar: (t, r, v) => this.d.confirmar?.(t, r, v) ?? Promise.resolve(false) },
         ),
       );
     } else if (tela === "execucao" && this.controle) {

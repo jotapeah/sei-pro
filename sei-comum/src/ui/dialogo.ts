@@ -57,9 +57,14 @@ export function criarAbrirModal(g: { aoAbrir?: () => void; aoFechar?: () => void
   };
 }
 
-/** "Confirmar" ou "Cancelar" (Esc e X também cancelam). */
-export function criarConfirmar(abrirModal: AbrirModal): (texto: string, rotuloOk?: string) => Promise<boolean> {
-  return (texto, rotuloOk = "Confirmar") =>
+/**
+ * "Confirmar" ou "Cancelar" (Esc e X também cancelam). `rotuloDesistir` troca o "Cancelar" quando ele seria
+ * ambíguo (ex.: "Cancelar a assinatura?" pede "Voltar").
+ */
+export function criarConfirmar(
+  abrirModal: AbrirModal,
+): (texto: string, rotuloOk?: string, rotuloDesistir?: string) => Promise<boolean> {
+  return (texto, rotuloOk = "Confirmar", rotuloDesistir = "Cancelar") =>
     new Promise<boolean>((ok) => {
       let resposta = false;
       let modal: { fechar(): void } | null = null;
@@ -70,7 +75,7 @@ export function criarConfirmar(abrirModal: AbrirModal): (texto: string, rotuloOk
         h(
           "div",
           { class: "spro-dialogo-rodape" },
-          h("button", { type: "button", class: "spro-botao", onclick: () => modal?.fechar() }, "Cancelar"),
+          h("button", { type: "button", class: "spro-botao", onclick: () => modal?.fechar() }, rotuloDesistir),
           h(
             "button",
             {

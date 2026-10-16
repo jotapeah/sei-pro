@@ -22,7 +22,7 @@ export interface DepsPrevia {
   rpc: Pick<Rpc, "chamar">;
   /** Só para saber se Assinar pode executar; nunca é exibida nem guardada aqui. */
   senha?: string | undefined;
-  confirmar(texto: string, rotuloOk?: string): Promise<boolean>;
+  confirmar(texto: string, rotuloOk?: string, rotuloDesistir?: string): Promise<boolean>;
 }
 
 interface Mudanca {
@@ -215,7 +215,7 @@ export function montarPrevia(doc: Document, e: EstadoApp, acoes: AcoesPrevia, de
     executando = true;
     executar.disabled = true;
     const texto = resumoConfirmacao(planos, e.etapas);
-    if (texto !== null && !(await deps.confirmar(texto, "Executar"))) {
+    if (texto !== null && !(await deps.confirmar(texto, "Executar", "Voltar"))) {
       executando = false;
       desenhar();
       return;
