@@ -23,6 +23,8 @@ export interface Andamento {
   /** "dd/mm/aaaa hh:mm" como o SEI exibe. */
   data: string;
   unidade: string;
+  /** Nome (descri\u00E7\u00E3o) da unidade, do `title` do link da sigla. A sigla do hist\u00F3rico pode diferir da do cabe\u00E7alho; o nome n\u00E3o. */
+  unidadeNome?: string;
   usuario: string;
   descricao: string;
 }
@@ -37,7 +39,8 @@ function lerAndamentos(p: Pagina): { itens: Andamento[]; total: number } {
     .filter((tr) => tr.querySelector("td"))
     .map((tr) => {
       const td = [...tr.querySelectorAll("td")];
-      return { data: textoDe(td[0]), unidade: textoDe(td[1]), usuario: textoDe(td[2]), descricao: textoDe(td[3]) };
+      const nome = td[1]?.querySelector("a")?.getAttribute("title") ?? "";
+      return { data: textoDe(td[0]), unidade: textoDe(td[1]), ...(nome ? { unidadeNome: nome } : {}), usuario: textoDe(td[2]), descricao: textoDe(td[3]) };
     });
   return { itens, total };
 }

@@ -10,6 +10,8 @@ export interface AndamentoSei {
   /** "dd/mm/aaaa hh:mm", como o SEI mostra. */
   data: string;
   unidade: string;
+  /** Nome (descrição) da unidade, quando o histórico o traz. */
+  unidadeNome?: string;
   usuario: string;
   descricao: string;
 }
@@ -43,8 +45,22 @@ const REMETIDO = /^Processo remetido pela unidade\s+(.+)$/i;
  * `andamentos` vem do mais recente para o mais antigo. `minhaUnidade` é a sigla da unidade atual: só valem os
  * registros dela. Cada dado só existe quando o andamento o traz; o que falta fica de fora (nunca é chutado).
  */
-export function extrairDados(andamentos: AndamentoSei[], minhaUnidade: string): Omit<DadosAndamento, 'consultadoEm'> {
-  const minha = minhaUnidade.trim();
+export interface UnidadeAtual {
+  sigla: string;
+  nome?: string;
+}
+
+/**
+ * A sigla do histórico nem sempre é a do cabeçalho (no SEI MJ o cabeçalho mostra "TESTE" e o histórico, "Uni-Teste"),
+ * mas o nome da unidade é o mesmo nos dois: vale a sigla OU o nome.
+ */
+export function ehMinhaUnidade(a: AndamentoSei, minha: UnidadeAtual): boolean {
+  if (a.unidade.trim() === minha.sigla.trim() && minha.sigla.trim()) return true;
+  return !!minha.nome?.trim() && a.unidadeNome?.trim() === minha.nome.trim();
+}
+
+export function extrairDados(andamentos: AndamentoSei[], minhaUnidade: UnidadeAtual | string): Omit<DadosAndamento, 'consultadoEm'> {
+  const minha: UnidadeAtual = typeof minhaUnidade === 'string' ? { sigla: minhaUnidade } : minhaUnidade;
   const r: Omit<DadosAndamento, 'consultadoEm'> = {};
   const geracoes = andamentos.filter((a) => GERADO.test(a.descricao.trim()));
   // A geração é única; se houver mais de uma linha, vale a mais antiga (a última da lista).
@@ -52,7 +68,7 @@ export function extrairDados(andamentos: AndamentoSei[], minhaUnidade: string): 
   const dataGer = ger ? dataDoAndamento(ger.data) : undefined;
   if (dataGer) r.autuacao = dataGer;
   for (const a of andamentos) {
-    if (a.unidade.trim() !== minha) continue;
+    if (!ehMinhaUnidade(a, minha)) continue;
     const desc = a.descricao.trim();
     const data = dataDoAndamento(a.data);
     if (!data) continue;

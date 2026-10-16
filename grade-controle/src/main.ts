@@ -140,7 +140,7 @@ function montar() {
       document.dispatchEvent(new CustomEvent('spro-prazos-abrir'));
     },
     anotar: async (protocolo, a) => void (await definirAnotacao(sei, protocolo, a, { aplicar: true })),
-    consultarAndamento: (p, sinal) => consultarAndamento(sei, p, contexto.unidade.sigla, sinal),
+    consultarAndamento: (p, sinal) => consultarAndamento(sei, p, { sigla: contexto.unidade.sigla, nome: contexto.unidade.nome }, sinal),
   });
   app.definirNomesCompletos(nomesCompletos);
   acompanharPesquisaRapida(app);

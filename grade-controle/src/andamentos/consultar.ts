@@ -7,13 +7,13 @@ import { andamentosDoLink } from '../../../sei-nucleo/src/dominio/historico';
 import { linkDaAcao } from '../../../sei-nucleo/src/links/links';
 import { ErroSei } from '../../../sei-nucleo/src/sessao/erros';
 import type { Sei } from '../../../sei-nucleo/src/sei';
-import { extrairDados } from '../modelo/andamentos';
+import { extrairDados, type UnidadeAtual } from '../modelo/andamentos';
 import type { Processo } from '../modelo/tipos';
 import { ErroSessaoColeta, type DadosColeta } from './coletar';
 
 const LIMITE_ANDAMENTOS = 500;
 
-export async function consultarAndamento(sei: Sei, p: Pick<Processo, 'link'>, minhaUnidade: string, sinal: AbortSignal): Promise<DadosColeta | null> {
+export async function consultarAndamento(sei: Sei, p: Pick<Processo, 'link'>, minhaUnidade: UnidadeAtual, sinal: AbortSignal): Promise<DadosColeta | null> {
   if (!p.link) return null;
   try {
     let pagina = await sei.http.obter(p.link, { sinal });

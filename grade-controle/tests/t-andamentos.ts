@@ -39,6 +39,16 @@ teste('andamentos: processo gerado na propria unidade vale como recebimento; rea
   assert.equal(r.autuacao, '2026-09-28');
 });
 
+teste('andamentos: a sigla do historico pode diferir da do cabecalho: vale tambem o nome da unidade (SEI MJ)', () => {
+  const mj: AndamentoSei[] = [
+    { data: '16/10/2026 19:01', unidade: 'Uni-Teste', unidadeNome: 'Unidade para testes do sistema SEI', usuario: 'x', descricao: 'Processo recebido na unidade' },
+    { data: '28/08/2026 17:50', unidade: 'Uni-Teste', unidadeNome: 'Unidade para testes do sistema SEI', usuario: 'x', descricao: 'Processo remetido pela unidade Suporte-SEI' },
+    { data: '28/08/2026 17:49', unidade: 'Suporte-SEI', unidadeNome: 'Suporte', usuario: 'x', descricao: 'Processo recebido na unidade' },
+  ];
+  assert.deepEqual(extrairDados(mj, { sigla: 'TESTE', nome: 'Unidade para testes do sistema SEI' }), { recebimento: '2026-10-16', envio: '2026-08-28', unidadeEnvio: 'Suporte-SEI' });
+  assert.deepEqual(extrairDados(mj, { sigla: 'TESTE' }), {}, 'sem o nome, sigla diferente nao casa');
+});
+
 teste('andamentos: faixas de data', () => {
   assert.equal(faixaDaData('2026-10-11', '2026-10-11'), 'hoje');
   assert.equal(faixaDaData('2026-10-05', '2026-10-11'), 'semana');
