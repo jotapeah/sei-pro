@@ -81,6 +81,35 @@ Ao final, a tabela traz o número de cada processo, com os botões **Copiar com 
 > - **Processos com situação incerta**: se a rede ou o SEI falhar no meio da criação, não há como saber se o processo foi criado. Para não gerar duplicidade, o SEI Pro **não tenta de novo** essas linhas: elas aparecem como incertas e pedem conferência no Controle de Processos.
 > - **Gerar links permanentes destes processos**: abre a ferramenta Pesquisar Link Permanente já preenchida com os números criados.
 
+### Modelos salvos
+
+Na linha **Modelo**, acima do tipo de processo, é possível guardar a configuração de um lote para usar de novo.
+
+> - **Salvar como modelo…**: guarda o tipo de processo, o nível de acesso, a hipótese legal e a pausa com um nome. Salvar com um nome que já existe substitui aquele modelo.
+> - **Aplicar**: ao escolher um modelo na lista, o formulário é preenchido com o que ele guardou.
+> - **Renomear** e **Apagar**: aparecem quando um modelo está escolhido. Apagar um modelo não muda os campos do formulário.
+> - O modelo **nunca guarda as linhas** (especificações, interessados, observações): só a forma do lote.
+> - O modelo também guarda as **ações de "Depois de criar"** (veja abaixo).
+> - Se o tipo de processo ou a hipótese legal do modelo **não existe mais** na unidade, o SEI Pro avisa e não aplica aquele campo.
+
+### Depois de criar
+
+Na tela de resultado, o painel **Depois de criar** oferece três ações opcionais e independentes sobre os processos criados:
+
+> - **Incluir em bloco interno**: escolha um dos blocos internos da unidade.
+> - **Aplicar marcador**: escolha o marcador e, se quiser, um texto.
+> - **Acompanhar**: inclui os processos no acompanhamento especial, com grupo e observação opcionais.
+
+Escolha as ações e clique em **Aplicar**. O resultado de cada ação aparece por processo, na coluna **Depois de criar** da tabela (e no CSV).
+
+> - As ações rodam **só nos processos criados com número confirmado**. Processo com situação incerta fica de fora, e o painel informa quantos ficaram de fora e por quê.
+> - **Já estava**: o processo já tinha aquele marcador, aquele acompanhamento ou já estava no bloco. Nada é duplicado.
+> - **Não confirmado: confira o bloco**: a inclusão em bloco pode ter sido gravada, mas o SEI não confirmou. Confira o bloco antes de tentar de novo; o SEI Pro não reenvia esses processos para o mesmo bloco.
+> - **Tentar de novo as falhas**: repete só o que, com certeza, não foi feito.
+> - O **bloco** precisa estar na **primeira página** da lista de blocos, e o **processo** precisa estar na página do **Controle de Processos**. Processo que não aparece ali é informado como fora da página, e a inclusão deve ser feita pelo Controle de Processos.
+
+Quando o lote começou com um modelo escolhido, o botão **Guardar estas ações no modelo** grava no modelo as ações marcadas no painel. Da próxima vez que esse modelo for usado, o painel já abre com essas ações escolhidas, mas **nada é aplicado sem clicar em Aplicar**. Se o marcador, o grupo ou o bloco do modelo não existe mais na unidade, aquela ação vem desligada, com o aviso "não existe mais nesta unidade".
+
 ## Próximo item
 
 > [Ferramentas na tela de Pesquisa: visualização rápida, baixar e copiar resultados](../pages/PESQUISA.md)
