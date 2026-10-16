@@ -95,7 +95,7 @@ export async function incluirProcessosEmBlocoInterno(sei: Sei, idBloco: string, 
 - Consumes: Task 18; `definirMarcador`, `definirAcompanhamento`, `listarOpcoes`, `marcadoresDoProcesso` do núcleo.
 - Produces (operações RPC novas, tudo JSON simples):
   - `posAcaoOpcoes({ protocolo })` → `{ marcadores: {id,nome}[], grupos: {id,nome}[], blocos: {id,numero,descricao}[], avisos: string[] }`; cada lista é independente (erro numa vira lista vazia + aviso); `protocolo` = qualquer processo criado.
-  - `posAcao({ acao: "marcador"|"acompanhar"|"bloco", protocolo?, idProcedimento?, marcador?, texto?, grupo?, observacao?, idBloco? })` → `{ situacao: "ok"|"ja-estava"|"erro", mensagem }` para marcador/acompanhar (um processo por chamada; `aplicar: true`; marcador já igual => `ja-estava`).
+  - `posAcao({ acao: "marcador"|"acompanhar", protocolo, idProcedimento, marcador?, texto?, grupo?, observacao? })` → `{ situacao: "ok"|"ja-estava"|"erro", mensagem, parar? }` (um processo por chamada; `aplicar: true`; marcador já igual => `ja-estava`; bloco NÃO passa por aqui, tem a operação própria abaixo).
   - `posAcaoBloco({ idBloco, idsProcedimento: string[] })` → `ResultadoInclusao[]` (uma chamada para todos os ids: um POST).
 - Regra: nenhuma operação aceita linha incerta (o app só envia processos `ok` com `idProcedimento` e número reais; se `idProcedimento` vier vazio => `erro` sem rede). Erros do núcleo viram `erro` com a mensagem, nunca excecão pela ponte. Sessão expirada => `{situacao:"erro", parar:true}`.
 
