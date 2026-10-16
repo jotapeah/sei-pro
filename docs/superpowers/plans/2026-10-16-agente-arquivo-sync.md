@@ -242,3 +242,14 @@ Detalhes:
 - [ ] **Step 2:** `npm run verificar` → `ok`.
 - [ ] **Step 3:** Commit `docs(agente): privacidade e histórico do backup em arquivo`.
 - [ ] **Step 4:** Avisar o Pedro: a política de privacidade (`PRIVACY_POLICY`) é editada pela web e precisa do mesmo ajuste lá — não editar o arquivo local.
+
+---
+
+## Resultado da prova no navegador (16/10/2026)
+
+Chrome for Testing 1234 (headless) com o `dist/` instalado; o "arquivo do usuário" foi um arquivo do OPFS guardado no banco `agenteIA_arquivo` como se tivesse sido escolhido (o seletor nativo não é automatizável). 22 de 22 verificações:
+
+- Computador A: o arquivo é gravado ao abrir o painel com memória, regras, conversa e instruções; sem a chave com a caixa desmarcada; status `ok`; caixa marcada leva a chave; regra apagada vira lápide em ~15 s; a chave já gravada é preservada ao desmarcar; regra acrescentada no arquivo com carimbo maior entra ao reabrir, e a apagada não volta; nenhum erro de página.
+- Computador B (perfil limpo, Importar pela seção "Backup em arquivo"): regras, memória, instruções e conversa importadas; a chave de B preservada; mensagem "Backup importado…" exibida; nenhum erro de página.
+- Não provado no navegador: o seletor nativo ("Criar arquivo"/"Usar arquivo existente") e o pedido de permissão ("Reconectar arquivo") — exigem clique humano.
+- Observado na montagem da prova: gravar direto no `chrome.storage.local` sem passar pelos `guardar*` (sem espelhar) faz a sincronia da conta remover o item na abertura seguinte — comportamento anterior do espelho, não desta mudança.
