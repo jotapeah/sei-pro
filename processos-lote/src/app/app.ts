@@ -567,6 +567,19 @@ export class AppProcessosLote {
       return;
     }
     if (this.destruido) return;
+    this.marcarMinimizado(m);
+  }
+
+  /**
+   * A aba ja restaurou a janela (clique no item do menu com a pastilha, `OP_RESTAURADO` do modalIframe): o app so
+   * volta a desenhar a tela cheia, sem pedir nada a aba.
+   */
+  restaurado(): void {
+    if (this.destruido || !this.minimizado) return;
+    this.marcarMinimizado(false);
+  }
+
+  private marcarMinimizado(m: boolean): void {
     this.minimizado = m;
     const html = this.raiz.ownerDocument.documentElement;
     if (m) html.setAttribute("data-minimizado", "1");

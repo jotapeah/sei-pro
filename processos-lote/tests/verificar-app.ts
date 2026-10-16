@@ -489,6 +489,34 @@ export async function verificarApp(): Promise<void> {
     m.app.destruir();
   }
 
+  secao("App: a aba restaurou a janela (clique no menu com a pastilha) e o app volta à tela cheia");
+  {
+    const s = segurar<ResultadoCriar>();
+    const m = montar({ roteiro: (esp) => (esp === "Beta" ? s.p : criado(esp, ++numeroSeq)) });
+    await m.app.iniciar();
+    await m.configurar("Alfa\nBeta");
+    m.clicar("Ver prévia");
+    m.clicar("Iniciar");
+    await ate(() => m.quantas("Beta") === 1);
+    m.clicar("Minimizar");
+    await tique();
+    checar("minimizado", m.doc.documentElement.hasAttribute("data-minimizado"));
+    m.app.restaurado();
+    checar(
+      "restaurado pela aba: sem pastilha, conteúdo visível, sem novo pedido à aba",
+      !m.doc.documentElement.hasAttribute("data-minimizado") &&
+        !!m.raiz.querySelector(".pl-pastilha[hidden]") &&
+        m.visivel("Cancelar") &&
+        m.t.minimizou.join() === "true",
+      m.t.minimizou,
+    );
+    m.app.restaurado();
+    checar("restaurado de novo: nada muda", !m.doc.documentElement.hasAttribute("data-minimizado"));
+    s.soltar(criado("Beta", ++numeroSeq));
+    await ate(() => !!m.raiz.querySelector(".pl-resultado"));
+    m.app.destruir();
+  }
+
   secao("App: fechar durante a execução pausa e mantém o registro");
   {
     const s = segurar<ResultadoCriar>();

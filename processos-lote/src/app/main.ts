@@ -10,10 +10,11 @@
 
 import { areaChrome } from "@comum/armazenamento/area";
 import { esperarConexaoDaAba } from "@comum/ponte/conexaoDaAba";
-import type { Rpc } from "@comum/ponte/rpc";
+import type { Rpc, Tratador } from "@comum/ponte/rpc";
 import { acompanharTemaDoPainel, aplicarTemaDoContexto } from "@comum/tema/painel";
 import { baixar, criarAbrirModal, criarConfirmar } from "@comum/ui/dialogo";
 import { h } from "@comum/ui/dom";
+import { OP_RESTAURADO } from "@comum/ui/modalIframe";
 import { CANAL_PROCESSOS_LOTE, CHAVE_ENTRADA_LINK } from "../modelo/constantes";
 import { RepositorioModelos } from "../modelos";
 import { RepositorioLote } from "../repositorio";
@@ -27,8 +28,10 @@ const temaDoEndereco = parametros.get("tema");
 if (temaDoEndereco === "claro" || temaDoEndereco === "escuro") document.documentElement.dataset.tema = temaDoEndereco;
 const raiz = document.getElementById("app")!;
 
-// O ouvinte da porta e registrado ja, antes do `load` do iframe, que e quando o content script conecta.
-const conexao = esperarConexaoDaAba(CANAL_PROCESSOS_LOTE);
+// O ouvinte da porta e registrado ja, antes do `load` do iframe, que e quando o content script conecta. Os
+// tratadores (o que a aba pede ao app) sao lidos a cada pedido: o `restaurado` entra quando o app existir.
+const tratadoresDoApp: Record<string, Tratador> = {};
+const conexao = esperarConexaoDaAba(CANAL_PROCESSOS_LOTE, tratadoresDoApp);
 
 const mensagem = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
@@ -108,6 +111,12 @@ async function iniciarModal(): Promise<void> {
       // Uso unico: o Link Permanente le e apaga ao abrir.
       gravarEntradaLink: (texto) => area.gravar({ [CHAVE_ENTRADA_LINK]: texto }),
     });
+    // A aba restaurou a janela (clique no item do menu com a pastilha): o app sai da pastilha.
+    const appAberto = app;
+    tratadoresDoApp[OP_RESTAURADO] = () => {
+      appAberto.restaurado();
+      return true;
+    };
     mostrar();
     await app.iniciar();
   } catch (e) {
