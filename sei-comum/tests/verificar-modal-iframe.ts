@@ -207,6 +207,26 @@ export async function verificarModalIframe(): Promise<void> {
     iframes(docT).length === 0 && !controle.aberto && docT.body.style.overflow === "",
   );
 
+  // Minimizado + clique no item do menu: restaura a janela e avisa o app (que desenha a tela cheia de novo).
+  pedirAbertura(docT);
+  const avisosRestaurar: number[] = [];
+  iframes(docT)[0]?.dispatchEvent(evento(docT, "load"));
+  const appR = criarRpc(ladoApp!, { restaurado: () => avisosRestaurar.push(1) });
+  await appR.chamar("minimizar", { minimizado: true });
+  checar("minimizado antes do clique no menu", controle.minimizado);
+  pedirAbertura(docT);
+  await tique(5);
+  checar(
+    "clique no menu com o modal minimizado: restaura (tela cheia, rolagem travada)",
+    !controle.minimizado && iframes(docT).length === 1 && docT.body.style.overflow === "hidden",
+  );
+  checar("o app e avisado da restauracao", avisosRestaurar.length === 1);
+  pedirAbertura(docT);
+  await tique(5);
+  checar("aberto e nao minimizado: novo clique nao avisa de novo", avisosRestaurar.length === 1 && iframes(docT).length === 1);
+  controle.fechar();
+  await tique();
+
   pedirAbertura(docT);
   const app3 = await carregar();
   await lanca(() => app3.chamar("fechar"));

@@ -156,6 +156,9 @@ function devolverFocoAoMenu(doc: Document, seletor: string): void {
   item.focus({ preventScroll: true });
 }
 
+/** Pedido que a aba faz ao app quando restaura a janela minimizada (clique no item do menu). */
+export const OP_RESTAURADO = "restaurado";
+
 export function criarControleModal(doc: Document, c: ConfigModal, d: DepsControleModal): ControleModal {
   let atual: Aberto | null = null;
   const agendar = d.agendar ?? agendarComTimeout;
@@ -185,6 +188,12 @@ export function criarControleModal(doc: Document, c: ConfigModal, d: DepsControl
 
   function abrir(): void {
     if (atual) {
+      // Minimizado, o clique no item do menu restaura a janela. Quem desenha a pastilha é o app (só ele sabe que
+      // pediu para minimizar), então ele é avisado; um app sem o tratador `restaurado` só recusa o pedido.
+      if (atual.modal.minimizado) {
+        atual.modal.minimizar(false);
+        void atual.rpc?.chamar(OP_RESTAURADO, undefined, 3000).catch(() => undefined);
+      }
       atual.modal.iframe.focus();
       return;
     }
