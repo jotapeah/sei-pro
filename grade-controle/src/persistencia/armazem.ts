@@ -8,11 +8,15 @@
 import type { Area } from '../../../sei-comum/src/armazenamento/area';
 import { type EstadoIdade, estadoVazio, normalizarEstado } from '../modelo/idade';
 import { normalizarVisao, visaoPadrao } from '../modelo/visoes';
+import { type DadosAndamento, estaValido } from '../modelo/andamentos';
 import type { Visao } from '../modelo/tipos';
 
 export const CHAVE_INDICE = 'spro_grade_v_ids';
 export const chaveVisao = (id: string) => `spro_grade_v:${id}`;
 export const chaveUnidade = (unidade: string) => `spro_grade:${unidade || 'x'}`;
+/** O cache do andamento é por unidade E por usuário: o recebimento e o envio mudam de quem olha. */
+export const chaveAndamentos = (unidade: string, usuario: string) => `spro_grade_and:${unidade || 'x'}:${usuario || 'x'}`;
+export const MAX_ANDAMENTOS = 5000;
 
 export interface EstadoUnidade {
   visao: Visao;
@@ -34,9 +38,21 @@ function normalizarUnidade(bruto: unknown): EstadoUnidade {
   };
 }
 
-export function criarArmazem(areas: { local: Area; sync: Area }, unidade: string) {
+const DATA = /^\d{4}-\d{2}-\d{2}$/;
+function normalizarAndamento(v: unknown): DadosAndamento | null {
+  if (!v || typeof v !== 'object') return null;
+  const b = v as Record<string, unknown>;
+  if (typeof b.consultadoEm !== 'number' || !Number.isFinite(b.consultadoEm)) return null;
+  const d: DadosAndamento = { consultadoEm: b.consultadoEm };
+  for (const c of ['autuacao', 'recebimento', 'envio'] as const) if (typeof b[c] === 'string' && DATA.test(b[c] as string)) d[c] = b[c] as string;
+  if (typeof b.unidadeEnvio === 'string' && b.unidadeEnvio) d.unidadeEnvio = b.unidadeEnvio.slice(0, 120);
+  return d;
+}
+
+export function criarArmazem(areas: { local: Area; sync: Area }, unidade: string, usuario = '') {
   const { local, sync } = areas;
   const chave = chaveUnidade(unidade);
+  const chaveAnd = chaveAndamentos(unidade, usuario);
 
   async function lerEstado(): Promise<EstadoUnidade> {
     return normalizarUnidade((await local.obter(chave))[chave]);
@@ -68,7 +84,27 @@ export function criarArmazem(areas: { local: Area; sync: Area }, unidade: string
     if (orfas.length) await sync.remover(orfas);
   }
 
+  /** Só o que ainda vale (24 h); o resto é descartado na leitura. */
+  async function lerAndamentos(agora: number): Promise<Record<string, DadosAndamento>> {
+    const bruto = (await local.obter(chaveAnd))[chaveAnd];
+    const itens = bruto && typeof bruto === 'object' ? ((bruto as { itens?: unknown }).itens as Record<string, unknown> | undefined) : undefined;
+    const r: Record<string, DadosAndamento> = {};
+    if (!itens || typeof itens !== 'object') return r;
+    for (const [id, v] of Object.entries(itens)) {
+      const d = normalizarAndamento(v);
+      if (d && estaValido(d, agora)) r[id] = d;
+    }
+    return r;
+  }
+  async function gravarAndamentos(itens: Record<string, DadosAndamento>): Promise<void> {
+    const ids = Object.keys(itens);
+    const aparado = ids.length > MAX_ANDAMENTOS ? Object.fromEntries(ids.sort((a, b) => itens[b]!.consultadoEm - itens[a]!.consultadoEm).slice(0, MAX_ANDAMENTOS).map((id) => [id, itens[id]!])) : itens;
+    await local.gravar({ [chaveAnd]: { itens: aparado } });
+  }
+
   return {
+    lerAndamentos,
+    gravarAndamentos,
     lerEstado,
     gravarVisao: (visao: Visao) => atualizar({ visao }),
     gravarIdade: (idade: EstadoIdade) => atualizar({ idade }),

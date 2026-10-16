@@ -781,3 +781,104 @@ await teste('app: a celula de anotacao leva a nota bruta para a dica rica (sem t
   assert.ok(c.getAttribute('data-tip-autor'));
   app.fechar();
 });
+
+// ---------- agrupar por andamento (datas e unidade de envio) ----------
+const escolherAgrupamento = (app: { host: HTMLElement }, texto: string) => {
+  qa(app, 'button.spro-combo').find((c) => c.getAttribute('aria-label') === 'Agrupar por')!.click();
+  [...app.host.shadowRoot!.querySelectorAll<HTMLElement>('[role=option]')].find((o) => o.textContent!.includes(texto))!.click();
+};
+const esperarAte = async (f: () => boolean) => { for (let i = 0; i < 400 && !f(); i += 1) await new Promise((r) => setTimeout(r, 5)); };
+
+await teste('andamento: sem o consultor, os agrupamentos por andamento nem aparecem', async () => {
+  const { app } = await montar();
+  qa(app, 'button.spro-combo').find((c) => c.getAttribute('aria-label') === 'Agrupar por')!.click();
+  const rotulos = [...app.host.shadowRoot!.querySelectorAll('[role=option]')].map((o) => o.textContent);
+  assert.ok(!rotulos.some((t) => /recebimento|autuação|envio/i.test(t!)), rotulos.join('|'));
+  app.fechar();
+});
+
+await teste('andamento: escolher o agrupamento avisa antes, so consulta depois do aval e guarda o resultado por 24 h', async () => {
+  const local = areaMemoria();
+  const consultados: string[] = [];
+  const consultar = async (p: { id: string; protocolo: string }) => { consultados.push(p.id); return { recebimento: '2026-10-10', unidadeEnvio: 'GABIN' }; };
+  const a = await montar({ armazem: criarArmazem({ local, sync: areaMemoria() }, 'u', 'ana'), consultarAndamento: consultar as never, andamentoPausaMs: 0, andamentoSimultaneas: 2 });
+  escolherAgrupamento(a.app, 'Data de recebimento');
+  await tick();
+  const dlg = dialogo(a.app);
+  assert.ok(dlg, 'abriu o aviso');
+  assert.match(dlg!.textContent!, /abrir o andamento de cada processo/);
+  assert.match(dlg!.textContent!, /Serão consultados \d+ processos?/);
+  assert.equal(consultados.length, 0, 'nada foi consultado antes do aval');
+  dlg!.querySelector<HTMLElement>('button.primario')!.click();
+  await esperarAte(() => q(a.app, '.spro-andamento').textContent!.startsWith('Andamento consultado'));
+  assert.ok(consultados.length > 0);
+  assert.equal(new Set(consultados).size, consultados.length, 'cada processo uma vez');
+  assert.match(q(a.app, '.spro-andamento').textContent!, /Andamento consultado agora há pouco/);
+  const grupos = qa(a.app, '.spro-grupo-titulo, .spro-grupo').map((g) => g.textContent).join('|');
+  assert.match(grupos, /Nos últimos 7 dias/);
+  a.app.fechar();
+
+  // Recarregar a pagina: o cache reaparece, sem aviso e sem nova consulta.
+  const antes = consultados.length;
+  const b = await montar({ armazem: criarArmazem({ local, sync: areaMemoria() }, 'u', 'ana'), consultarAndamento: consultar as never, andamentoPausaMs: 0 });
+  b.app.definirVisao({ agrupar: 'recebimento' });
+  await tick();
+  assert.equal(dialogo(b.app), null, 'com cache valido nao ha aviso');
+  assert.equal(consultados.length, antes, 'nada foi reconsultado');
+  assert.match(q(b.app, '.spro-andamento').textContent!, /Andamento consultado/);
+  assert.match(qa(b.app, '.spro-andamento button').map((x) => x.textContent).join(' '), /Atualizar/);
+  b.app.fechar();
+});
+
+await teste('andamento: desistir do aviso, sem nada guardado, volta ao agrupamento anterior', async () => {
+  const consultados: string[] = [];
+  const a = await montar({ consultarAndamento: (async (p: { id: string }) => { consultados.push(p.id); return {}; }) as never });
+  escolherAgrupamento(a.app, 'Unidade de envio');
+  await tick();
+  const dlg = dialogo(a.app)!;
+  dlg.querySelector<HTMLElement>('button[aria-label=Fechar]')!.click();
+  dlg.dispatchEvent(new (dlg.ownerDocument.defaultView as unknown as { Event: typeof Event }).Event('close')); // o linkedom nao dispara o 'close' do <dialog>
+  await tick(); await tick();
+  assert.equal(consultados.length, 0);
+  assert.equal(a.app.estado().visao.agrupar, 'nenhum');
+  a.app.fechar();
+});
+
+await teste('andamento: Cancelar para a consulta e o que ja foi lido fica', async () => {
+  let cancelar: (() => void) | null = null;
+  let n = 0;
+  const consultar = (p: { id: string }, sinal: AbortSignal) => new Promise<{ envio: string } | null>((res) => {
+    n += 1;
+    if (n > 3) { cancelar ??= () => undefined; sinal.addEventListener('abort', () => res(null)); return; }
+    res({ envio: '2026-10-01' });
+  });
+  const a = await montar({ consultarAndamento: consultar as never, andamentoPausaMs: 0, andamentoSimultaneas: 1 });
+  escolherAgrupamento(a.app, 'Data de envio');
+  await tick();
+  dialogo(a.app)!.querySelector<HTMLElement>('button.primario')!.click();
+  await esperarAte(() => /Consultando/.test(q(a.app, '.spro-andamento').textContent!) && n > 3);
+  assert.match(q(a.app, '.spro-andamento').textContent!, /Consultando o andamento dos processos… \d+ de \d+/);
+  qa(a.app, '.spro-andamento button').find((b) => b.textContent === 'Cancelar')!.click();
+  await esperarAte(() => !/Consultando/.test(q(a.app, '.spro-andamento').textContent!));
+  assert.match(q(a.app, '.spro-andamento').textContent!, /Andamento consultado|ainda não foi consultado/);
+  a.app.fechar();
+});
+
+await teste('andamento: o botao Atualizar pede novo aviso e reconsulta todos os processos', async () => {
+  const consultados: string[] = [];
+  const consultar = async (p: { id: string }) => { consultados.push(p.id); return { envio: '2026-10-01' }; };
+  const a = await montar({ consultarAndamento: consultar as never, andamentoPausaMs: 0 });
+  escolherAgrupamento(a.app, 'Data de envio');
+  await tick();
+  dialogo(a.app)!.querySelector<HTMLElement>('button.primario')!.click();
+  await esperarAte(() => q(a.app, '.spro-andamento').textContent!.startsWith('Andamento consultado'));
+  const primeira = consultados.length;
+  qa(a.app, '.spro-andamento button').find((b) => /Atualizar/.test(b.textContent!))!.click();
+  await tick();
+  assert.ok(dialogo(a.app), 'Atualizar avisa de novo');
+  assert.equal(consultados.length, primeira, 'so depois do aval');
+  dialogo(a.app)!.querySelector<HTMLElement>('button.primario')!.click();
+  await esperarAte(() => consultados.length >= primeira * 2);
+  assert.equal(consultados.length, primeira * 2, 'todos reconsultados');
+  a.app.fechar();
+});

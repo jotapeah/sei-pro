@@ -51,6 +51,15 @@ Abaixo da busca ficam os **filtros rápidos**: **Meus**, **Recebidos**, **Gerado
 
 A coluna **Na caixa** conta desde a **primeira vez que o SEI Pro viu o processo** na sua unidade, porque o SEI não informa a data de chegada.
 
+#### Agrupar por datas e unidade de envio (consulta o andamento)
+
+Quatro agrupamentos precisam de dados que o SEI **não mostra na lista**: **Data de autuação**, **Data de recebimento**, **Data de envio** e **Unidade de envio**. Para obtê-los, o SEI Pro abre o **andamento de cada processo**, um por um — por isso ele **avisa antes** e só consulta depois que você confirma.
+
+* **O aviso** diz quantos processos serão consultados e quais ficam de fora: os **não visualizados** (abrir o andamento de um processo ainda não visto o marcaria como visualizado ou recebido em seu nome) e os **sigilosos**. A consulta é só de leitura e pode ser **cancelada** a qualquer momento; os grupos vão aparecendo enquanto ela corre.
+* **O resultado fica guardado por 24 horas** neste navegador (por unidade e por usuário). Ao recarregar a página, o agrupamento reaparece na hora, **sem consultar de novo**.
+* **Uma faixa acima da lista** mostra há quanto tempo foi a consulta e traz o botão **Atualizar**, que consulta tudo outra vez (com novo aviso). Processos que chegaram depois da consulta ficam em *Sem informação* até você atualizar.
+* **O que cada agrupamento significa:** *Data de autuação* é quando o processo foi gerado; *Data de recebimento* é o último "Processo recebido na unidade" (ou reabertura) da **sua** unidade; *Data de envio* é a data em que a unidade anterior **enviou o processo à sua**, e *Unidade de envio* é essa unidade anterior. Os de data separam em faixas (hoje, 7, 30 e 90 dias). Quando o andamento não traz a informação, o processo fica em *Sem informação*.
+
 ### Quadro (Kanban)
 
 O botão **Quadro** troca a lista por colunas. Divida o quadro por **marcador** ou por **responsável** e **arraste o processo** de uma coluna para outra: o marcador (ou a atribuição) muda no SEI. Aparece um aviso com **Desfazer**. Dá para limitar quantos cartões cabem em cada coluna (a coluna cheia fica destacada) e separar o quadro em **raias por responsável**. Divisões por prazo e por tipo são só para ver.

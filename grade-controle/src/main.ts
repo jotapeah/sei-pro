@@ -16,6 +16,7 @@ import { baixar } from '../../sei-comum/src/ui/dialogo';
 import { listarOpcoes } from '../../sei-nucleo/src/dominio/opcoes';
 import { alterarProcesso } from '../../sei-nucleo/src/dominio/processo';
 import { atribuirProcesso, definirAnotacao, definirMarcador } from '../../sei-nucleo/src/dominio/acoesProcesso';
+import { consultarAndamento } from './andamentos/consultar';
 import { Sei, lerContexto } from '../../sei-nucleo/src/sei';
 import { paginaDe } from '../../sei-nucleo/src/sessao/pagina';
 import { enviarAcao } from './acoes/foraDaPagina';
@@ -75,7 +76,7 @@ function montar() {
   const sei = new Sei(location.href, () => paginaDe(document, location.href));
   const contexto = lerContexto(paginaDe(document, location.href));
   const unidade = contexto.unidade.id;
-  const armazem = criarArmazem({ local: areaChrome(chrome.storage.local, 'local'), sync: areaChrome(chrome.storage.sync, 'sync') }, String(unidade));
+  const armazem = criarArmazem({ local: areaChrome(chrome.storage.local, 'local'), sync: areaChrome(chrome.storage.sync, 'sync') }, String(unidade), contexto.usuario.login);
   // Uma carga interrompida (aba fechada no meio) pode ter deixado o SEI numa pagina que nao e a primeira: a tela
   // mostraria so um trecho. Volta para a primeira e recarrega uma unica vez.
   const fora = ['hdnRecebidosPaginaAtual', 'hdnGeradosPaginaAtual', 'hdnDetalhadoPaginaAtual'].some((id) => (document.getElementById(id) as HTMLInputElement | null)?.value && (document.getElementById(id) as HTMLInputElement).value !== '0');
@@ -139,6 +140,7 @@ function montar() {
       document.dispatchEvent(new CustomEvent('spro-prazos-abrir'));
     },
     anotar: async (protocolo, a) => void (await definirAnotacao(sei, protocolo, a, { aplicar: true })),
+    consultarAndamento: (p, sinal) => consultarAndamento(sei, p, contexto.unidade.sigla, sinal),
   });
   app.definirNomesCompletos(nomesCompletos);
   acompanharPesquisaRapida(app);

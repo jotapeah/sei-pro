@@ -1,6 +1,7 @@
 /** Agrupamento. Cada grupo traz chave estável (para lembrar o que o usuário recolheu) e rótulo. */
 import type { Ctx } from './contexto';
 import { diasNaCaixa, diasParaVencer, resumoDoPrazo } from './derivados';
+import { FAIXAS_DATA, faixaDaData } from './andamentos';
 import type { AgruparPor, Processo } from './tipos';
 
 export interface GrupoLista {
@@ -121,10 +122,24 @@ export function agrupar(processos: Processo[], por: AgruparPor, ctx: Ctx): Grupo
         pegar(m, f, FAIXAS_CAIXA.find((x) => x[0] === f)![1]).itens.push(p);
         break;
       }
+      case 'autuacao':
+      case 'recebimento':
+      case 'envio': {
+        const f = faixaDaData(ctx.andamentos?.[p.id]?.[por], ctx.hoje);
+        pegar(m, f, FAIXAS_DATA.find((x) => x[0] === f)![1]).itens.push(p);
+        break;
+      }
+      case 'unidadeEnvio': {
+        const u = ctx.andamentos?.[p.id]?.unidadeEnvio;
+        if (u) pegar(m, `u:${u}`, u).itens.push(p);
+        else pegar(m, 'sem', 'Sem informação').itens.push(p);
+        break;
+      }
     }
   }
   if (por === 'prazo') return fixos(m, FAIXAS_PRAZO);
   if (por === 'caixa') return fixos(m, FAIXAS_CAIXA);
+  if (por === 'autuacao' || por === 'recebimento' || por === 'envio') return fixos(m, FAIXAS_DATA);
   if (por === 'situacao') return fixos(m, [['novo', ''], ['lido', '']]);
   if (por === 'grupo') return fixos(m, [['recebidos', ''], ['gerados', '']]);
   if (por === 'anotacao') return fixos(m, [['prio', ''], ['com', ''], ['sem', '']]);
@@ -145,4 +160,8 @@ export const ROTULO_AGRUPAR: Record<AgruparPor, string> = {
   acompanhamento: 'Acompanhamento especial',
   retorno: 'Retorno programado',
   caixa: 'Tempo na caixa',
+  autuacao: 'Data de autuação',
+  recebimento: 'Data de recebimento',
+  envio: 'Data de envio',
+  unidadeEnvio: 'Unidade de envio',
 };

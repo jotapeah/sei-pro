@@ -204,3 +204,12 @@ kbd { padding: 0 5px; font: 12px var(--spro-mono); background: var(--spro-fundo-
 .spro-pi-contador { margin-left: auto; font-size: 11px; color: #666; }
 .spro-pi-estouro { color: var(--spro-perigo); font-weight: 700; }
 .spro-escuro .spro-pi-editor { color: #4b4b4b; }
+
+/* ---- Consulta do andamento (agrupar por data de recebimento, envio, autuacao e unidade de envio) ---- */
+.spro-andamento { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 0 0 8px; padding: 6px 10px; font-size: 12px; color: var(--spro-suave); background: var(--spro-fundo-2); border: 1px solid var(--spro-borda); border-radius: var(--spro-raio); }
+.spro-andamento[hidden] { display: none; }
+.spro-andamento progress { flex: 1 1 120px; max-width: 260px; height: 8px; accent-color: var(--spro-destaque); }
+.spro-andamento .spro-link { display: inline-flex; gap: 4px; align-items: center; }
+.spro-confirma-andamento p { margin: 0 0 10px; line-height: 1.45; }
+.spro-confirma-andamento ul { margin: 0 0 10px 18px; padding: 0; }
+.spro-confirma-andamento .spro-dialogo-rodape { margin-top: 14px; }

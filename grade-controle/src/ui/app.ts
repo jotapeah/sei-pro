@@ -27,6 +27,8 @@ import type { Grupo, SelecaoDaPagina } from '../modelo/tipos';
 import type { Fonte, Progresso } from '../paginas/carregar';
 import { carregarRestante } from '../paginas/carregar';
 import type { Armazem } from '../persistencia/armazem';
+import type { DadosColeta } from '../andamentos/coletar';
+import { criarAndamentos, ehAgrupamentoAndamento } from './andamentos';
 import { desenharQuadro } from './quadro';
 import { iconeGrade } from './icones';
 import { vigiarTitulos } from './dica';
@@ -57,6 +59,11 @@ export interface DepsApp {
   /** Pede ao modulo de prazos que abra o menu do prazo do processo. */
   abrirPrazo(id: string): void;
   anotar(protocolo: string, a: { texto: string; prioridade: boolean }): Promise<void>;
+  /** Consulta o andamento de um processo (datas e unidade de envio). Sem isso, os agrupamentos por andamento não existem. */
+  consultarAndamento?(p: Processo, sinal: AbortSignal): Promise<DadosColeta | null>;
+  /** Para os testes. */
+  andamentoSimultaneas?: number;
+  andamentoPausaMs?: number;
   /** Para os testes: não reagir ao relógio. */
   semDebounce?: boolean;
 }
@@ -115,7 +122,7 @@ export function criarApp(d: DepsApp) {
   const fila = criarFila(d.mover);
   const ctl = new AbortController();
 
-  const ctx = (): Ctx => ({ hoje: d.hoje(), agora: d.agora(), ...(d.eu ? { eu: d.eu } : {}), ...(visitaAnterior !== undefined ? { visitaAnterior } : {}) });
+  const ctx = (): Ctx => ({ hoje: d.hoje(), agora: d.agora(), ...(d.eu ? { eu: d.eu } : {}), ...(visitaAnterior !== undefined ? { visitaAnterior } : {}), ...(andamentos ? { andamentos: andamentos.dados() } : {}) });
 
   // ---------- DOM ----------
   const host = doc.createElement('div');
@@ -129,6 +136,15 @@ export function criarApp(d: DepsApp) {
   const estiloModulos = doc.createElement('style');
   sombra.append(estilo, estiloModulos, raiz);
   const pararTitulos = vigiarTitulos(sombra);
+  /** Datas e unidade de envio tiradas do andamento (só existe se quem montou a grade sabe consultá-lo). */
+  const andamentos = d.consultarAndamento
+    ? criarAndamentos({
+        sombra,
+        agora: () => d.agora(), armazem: d.armazem, consultar: (p, s) => d.consultarAndamento!(p, s),
+        processos: () => todos, aoMudar: () => render(), aviso: (t) => aviso(t),
+        simultaneas: d.andamentoSimultaneas, pausaMs: d.andamentoPausaMs, semDebounce: d.semDebounce,
+      })
+    : null;
 
   const busca = h('input', { type: 'search', class: 'spro-busca', placeholder: 'Buscar: texto, resp:ana, prazo:<7d, marcador:urgente...', 'aria-label': 'Buscar processos', spellcheck: 'false', autocomplete: 'off' });
   const chips = h('div', { class: 'spro-chips' });
@@ -143,8 +159,17 @@ export function criarApp(d: DepsApp) {
   const ORDENS: Array<[CampoOrdem, string]> = [['protocolo', 'Número do processo'], ['prazo', 'Prazo'], ['tipo', 'Tipo'], ['responsavel', 'Responsável'], ['marcador', 'Marcador'], ['caixa', 'Tempo na caixa'], ['parado', 'Parado há'], ['novo', 'Não visualizados']];
   const comboAgrupar = criarCombo({
     rotulo: 'Agrupar por', icone: 'camadas', classe: 'spro-combo-compacto', busca: false, vazio: 'Sem agrupamento',
-    opcoes: (Object.keys(ROTULO_AGRUPAR) as AgruparPor[]).map((k) => ({ valor: k, rotulo: k === 'nenhum' ? 'Sem agrupamento' : `Agrupar: ${ROTULO_AGRUPAR[k]}` })),
-    valor: ['nenhum'], aoMudar: ([v]) => alterar({ agrupar: (v ?? 'nenhum') as AgruparPor }),
+    opcoes: (Object.keys(ROTULO_AGRUPAR) as AgruparPor[])
+      .filter((k) => andamentos || !ehAgrupamentoAndamento(k))
+      .map((k) => ({ valor: k, rotulo: k === 'nenhum' ? 'Sem agrupamento' : `Agrupar: ${ROTULO_AGRUPAR[k]}`, ...(ehAgrupamentoAndamento(k) ? { descricao: 'Consulta o andamento de cada processo' } : {}) })),
+    valor: ['nenhum'],
+    aoMudar: ([v]) => {
+      const novo = (v ?? 'nenhum') as AgruparPor;
+      const anterior = visao.agrupar;
+      alterar({ agrupar: novo });
+      // Agrupar por andamento pede o aval do usuario (consulta processo a processo); se ele desiste e nada ha guardado, volta ao anterior.
+      if (andamentos && ehAgrupamentoAndamento(novo)) void andamentos.aoEscolherAgrupamento().then((ok) => { if (!ok && visao.agrupar === novo) alterar({ agrupar: anterior }); });
+    },
   });
   const comboOrdem = criarCombo({
     rotulo: 'Ordenar por', icone: 'ordenar', classe: 'spro-combo-compacto', busca: false, vazio: 'Ordem do SEI',
@@ -182,7 +207,7 @@ export function criarApp(d: DepsApp) {
       btnColunas, btnDensidade, btnVisoes, btnCsv, btnAjuda),
     chips,
     h('div', { class: 'spro-faixa' }, rapidos, fResp.el, fTipo.el, fMarc.el),
-    opcoesQuadro, ajuda, painel, status, lote, conteudo, avisos);
+    opcoesQuadro, ajuda, painel, status, ...(andamentos ? [andamentos.faixa] : []), lote, conteudo, avisos);
 
   // ---------- estado ----------
   const comId = (): Processo[] => comIdade(todos, idade);
@@ -428,6 +453,7 @@ export function criarApp(d: DepsApp) {
     btnColunas.hidden = visao.modo === 'quadro';
     renderQuadroCfg();
     renderChips();
+    andamentos?.definirAtivo(ehAgrupamentoAndamento(visao.agrupar) && visao.modo === 'tabela');
     renderConteudo();
     renderStatus(filtrados().length);
     renderLote();
@@ -620,6 +646,7 @@ export function criarApp(d: DepsApp) {
       salvas = await d.armazem.lerVisoes();
     } catch { /* sem preferências legíveis: segue com o padrão */ }
     idade = registrarVistos(idade, todos.map((p) => p.id), d.agora(), false);
+    if (andamentos) await andamentos.carregar();
     busca.value = visao.busca;
     atualizarEstilosModulos();
     for (const [id] of todos.map((p) => [p.id])) assinaturas.set(id!, assinaturaIcones(doc, id!));
@@ -637,6 +664,7 @@ export function criarApp(d: DepsApp) {
     fechar() {
       encerrado = true;
       ctl.abort();
+      andamentos?.fechar();
       clearTimeout(buscaTimer); clearTimeout(gravarTimer); clearTimeout(sincTimer);
       observadorNativo?.disconnect();
       observadorTamanho?.disconnect();

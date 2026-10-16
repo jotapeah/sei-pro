@@ -2,6 +2,16 @@
 
 ## ![SEI Pro Histórico de Versões](../img/icon-historico.png) Histórico de versões
 
+### Versão 3.5
+16/10/2026
+
+**Novo — agrupar o Novo Controle de Processos por datas e unidade de envio** (*SEI Pro Lab*, Chrome e Edge). O que o agrupamento do SEI Pro antigo fazia, refeito: [Data de autuação, Data de recebimento, Data de envio e Unidade de envio](../pages/GRADECONTROLE.md#agrupar-por-datas-e-unidade-de-envio-consulta-o-andamento).
+
+- **Avisa antes de consultar.** O SEI não mostra essas datas na lista: para agrupar, o SEI Pro abre o andamento de cada processo. O aviso diz quantos serão consultados e o que fica de fora (não visualizados e sigilosos), e a consulta só começa depois que você confirma.
+- **Cache de 24 horas.** Ao recarregar a página, o agrupamento reaparece sem consultar de novo. Uma faixa mostra há quanto tempo foi a consulta e traz o botão **Atualizar**.
+- **Com progresso e cancelamento.** Os grupos vão se completando enquanto a consulta corre, e ela para sozinha se a sessão do SEI cair.
+- **Sem os iframes ocultos do legado:** a consulta é direta e só de leitura, sem guardar nada na página do SEI.
+
 ### Versão 3.4
 16/10/2026
 

@@ -117,7 +117,11 @@ export type AgruparPor =
   | 'anotacao'
   | 'acompanhamento'
   | 'retorno'
-  | 'caixa';
+  | 'caixa'
+  | 'autuacao'
+  | 'recebimento'
+  | 'envio'
+  | 'unidadeEnvio';
 
 export type ModoVisao = 'tabela' | 'quadro';
 export type Densidade = 'compacta' | 'confortavel';

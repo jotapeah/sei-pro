@@ -24,7 +24,7 @@ export function visaoPadrao(): Visao {
   };
 }
 
-const AGRUPAR: Visao['agrupar'][] = ['nenhum', 'responsavel', 'tipo', 'marcador', 'prazo', 'situacao', 'grupo', 'anotacao', 'acompanhamento', 'retorno', 'caixa'];
+const AGRUPAR: Visao['agrupar'][] = ['nenhum', 'responsavel', 'tipo', 'marcador', 'prazo', 'situacao', 'grupo', 'anotacao', 'acompanhamento', 'retorno', 'caixa', 'autuacao', 'recebimento', 'envio', 'unidadeEnvio'];
 const CAMPOS: CriterioOrdem['campo'][] = ['protocolo', 'tipo', 'responsavel', 'marcador', 'prazo', 'caixa', 'parado', 'novo'];
 const COLUNAS_QUADRO: ConfigQuadro['colunas'][] = ['marcador', 'responsavel', 'prazo', 'tipo'];
 

@@ -23,7 +23,7 @@ export {
   marcadoresDoProcesso,
   type MarcadorProcesso,
 } from "./dominio/acoesProcesso";
-export { andamentos, type Andamento, type TipoHistorico } from "./dominio/historico";
+export { andamentos, andamentosDaArvore, andamentosDoLink, type Andamento, type TipoHistorico } from "./dominio/historico";
 export { lerCaixaDaPagina, lerLinhaCaixa, listarCaixa, type ProcessoNaCaixa } from "./dominio/caixa";
 export {
   localizarDocumento,
