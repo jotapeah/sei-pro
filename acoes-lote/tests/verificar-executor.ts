@@ -592,6 +592,41 @@ export async function verificarExecutor(): Promise<void> {
       erro: "Nenhum arquivo foi guardado para o ZIP.",
     });
   }
+  secao("Executor: HTML baixado com o charset coerente com os bytes (o SEI declara iso-8859-1)");
+  {
+    const SEI =
+      '<?xml version="1.0" encoding="iso-8859-1"?><html><head><meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1" /></head><body><p>vers\u00E3o</p></body></html>';
+    const conteudoSei = (async () => ({ titulo: "Despacho 1", numero: "0001234", html: SEI })) as never;
+    const confere = (nome: string, bytes: Uint8Array | undefined) => {
+      const texto = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      checar(`${nome}: bytes em UTF-8 com o acento`, texto.includes("<p>vers\u00E3o</p>"), texto);
+      checar(
+        `${nome}: declara utf-8 e nunca iso-8859-1`,
+        /charset=utf-8/.test(texto) && /encoding="utf-8"/.test(texto) && !/8859/i.test(texto),
+        texto,
+      );
+    };
+    const a = falso({ conteudo: conteudoSei });
+    await a.t.baixarArquivo({ numero: "0001234" });
+    confere("baixar arquivos", a.baixados[0]?.bytes);
+    const z = falso({ conteudo: conteudoSei });
+    await z.t.zipAdicionar({ numero: "0001234", loteId: "L" });
+    await z.t.zipFechar({ nome: "z" });
+    confere("zip", unzipSync(z.baixados[0]!.bytes)["0001234 - Despacho 1.html"]);
+    const semMeta = falso({
+      conteudo: (async () => ({
+        titulo: "D",
+        numero: "1",
+        html: "<html><head><title>x</title></head><body>\u00E7</body></html>",
+      })) as never,
+    });
+    await semMeta.t.baixarArquivo({ numero: "1" });
+    checar(
+      "sem declaracao: ganha meta charset utf-8 no head",
+      new TextDecoder().decode(semMeta.baixados[0]?.bytes).startsWith('<html><head><meta charset="utf-8"><title>'),
+      new TextDecoder().decode(semMeta.baixados[0]?.bytes),
+    );
+  }
   {
     const { t, baixados } = falso();
     await t.zipAdicionar({ numero: "0001234", loteId: "A" });

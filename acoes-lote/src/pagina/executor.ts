@@ -32,7 +32,7 @@ import { documentoTopo } from "@nucleo/sessao/pagina";
 import { ACOES, type AcaoId } from "../modelo/acoes";
 import { type LinhaDoc, linhasDaArvore, MOTIVO_SIGILOSO } from "../modelo/documentos";
 import { BLOCO_NAO_CONFIRMADO, type ItemLista, type ParamsEtapa } from "../modelo/fila";
-import { AcumuladorZip, baixarBytes, extensaoDe, nomeArquivo } from "../sei/download";
+import { AcumuladorZip, baixarBytes, extensaoDe, htmlEmUtf8, nomeArquivo } from "../sei/download";
 import type { ContextoAcoes } from "./contexto";
 
 /** As chamadas ao SEI, trocáveis nas provas para forçar cada desfecho sem rede. */
@@ -405,7 +405,7 @@ export function tratadoresAcoesLote(d: DepsExecutor): Record<string, Tratador> {
     }
     return {
       nome: nomeArquivo(r.numero, r.titulo, "html"),
-      bytes: new TextEncoder().encode(r.html ?? ""),
+      bytes: htmlEmUtf8(r.html ?? ""),
       tipo: "text/html;charset=utf-8",
     };
   };

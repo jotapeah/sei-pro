@@ -36,6 +36,23 @@ export function extensaoDe(nome: string): string {
   return m ? m[1].toLowerCase() : "";
 }
 
+/**
+ * HTML de documento interno em bytes UTF-8, declarando UTF-8. O SEI serve em ISO-8859-1 e declara isso no
+ * `<meta>` (e às vezes no `<?xml?>`); o texto aqui já foi decodificado, então gravar em UTF-8 com a declaração
+ * antiga quebrava os acentos ao abrir o arquivo ("versÃ£o"). Sem declaração e com `<head>`, ganha uma.
+ */
+export function htmlEmUtf8(html: string): Uint8Array {
+  let declarou = false;
+  let t = html
+    .replace(/(<\?xml\b[^>]*?\bencoding\s*=\s*["'])[\w.:-]+/i, (_, a: string) => `${a}utf-8`)
+    .replace(/(<meta\b[^>]*?\bcharset\s*=\s*["']?)[\w.:-]+/gi, (_, a: string) => {
+      declarou = true;
+      return `${a}utf-8`;
+    });
+  if (!declarou) t = t.replace(/<head\b[^>]*>/i, (m) => `${m}<meta charset="utf-8">`);
+  return new TextEncoder().encode(t);
+}
+
 /** Dispara o download de `bytes` no documento (a aba do SEI, janela de cima). */
 export function baixarBytes(bytes: Uint8Array, nome: string, tipo = "application/octet-stream"): void {
   const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: tipo }));
