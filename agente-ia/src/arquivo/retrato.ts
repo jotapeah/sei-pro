@@ -24,7 +24,6 @@ import { CHAVE_COLECOES as CHAVE_COLECOES_FLUXOS, guardarColecoesDeFluxos } from
 import { CHAVE_FLUXOS, CHAVE_IGNORADOS, guardarFluxos, guardarIgnorados, type Ignorados } from "../fluxos/modelo";
 import { CHAVE_CONECTORES, guardarConectores } from "../mcp/conectores";
 import { CHAVE_CONFIG, configPadrao } from "../painel/config";
-import { ESPELHOS, espelhar } from "../painel/espelho";
 import { gravarVarias, todas, type ConversaSalva } from "../painel/historico";
 import type { Config } from "../painel/main";
 import { CHAVE_MEMORIA, guardarMemoria } from "../painel/memoria";
@@ -159,7 +158,7 @@ const GRAVAR: { [T in ListaSemConversas]: (lista: Retrato["listas"][T]) => Promi
 };
 
 /** As fontes de verdade: `chrome.storage.local` e o histórico no IndexedDB. */
-export function fontesDoNavegador(): FontesRetrato {
+export function fontesDoNavegador(historico: { todas: typeof todas; gravarVarias: typeof gravarVarias } = { todas, gravarVarias }): FontesRetrato {
   // Da última leitura: o que ficou de fora e precisa sobreviver à regravação.
   let ultima: Pick<ListasLidas, "preservar" | "recusados"> = { preservar: {}, recusados: {} };
   return {
@@ -168,7 +167,7 @@ export function fontesDoNavegador(): FontesRetrato {
       // sincronização, em vez de parecer "tudo apagado" e virar lápide.
       const cru = await chrome.storage.local.get([CHAVE_CONFIG, CHAVE_IGNORADOS, ...Object.values(CHAVES_LISTAS)]);
       const lidas = lerListas(cru);
-      const conversas = await todas();
+      const conversas = await historico.todas();
       ultima = { preservar: lidas.preservar, recusados: lidas.recusados };
       return {
         config: { ...configPadrao(), ...(cru[CHAVE_CONFIG] as Partial<Config> | undefined) },
@@ -185,16 +184,16 @@ export function fontesDoNavegador(): FontesRetrato {
         // O item cru recusado volta junto, a menos que o arquivo tenha trazido
         // uma versão válida dele (mesmo id).
         const crus = (ultima.recusados[t] ?? []).filter((i) => !ids.has((i as { id?: string } | null)?.id as string));
-        if (!crus.length) {
-          await (GRAVAR[t] as (l: unknown) => Promise<void>)(lista);
-          continue;
-        }
-        await chrome.storage.local.set({ [CHAVES_LISTAS[t]]: [...lista, ...crus] });
-        const espelho = (ESPELHOS as Partial<Record<ListaSemConversas, Parameters<typeof espelhar>[0]>>)[t];
-        if (espelho) void espelhar(espelho, lista);
+        // Sempre pelo `guardar*` (tetos, espelho no sync só dos válidos); os
+        // crus entram depois, por cima do que ele gravou.
+        await (GRAVAR[t] as (l: unknown) => Promise<void>)(lista);
+        if (!crus.length) continue;
+        const chave = CHAVES_LISTAS[t];
+        const gravada = (await chrome.storage.local.get(chave))[chave];
+        await chrome.storage.local.set({ [chave]: [...(Array.isArray(gravada) ? gravada : []), ...crus] });
       }
       if (m.ignorados) await guardarIgnorados(depois.ignorados);
-      await gravarVarias(m.conversas.novas, m.conversas.removidas);
+      await historico.gravarVarias(m.conversas.novas, m.conversas.removidas);
       if (m.config) await chrome.storage.local.set({ [CHAVE_CONFIG]: depois.config });
     },
     async lerDiario() {

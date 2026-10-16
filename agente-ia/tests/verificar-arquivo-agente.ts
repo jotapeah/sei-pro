@@ -19,7 +19,8 @@ import {
   type Retrato,
 } from "../src/arquivo/envelope";
 import { adaptadorAgente } from "../src/arquivo/adaptador";
-import { lerListas, mudancas, type FontesRetrato } from "../src/arquivo/retrato";
+import { fontesDoNavegador, lerListas, mudancas, type FontesRetrato } from "../src/arquivo/retrato";
+import { MAX_LEMBRANCAS } from "../src/painel/memoria";
 import { validarItem } from "../src/arquivo/validar";
 import type { TipoLista } from "../src/arquivo/envelope";
 import type { Rotina } from "../src/painel/rotinas";
@@ -586,6 +587,90 @@ export async function verificarAdaptadorAgente(): Promise<void> {
       const ok = { ...env, registros: { rotinas: [{ id: "x5", em: 1, dado: { id: "x5", nome: "Boa", frequencia: "diaria" } }] } };
       return lerEnvelope(ok) !== null && mesclar(b.r, {}, lerEnvelope(ok), { agora: 10, segredos: false, validar: validarItem }).retrato.listas.rotinas[0]?.hora === "08:00";
     })());
+  }
+
+  // rotina autônoma que vem do arquivo: chega desligada aqui
+  {
+    const auto = (r: Partial<Rotina> = {}) =>
+      ({ id: "ra", nome: "Auto", pergunta: "faz", frequencia: "diaria", hora: "08:00", ativa: true, alcance: "autonoma", autorizadas: ["incluir_documento"], avisar: true, ...r }) as Rotina;
+    const comRotina = (c: ReturnType<typeof computador>, r: Rotina) => {
+      c.r = { ...c.r, listas: { ...c.r.listas, rotinas: [r] } };
+    };
+    const arq = arquivoMemoria();
+    const A = computador(retrato({ rotinas: [auto()] }));
+    const B = computador(retrato());
+    await sincronia(A, arq, relogio).sincronizar();
+    await sincronia(B, arq, relogio).sincronizar();
+    checar("autonoma nova do arquivo chega desligada", B.r.listas.rotinas[0]?.ativa === false, B.r.listas.rotinas);
+    let n = arq.gravacoes;
+    for (const c of [A, B, A, B]) await sincronia(c, arq, relogio).sincronizar();
+    checar("autonoma desligada aqui: sem regravacao em laco", arq.gravacoes === n, arq.gravacoes - n);
+    checar("autonoma: o outro computador segue ligado", A.r.listas.rotinas[0]?.ativa === true);
+
+    // B liga aqui; A muda a pergunta (sem mexer no alcance): B continua ligado
+    comRotina(B, { ...B.r.listas.rotinas[0], ativa: true });
+    await sincronia(B, arq, relogio).sincronizar();
+    comRotina(A, { ...A.r.listas.rotinas[0], pergunta: "faz outra" });
+    await sincronia(A, arq, relogio).sincronizar();
+    await sincronia(B, arq, relogio).sincronizar();
+    checar("autonoma atualizada sem ampliar: mantem ligada", B.r.listas.rotinas[0]?.ativa === true && B.r.listas.rotinas[0]?.pergunta === "faz outra", B.r.listas.rotinas);
+    n = arq.gravacoes;
+    for (const c of [A, B, A, B]) await sincronia(c, arq, relogio).sincronizar();
+    checar("depois da atualizacao: sem regravacao em laco", arq.gravacoes === n, arq.gravacoes - n);
+
+    // A autoriza mais uma ferramenta: em B volta desligada
+    comRotina(A, { ...A.r.listas.rotinas[0], autorizadas: ["incluir_documento", "enviar_processo"] });
+    await sincronia(A, arq, relogio).sincronizar();
+    await sincronia(B, arq, relogio).sincronizar();
+    checar("autorizadas ampliadas: chega desligada", B.r.listas.rotinas[0]?.ativa === false && B.r.listas.rotinas[0]?.autorizadas?.length === 2, B.r.listas.rotinas);
+    n = arq.gravacoes;
+    for (const c of [A, B, A, B]) await sincronia(c, arq, relogio).sincronizar();
+    checar("desligada aqui com carimbo de la: sem laco", arq.gravacoes === n, arq.gravacoes - n);
+    checar("desligada aqui com carimbo de la: o arquivo segue com a versao de A", A.r.listas.rotinas[0]?.ativa === true && B.r.listas.rotinas[0]?.ativa === false && (lerEnvelope(JSON.parse(arq.texto))?.registros.rotinas[0]?.dado as Rotina).ativa === true);
+
+    // leitura que vira autônoma: também desligada
+    const C = computador(retrato({ rotinas: [auto({ id: "rl", alcance: "leitura", autorizadas: undefined, avisar: undefined })] }));
+    const lidoC = lerEnvelope({ formato: FORMATO, versao: VERSAO, geradoEm: 1, registros: { rotinas: [{ id: "rl", em: 50, dado: auto({ id: "rl" }) }] } });
+    const rC = mesclar(C.r, carimbar(C.r, {}, 10), lidoC, { agora: 100, segredos: false, validar: validarItem });
+    checar("leitura que vira autonoma: chega desligada", rC.retrato.listas.rotinas[0]?.alcance === "autonoma" && rC.retrato.listas.rotinas[0]?.ativa === false, rC.retrato.listas.rotinas);
+  }
+
+  // registro com id diferente do id do dado: não entra, não apaga
+  {
+    const C = computador(retrato({ regras: [regra({ id: "r1" })] }));
+    const lido = lerEnvelope({ formato: FORMATO, versao: VERSAO, geradoEm: 1, registros: { regras: [{ id: "r1", em: 50, dado: regra({ id: "r9", nome: "trocada" }) }, { id: "r2", em: 50, dado: regra({ id: "r3" }) }] } });
+    const r = mesclar(C.r, carimbar(C.r, {}, 10), lido, { agora: 100, segredos: false, validar: validarItem });
+    checar("id trocado: local fica como estava", JSON.stringify(r.retrato.listas.regras) === JSON.stringify([regra({ id: "r1" })]), r.retrato.listas.regras);
+    checar("id trocado: nada gravado, sem lapide", !r.mudouLocal && r.envelope.registros.regras.every((x) => !x.apagado), r.envelope.registros.regras);
+  }
+
+  // aplicar com itens recusados: respeita os tetos do guardar*
+  {
+    const dados: Record<string, unknown> = {};
+    const antes = (globalThis as { chrome?: unknown }).chrome;
+    (globalThis as { chrome?: unknown }).chrome = {
+      storage: {
+        local: {
+          get: async (chaves: string | string[]) =>
+            Object.fromEntries((Array.isArray(chaves) ? chaves : [chaves]).filter((k) => k in dados).map((k) => [k, structuredClone(dados[k])])),
+          set: async (itens: Record<string, unknown>) => void Object.assign(dados, structuredClone(itens)),
+        },
+      },
+    };
+    try {
+      const lembranca = (i: number) => ({ id: `m${i}`, texto: `nota ${i}`, quando: i, origem: "usuario" });
+      dados.agenteIA_memoria = [...Array.from({ length: MAX_LEMBRANCAS }, (_, i) => lembranca(i)), { id: "quebrada", quando: 1 }];
+      const f = fontesDoNavegador({ todas: async () => [], gravarVarias: async () => undefined });
+      const local = await f.lerRetrato();
+      checar("navegador: recusada fora do retrato e preservada", local.listas.memoria.length === MAX_LEMBRANCAS && f.preservados?.().memoria?.[0] === "quebrada");
+      const depois = { ...local, listas: { ...local.listas, memoria: [...local.listas.memoria, lembranca(99) as never] } };
+      await f.aplicar(local, depois);
+      const gravada = dados.agenteIA_memoria as Array<{ id: string }>;
+      checar("navegador: teto de lembrancas respeitado", gravada.filter((l) => l.id !== "quebrada").length === MAX_LEMBRANCAS, gravada.length);
+      checar("navegador: recusada volta ao storage", gravada.some((l) => l.id === "quebrada") && gravada.some((l) => l.id === "m99"));
+    } finally {
+      (globalThis as { chrome?: unknown }).chrome = antes;
+    }
   }
 
   // mudancas: só o que mudou vai ser gravado

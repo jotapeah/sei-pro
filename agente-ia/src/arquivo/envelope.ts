@@ -201,7 +201,23 @@ function paraArquivo(tipo: TipoLista, item: unknown): unknown {
 
 /** O item que o retrato passa a ter, a partir do dado do arquivo. */
 function doArquivo(tipo: TipoLista, dado: unknown, local: unknown): unknown {
-  return tipo === "conectores" ? conectorDoArquivo(dado as Conector, local as Conector | undefined) : dado;
+  if (tipo === "conectores") return conectorDoArquivo(dado as Conector, local as Conector | undefined);
+  if (tipo === "rotinas") return rotinaDoArquivo(dado as Rotina, local as Rotina | undefined);
+  return dado;
+}
+
+/**
+ * Rotina autônoma altera o SEI sozinha: quem a liga é a pessoa, neste
+ * computador. A que chega do arquivo nova aqui, ou que passa a ser autônoma,
+ * ou que ganha ferramenta autorizada que a daqui não tinha, entra DESLIGADA.
+ * Sem ampliar nada, só fica ligada se estiver ligada aqui e lá (desligar
+ * propaga; ligar, não).
+ */
+function rotinaDoArquivo(vinda: Rotina, local: Rotina | undefined): Rotina {
+  if (vinda.alcance !== "autonoma") return vinda;
+  const daqui = local?.alcance === "autonoma" ? new Set(local.autorizadas ?? []) : null;
+  const amplia = daqui === null || (vinda.autorizadas ?? []).some((t) => !daqui.has(t));
+  return { ...vinda, ativa: amplia ? false : Boolean(local?.ativa && vinda.ativa) };
 }
 
 const hash = (dado: unknown): string => JSON.stringify(dado);
@@ -345,7 +361,10 @@ function mesclarLista(
     if (venceArquivo) {
       registros.push(reg);
       const dado = reg.apagado || !validar ? reg.dado : validar(tipo, reg.dado);
-      if (!aceitar(reg) || (!reg.apagado && dado === null)) {
+      // O id de dentro do dado tem de ser o do registro: senão um registro
+      // "r1" adulterado sobrescreveria (ou criaria) outro item.
+      const recusado = !reg.apagado && (dado === null || (validar !== undefined && idDe(dado) !== id));
+      if (!aceitar(reg) || recusado) {
         // Fica no arquivo, mas não entra aqui: conversa fora do prazo daqui,
         // ou registro que não passa na validação (nada gravado, nada apagado).
         if (local !== undefined) itens.push(local);
@@ -361,7 +380,12 @@ function mesclarLista(
     }
     if (local !== undefined) {
       itens.push(local);
-      registros.push({ id, em: marca?.em ?? 0, dado: paraArquivo(tipo, local) });
+      // Mesmo carimbo dos dois lados = o daqui não mudou desde que veio deste
+      // registro; a diferença é só o que a entrada ajusta aqui (rotina
+      // autônoma desligada, normalização). O arquivo fica com o dele: senão
+      // cada computador regravaria a sua versão com o mesmo carimbo, em laço.
+      const mesmoCarimbo = reg !== undefined && !reg.apagado && marca !== undefined && reg.em === marca.em && reg.em !== 0;
+      registros.push(mesmoCarimbo ? reg : { id, em: marca?.em ?? 0, dado: paraArquivo(tipo, local) });
     } else if (marca?.apagado) {
       registros.push({ id, em: marca.em, apagado: true });
     } else if (reg !== undefined && preservados.has(id)) {
