@@ -12,7 +12,7 @@ Abra o processo e clique em **Ações em lote**, na barra de botões da árvore,
 
 ### Escolher os documentos
 
-A janela lista os documentos do processo, com número SEI, nome, quem assinou, datas, unidade e nível de acesso. Marque os que deseja ou use a caixa do cabeçalho para marcar todos. Os **filtros** reduzem a lista e os **3 atalhos de seleção** marcam grupos de documentos de uma vez.
+A janela lista os documentos do processo, com número SEI, nome, quem assinou, datas, unidade e nível de acesso. Marque os que deseja ou use a caixa do cabeçalho para marcar todos. Os **filtros** reduzem a lista e três atalhos marcam grupos de documentos de uma vez: **Não assinados da minha unidade**, **Assinados por mim** e **Externos**.
 
 > **Documentos e processos sigilosos ficam de fora.** Diferente da versão anterior, eles não entram na lista nem são alterados pela ferramenta.
 
@@ -31,11 +31,11 @@ A janela lista os documentos do processo, com número SEI, nome, quem assinou, d
 | **Incluir em bloco de assinatura** | Inclui os documentos num bloco já existente ou num bloco novo |
 | **Alterar dados** | Muda descrição, observação, interessados, assuntos e nível de acesso. Em interessados e assuntos você escolhe **Acrescentar**, **Remover** ou **Substituir** |
 | **Mover para outro processo** | Move os documentos marcados para outro processo |
-| **PDF único** | Gera um só PDF com os documentos marcados, produzido pelo próprio SEI |
+| **Baixar tudo num PDF** | Gera um só PDF com os documentos marcados, gerado pelo próprio SEI |
 
 ### Fila de ações
 
-Você pode combinar **várias ações em ordem**: por exemplo, dar ciência, assinar e depois baixar. As ações que não têm volta ou que alteram a lista de documentos (**excluir, cancelar documento, mover, baixar e PDF único**) só podem ser a **última etapa** da fila.
+Você pode combinar **várias ações em ordem**: por exemplo, dar ciência, assinar e depois baixar. As ações que encerram o trabalho com o documento ou mudam a lista (**excluir, cancelar documento, mover, baixar e Baixar tudo num PDF**) só podem ser a **última etapa** da fila.
 
 ### Prévia e confirmação
 
@@ -43,10 +43,10 @@ Antes de executar, a **prévia** mostra o que será feito em cada documento. Aç
 
 ### Durante a execução
 
-* **Pausar, continuar e parar**: os botões ficam no alto da janela;
-* **Minimizar**: a janela vira uma barra pequena e você segue usando o SEI;
-* **Retomar**: se você fechar a janela com a execução em andamento, é possível retomar de onde parou ao abri-la de novo;
-* **Teclado**: **Esc** fecha a janela (se houver execução em andamento, pausa primeiro) e **Ctrl+Enter** avança para a próxima etapa.
+* **Pausar / Continuar** e **Parar lote**: os botões ficam na janela de execução. **Parar lote** encerra a execução;
+* **Minimizar**: libera a tela do SEI para você seguir trabalhando;
+* **Retomar**: fechar a janela **pausa o lote**, que fica salvo; ao abrir a ferramenta de novo é possível continuar de onde parou;
+* **Teclado**: **Ctrl+Enter** (Cmd+Enter no Mac) avança da configuração para a prévia e da prévia para a execução. **Esc** fecha a janela; durante a execução, pausa o lote e pergunta antes de fechar. Com a janela minimizada, o Esc não faz nada.
 
 ### Resultado
 
@@ -73,7 +73,7 @@ Nos pacotes que ainda não têm a nova versão (oficial e Firefox), a ferramenta
 
 ### Como usar (janela anterior)
 
-1. Abra o processo e, na barra de botões, clique em **Iniciar ações em lote**;
+1. Abra o processo e, na barra de botões, clique em **Ações em lote**;
 2. A janela **Ações em lote** lista os documentos, com número SEI, nome, quem assinou, datas, unidade e nível de acesso;
 3. Marque os documentos desejados — ou use a caixa do cabeçalho para selecionar todos;
 4. Clique no botão da ação, no alto da janela.
