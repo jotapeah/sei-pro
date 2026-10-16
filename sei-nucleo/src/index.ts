@@ -30,6 +30,7 @@ export {
   lerConteudo,
   alterarDocumento,
   criarDocumento,
+  duplicarDocumento,
   tiposDocumento,
   pesquisarContatos,
   pesquisarAssuntos,
@@ -38,6 +39,8 @@ export {
   type NovoDocumento,
   type TipoDocumento,
 } from "./dominio/documento";
+export { moverDocumento, resolverProcessoDestino, type ProcessoDestino } from "./dominio/moverDocumento";
+export { gerarPdfDocumentos, type PdfGerado } from "./dominio/pdfProcesso";
 export type { OpcoesEscrita, ResultadoEscrita } from "./dominio/escrita";
 export { aplicarModo, linkAutoCompletar, type AlteracaoLista, type ModoLista } from "./dominio/lupas";
 export { abrirEditor, editarConteudo, lerEditor, textoDoHtml, type EdicaoConteudo, type EditorDocumento, type SecaoEditor } from "./dominio/editor";

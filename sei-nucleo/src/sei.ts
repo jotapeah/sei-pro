@@ -167,6 +167,14 @@ export class Sei {
   }
 
   /**
+   * Esquece onde uma referência foi localizada (chamar quando um documento
+   * muda de processo: o nº SEI passa a levar a outra árvore).
+   */
+  esquecer(referencia: string): void {
+    this.localizados.delete(referencia.trim());
+  }
+
+  /**
    * Chamada `controlador_ajax.php` (montar select, autocompletar). A resposta é
    * XML com `<option value="">texto</option>` ou `<item id="" descricao="">`.
    */
