@@ -49,8 +49,10 @@ function lerCorpo(corpo: string): Array<[string, string]> {
 const valor = (p: Post | undefined, nome: string) => p?.pares.find(([n]) => n === nome)?.[1];
 
 /** Tela de alteração do Despacho 0103947 (id 160173), com ajustes pedidos pelo teste. */
-function telaAlterar(o: { numero?: string; restrito?: boolean; observacao?: string }): string {
+function telaAlterar(o: { numero?: string; restrito?: boolean; observacao?: string; semInteressados?: boolean; assunto?: boolean }): string {
   let h = htmlDe("sei41/despacho_alterar.html");
+  if (o.semInteressados) h = h.replace(/(<select id="selInteressados"[^>]*>)[\s\S]*?<\/select>/, "$1</select>");
+  if (o.assunto) h = h.replace(/(<select id="selAssuntos"[^>]*>)\s*<\/select>/, '$1<option value="300001">01.01 - Organiza\u00E7\u00E3o</option></select>');
   if (o.numero !== undefined) h = h.replace(/(id="txtNumero"[^>]*value=")[^"]*"/, `$1${o.numero}"`);
   if (o.observacao !== undefined) h = h.replace(/(<textarea id="txaObservacoes"[^>]*>)<\/textarea>/, `$1${o.observacao}</textarea>`);
   if (o.restrito) {
@@ -64,11 +66,14 @@ function telaAlterar(o: { numero?: string; restrito?: boolean; observacao?: stri
 }
 
 /** Tela de cadastro do documento novo: o mesmo `#frmDocumentoCadastro`, vazio e apontando para `documento_cadastrar`. */
-function telaCadastro(): string {
-  return htmlDe("sei41/despacho_alterar.html")
+function telaCadastro(preenchida = false): string {
+  let h = htmlDe("sei41/despacho_alterar.html")
     .replace(/acao=documento_alterar&acao_origem=documento_alterar/g, "acao=documento_cadastrar&acao_origem=documento_cadastrar")
-    .replace(/(<select id="selInteressados"[^>]*>)[\s\S]*?<\/select>/, "$1</select>")
     .replace(/(id="txtDescricao"[^>]*value=")[^"]*"/, '$1"');
+  // Preenchida: a tela de cadastro já traz interessados (os do processo) e um assunto sugerido pelo tipo.
+  if (preenchida) h = h.replace(/(<select id="selAssuntos"[^>]*>)\s*<\/select>/, '$1<option value="300009">Assunto sugerido</option></select>');
+  else h = h.replace(/(<select id="selInteressados"[^>]*>)[\s\S]*?<\/select>/, "$1</select>");
+  return h;
 }
 
 const LINK_SELECIONAR_PDF = `controlador.php?acao=documento_selecionar&tipo_selecao=2&id_object=objLupaDocumentosApenas&id_procedimento=148265&tipo_selecao_documento=PDF&arvore=1&id_procedimento=148265&infra_sistema=100000100&infra_unidade_atual=110000001&infra_hash=${H0}`;
@@ -97,6 +102,11 @@ const LINK_DOWNLOAD = `controlador.php?acao=exibir_arquivo&nome_arquivo=sei_pdf_
 
 interface Opcoes {
   alterar?: Parameters<typeof telaAlterar>[0];
+  /** Tela de cadastro já com interessados e assunto. */
+  cadastroPreenchido?: boolean;
+  /** O tipo do original (5) não está na lista da unidade, mas há um tipo com "5" no nome. */
+  semTipoOriginal?: boolean;
+  processoSigiloso?: boolean;
   ri1023Erro?: boolean;
   moverSemResultado?: boolean;
   moverValidacao?: boolean;
@@ -112,12 +122,16 @@ function montar(o: Opcoes = {}) {
     const bytes = new Uint8Array([...html].map((c) => c.charCodeAt(0) & 0xff));
     return { url: new URL(url, RAIZ).href, status: 200, arrayBuffer: async () => bytes.buffer } as unknown as Response;
   };
+  const telaTipos = () => {
+    const h = htmlDe("sei41/p_documento_escolher_tipo.html");
+    return o.semTipoOriginal ? h.replace(/escolher\(5\)("[^>]*>)Despacho</, "escolher(9005)$1Despacho 2025<") : h;
+  };
   const paginas = o.selecao ?? [[["160173", "Despacho 0103947"], ["148268", "Despacho teste 0094793"]]];
   const fetch = (async (u: string, init?: RequestInit) => {
     if (init?.method !== "POST") {
       estado.gets.push(u);
       if (/acao=documento_alterar&/.test(u)) return resp(u, telaAlterar(o.alterar ?? {}));
-      if (/acao=documento_escolher_tipo&/.test(u)) return resp(u, htmlDe("sei41/p_documento_escolher_tipo.html"));
+      if (/acao=documento_escolher_tipo&/.test(u)) return resp(u, telaTipos());
       if (/acao=documento_mover&/.test(u)) return resp(u, htmlDe("sei41/documento_mover.html"));
       if (/acao=procedimento_gerar_pdf&/.test(u)) return resp(u, htmlDe("sei41/p_procedimento_gerar_pdf.html"));
       if (/acao=documento_selecionar&/.test(u)) return resp(u, telaSelecao(paginas[0], { paginaSeguinte: paginas.length > 1 }));
@@ -129,8 +143,8 @@ function montar(o: Opcoes = {}) {
     if (/acao_ajax=protocolo_RI1023/.test(u)) return resp(u, o.ri1023Erro ? XML_RI1023_ERRO : XML_RI1023);
     if (/acao_ajax=hipotese_legal_select/.test(u)) return resp(u, XML_HIPOTESES);
     if (/acao=documento_escolher_tipo&/.test(u)) {
-      if (v("hdnIdSerie")) return resp(`controlador.php?acao=documento_cadastrar&acao_origem=documento_escolher_tipo&id_serie=${v("hdnIdSerie")}&infra_hash=${H0}`, telaCadastro());
-      return resp(u, htmlDe("sei41/p_documento_escolher_tipo.html"));
+      if (v("hdnIdSerie")) return resp(`controlador.php?acao=documento_cadastrar&acao_origem=documento_escolher_tipo&id_serie=${v("hdnIdSerie")}&infra_hash=${H0}`, telaCadastro(o.cadastroPreenchido));
+      return resp(u, telaTipos());
     }
     if (/acao=documento_cadastrar&/.test(u)) {
       return resp(`controlador.php?acao=arvore_visualizar&acao_origem=documento_gerar&id_procedimento=148265&id_documento=999001&infra_hash=${H0}`, "<html><body>ok</body></html>");
@@ -154,6 +168,7 @@ function montar(o: Opcoes = {}) {
 
   const sei = new Sei(urlDe("sei41/arvore_completa.html"), null, { fetch });
   const arvore = lerArvore(fixture("sei41/arvore_completa.html"));
+  if (o.processoSigiloso) arvore.nivel = "sigiloso";
   let criado = false;
   Object.assign(sei, {
     localizar: async (ref: string) => {
@@ -224,6 +239,31 @@ export async function verificarAcoesLote(): Promise<void> {
     const e = await lanca(() => duplicarDocumento(sei, "0103925", APLICAR));
     checar("externo recusado com SEI_ACAO_INDISPONIVEL", e?.codigo === "SEI_ACAO_INDISPONIVEL", e);
     checar("externo: nenhuma tela aberta", estado.gets.length === 0 && estado.posts.length === 0, estado);
+  }
+
+  {
+    const { sei, estado } = montar({ semTipoOriginal: true });
+    const e = await lanca(() => duplicarDocumento(sei, "0103947", APLICAR));
+    checar("tipo do original fora da lista: SEI_ACAO_INDISPONIVEL (nao casa 'Despacho 2025' pelo '5')", e?.codigo === "SEI_ACAO_INDISPONIVEL" && /n\u00E3o est\u00E1 dispon\u00EDvel nesta unidade/.test(e.message ?? ""), e);
+    checar("tipo do original fora da lista: nenhum cadastro", !estado.posts.some(ehCadastro) && !estado.posts.some((p) => valor(p, "hdnIdSerie")), estado.posts.map((p) => p.url));
+  }
+  {
+    const { sei, estado } = montar({ alterar: { semInteressados: true }, cadastroPreenchido: true });
+    await duplicarDocumento(sei, "0103947", APLICAR);
+    const post = estado.posts.find(ehCadastro);
+    checar("original sem interessados limpa os que a tela de cadastro trouxe", valor(post, "hdnInteressados") === "", valor(post, "hdnInteressados"));
+    checar("original sem assuntos mantem o assunto que a tela trouxe", lerLupa(valor(post, "hdnAssuntos") ?? "").map((i) => i.id).join(",") === "300009", valor(post, "hdnAssuntos"));
+  }
+  {
+    const { sei, estado } = montar({ alterar: { assunto: true }, cadastroPreenchido: true });
+    await duplicarDocumento(sei, "0103947", APLICAR);
+    const post = estado.posts.find(ehCadastro);
+    checar("assuntos do original substituem os da tela, exatamente", lerLupa(valor(post, "hdnAssuntos") ?? "").map((i) => i.id).join(",") === "300001", valor(post, "hdnAssuntos"));
+  }
+  {
+    const { sei, estado } = montar({ processoSigiloso: true });
+    const e = await lanca(() => duplicarDocumento(sei, "0103947", APLICAR));
+    checar("processo sigiloso: SEI_SIGILOSO sem abrir a tela de alteracao", e?.codigo === "SEI_SIGILOSO" && estado.gets.length === 0 && estado.posts.length === 0, { e, gets: estado.gets });
   }
 
   secao("acoes em lote: mover documento");

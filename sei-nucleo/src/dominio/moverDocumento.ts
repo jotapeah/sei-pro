@@ -35,12 +35,12 @@ export interface ProcessoDestino {
 
 async function documentoMovel(sei: Sei, numero: string, sinal?: AbortSignal): Promise<{ d: DocumentoLocalizado; link: string }> {
   const d = await localizarDocumento(sei, numero, { sinal });
-  if (d.documento.nivel === "sigiloso" || d.arvore.nivel === "sigiloso") throw new ErroSei("SEI_SIGILOSO", "Documento sigiloso: o agente não atua nele.");
+  if (d.documento.nivel === "sigiloso" || d.arvore.nivel === "sigiloso") throw new ErroSei("SEI_SIGILOSO", "Documento sigiloso: o agente n\u00E3o atua nele.");
   const link = linkDaAcao(d.documento.acoes, "documento_mover");
   if (!link) {
     throw new ErroSei(
       "SEI_ACAO_INDISPONIVEL",
-      `O SEI não oferece mover o documento ${d.documento.numero} para você (documento de outra unidade, assinado, ou processo fechado).`,
+      `O SEI n\u00E3o oferece mover o documento ${d.documento.numero} para voc\u00EA (documento de outra unidade, assinado, ou processo fechado).`,
     );
   }
   return { d, link };
@@ -56,7 +56,7 @@ export function lerComplementos(xml: string): Record<string, string> {
   const erro = /<erro\s+descricao="([^"]*)"/.exec(xml);
   if (erro) {
     const msg = textoDoXml(erro[1]).replace(/\\n/g, "\n");
-    throw new ErroSei(/não encontrad/i.test(msg) ? "SEI_NAO_ENCONTRADO" : "SEI_VALIDACAO", msg, msg);
+    throw new ErroSei(/n\u00E3o encontrad/i.test(msg) ? "SEI_NAO_ENCONTRADO" : "SEI_VALIDACAO", msg, msg);
   }
   const saida: Record<string, string> = {};
   for (const m of xml.matchAll(/<complemento\s+nome="([^"]+)"\s*>([\s\S]*?)<\/complemento>/g)) saida[m[1]] = textoDoXml(m[2]);
@@ -68,14 +68,14 @@ export function lerComplementos(xml: string): Record<string, string> {
  * do documento `numeroDoc` (o link do AJAX é colhido dessa tela).
  */
 export async function resolverProcessoDestino(sei: Sei, numeroDoc: string, protocolo: string, sinal?: AbortSignal): Promise<ProcessoDestino> {
-  if (!protocolo?.trim()) throw new ErroSei("ARGUMENTO_INVALIDO", "Informe o número do processo destino.");
+  if (!protocolo?.trim()) throw new ErroSei("ARGUMENTO_INVALIDO", "Informe o n\u00FAmero do processo destino.");
   const { link } = await documentoMovel(sei, numeroDoc, sinal);
   const tela = await sei.http.obter(link, { sinal });
   const ajax = /controlador_ajax\.php\?acao_ajax=protocolo_RI1023[^'"\s]*/.exec(tela.html)?.[0];
-  if (!ajax) throw new ErroSei("SEI_VERSAO_NAO_SUPORTADA", "A tela de mover documento não tem a pesquisa do processo destino (protocolo_RI1023).");
+  if (!ajax) throw new ErroSei("SEI_VERSAO_NAO_SUPORTADA", "A tela de mover documento n\u00E3o tem a pesquisa do processo destino (protocolo_RI1023).");
   const resposta = await sei.http.enviar(decodificarEntidades(ajax), [["idProcedimento", protocolo.trim()]], { sinal, aceitarValidacao: true });
   const c = lerComplementos(resposta.html);
-  if (!c.IdProcedimento) throw new ErroSei("SEI_NAO_ENCONTRADO", `Processo ${protocolo} não encontrado, ou você não tem acesso a ele.`);
+  if (!c.IdProcedimento) throw new ErroSei("SEI_NAO_ENCONTRADO", `Processo ${protocolo} n\u00E3o encontrado, ou voc\u00EA n\u00E3o tem acesso a ele.`);
   return { idProcedimento: c.IdProcedimento, protocolo: c.ProtocoloProcedimentoFormatado ?? protocolo.trim(), tipo: c.NomeTipoProcedimento ?? "" };
 }
 
@@ -88,11 +88,11 @@ export async function moverDocumento(
   op: OpcoesEscrita,
 ): Promise<ResultadoEscrita> {
   if (!motivo?.trim()) throw new ErroSei("ARGUMENTO_INVALIDO", "Mover documento exige o motivo.");
-  if (!destino?.idProcedimento) throw new ErroSei("ARGUMENTO_INVALIDO", "Processo destino não resolvido.");
+  if (!destino?.idProcedimento) throw new ErroSei("ARGUMENTO_INVALIDO", "Processo destino n\u00E3o resolvido.");
   const { d, link } = await documentoMovel(sei, numero, op.sinal);
   const doc = d.documento;
   if (destino.idProcedimento === d.arvore.idProcedimento) {
-    throw new ErroSei("ARGUMENTO_INVALIDO", `O documento ${doc.numero} já está no processo ${d.arvore.protocolo}.`);
+    throw new ErroSei("ARGUMENTO_INVALIDO", `O documento ${doc.numero} j\u00E1 est\u00E1 no processo ${d.arvore.protocolo}.`);
   }
   const base: ResultadoEscrita = {
     alvo: doc.numero,
@@ -114,7 +114,7 @@ export async function moverDocumento(
   await form.enviar({
     sinal: op.sinal,
     botao: "sbmMover",
-    operacao: `a mudança do documento ${doc.numero} para ${destino.protocolo}`,
+    operacao: `a mudan\u00E7a do documento ${doc.numero} para ${destino.protocolo}`,
     sucesso: (p) => {
       const q = parametros(p.url);
       return q.get("acao_origem") === "documento_mover" && q.get("resultado") === "1";
