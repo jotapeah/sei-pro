@@ -1,4 +1,5 @@
 import type { Area } from "@comum/armazenamento/area";
+import { TETO } from "./modelo/constantes";
 import type { LinhaLote } from "./modelo/linhas";
 
 export interface Parametros {
@@ -28,27 +29,62 @@ export interface LoteEmAndamento {
 
 type Item = LoteEmAndamento["itens"][number];
 
-/** Dado gravado por versao antiga, editado ou cortado nao pode derrubar o app: o que nao fecha vira "sem lote". */
-function loteValido(v: unknown): v is LoteEmAndamento {
-  if (!v || typeof v !== "object") return false;
-  const l = v as Partial<LoteEmAndamento>;
-  if (!l.parametros || typeof l.parametros !== "object" || typeof l.parametros.idTipo !== "string" || !l.parametros.idTipo) return false;
-  if (!Array.isArray(l.itens) || !Array.isArray(l.linhas)) return false;
-  return l.itens.length === l.linhas.length && l.itens.every((i) => !!i && typeof i === "object");
+const ehObjeto = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+
+function itemValido(i: unknown): boolean {
+  if (!ehObjeto(i)) return false;
+  if (i.situacao !== "pendente" && i.situacao !== "ok" && i.situacao !== "erro") return false;
+  if (i.criado !== undefined) {
+    if (!ehObjeto(i.criado) || typeof i.criado.numero !== "string") return false;
+  }
+  // Uma linha so conta como criada depois da resposta com numero: "ok" sem isso refaria ou perderia o processo.
+  if (i.situacao === "ok") {
+    const c = i.criado as Record<string, unknown> | undefined;
+    if (!c?.numero || typeof c.idProcedimento !== "string") return false;
+  }
+  return true;
 }
 
-/** Um lote em andamento por `host|login`: e o que o app oferece como "Continuar de onde parou". */
+/** Dado gravado por versao antiga, editado ou cortado nao pode derrubar o app: o que nao fecha vira "sem lote". */
+function loteValido(v: unknown): v is LoteEmAndamento {
+  if (!ehObjeto(v)) return false;
+  const p = v.parametros;
+  if (!ehObjeto(p) || typeof p.idTipo !== "string" || !p.idTipo) return false;
+  if (p.nivelAcesso !== "0" && p.nivelAcesso !== "1") return false;
+  if (typeof p.pausa !== "number" || !Number.isFinite(p.pausa)) return false;
+  if (!Array.isArray(v.itens) || !Array.isArray(v.linhas)) return false;
+  if (v.linhas.length > TETO || v.itens.length !== v.linhas.length) return false;
+  if (!v.linhas.every((l) => ehObjeto(l) && typeof l.especificacao === "string")) return false;
+  return v.itens.every(itemValido);
+}
+
+/**
+ * Um lote em andamento por `host|login`: e o que o app oferece como "Continuar de onde parou".
+ * As escritas desta instancia sao enfileiradas (read-modify-write do `marcar` nao se perde). Escritores de OUTRA
+ * instancia ou aba NAO sao serializados: assume-se um unico escritor por escopo; a releitura estreita essa janela,
+ * mas nao a fecha.
+ */
 export class RepositorioLote {
   private readonly chave: string;
+  private fila: Promise<unknown> = Promise.resolve();
   constructor(
     private readonly area: Area,
     escopo: string,
   ) {
+    const i = escopo.indexOf("|");
+    if (!(i > 0 && i < escopo.length - 1)) throw new Error(`escopo invalido (esperado host|login): "${escopo}"`);
     this.chave = `lote/${escopo}/atual`;
   }
 
-  async gravar(l: LoteEmAndamento): Promise<void> {
-    await this.area.gravar({ [this.chave]: l });
+  /** Encadeia sem quebrar a fila apos um erro; quem chamou ainda recebe o proprio resultado ou erro. */
+  private enfileirar<T>(tarefa: () => Promise<T>): Promise<T> {
+    const r = this.fila.then(tarefa, tarefa);
+    this.fila = r.catch(() => undefined);
+    return r;
+  }
+
+  gravar(l: LoteEmAndamento): Promise<void> {
+    return this.enfileirar(() => this.area.gravar({ [this.chave]: l }));
   }
 
   async ler(): Promise<LoteEmAndamento | null> {
@@ -56,17 +92,19 @@ export class RepositorioLote {
     return loteValido(v) ? v : null;
   }
 
-  /** Rele antes de gravar: outra aba ou instancia pode ter marcado outro indice nesse meio-tempo. */
-  async marcar(indice: number, item: Item): Promise<void> {
-    const atual = await this.ler();
-    if (!atual || indice < 0 || indice >= atual.itens.length) return;
-    const itens = atual.itens.slice();
-    itens[indice] = item;
-    await this.gravar({ ...atual, itens });
+  /** Rele antes de gravar e muda so o indice pedido; chamadas desta instancia rodam em fila. */
+  marcar(indice: number, item: Item): Promise<void> {
+    return this.enfileirar(async () => {
+      const atual = await this.ler();
+      if (!atual || indice < 0 || indice >= atual.itens.length) return;
+      const itens = atual.itens.slice();
+      itens[indice] = item;
+      await this.area.gravar({ [this.chave]: { ...atual, itens } });
+    });
   }
 
-  async descartar(): Promise<void> {
-    await this.area.remover(this.chave);
+  descartar(): Promise<void> {
+    return this.enfileirar(() => this.area.remover(this.chave));
   }
 
   pendentes(l: LoteEmAndamento): number[] {

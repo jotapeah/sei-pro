@@ -1,4 +1,5 @@
 import { areaMemoria } from "@comum/armazenamento/area";
+import { TETO } from "../src/modelo/constantes";
 import { type LoteEmAndamento, RepositorioLote } from "../src/repositorio";
 import { checar, igual, secao } from "./util";
 
@@ -13,6 +14,10 @@ function exemplo(login = "ana"): LoteEmAndamento {
     itens: [{ situacao: "pendente" }, { situacao: "pendente" }, { situacao: "pendente" }, { situacao: "pendente" }],
   };
 }
+
+// Dado corrompido nao respeita os tipos: o teste mexe nele livremente.
+// biome-ignore lint/suspicious/noExplicitAny: fixture de dado corrompido
+type Mutavel = any;
 
 export async function verificarRepositorio(): Promise<void> {
   secao("RepositorioLote");
@@ -35,12 +40,12 @@ export async function verificarRepositorio(): Promise<void> {
   );
   igual("marcar guarda criado", l?.itens[1]?.criado, criado);
 
-  // Outra instancia grava entre a leitura e a marcacao: a releitura preserva o que ela fez.
+  // Sequencial: a releitura enxerga o que a outra instancia gravou antes (nao prova corrida simultanea).
   const outra = new RepositorioLote(area, escopo);
   await outra.marcar(3, { situacao: "erro", erro: "falhou" });
   await repo.marcar(0, { situacao: "ok", criado });
   igual(
-    "marcar rele antes de gravar",
+    "marcar rele o gravado antes (sequencial)",
     (await repo.ler())?.itens.map((i) => i.situacao),
     ["ok", "ok", "pendente", "erro"],
   );
@@ -68,4 +73,67 @@ export async function verificarRepositorio(): Promise<void> {
   const tam = { ...exemplo(), itens: [{ situacao: "ok" }] };
   igual("itens.length != linhas.length le null", await new RepositorioLote(areaMemoria({ [k]: tam }), escopo).ler(), null);
   igual("lixo le null", await new RepositorioLote(areaMemoria({ [k]: 42 }), escopo).ler(), null);
+
+  // Concorrencia na mesma instancia: sem fila, a ultima escrita perderia as outras.
+  const conc = new RepositorioLote(areaMemoria(), escopo);
+  await conc.gravar(exemplo());
+  const ok = (n: string) => ({ situacao: "ok" as const, criado: { numero: n, idProcedimento: n, url: "u" } });
+  await Promise.all([conc.marcar(1, ok("1")), conc.marcar(2, ok("2")), conc.marcar(3, ok("3"))]);
+  igual(
+    "marcar concorrente persiste os tres",
+    (await conc.ler())?.itens.map((i) => i.situacao),
+    ["pendente", "ok", "ok", "ok"],
+  );
+  const base = areaMemoria();
+  let falhar = true;
+  const aposErro = new RepositorioLote({ ...base, gravar: (i) => (falhar ? Promise.reject(new Error("falha")) : base.gravar(i)) }, escopo);
+  let rejeitou = false;
+  await aposErro.gravar(exemplo()).catch(() => {
+    rejeitou = true;
+  });
+  checar("erro chega a quem chamou", rejeitou);
+  falhar = false;
+  await aposErro.gravar(exemplo());
+  checar("fila segue viva apos erro", (await aposErro.ler()) !== null);
+
+  const invalido = async (nome: string, mexer: (l: Mutavel) => void) => {
+    const l = JSON.parse(JSON.stringify(exemplo())) as Mutavel;
+    mexer(l);
+    igual(nome, await new RepositorioLote(areaMemoria({ [k]: l }), escopo).ler(), null);
+  };
+  await invalido("situacao invalida le null", (l) => {
+    l.itens[0].situacao = "feito";
+  });
+  await invalido("ok sem criado le null", (l) => {
+    l.itens[0] = { situacao: "ok" };
+  });
+  await invalido("ok com criado sem numero le null", (l) => {
+    l.itens[0] = { situacao: "ok", criado: { idProcedimento: "1", url: "u" } };
+  });
+  await invalido("criado sem numero em erro le null", (l) => {
+    l.itens[0] = { situacao: "erro", criado: {} };
+  });
+  await invalido("null em linhas le null", (l) => {
+    l.linhas[1] = null;
+  });
+  await invalido("pausa NaN le null", (l) => {
+    l.parametros.pausa = Number.NaN;
+  });
+  await invalido("nivelAcesso invalido le null", (l) => {
+    l.parametros.nivelAcesso = "2";
+  });
+  await invalido("mais de TETO linhas le null", (l) => {
+    l.linhas = Array.from({ length: TETO + 1 }, () => ({ especificacao: "x" }));
+    l.itens = l.linhas.map(() => ({ situacao: "pendente" }));
+  });
+
+  for (const ruim of ["", "|", "host|", "|login", "semBarra"]) {
+    let lancou = false;
+    try {
+      new RepositorioLote(areaMemoria(), ruim);
+    } catch {
+      lancou = true;
+    }
+    checar(`escopo invalido "${ruim}" lanca`, lancou);
+  }
 }
