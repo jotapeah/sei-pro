@@ -162,7 +162,7 @@ export class AppAcoesLote {
     );
     const fechar = h(
       "button",
-      { type: "button", class: "spro-botao-icone", "aria-label": "Fechar", title: "Fechar (Esc)", onclick: () => this.d.fechar() },
+      { type: "button", class: "spro-botao-icone", "aria-label": "Fechar", title: "Fechar (Esc)", onclick: () => this.fechar() },
       icone("fechar", 18),
     );
     this.atualizar = atualizar;
@@ -184,8 +184,9 @@ export class AppAcoesLote {
       const dialogo = (ev.target as HTMLElement | null)?.closest?.("dialog");
       if (dialogo && !dialogo.contains(this.raiz)) return;
       if (ev.key === "Escape") {
+        if (this.minimizado) return;
         ev.preventDefault();
-        if (!this.minimizado) void this.aoEsc();
+        void this.aoEsc();
       } else if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey) && !this.minimizado) {
         if (this.tela !== "configuracao" && this.tela !== "previa") return;
         ev.preventDefault();
@@ -197,17 +198,23 @@ export class AppAcoesLote {
     this.pararTeclado = () => doc.removeEventListener("keydown", teclado);
   }
 
+  /** Toda saída passa por aqui: o teclado para junto. */
+  private fechar(): void {
+    this.pararTeclado();
+    this.d.fechar();
+  }
+
   /** Esc: em qualquer tela fecha; na execução pausa o lote e pergunta (o lote fica salvo e retomável). */
   private async aoEsc(): Promise<void> {
     if (this.tela !== "execucao" || !this.controle || !this.d.confirmar) {
-      this.d.fechar();
+      this.fechar();
       return;
     }
     if (this.perguntando) return;
     this.perguntando = true;
     this.controle.pausar();
     try {
-      if (await this.d.confirmar("O lote foi pausado. Fechar as Ações em Lote?", "Fechar")) this.d.fechar();
+      if (await this.d.confirmar("O lote foi pausado. Fechar as Ações em Lote?", "Fechar")) this.fechar();
     } finally {
       this.perguntando = false;
     }
@@ -234,6 +241,7 @@ export class AppAcoesLote {
 
   /** Modal fechado: nada novo é disparado; o lote fica salvo para a retomada. */
   destruir(): void {
+    if (this.destruido) return;
     this.destruido = true;
     this.pararTeclado();
     this.controle?.encerrar();

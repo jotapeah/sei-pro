@@ -192,6 +192,83 @@ export async function verificarAppTeclado(): Promise<void> {
     m.app.destruir();
   }
 
+  secao("Executar: uma so vez");
+  {
+    const caso = async (
+      nome: string,
+      etapa: "ciencia" | "excluir",
+      disparo: (m: Awaited<ReturnType<typeof montar>>) => void,
+      esperado: number,
+      confirma = true,
+    ) => {
+      const m = await montar(() => confirma);
+      m.app.estado!.etapas = [{ acao: etapa }];
+      let n = 0;
+      const orig = m.app.executar.bind(m.app);
+      m.app.executar = () => {
+        n++;
+        orig();
+      };
+      m.ir("previa");
+      await tique(30);
+      disparo(m);
+      await tique(20);
+      igual(nome, n, esperado);
+      m.app.destruir();
+    };
+    await caso("um Ctrl+Enter (so ciencia): uma execucao", "ciencia", (m) => void tecla(m.doc, "Enter", { ctrl: true }), 1);
+    await caso(
+      "dois Ctrl+Enter seguidos: uma execucao",
+      "ciencia",
+      (m) => {
+        tecla(m.doc, "Enter", { ctrl: true });
+        tecla(m.doc, "Enter", { ctrl: true });
+      },
+      1,
+    );
+    await caso(
+      "dois cliques rapidos: uma execucao",
+      "ciencia",
+      (m) => {
+        const b = [...m.raiz.querySelectorAll("button")].find((x) => x.textContent === "Executar")!;
+        b.click();
+        b.click();
+      },
+      1,
+    );
+    await caso(
+      "destrutiva, Ctrl+Enter + clique: uma execucao",
+      "excluir",
+      (m) => {
+        tecla(m.doc, "Enter", { ctrl: true });
+        [...m.raiz.querySelectorAll("button")].find((x) => x.textContent === "Executar")!.click();
+      },
+      1,
+    );
+    {
+      const m = await montar(() => false);
+      m.app.estado!.etapas = [{ acao: "excluir" }];
+      let n = 0;
+      const orig = m.app.executar.bind(m.app);
+      m.app.executar = () => {
+        n++;
+        orig();
+      };
+      m.ir("previa");
+      await tique(30);
+      const b = [...m.raiz.querySelectorAll("button")].find((x) => x.textContent === "Executar")!;
+      b.click();
+      await tique(10);
+      igual("recusou a confirmacao: nao executou", n, 0);
+      checar("Executar volta a ficar habilitado", !b.disabled);
+      m.textos.length = 0;
+      b.click();
+      await tique(10);
+      igual("pergunta de novo apos recusar", m.textos.length, 1);
+      m.app.destruir();
+    }
+  }
+
   secao("Teclado: nenhum botao Cancelar nas telas");
   {
     const m = await montar();

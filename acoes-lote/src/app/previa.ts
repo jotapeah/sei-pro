@@ -208,10 +208,18 @@ export function montarPrevia(doc: Document, e: EstadoApp, acoes: AcoesPrevia, de
     executorAtual?.cancelar();
     acoes.voltar();
   });
+  let executando = false;
   async function aoExecutar(): Promise<void> {
-    if (executar.disabled) return;
+    // Sem a trava, dois cliques (ou clique e Ctrl+Enter) rodariam acoes.executar() duas vezes: dois lotes.
+    if (executando || executar.disabled) return;
+    executando = true;
+    executar.disabled = true;
     const texto = resumoConfirmacao(planos, e.etapas);
-    if (texto !== null && !(await deps.confirmar(texto, "Executar"))) return;
+    if (texto !== null && !(await deps.confirmar(texto, "Executar"))) {
+      executando = false;
+      desenhar();
+      return;
+    }
     vivo = false;
     executorAtual?.cancelar();
     acoes.executar();
@@ -229,13 +237,6 @@ export function montarPrevia(doc: Document, e: EstadoApp, acoes: AcoesPrevia, de
     dica,
     h("div", { class: "al-rodape" }, voltar, executar),
   );
-  raiz.addEventListener("keydown", (ev) => {
-    const k = ev as KeyboardEvent;
-    if (k.key === "Enter" && (k.ctrlKey || k.metaKey)) {
-      k.preventDefault();
-      void aoExecutar();
-    }
-  });
   void doc;
   desenhar();
   void rodar();
