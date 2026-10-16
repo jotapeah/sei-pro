@@ -41,6 +41,7 @@ import { verificarFavoritosTool } from "./verificar-favoritos-tool";
 import { verificarHistoricoTool } from "./verificar-historico-tool";
 import { verificarProjetosTool } from "./verificar-projetos-tool";
 import { verificarAdaptadorAgente, verificarArquivoAgente, verificarCamposDaConfig, verificarCoordenacaoArquivo, verificarEstadoDaMaquina, verificarGatilhoAgente, verificarSemPinguePongue, verificarSyncNoMeio } from "./verificar-arquivo-agente";
+import { verificarAnexo } from "./verificar-anexo";
 import { resumo } from "./util";
 
 await verificarMotor();
@@ -112,4 +113,5 @@ await verificarSyncNoMeio();
 verificarSemPinguePongue();
 verificarEstadoDaMaquina();
 verificarCamposDaConfig();
+verificarAnexo();
 resumo();
