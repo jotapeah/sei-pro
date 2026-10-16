@@ -2,6 +2,33 @@
 
 ## ![SEI Pro Histórico de Versões](../img/icon-historico.png) Histórico de versões
 
+### Versão 3.4
+16/10/2026
+
+**Novo — [Pesquisar Link Permanente](../pages/LINKPERMANENTE.md) e [Processos em Lote](../pages/PROCESSOSEMLOTE.md) refeitos** (*SEI Pro Lab*, Chrome e Edge), no mesmo estilo dos painéis do SEI Pro, com tema claro e escuro.
+
+**Pesquisar Link Permanente**
+- **Status por linha:** cada número aparece como *Encontrado*, *Não encontrado*, *Sem acesso* ou *Erro*, e o botão **Tentar de novo só as que falharam** repete apenas o que falhou.
+- **Cole o texto como estiver:** um e-mail, um parágrafo ou uma planilha. O módulo reconhece os números de processo e os números SEI, tira as repetições e mostra o que entendeu antes de pesquisar.
+- **Copiar com links:** o número vai com o link por baixo, e cola clicável no Teams, no Outlook e no Word. Continua o **Baixar CSV**.
+- **Pesquisa em paralelo:** três de cada vez, com a lista aparecendo conforme chega.
+
+**Processos em Lote**
+- **Prévia antes de criar:** mostra repetidas, linhas vazias, texto cortado em 100 caracteres e caracteres trocados (o travessão do Word vira hífen), com **Remover repetidas**. Um nível de acesso que o módulo não reconhece trava a prévia, em vez de criar o processo com outro nível.
+- **Colunas da planilha:** especificação, interessado, observação e nível de acesso por linha, com cabeçalho opcional. *(A coluna de interessado é lida, mas ainda não é aplicada.)*
+- **Retomar de onde parou:** o lote fica salvo a cada processo. Se a janela fechar ou a sessão cair, ao reabrir dá para **continuar sem recriar** o que já tem número. Se parecer que outra aba do SEI está rodando o mesmo lote, o módulo avisa.
+- **Minimizar:** a janela vira uma pastilha de progresso no canto e a tela do SEI fica livre para leitura. Há **Pausar**, **Continuar** e **Cancelar**, e a pausa entre processos se ajusta sozinha quando o SEI fica lento.
+- **Sem duplicar processo:** se o SEI não confirmar uma criação (a rede caiu, a resposta veio estranha), o processo aparece como **incerto** e o SEI Pro **não tenta de novo**; confira no Controle de Processos.
+- **Resultado:** tabela com número SEI e link, **Copiar com links**, **Baixar CSV**, **Tentar de novo as falhas** e **Gerar links permanentes destes processos** (abre o Pesquisar Link Permanente já preenchido).
+- **Modelos salvos:** guarde o tipo, o nível, a hipótese legal, a pausa e as ações depois da criação sob um nome, e aplique de novo quando quiser. Nunca guarda as linhas.
+- **Depois de criar:** nos processos criados com número confirmado, **incluir em bloco interno**, **aplicar marcador** e **acompanhar**, cada ação opcional. Repetir é seguro: o que já estava aparece como *já estava*, e uma inclusão que o SEI não confirmou nunca é reenviada ao mesmo bloco.
+
+**Também nesta versão**
+- **Corrigido — [Pesquisa rápida](../pages/PESQUISARAPIDA.md) com o [Novo Controle de Processos](../pages/GRADECONTROLE.md):** com a grade ligada, digitar na pesquisa rápida não filtrava nada. Agora o termo filtra a grade (sem criar filtro salvo) e aparece na linha de status; sem a grade, tudo funciona como antes.
+- **Corrigido — hipótese legal padrão:** a lista agora é lida do SEI quando você abre um processo (no máximo a cada 12 horas), e as Configurações só montam a escolha a partir dela. Antes dependia de um botão dentro do editor de documentos, que saiu. Se estiver vazia, as Configurações pedem para abrir um processo no SEI.
+- **Corrigido — Documentos em Lote:** com nível de acesso público, o SEI recusava o documento com *Hipótese Legal não aplicável ao protocolo*, porque a hipótese pré-selecionada pelo tipo ia junto. Agora ela não é enviada nesse caso.
+- **Ajuste — convite para avaliar nas lojas:** o texto do convite é sorteado a cada abertura, em vez de um por dia.
+
 ### Versão 3.3
 15/10/2026
 
