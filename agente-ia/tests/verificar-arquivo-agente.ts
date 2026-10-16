@@ -1156,6 +1156,35 @@ export function verificarSemPinguePongue(): void {
   }
 }
 
+/** Estado da máquina (conferências, erros, etag) não viaja nem oscila (achado 6). */
+export function verificarEstadoDaMaquina(): void {
+  secao("arquivo do agente: estado da maquina fica na maquina");
+  const skA = skill({ verificadaEm: 111, etag: "W/etag-A", erroSync: "falhou em A" });
+  const cA = conector({ erro: "caiu em A", semResposta: true, verificadoEm: 222 });
+  const colA = { id: "col1", nome: "Equipe", url: "https://github.com/o/r/tree/main/s", verificadaEm: 333, erroSync: "x" };
+  const A = retrato({ skills: [skA], conectores: [cA], colecoes: [colA] });
+  const a = mesclar(A, {}, null, { agora: 10, segredos: false, validar: validarItem });
+  const texto = JSON.stringify(a.envelope);
+  checar("maquina: nada do estado local vai ao arquivo", !/verificadaEm|etag|erroSync|semResposta|verificadoEm|caiu em A/.test(texto), texto.slice(0, 400));
+  // conferir de novo (só o estado muda) não é edição
+  const A2 = retrato({ skills: [{ ...skA, verificadaEm: 999, etag: "W/outro", erroSync: undefined }], conectores: [{ ...cA, erro: undefined, semResposta: undefined, verificadoEm: 998 }], colecoes: [{ ...colA, verificadaEm: 997 }] });
+  const d2 = carimbar(A2, a.diario, 5_000);
+  checar("maquina: so o estado mudou, sem carimbo novo", d2.skills.s1.em === a.diario.skills.s1.em && d2.conectores.c1.em === a.diario.conectores.c1.em && d2.colecoes.col1.em === a.diario.colecoes.col1.em, [d2.skills, d2.conectores]);
+  // B recebe a versão de A e fica com o seu estado
+  const skB = skill({ texto: "velho", verificadaEm: 50, etag: "W/etag-B" });
+  const cB = conector({ nome: "Antigo", verificadoEm: 60, auth: { tipo: "token", cabecalho: "Authorization", valor: "Bearer segredo" } });
+  const B = retrato({ skills: [skB], conectores: [cB] });
+  const envA = mesclar(retrato({ skills: [skA], conectores: [cA] }), diarioEm(retrato({ skills: [skA], conectores: [cA] }), 100), null, { agora: 100, segredos: false }).envelope;
+  const b = mesclar(B, diarioEm(B, 50), envA, { agora: 200, segredos: false, validar: validarItem });
+  const sB = b.retrato.listas.skills[0];
+  const conB = b.retrato.listas.conectores[0];
+  checar("maquina: B recebe o texto de A", sB.texto === skA.texto, sB);
+  checar("maquina: B fica com a sua conferencia da skill", sB.verificadaEm === 50 && sB.etag === "W/etag-B" && sB.erroSync === undefined, sB);
+  checar("maquina: B fica com o seu estado do conector", conB.nome === "Compras" && conB.verificadoEm === 60 && conB.erro === undefined && conB.semResposta === undefined, conB);
+  const b2 = mesclar(b.retrato, b.diario, b.envelope, { agora: 300, segredos: false, validar: validarItem });
+  checar("maquina: depois de receber, nada a regravar", assinatura(b2.envelope) === assinatura(b.envelope) && !b2.mudouLocal);
+}
+
 // Execução avulsa: `npx tsx tests/verificar-arquivo-agente.ts`.
 if (process.argv[1]?.endsWith("verificar-arquivo-agente.ts")) {
   verificarArquivoAgente();
@@ -1164,5 +1193,6 @@ if (process.argv[1]?.endsWith("verificar-arquivo-agente.ts")) {
   await verificarCoordenacaoArquivo();
   await verificarSyncNoMeio();
   verificarSemPinguePongue();
+  verificarEstadoDaMaquina();
   resumo();
 }

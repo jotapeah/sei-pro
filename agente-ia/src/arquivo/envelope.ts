@@ -194,13 +194,49 @@ function conectorDoArquivo(vindo: Conector, localQualquer: Conector | undefined)
   return { ...vindo, auth };
 }
 
+/**
+ * Estado DESTE computador, que não é configuração: quando a skill ou a
+ * coleção foi conferida na origem (e o `etag` de lá, e a falha), quando o
+ * conector respondeu (e o erro, e o "sem resposta" do servidor local). Não
+ * vai ao arquivo nem entra no hash — senão cada conferência seria uma edição
+ * e os dois computadores trocariam o estado um do outro —, e na entrada fica
+ * o valor daqui.
+ */
+const DA_MAQUINA: Partial<Record<TipoLista, readonly string[]>> = {
+  skills: ["verificadaEm", "etag", "erroSync"],
+  colecoes: ["verificadaEm", "erroSync"],
+  colecoesFluxos: ["verificadaEm", "erroSync"],
+  conectores: ["erro", "semResposta", "verificadoEm"],
+};
+
+function semDaMaquina(tipo: TipoLista, item: unknown): unknown {
+  const campos = DA_MAQUINA[tipo];
+  if (!campos || typeof item !== "object" || item === null) return item;
+  const copia = { ...(item as Record<string, unknown>) };
+  for (const c of campos) delete copia[c];
+  return copia;
+}
+
+/** O dado do arquivo com o estado deste computador (o do `local`, se houver). */
+function comDaMaquina(tipo: TipoLista, dado: unknown, local: unknown): unknown {
+  const campos = DA_MAQUINA[tipo];
+  const limpoDeLa = semDaMaquina(tipo, dado);
+  if (!campos || typeof local !== "object" || local === null || typeof limpoDeLa !== "object" || limpoDeLa === null) return limpoDeLa;
+  const daqui = local as Record<string, unknown>;
+  const r = limpoDeLa as Record<string, unknown>;
+  for (const c of campos) if (daqui[c] !== undefined) r[c] = daqui[c];
+  return r;
+}
+
 /** O dado do registro como vai ao arquivo. */
 function paraArquivo(tipo: TipoLista, item: unknown): unknown {
-  return tipo === "conectores" ? conectorParaArquivo(item as Conector) : item;
+  const sem = semDaMaquina(tipo, item);
+  return tipo === "conectores" ? conectorParaArquivo(sem as Conector) : sem;
 }
 
 /** O item que o retrato passa a ter, a partir do dado do arquivo. */
-function doArquivo(tipo: TipoLista, dado: unknown, local: unknown): unknown {
+function doArquivo(tipo: TipoLista, dadoDeLa: unknown, local: unknown): unknown {
+  const dado = comDaMaquina(tipo, dadoDeLa, local);
   if (tipo === "conectores") return conectorDoArquivo(dado as Conector, local as Conector | undefined);
   if (tipo === "rotinas") return rotinaDoArquivo(dado as Rotina, local as Rotina | undefined);
   return dado;
