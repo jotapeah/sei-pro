@@ -375,9 +375,10 @@
   transition:
     background-color var(--spro-dur) var(--spro-curva),
     color var(--spro-dur) var(--spro-curva),
-    font-size var(--spro-dur) var(--spro-curva),
-    padding var(--spro-dur) var(--spro-curva),
-    gap var(--spro-dur) var(--spro-curva);
+    font-size var(--spro-nav-dur, 380ms) var(--spro-nav-curva, ease),
+    width var(--spro-nav-dur, 380ms) var(--spro-nav-curva, ease),
+    padding var(--spro-nav-dur, 380ms) var(--spro-nav-curva, ease),
+    gap var(--spro-nav-dur, 380ms) var(--spro-nav-curva, ease);
 }
 :root[data-spro-tema-ativo] div.spro-doc-acoes[data-spro-compacto] {
   justify-content: flex-end;
@@ -389,13 +390,19 @@
   justify-content: center;
   font-size: 0;
 }
-:root[data-spro-tema-ativo] div.spro-doc-acoes[data-spro-compacto] > .spro-doc-acao[data-spro-rotulo]::after {
-  content: none;
-}
 :root[data-spro-tema-ativo] div.spro-doc-acoes[data-spro-compacto] > button.spro-largura::before {
   font-size: 15px;
 }
 /* O texto some com font-size 0, mas o ícone (fonte de ícones ou imagem) mantém o tamanho dele */
 :root[data-spro-tema-ativo] div.spro-doc-acoes[data-spro-compacto] > a.spro-doc-acao > * {
   font-size: 14px;
+}
+/* Largura "auto" também anima (o botão encolhe até o ícone em vez de saltar) */
+:root[data-spro-tema-ativo] .spro-doc-acao {
+  interpolate-size: allow-keywords;
+  width: auto;
+  overflow: hidden;
+}
+:root[data-spro-tema-ativo] div.spro-doc-acoes[data-spro-compacto] > .spro-doc-acao {
+  width: 32px;
 }

@@ -80,6 +80,8 @@ export function gerarTokens(cfg: ConfigTema, esquema: Esquema): Record<string, s
     "--spro-raio-xg": "16px",
     "--spro-fonte": 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
     "--spro-dur": "150ms",
+    /** Curva das transições da casca (estava em uso em ~34 regras sem estar definida, então nenhuma transição rodava). */
+    "--spro-curva": "cubic-bezier(0.22, 0.61, 0.36, 1)",
   };
 }
 
