@@ -1,4 +1,5 @@
 import { resumo } from "./util";
+import { verificarAppSelecao } from "./verificar-app-selecao";
 import { verificarDocumentos } from "./verificar-documentos";
 import { verificarExecutor } from "./verificar-executor";
 import { verificarFila } from "./verificar-fila";
@@ -10,4 +11,5 @@ verificarDocumentos();
 verificarFila();
 await verificarRepositorio();
 await verificarExecutor();
+await verificarAppSelecao();
 resumo();

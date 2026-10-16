@@ -74,3 +74,90 @@ html[data-minimizado] #app {
     padding: 10px;
   }
 }
+
+/* ---------- Tela de selecao ---------- */
+.al-nota {
+  margin: 0;
+  color: var(--spro-suave);
+}
+.al-selecao {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.al-filtros,
+.al-periodo,
+.al-atalhos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+.al-periodo label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--spro-suave);
+}
+.al-data {
+  font: inherit;
+  color: var(--spro-texto);
+  background: var(--spro-fundo);
+  border: 1px solid var(--spro-borda);
+  border-radius: var(--spro-raio);
+  padding: 3px 6px;
+}
+.al-data:disabled {
+  opacity: 0.5;
+}
+.al-rotulo {
+  color: var(--spro-suave);
+}
+.al-tabela {
+  max-height: 46vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  background: var(--spro-fundo);
+  border: 1px solid var(--spro-borda);
+  border-radius: var(--spro-raio);
+}
+.al-tabela > .al-nota {
+  padding: 16px;
+  text-align: center;
+}
+table.al-documentos {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+table.al-documentos th,
+table.al-documentos td {
+  padding: 5px 8px;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--spro-borda);
+}
+table.al-documentos th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--spro-fundo);
+  color: var(--spro-suave);
+  font-weight: 600;
+  white-space: nowrap;
+}
+table.al-documentos tr.al-marcada td {
+  background: color-mix(in srgb, var(--spro-destaque) 10%, transparent);
+}
+.al-col-caixa {
+  width: 32px;
+  text-align: center;
+}
+.al-col-menu {
+  width: 36px;
+}
+.al-barra .spro-botao:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

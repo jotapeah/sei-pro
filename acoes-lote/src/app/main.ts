@@ -1,6 +1,6 @@
 /**
- * Entrada de html/acoes-lote.html. Esqueleto: conecta com a aba do SEI, abre o <dialog> do modal e mostra
- * "Carregando…". O app de verdade (telas, execucao) entra nas tarefas seguintes.
+ * Entrada de html/acoes-lote.html: conecta com a aba do SEI, abre o <dialog> do modal, segue o tema do SEI e
+ * monta o app (tela de selecao; as demais telas entram nas tarefas seguintes).
  *
  * So o modo modal (`#modo=modal&tema=claro|escuro`), como o Processos em Lote: iframe transparente sobre a tela
  * do SEI, ligado a PROPRIA aba (pagina/main.ts), com o app num <dialog> com veu.
@@ -8,8 +8,10 @@
 
 import { esperarConexaoDaAba } from "@comum/ponte/conexaoDaAba";
 import type { Rpc, Tratador } from "@comum/ponte/rpc";
+import { aplicarTemaDoContexto } from "@comum/tema/painel";
 import { h } from "@comum/ui/dom";
 import { CANAL_ACOES_LOTE } from "../modelo/constantes";
+import { AppAcoesLote, type ContextoApp } from "./app";
 
 const parametros = new URLSearchParams(location.hash.slice(1));
 document.documentElement.dataset.modo = "modal";
@@ -36,6 +38,9 @@ async function iniciarModal(): Promise<void> {
   dlg.showModal();
   try {
     rpc = await conexao;
+    const ctx = await rpc.chamar<ContextoApp>("contexto");
+    aplicarTemaDoContexto(document.documentElement, ctx);
+    await new AppAcoesLote(raiz, { rpc, ctx, fechar: () => dlg.close() }).iniciar();
   } catch (e) {
     raiz.replaceChildren(
       h("p", { class: "spro-lista-erro" }, `Não foi possível abrir as Ações em Lote: ${e instanceof Error ? e.message : String(e)}`),
