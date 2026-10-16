@@ -7,6 +7,9 @@
  * meio de uma gravação do arquivo, regrava a lista velha por cima.
  */
 
+import { absorverDoSync, type Diario } from "../arquivo/envelope";
+import { CHAVE_DIARIO } from "../arquivo/retrato";
+import { validarItem } from "../arquivo/validar";
 import { guardarConectores, listarConectores, type Conector } from "../mcp/conectores";
 import { guardarFluxos, listarFluxos, type Fluxo } from "../fluxos/modelo";
 import { aplicarDoSync, espelhar, ESPELHOS, unirNaPrimeiraVez } from "./espelho";
@@ -71,7 +74,19 @@ export async function trazerDoSync(l: ListasEspelhadas, primeira: boolean): Prom
     guardarConectores(n.conectores),
     guardarFluxos(n.fluxos),
   ]);
+  // Depois de gravar: o diário passa a conhecer o que veio do sync como
+  // "não é edição daqui" (ver `absorverDoSync`).
+  await absorverNoDiario(l, n);
   return n;
+}
+
+/** O que o sync mudou entra no diário do arquivo sem carimbo novo. */
+async function absorverNoDiario(antes: ListasEspelhadas, depois: ListasEspelhadas): Promise<void> {
+  const d = (await chrome.storage.local.get(CHAVE_DIARIO))[CHAVE_DIARIO] as Diario | undefined;
+  if (!d || typeof d !== "object") return;
+  let novo = d;
+  for (const tipo of Object.keys(depois) as Array<keyof ListasEspelhadas>) novo = absorverDoSync(novo, tipo, antes[tipo], depois[tipo], validarItem);
+  if (novo !== d) await chrome.storage.local.set({ [CHAVE_DIARIO]: novo });
 }
 
 /**

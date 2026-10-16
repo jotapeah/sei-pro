@@ -313,6 +313,44 @@ export function carimbar(r: Retrato, d: Diario, agora: number, preservar: Partia
   return novo;
 }
 
+/**
+ * O que o `storage.sync` trouxe NÃO é edição daqui: é a edição de outro
+ * computador, que o arquivo também vai trazer (completa e com o carimbo de
+ * lá). Sem isto, `carimbar` veria o hash novo e carimbaria `agora` — e o
+ * recorte do sync (skill com a descrição nova e o texto velho, conector
+ * rebaixado a "sem autenticação", rotina com o histórico daqui) venceria no
+ * arquivo a versão completa que o outro computador gravou.
+ *
+ * Então, para cada item que mudou entre `antes` e `depois` (a lista antes e
+ * depois de aplicar o sync), a marca do diário ganha o hash novo e MANTÉM o
+ * carimbo. A versão do arquivo, com carimbo maior, continua vencendo; com o
+ * mesmo carimbo, o arquivo fica com a dele (ver `mesmoCarimbo`).
+ *
+ * Só quando o item de `antes` ainda batia com a marca: se não batia, havia
+ * edição daqui por carimbar, e ela segue o caminho normal.
+ */
+export function absorverDoSync(d: Diario, tipo: TipoLista, antes: readonly unknown[], depois: readonly unknown[], validar?: OpcoesMescla["validar"]): Diario {
+  const marcas = d[tipo];
+  if (!marcas) return d;
+  // O mesmo hash que `carimbar` calcula: do item normalizado, como vai ao arquivo.
+  const hashDe = (item: unknown): string | null => {
+    const v = validar ? validar(tipo, item) : item;
+    return v === null || v === undefined ? null : hash(paraArquivo(tipo, v));
+  };
+  const velhos = new Map(antes.map((i) => [idDe(i), i]));
+  let novas: Record<string, Marca> | null = null;
+  for (const item of depois) {
+    const id = idDe(item);
+    const marca = marcas[id];
+    const velho = velhos.get(id);
+    if (!marca || marca.apagado || velho === undefined || hashDe(velho) !== marca.h) continue;
+    const h = hashDe(item);
+    if (h === null || h === marca.h) continue;
+    (novas ??= { ...marcas })[id] = { ...marca, h };
+  }
+  return novas ? { ...d, [tipo]: novas } : d;
+}
+
 // ------------------------------------------------------------ a mescla
 
 interface ResultadoLista {

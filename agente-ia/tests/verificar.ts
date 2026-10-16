@@ -40,7 +40,7 @@ import { verificarFaixaDeFluxo } from "./verificar-faixa";
 import { verificarFavoritosTool } from "./verificar-favoritos-tool";
 import { verificarHistoricoTool } from "./verificar-historico-tool";
 import { verificarProjetosTool } from "./verificar-projetos-tool";
-import { verificarAdaptadorAgente, verificarArquivoAgente, verificarCoordenacaoArquivo, verificarGatilhoAgente } from "./verificar-arquivo-agente";
+import { verificarAdaptadorAgente, verificarArquivoAgente, verificarCoordenacaoArquivo, verificarGatilhoAgente, verificarSyncNoMeio } from "./verificar-arquivo-agente";
 import { resumo } from "./util";
 
 await verificarMotor();
@@ -108,4 +108,5 @@ verificarArquivoAgente();
 await verificarAdaptadorAgente();
 await verificarGatilhoAgente();
 await verificarCoordenacaoArquivo();
+await verificarSyncNoMeio();
 resumo();

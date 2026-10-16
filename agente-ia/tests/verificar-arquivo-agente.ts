@@ -7,6 +7,7 @@
  */
 
 import {
+  absorverDoSync,
   assinatura,
   carimbar,
   FORMATO,
@@ -21,6 +22,7 @@ import {
 import { adaptadorAgente } from "../src/arquivo/adaptador";
 import { CHAVES_DO_AGENTE, criarFila, deveAgendar, exportarBackup, fontesQueAvisam, importarBackup, MSG_IMPORTADO, MSG_NAO_E_BACKUP, travarAdaptador } from "../src/arquivo/gatilho";
 import { espelharListas, lerListasDoLocal, trazerDoSync, type ListasEspelhadas } from "../src/painel/sincronia-listas";
+import { ESPELHOS } from "../src/painel/espelho";
 import { fontesDoNavegador, lerListas, mudancas, type FontesRetrato } from "../src/arquivo/retrato";
 import { MAX_LEMBRANCAS } from "../src/painel/memoria";
 import { validarItem } from "../src/arquivo/validar";
@@ -928,11 +930,138 @@ export async function verificarCoordenacaoArquivo(): Promise<void> {
   }
 }
 
+/**
+ * Dois computadores com o `storage.sync` NO MEIO: o recorte chega pelo sync
+ * em segundos, o arquivo chega depois. O que o sync trouxe não pode ser
+ * carimbado como edição daqui (achados 1 e 2 da revisão final).
+ */
+export async function verificarSyncNoMeio(): Promise<void> {
+  secao("arquivo do agente: dois computadores com o sync no meio");
+  const o = (agora: number) => ({ agora, segredos: false, validar: validarItem });
+
+  // skill: A edita texto e descrição; B recebe o recorte (texto velho) antes do arquivo
+  {
+    const sk = (s: Partial<SkillUsuario> = {}) => skill({ descricao: "d", texto: "velho", ...s });
+    let A = retrato({ skills: [sk()] });
+    let B = retrato({ skills: [sk()] });
+    let rA = mesclar(A, {}, null, o(10));
+    let arquivo = rA.envelope;
+    let dA = rA.diario;
+    let rB = mesclar(B, {}, arquivo, o(20));
+    let dB = rB.diario;
+    B = rB.retrato;
+    arquivo = rB.envelope;
+    A = retrato({ skills: [sk({ texto: "NOVO", descricao: "d2" })] });
+    rA = mesclar(A, dA, arquivo, o(1000));
+    dA = rA.diario;
+    arquivo = rA.envelope;
+    // o sync entrega o recorte de A a B (sem o texto)
+    const antes = B.listas.skills;
+    const depois = [ESPELHOS.skills.doSync(ESPELHOS.skills.paraSync(A.listas.skills[0])!, antes[0])!];
+    checar("sync no meio: o recorte chega com o texto velho (premissa)", depois[0].texto === "velho" && depois[0].descricao === "d2", depois);
+    dB = absorverDoSync(dB, "skills", antes, depois, validarItem);
+    B = { ...B, listas: { ...B.listas, skills: depois } };
+    rB = mesclar(B, dB, arquivo, o(2000));
+    dB = rB.diario;
+    arquivo = rB.envelope;
+    const sB = rB.retrato.listas.skills[0];
+    checar("sync no meio: B fica com o texto novo do arquivo", sB.texto === "NOVO" && sB.descricao === "d2", sB);
+    const noArquivo = arquivo.registros.skills[0].dado as SkillUsuario;
+    checar("sync no meio: o arquivo segue com o texto novo", noArquivo.texto === "NOVO" && arquivo.registros.skills[0].em === 1000, arquivo.registros.skills[0]);
+    rA = mesclar(A, dA, arquivo, o(3000));
+    checar("sync no meio: A nao perde o texto que editou", rA.retrato.listas.skills[0].texto === "NOVO", rA.retrato.listas.skills[0]);
+  }
+
+  // conector: o doSync rebaixa "token sem valor" a "sem autenticação" a cada abertura
+  {
+    const cA = conector({ permissoes: {} });
+    let rA = mesclar(retrato({ conectores: [cA] }), {}, null, o(10));
+    let arquivo = rA.envelope;
+    const dA = rA.diario;
+    const A = rA.retrato;
+    const bruto = ESPELHOS.conectores.paraSync(cA)!;
+    let B = retrato({ conectores: [validarItem("conectores", ESPELHOS.conectores.doSync(bruto, undefined)) as Conector] });
+    let rB = mesclar(B, {}, arquivo, o(20));
+    let dB = rB.diario;
+    B = rB.retrato;
+    arquivo = rB.envelope;
+    for (const t of [30, 40, 50]) {
+      // B abre o painel: o sync é aplicado de novo sobre o que B tem
+      const antes = B.listas.conectores;
+      // normalizado como o retrato o lê do storage (`lerListas`)
+      const depois = [validarItem("conectores", ESPELHOS.conectores.doSync(bruto, antes[0])) as Conector];
+      dB = absorverDoSync(dB, "conectores", antes, depois, validarItem);
+      B = { ...B, listas: { ...B.listas, conectores: depois } };
+      rB = mesclar(B, dB, arquivo, o(t));
+      dB = rB.diario;
+      B = rB.retrato;
+      arquivo = rB.envelope;
+    }
+    const reg = arquivo.registros.conectores[0].dado as Conector;
+    checar("sync no meio: o arquivo nao recebe o conector rebaixado", reg.auth.tipo === "token", reg.auth);
+    rA = mesclar(A, dA, arquivo, o(60));
+    const auth = rA.retrato.listas.conectores[0].auth;
+    checar("sync no meio: A continua com o token", auth.tipo === "token" && auth.valor === "Bearer segredo", auth);
+  }
+
+  // absorver: edição daqui ainda não carimbada não é absorvida
+  {
+    const r = retrato({ regras: [regra()] });
+    const d = carimbar(r, {}, 5);
+    const editada = [regra({ mensagem: "editada aqui" })];
+    const doSync = [regra({ mensagem: "veio do sync" })];
+    const d2 = absorverDoSync(d, "regras", editada, doSync, validarItem);
+    checar("absorver: com edicao pendente, a marca fica como estava", d2 === d, d2.regras);
+    const d3 = absorverDoSync(d, "regras", r.listas.regras, doSync, validarItem);
+    checar("absorver: sem edicao pendente, hash novo e mesmo carimbo", d3.regras.r1.em === d.regras.r1.em && d3.regras.r1.h !== d.regras.r1.h, d3.regras);
+    checar("absorver: o carimbar seguinte nao carimba agora", carimbar({ ...r, listas: { ...r.listas, regras: doSync } }, d3, 999).regras.r1.em === d.regras.r1.em);
+  }
+
+  // integração: trazerDoSync de verdade (chrome falso) + adaptador com o arquivo de A
+  const antesChrome = (globalThis as { chrome?: unknown }).chrome;
+  try {
+    let t = 500_000;
+    const relogio = () => (t += 1_000);
+    const nav = navegadorComAvisos("nada_");
+    (globalThis as { chrome?: unknown }).chrome = nav.chrome;
+    const sk = (s: Partial<SkillUsuario> = {}) => skill({ descricao: "d", texto: "velho", ...s });
+    // A (em memória) e B (chrome falso) começam iguais, pelo arquivo
+    const A = computador(retrato({ skills: [sk()] }));
+    const arq = arquivoMemoria();
+    await sincronia(A, arq, relogio).sincronizar();
+    const fontesB = fontesDoNavegador({ todas: async () => [], gravarVarias: async () => undefined });
+    await sincronia(fontesB, arq, relogio).sincronizar();
+    await assentar();
+    // A edita; o arquivo de A é gravado; o recorte sobe ao sync
+    A.r = { ...A.r, listas: { ...A.r.listas, skills: [sk({ texto: "NOVO", descricao: "d2" })] } };
+    await sincronia(A, arq, relogio).sincronizar();
+    nav.dados.sync.spro_skill_s1 = ESPELHOS.skills.paraSync(A.r.listas.skills[0]);
+    // B abre o painel: o sync chega primeiro
+    const listasB = await lerListasDoLocal();
+    await trazerDoSync(listasB, false);
+    await assentar();
+    const local = (nav.dados.local.agenteIA_skills as SkillUsuario[])[0];
+    checar("integracao: B recebeu o recorte pelo sync (premissa)", local.descricao === "d2" && local.texto === "velho", local);
+    // depois chega o arquivo
+    await sincronia(fontesB, arq, relogio).sincronizar();
+    await assentar();
+    const final = (nav.dados.local.agenteIA_skills as SkillUsuario[])[0];
+    checar("integracao: B fica com o texto novo", final.texto === "NOVO" && final.descricao === "d2", final);
+    const env = lerEnvelope(JSON.parse(arq.texto));
+    checar("integracao: o arquivo continua com o texto novo", (env?.registros.skills[0].dado as SkillUsuario | undefined)?.texto === "NOVO", env?.registros.skills);
+    await sincronia(A, arq, relogio).sincronizar();
+    checar("integracao: A continua com o texto novo", A.r.listas.skills[0].texto === "NOVO", A.r.listas.skills);
+  } finally {
+    (globalThis as { chrome?: unknown }).chrome = antesChrome;
+  }
+}
+
 // Execução avulsa: `npx tsx tests/verificar-arquivo-agente.ts`.
 if (process.argv[1]?.endsWith("verificar-arquivo-agente.ts")) {
   verificarArquivoAgente();
   await verificarAdaptadorAgente();
   await verificarGatilhoAgente();
   await verificarCoordenacaoArquivo();
+  await verificarSyncNoMeio();
   resumo();
 }
