@@ -3,7 +3,7 @@
 import { lerArvore } from "@nucleo/dominio/arvore";
 import { fixture } from "../../sei-nucleo/tests/util";
 import { ACOES, type AcaoId } from "../src/modelo/acoes";
-import { contarPorAcao, elegivel, type LinhaDoc, linhasDaArvore } from "../src/modelo/documentos";
+import { contarPorAcao, elegivel, type LinhaDoc, linhasDaArvore, tiposDosTitulos } from "../src/modelo/documentos";
 import { aplicarAtalho, filtrar } from "../src/modelo/filtros";
 import { checar, igual, secao } from "./util";
 
@@ -42,6 +42,47 @@ export function verificarDocumentos(): void {
     "data fica indefinida",
     linhas.every((l) => l.data === undefined),
   );
+
+  secao("Documentos: tipo tirado do título (a árvore não traz a série)");
+  {
+    const titulos = [
+      "Despacho 0103947",
+      "Despacho Maria Souza",
+      "Abaixo-Assinado Anexo Documentos da vistoria",
+      "Boletim 4444 sdgsdg",
+      "Autorização 01 para assinatura de contrato",
+      "Laudo teste B1.3",
+      "Vídeo",
+      "Ofício 12/2026",
+      "Ofício Circular",
+    ];
+    igual("tipos de títulos reais do SEI SP", tiposDosTitulos(titulos), [
+      "Despacho",
+      "Despacho",
+      "Abaixo-Assinado",
+      "Boletim",
+      "Autorização",
+      "Laudo teste",
+      "Vídeo",
+      "Ofício",
+      "Ofício",
+    ]);
+    igual("prefixo por palavra, não por letra", tiposDosTitulos(["Ata 3", "Atas Diversas"]), ["Ata", "Atas"]);
+    igual("o maior tipo conhecido ganha", tiposDosTitulos(["Nota 1", "Nota Técnica 2", "Nota Técnica Conjunta"]), [
+      "Nota",
+      "Nota Técnica",
+      "Nota Técnica",
+    ]);
+    const linhasSp = linhasDaArvore({
+      ...arv,
+      documentos: arv.documentos.slice(0, 2).map((d, i) => ({ ...d, titulo: ["Despacho 5", "Despacho Maria Souza"][i]! })),
+    });
+    igual(
+      "linhasDaArvore usa a passada sobre todas as linhas",
+      linhasSp.map((l) => l.tipo),
+      ["Despacho", "Despacho"],
+    );
+  }
 
   secao("Documentos: definição das ações");
   igual(

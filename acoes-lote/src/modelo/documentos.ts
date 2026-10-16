@@ -7,7 +7,7 @@ export interface LinhaDoc {
   id: string;
   numero: string;
   titulo: string;
-  /** O título sem o número final ("Despacho 12" vira "Despacho"). */
+  /** O tipo tirado do título (a árvore não traz a série): ver `tiposDosTitulos`. */
   tipo: string;
   externo: boolean;
   formato: string;
@@ -22,18 +22,51 @@ export interface LinhaDoc {
   data?: string;
 }
 
-/** "Despacho 12" -> "Despacho"; títulos sem número no fim ficam como estão. */
-function tipoDoTitulo(titulo: string): string {
-  const t = titulo.replace(/\s+\d+$/, "").trim();
-  return t || titulo.trim();
+const palavras = (s: string): string[] => s.trim().split(/\s+/).filter(Boolean);
+
+/**
+ * Tipo pelo corte no primeiro token com dígito ("Autorização 01 para…" -> "Autorização", "Laudo teste B1.3" ->
+ * "Laudo teste"); null quando o título não tem token com dígito (ou começa por um).
+ */
+function tipoPorDigito(titulo: string): string | null {
+  const p = palavras(titulo);
+  const i = p.findIndex((t) => /\d/.test(t));
+  return i > 0 ? p.slice(0, i).join(" ") : null;
+}
+
+/**
+ * Tipo do documento a partir do título. A árvore do SEI não traz a série, e o título é "tipo + número" ou
+ * "tipo + nome na árvore" ("Despacho Maria Souza"). Com dígito, corta nele; sem dígito, o maior tipo de
+ * `conhecidos` que seja prefixo por palavra; senão, a primeira palavra.
+ */
+export function tipoDoTitulo(titulo: string, conhecidos: ReadonlySet<string> = new Set()): string {
+  const porDigito = tipoPorDigito(titulo);
+  if (porDigito) return porDigito;
+  const p = palavras(titulo);
+  if (!p.length) return titulo.trim();
+  const t = p.join(" ");
+  let melhor = "";
+  for (const k of conhecidos) if ((t === k || t.startsWith(`${k} `)) && k.length > melhor.length) melhor = k;
+  return melhor || p[0]!;
+}
+
+/** Uma passada sobre todos os títulos: os tipos obtidos pelo dígito servem de dicionário para os demais. */
+export function tiposDosTitulos(titulos: readonly string[]): string[] {
+  const conhecidos = new Set<string>();
+  for (const t of titulos) {
+    const k = tipoPorDigito(t);
+    if (k) conhecidos.add(k);
+  }
+  return titulos.map((t) => tipoDoTitulo(t, conhecidos));
 }
 
 export function linhasDaArvore(a: Arvore): LinhaDoc[] {
-  return a.documentos.map((d) => ({
+  const tipos = tiposDosTitulos(a.documentos.map((d) => d.titulo));
+  return a.documentos.map((d, i) => ({
     id: d.id,
     numero: d.numero,
     titulo: d.titulo,
-    tipo: tipoDoTitulo(d.titulo),
+    tipo: tipos[i]!,
     externo: d.externo,
     formato: d.formato,
     nivel: d.nivel,
