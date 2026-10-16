@@ -1945,6 +1945,14 @@ table.pl-resumo th {
 tr.pl-repetida td {
   opacity: 0.75;
 }
+/* Nivel nao reconhecido: erro que trava o Iniciar; o texto longo pode quebrar. */
+.pl-avisos .pl-aviso-nivel-invalido {
+  --tom: var(--spro-perigo);
+  white-space: normal;
+}
+tr.pl-linha-erro td {
+  background: color-mix(in srgb, var(--spro-perigo) 6%, transparent);
+}
 
 /* ---------- Execucao ---------- */
 .pl-execucao {
