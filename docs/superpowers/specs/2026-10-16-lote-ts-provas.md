@@ -61,4 +61,10 @@ antes da atualizacao devolve "Operacao desconhecida: posAcaoOpcoes"; um app novo
 | Combo de tipos mostra "selecione o tipo de processo" depois de carregar; aviso de cautela num paragrafo so | ok | ok |
 
 Processos de teste desta etapa: MJ `00000.000018/2026-59` a `00000.000021/2026-72` (4), SP `99906.713-630.000025/2026-61` e `...026/2026-14`.
-No MJ, os processos `...020` e `...021` ficaram incluidos no bloco "teste" (408164) e levam o marcador "Teste"; no SP, os dois ficaram no bloco "TESTE ALINE" (16991) com o marcador "Marcador Teste 1". Tambem ficou no bloco "teste" do MJ o processo `00000.000007/2026-79` (experimento de reconhecimento do protocolo).
+No MJ, os processos `...020` e `...021` ficaram incluidos no bloco "teste" (408164) e levam o marcador "Teste"; no SP, os dois ficaram no bloco de teste do SP (16991) com o marcador "Marcador Teste 1". Tambem ficou no bloco "teste" do MJ o processo `00000.000007/2026-79` (experimento de reconhecimento do protocolo).
+
+## Menu suspenso (item levado da Task 7)
+
+O legado fecha o menu suspenso antes de abrir o Historico (`getHistoryProcessosPro`, em `dist/js/sei-functions-pro.js`:
+`$(infraBarraS+'.barSuspenso').trigger('click')`). Os ganchos novos do Pesquisar Link Permanente e do Processos em Lote
+nao fazem esse clique. Estas provas nao registram se o menu suspenso cobre o modal novo no SP nem no MJ: não verificado: conferir antes do release.

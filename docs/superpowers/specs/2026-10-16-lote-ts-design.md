@@ -76,6 +76,8 @@ Tema claro e escuro herdado do SEI, Esc fecha e Ctrl+Enter executa, estrutura de
 
 Detalhar e planejar só depois que a primeira etapa estiver validada.
 
+> **Decisão registrada (revisão final, 16/10/2026):** o modelo salvo guarda tipo, nível de acesso, hipótese legal, pausa e as ações de "Depois de criar"; não guarda assuntos nem interessados, nem as linhas. Assuntos e interessados vêm do formulário do tipo de processo (o padrão que o SEI define para o tipo), e a coluna interessado ainda não é aplicada ao processo; guardá-los no modelo prometeria um efeito que a criação não tem. O item 1 acima fica assim.
+
 ## 9. Fora de escopo
 
 Oficial e Firefox; mudar o formato do link; funcionalidades do PGD; migrar o Documentos em Lote (outro módulo).

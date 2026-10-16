@@ -59,11 +59,17 @@ Ao colar a lista, o SEI Pro mostra uma prévia e só cria os processos depois da
 > - linhas **repetidas**, com um botão para remover as repetidas;
 > - linhas **vazias**, que são ignoradas;
 > - especificações **cortadas em 100 caracteres**, que é o limite do SEI;
-> - **caracteres trocados** (por exemplo, aspas e travessões vindos do Word), destacados na linha.
+> - **caracteres trocados** (por exemplo, aspas e travessões vindos do Word), destacados na linha;
+> - **nível de acesso não reconhecido** na coluna de nível (por exemplo, "Sigiloso" ou "R"): é um erro, e o botão **Iniciar** fica travado até a linha ser corrigida ou removida, para que um processo que deveria ser restrito não seja criado como público;
+> - **interessado não aplicado**: a coluna de interessado é lida, mas ainda não é aplicada ao processo nesta versão.
 
 ### Colunas coladas da planilha
 
-É possível colar direto do Excel ou do Google Planilhas. A tabulação separa as colunas, nesta ordem: **especificação**, **interessado**, **observação** e **nível de acesso**. O cabeçalho é opcional e é reconhecido automaticamente.
+É possível colar direto do Excel ou do Google Planilhas. A tabulação separa as colunas, nesta ordem: **especificação**, **interessado**, **observação** e **nível de acesso**.
+
+> - **Cabeçalho**: é opcional. A primeira linha é tratada como cabeçalho quando alguma das suas células é exatamente um destes nomes (sem diferença de acento ou maiúsculas): Especificação(ões), Descrição(ões), Assunto, Interessado(s), Observação(ões), Nível ou Nível de acesso. Com cabeçalho, a coluna da especificação é a primeira cujo nome começa com "Especificação" ou "Descrição", ou que se chama "Assunto" (sem nenhuma, vale a primeira coluna); as outras são reconhecidas pelo nome, e as de nome desconhecido são ignoradas. Uma primeira linha com outro conteúdo é tratada como dado.
+> - **Nível de acesso**: aceita Público (ou Pública, ou 0) e Restrito (ou Restrita, ou 1). Célula vazia usa o nível escolhido para o lote; qualquer outro valor trava o início (veja a prévia).
+> - **Interessado**: a coluna é lida, mas **ainda não é aplicada** ao processo nesta versão; o interessado fica o padrão do tipo de processo.
 
 ### Retomar de onde parou
 
@@ -71,7 +77,7 @@ O lote fica salvo enquanto é executado. Se a janela for fechada ou a página re
 
 ### Ritmo, pausa e minimizar
 
-A pausa entre um processo e outro se adapta sozinha ao tempo de resposta do SEI. Durante a execução há os botões **Pausar**, **Continuar** e **Cancelar**. O botão **Minimizar** recolhe a janela em uma pastilha de progresso no canto da tela, e o trabalho no SEI pode seguir normalmente.
+A pausa entre um processo e outro se adapta sozinha ao tempo de resposta do SEI. Durante a execução há os botões **Pausar**, **Continuar** e **Cancelar**. O botão **Minimizar** recolhe a janela em uma pastilha de progresso no canto da tela e libera a tela do SEI para leitura. **Mudar de página nesta aba interrompe o lote** (abrir um processo, trocar de tela): o lote fica salvo e pode ser retomado depois.
 
 ### Resultado
 
