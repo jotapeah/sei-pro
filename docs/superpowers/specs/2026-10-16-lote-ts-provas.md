@@ -1,0 +1,46 @@
+# Pesquisar Link Permanente e Processos em Lote (TS): provas no navegador
+
+Data: 16/10/2026. Build do worktree `feat/lote-ts` carregado como extensao descompactada no Chrome for Testing
+(porta 9555, perfil isolado, user-agent comum: o SEI SP de treinamento devolve 404 ao user-agent "Chrome for Testing").
+Ambientes: SEI SP de treinamento (4.1.5, unidade TESTE) e SEI MJ de homologacao `hmlsei.mj.gov.br` (5.0.4, unidade TESTE).
+Nada foi enviado, concluido ou apagado; foram criados processos de teste (listados abaixo).
+
+## Pesquisar Link Permanente
+
+| Prova | SP 4.1.5 | MJ 5.0.4 |
+|---|---|---|
+| Item do menu abre o modal novo (e nao o dialogo legado) | ok | ok |
+| Tema claro, caixa pre-preenchida com os processos da tela | ok (199 linhas) | ok (27 linhas) |
+| Pesquisa: processo valido, inexistente, linha solta | ok: Encontrado / Nao encontrado | ok |
+| Link sem `infra_hash` (`procedimento_trabalhar&id_procedimento=N`) | ok | ok |
+| Esc fecha, devolve a rolagem, remove o iframe (aba em primeiro plano) | ok | ok |
+| Copiar com links / Baixar CSV | nao exercitado no navegador (area de transferencia/download) | idem |
+
+Achados: numeros com prefixo de 3 digitos (`026.00000052/2023-47`, comum no SP) caem em "outros" no painel Reconhecidos
+(a pesquisa os acha mesmo assim).
+
+## Processos em Lote
+
+| Prova | SP 4.1.5 | MJ 5.0.4 |
+|---|---|---|
+| Menu abre o modal novo; aviso de cautela do legado | ok | ok |
+| Lista de tipos (584 no SP, 921 no MJ) | ok | ok |
+| Previa: repetida, travessao trocado por hifen, remover repetidas | nao | ok |
+| Criacao de 2 processos com travessao no texto (gravou hifen, sem `%u2014`) | ok (`99906.713-630.000023/2026-72`, `...024/2026-17`) | ok (`00000.000007/2026-79`, `...008/2026-13`) |
+| Numero SEI vindo do `<title>`; link do resultado | ok | ok |
+| Minimizar (pastilha 320x64 no canto, rolagem destravada, Esc nao fecha) | nao | ok |
+| Lote 3 em andamento + Esc fecha no meio + reabrir: oferta "Continuar de onde parou" (1 de 3 criados), aviso de outra aba | nao | ok |
+| Continuar mesmo assim: termina 3 de 3 sem duplicar (numeros consecutivos 15, 16, 17) | nao | ok |
+| Lote concluido descarta o registro (reabrir mostra a configuracao) | nao | ok |
+| "Gerar links permanentes destes processos": chave gravada, modulo abre | nao | chave gravada; o Link Permanente do `dist/` estava desatualizado (build anterior a Task 15) e nao leu a chave |
+
+Processos de teste criados no MJ: 00000.000007/2026-79 a 00000.000017/2026-12 (11, tipo "Defesa do Consumidor: Reunioes ..."),
+no SP: 99906.713-630.000023/2026-72 e ...024/2026-17 (tipo "Ata de reuniao"). Podem ser apagados/ignorados.
+
+## Defeitos achados na validacao (corrigidos na rodada seguinte)
+
+1. Combo de tipos do Lote fica com o texto "carregando tipos de processo..." depois de carregar.
+2. Aviso de cautela do Lote: trechos em negrito saem em linhas separadas (layout).
+3. `dist/js/link-permanente/app.js` gerado antes da Task 15: nao consome a entrada pendente. Rebuild de ambos.
+4. Numeros de processo com prefixo de 3 digitos classificados como "outros"; nº SEI seguido de ponto final de frase descartado.
+5. Armadilha do harness (nao do produto): a aba em segundo plano (`visibilityState: hidden`) nao dispara o evento `close` do `<dialog>`.
