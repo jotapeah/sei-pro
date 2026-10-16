@@ -21,6 +21,11 @@ export function verificarModelo(): void {
   checar("base sem barra final em /sei", montarLink("https://sei.x.gov.br/sei", "123") === alvo);
   checar("base so com controlador.php", montarLink("https://sei.x.gov.br/sei/controlador.php", "123") === alvo);
   checar(
+    "base terminada em controlador.php/",
+    montarLink("https://sei.x.gov.br/sei/controlador.php/", "123") === alvo,
+    montarLink("https://sei.x.gov.br/sei/controlador.php/", "123"),
+  );
+  checar(
     "base so com a origem",
     montarLink("https://sei.x.gov.br/", "123") === "https://sei.x.gov.br/controlador.php?acao=procedimento_trabalhar&id_procedimento=123",
   );
