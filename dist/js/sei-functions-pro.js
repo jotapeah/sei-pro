@@ -14021,6 +14021,11 @@ function loopIDProtocoloSEI(protocoloSEI, index, TimeOut = 200) {
 
 }
 function initBoxSearchProtocoloSEI() {
+    // Link Permanente novo (js/init_link_permanente.js, SEI Pro Lab): o modal e dele.
+    if (document.documentElement.hasAttribute('data-seipro-link-permanente')) {
+        document.dispatchEvent(new CustomEvent('spro-link-permanente-abrir'));
+        return;
+    }
     resetDialogBoxPro();
     var htmlBox =   '<div class="searchProtocoloSEI" style="width: 100%; float: left;"><textarea placeholder="Insira os n\u00FAmeros de processo ou n\u00FAmeros SEI, um em cada linha..." id="searchProtocoloSEI" style="width: 90%; border: 2px solid #c5c5c5; height: 330px; border-radius: 5px;"></textarea></div>'+
                     '<div id="resultProtocoloSEI" class="resultProtocoloSEI" style="float: right; display: none;">'+
