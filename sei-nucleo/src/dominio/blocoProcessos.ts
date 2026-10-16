@@ -231,9 +231,14 @@ async function telaDoBloco(sei: Sei, idBloco: string, fontes: Pagina[], op: Opco
  *
  * Contrato de repetição: só `erro` é seguro repetir (nada foi incluído).
  * `nao-confirmado` NÃO se repete às cegas: o usuário confere o bloco, porque o
- * processo pode já estar nele (POST que caiu na rede ou devolveu exceção,
- * tela do bloco paginada ou irreconhecível). `incluido` e `ja-estava` não
- * pedem nada; `fora-da-pagina` pede o processo visível no Controle.
+ * processo pode já estar nele (POST que caiu na rede ou devolveu exceção, URL
+ * final diferente da tela do bloco sem mensagem de validação, tela do bloco
+ * paginada ou irreconhecível). `incluido` e `ja-estava` não pedem nada;
+ * `fora-da-pagina` pede o processo visível no Controle.
+ *
+ * Exceção: cancelamento (`CANCELADO`) ou sessão expirada DURANTE o POST lançam
+ * o erro, sem resultado por processo. O pedido pode ter saído, então quem chama
+ * trata todos os ids enviados como `nao-confirmado` (nunca como `erro`).
  */
 export async function incluirProcessosEmBlocoInterno(
   sei: Sei,
