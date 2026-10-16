@@ -39,6 +39,7 @@ import { verificarFaixaDeFluxo } from "./verificar-faixa";
 import { verificarFavoritosTool } from "./verificar-favoritos-tool";
 import { verificarHistoricoTool } from "./verificar-historico-tool";
 import { verificarProjetosTool } from "./verificar-projetos-tool";
+import { verificarArquivoAgente } from "./verificar-arquivo-agente";
 import { resumo } from "./util";
 
 await verificarMotor();
@@ -101,4 +102,5 @@ await verificarFluxoMarkdown();
 verificarColecaoDeFluxos();
 await verificarEditarConteudo();
 verificarFaixaDeFluxo();
+verificarArquivoAgente();
 resumo();

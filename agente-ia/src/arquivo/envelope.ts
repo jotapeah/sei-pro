@@ -1,0 +1,448 @@
+/**
+ * Núcleo da sincronia do Agente por arquivo `.json`: o envelope, o diário e a
+ * mescla. Tudo puro — sem `chrome`, sem IndexedDB e sem relógio (o tempo vem
+ * de `agora`) —, para a camada de leitura e gravação ficar fina e os testes
+ * rodarem no Node.
+ *
+ * O arquivo é a cópia completa do Agente, ao contrário do espelho do
+ * `storage.sync` (ver `espelho.ts`): vai o registro inteiro, com o texto das
+ * skills, o histórico das rotinas e as conversas. Só os segredos ficam de fora
+ * dos registros; quando a pessoa marca a opção, vão numa seção à parte
+ * (`segredos`), que dá para remover sem mexer no resto.
+ *
+ * Como dois computadores escrevem no mesmo arquivo sem se atropelar:
+ * - cada registro leva um carimbo `em` (quando mudou pela última vez);
+ * - o carimbo vem do DIÁRIO, guardado neste computador: ele lembra o hash de
+ *   cada registro como foi ao arquivo, e um hash diferente é uma edição daqui;
+ * - um id que estava no diário e sumiu daqui é uma exclusão, e vira LÁPIDE
+ *   (registro sem dado, com a data da exclusão) — sem ela o arquivo devolveria
+ *   o item apagado, e o espelho o subiria de novo ao `storage.sync`;
+ * - na mescla, vence o carimbo maior, contando a lápide como versão; no
+ *   empate, fica o daqui.
+ *
+ * A poda das conversas por idade (`config.dias`) é DESTE computador: não gera
+ * lápide e não propaga, e o arquivo continua com as conversas que outro
+ * computador guarda por mais tempo.
+ */
+
+import type { Conector } from "../mcp/conectores";
+import type { ColecaoFluxos } from "../fluxos/colecao";
+import type { Fluxo, Ignorados } from "../fluxos/modelo";
+import { configDoSync, configParaSync } from "../painel/espelho";
+import type { ConversaSalva } from "../painel/historico";
+import type { Config } from "../painel/main";
+import type { Lembranca } from "../painel/memoria";
+import type { Regra } from "../painel/regras";
+import type { Rotina } from "../painel/rotinas";
+import type { ColecaoSkills, SkillUsuario } from "../painel/skills";
+
+export const FORMATO = "seipro-agente";
+export const VERSAO = 1;
+
+export type TipoLista = "skills" | "colecoes" | "regras" | "memoria" | "rotinas" | "conectores" | "fluxos" | "colecoesFluxos" | "conversas";
+
+/** A ordem dos tipos no arquivo (e na assinatura). */
+export const TIPOS: TipoLista[] = ["skills", "colecoes", "regras", "memoria", "rotinas", "conectores", "fluxos", "colecoesFluxos", "conversas"];
+
+export interface Registro {
+  id: string;
+  em: number;
+  apagado?: true;
+  dado?: unknown;
+}
+
+export interface Unico<T> {
+  em: number;
+  dado: T;
+}
+
+export interface Segredos {
+  em: number;
+  chave?: string;
+  tokens?: Record<string, string>;
+}
+
+export interface EnvelopeAgente {
+  formato: typeof FORMATO;
+  versao: number;
+  geradoEm: number;
+  config?: Unico<Omit<Config, "chave">>;
+  ignorados?: Unico<Ignorados>;
+  registros: Record<TipoLista, Registro[]>;
+  segredos?: Segredos;
+}
+
+/** Carimbo local por registro: `h` = hash do dado como vai ao arquivo. */
+export interface Marca {
+  em: number;
+  h: string;
+  apagado?: true;
+}
+
+/** Tipo (`config`, `ignorados` ou um `TipoLista`) → id → marca. */
+export type Diario = Record<string, Record<string, Marca>>;
+
+export interface Retrato {
+  config: Config;
+  ignorados: Ignorados;
+  listas: {
+    skills: SkillUsuario[];
+    colecoes: ColecaoSkills[];
+    regras: Regra[];
+    memoria: Lembranca[];
+    rotinas: Rotina[];
+    conectores: Conector[];
+    fluxos: Fluxo[];
+    colecoesFluxos: ColecaoFluxos[];
+    conversas: ConversaSalva[];
+  };
+}
+
+export interface OpcoesMescla {
+  agora: number;
+  /** A caixa "Incluir chave de API e tokens", que é deste computador. */
+  segredos: boolean;
+  /** O botão "Remover segredos do arquivo". */
+  removerSegredos?: boolean;
+}
+
+const DIA = 86_400_000;
+
+/** Id da marca dos itens únicos no diário (`config`, `ignorados`). */
+const UNICO = "_";
+
+// ------------------------------------------------------------ o que vai ao arquivo
+
+/** Remove as chaves de valor `undefined`, que o JSON não carrega (e o hash não pode ver). */
+function limpo<T extends object>(o: T): T {
+  return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as T;
+}
+
+/**
+ * O conector como vai ao arquivo: tudo, menos o segredo. O NOME do cabeçalho
+ * vai; o valor do token vai à parte (`segredos.tokens`), só com a caixa
+ * marcada. O token do OAuth não vai nunca: é renovado por fluxo próprio.
+ */
+function conectorParaArquivo(c: Conector): Conector {
+  const auth =
+    c.auth.tipo === "token"
+      ? ({ tipo: "token", cabecalho: c.auth.cabecalho } as unknown as Conector["auth"])
+      : c.auth.tipo === "oauth"
+        ? limpo({ tipo: "oauth" as const, emissor: c.auth.emissor, cliente: c.auth.cliente })
+        : c.auth;
+  return limpo({ ...c, auth });
+}
+
+/** Remonta o conector do arquivo com o segredo que já existe aqui. */
+function conectorDoArquivo(vindo: Conector, local: Conector | undefined): Conector {
+  const auth: Conector["auth"] =
+    vindo.auth?.tipo === "token"
+      ? {
+          tipo: "token",
+          cabecalho: vindo.auth.cabecalho || "Authorization",
+          // Token vazio fica como token vazio (e não "sem autenticação"): assim
+          // o hash não muda e o conector não volta ao arquivo rebaixado.
+          valor: local?.auth.tipo === "token" ? local.auth.valor : "",
+        }
+      : vindo.auth?.tipo === "oauth"
+        ? local?.auth.tipo === "oauth"
+          ? limpo({ ...vindo.auth, token: local.auth.token, refresh: local.auth.refresh, expiraEm: local.auth.expiraEm })
+          : vindo.auth
+        : { tipo: "nenhuma" };
+  return { ...vindo, auth };
+}
+
+/** O dado do registro como vai ao arquivo. */
+function paraArquivo(tipo: TipoLista, item: unknown): unknown {
+  return tipo === "conectores" ? conectorParaArquivo(item as Conector) : item;
+}
+
+/** O item que o retrato passa a ter, a partir do dado do arquivo. */
+function doArquivo(tipo: TipoLista, dado: unknown, local: unknown): unknown {
+  return tipo === "conectores" ? conectorDoArquivo(dado as Conector, local as Conector | undefined) : dado;
+}
+
+const hash = (dado: unknown): string => JSON.stringify(dado);
+
+const idDe = (item: unknown): string => (item as { id: string }).id;
+
+// ------------------------------------------------------------ o diário
+
+/** Quem não está guardando conversas não carimba nem exporta as suas. */
+const guardaConversas = (c: Config): boolean => Boolean(c.guardar);
+
+/** Abaixo deste carimbo, a conversa já passou do prazo deste computador. */
+function limiteDaPoda(c: Config, agora: number): number | null {
+  return c.dias > 0 ? agora - c.dias * DIA : null;
+}
+
+/** Uma lista contra o diário: hash diferente carimba; id que sumiu vira lápide. */
+function carimbarLista(itens: Array<[string, unknown]>, marcas: Record<string, Marca> | undefined, agora: number, podaAntesDe: number | null): Record<string, Marca> {
+  const novo: Record<string, Marca> = {};
+  const presentes = new Set<string>();
+  for (const [id, dado] of itens) {
+    presentes.add(id);
+    const h = hash(dado);
+    const antes = marcas?.[id];
+    novo[id] = antes && !antes.apagado && antes.h === h ? antes : { em: agora, h };
+  }
+  for (const [id, marca] of Object.entries(marcas ?? {})) {
+    if (presentes.has(id)) continue;
+    // Poda local: a marca velha sai do diário sem deixar lápide.
+    if (podaAntesDe !== null && marca.em < podaAntesDe) continue;
+    novo[id] = marca.apagado ? marca : { em: agora, h: "", apagado: true };
+  }
+  return novo;
+}
+
+/**
+ * O diário atualizado contra o retrato. Idempotente: carimbar o mesmo retrato
+ * de novo, mais tarde, não muda nenhum carimbo.
+ */
+export function carimbar(r: Retrato, d: Diario, agora: number): Diario {
+  const novo: Diario = { ...d };
+  novo.config = carimbarLista([[UNICO, configParaSync(r.config)]], d.config, agora, null);
+  novo.ignorados = carimbarLista([[UNICO, r.ignorados]], d.ignorados, agora, null);
+  for (const tipo of TIPOS) {
+    if (tipo === "conversas") {
+      // Sem guardar conversas, nada delas entra no diário (nem lápide).
+      if (!guardaConversas(r.config)) continue;
+      novo.conversas = carimbarLista(
+        r.listas.conversas.map((c) => [c.id, c]),
+        d.conversas,
+        agora,
+        limiteDaPoda(r.config, agora),
+      );
+      continue;
+    }
+    const lista = r.listas[tipo] as unknown[];
+    novo[tipo] = carimbarLista(
+      lista.map((item) => [idDe(item), paraArquivo(tipo, item)]),
+      d[tipo],
+      agora,
+      null,
+    );
+  }
+  return novo;
+}
+
+// ------------------------------------------------------------ a mescla
+
+interface ResultadoLista {
+  itens: unknown[];
+  marcas: Record<string, Marca>;
+  registros: Registro[];
+  /** Ids cuja versão do arquivo venceu (a marca é refeita do item final). */
+  vindos: Map<string, number>;
+}
+
+/**
+ * Uma lista contra o arquivo, por id: vence o carimbo maior. A ORDEM é a de
+ * cá; o que só existe no arquivo entra no fim, na ordem de lá.
+ */
+function mesclarLista(
+  tipo: TipoLista,
+  locais: unknown[],
+  marcas: Record<string, Marca>,
+  lidos: Registro[],
+  aceitar: (r: Registro) => boolean,
+): ResultadoLista {
+  const doArq = new Map(lidos.map((r) => [r.id, r]));
+  const locaisPorId = new Map(locais.map((item) => [idDe(item), item]));
+  const ids = [...new Set([...locais.map(idDe), ...Object.keys(marcas), ...lidos.map((r) => r.id)])];
+  const itens: unknown[] = [];
+  const novasMarcas: Record<string, Marca> = { ...marcas };
+  const registros: Registro[] = [];
+  const vindos = new Map<string, number>();
+  for (const id of ids) {
+    const local = locaisPorId.get(id);
+    const marca = marcas[id];
+    const reg = doArq.get(id);
+    const venceArquivo = reg !== undefined && (marca === undefined || reg.em > marca.em);
+    if (venceArquivo) {
+      registros.push(reg);
+      if (!aceitar(reg)) {
+        // Fica no arquivo, mas não entra aqui (conversa fora do prazo daqui).
+        if (local !== undefined) itens.push(local);
+        continue;
+      }
+      if (reg.apagado) {
+        novasMarcas[id] = { em: reg.em, h: "", apagado: true };
+      } else {
+        itens.push(doArquivo(tipo, reg.dado, local));
+        vindos.set(id, reg.em);
+      }
+      continue;
+    }
+    if (local !== undefined) {
+      itens.push(local);
+      registros.push({ id, em: marca?.em ?? 0, dado: paraArquivo(tipo, local) });
+    } else if (marca?.apagado) {
+      registros.push({ id, em: marca.em, apagado: true });
+    }
+  }
+  return { itens, marcas: novasMarcas, registros, vindos };
+}
+
+/** Os tokens dos conectores deste computador, por id. */
+function tokensDaqui(conectores: Conector[]): Record<string, string> {
+  const tokens: Record<string, string> = {};
+  for (const c of conectores) if (c.auth.tipo === "token" && c.auth.valor) tokens[c.id] = c.auth.valor;
+  return tokens;
+}
+
+/**
+ * Lê o arquivo e mescla com o que está aqui; devolve o que o local passa a
+ * ter, o diário novo e o envelope que vai ao arquivo. Nunca apaga daqui o que
+ * o arquivo não tem: só uma lápide mais nova que a versão daqui apaga.
+ */
+export function mesclar(
+  local: Retrato,
+  d: Diario,
+  lido: EnvelopeAgente | null,
+  o: OpcoesMescla,
+): { retrato: Retrato; diario: Diario; envelope: EnvelopeAgente; mudouLocal: boolean } {
+  const { agora } = o;
+  const carimbado = carimbar(local, d, agora);
+  const diario: Diario = { ...carimbado };
+  const registros = {} as Record<TipoLista, Registro[]>;
+  const listas = { ...local.listas } as Record<TipoLista, unknown[]>;
+  const vindosPorTipo = new Map<TipoLista, Map<string, number>>();
+
+  // -- config e ignorados: um item só, vence o carimbo maior.
+  const marcaConfig = carimbado.config[UNICO];
+  const configVence = lido?.config !== undefined && lido.config.em > marcaConfig.em;
+  let config = configVence ? configDoSync(lido!.config!.dado as unknown as Record<string, unknown>, local.config) : local.config;
+  const envConfig: Unico<Omit<Config, "chave">> = configVence ? lido!.config! : { em: marcaConfig.em, dado: configParaSync(local.config) };
+
+  const marcaIgn = carimbado.ignorados[UNICO];
+  const ignVence = lido?.ignorados !== undefined && lido.ignorados.em > marcaIgn.em;
+  const ignorados = ignVence ? lido!.ignorados!.dado : local.ignorados;
+  const envIgnorados: Unico<Ignorados> = ignVence ? lido!.ignorados! : { em: marcaIgn.em, dado: local.ignorados };
+  if (ignVence) diario.ignorados = { [UNICO]: { em: lido!.ignorados!.em, h: hash(ignorados) } };
+
+  // -- as listas
+  const limite = limiteDaPoda(local.config, agora);
+  for (const tipo of TIPOS) {
+    const lidos = lido?.registros[tipo] ?? [];
+    if (tipo === "conversas" && !guardaConversas(local.config)) {
+      // Não importa nem exporta as daqui: o arquivo segue com as dos outros.
+      registros.conversas = lidos;
+      continue;
+    }
+    const aceitar =
+      tipo === "conversas" && limite !== null
+        ? (r: Registro) => r.apagado === true || ((r.dado as Partial<ConversaSalva> | undefined)?.quando ?? 0) >= limite
+        : () => true;
+    const res = mesclarLista(tipo, local.listas[tipo] as unknown[], carimbado[tipo] ?? {}, lidos, aceitar);
+    listas[tipo] = res.itens;
+    registros[tipo] = res.registros;
+    diario[tipo] = res.marcas;
+    vindosPorTipo.set(tipo, res.vindos);
+  }
+
+  // -- segredos: importar só com a caixa marcada, e só onde falta aqui.
+  const lidoSeg = lido?.segredos;
+  if (o.segredos && lidoSeg) {
+    if (!config.chave && lidoSeg.chave) config = { ...config, chave: lidoSeg.chave };
+    const tokens = lidoSeg.tokens ?? {};
+    const regsConector = new Map((lido?.registros.conectores ?? []).map((r) => [r.id, r]));
+    listas.conectores = (listas.conectores as Conector[]).map((c) => {
+      const token = tokens[c.id];
+      if (!token) return c;
+      if (c.auth.tipo === "token" && !c.auth.valor) return { ...c, auth: { ...c.auth, valor: token } };
+      if (c.auth.tipo === "nenhuma") {
+        // Chegou pelo `storage.sync` como "sem autenticação" (lá o token não
+        // viaja): volta a token com o cabeçalho que o registro do arquivo tem.
+        const auth = (regsConector.get(c.id)?.dado as Partial<Conector> | undefined)?.auth;
+        const cabecalho = auth?.tipo === "token" && auth.cabecalho ? auth.cabecalho : "Authorization";
+        return { ...c, auth: { tipo: "token", cabecalho, valor: token } };
+      }
+      return c;
+    });
+  }
+
+  // A marca do que veio do arquivo é o carimbo de lá com o hash do item final
+  // daqui: na próxima mescla, `carimbar` não o vê como edição.
+  for (const [tipo, vindos] of vindosPorTipo) {
+    for (const item of listas[tipo]) {
+      const em = vindos.get(idDe(item));
+      if (em !== undefined) diario[tipo] = { ...diario[tipo], [idDe(item)]: { em, h: hash(paraArquivo(tipo, item)) } };
+    }
+  }
+  if (configVence) diario.config = { [UNICO]: { em: lido!.config!.em, h: hash(configParaSync(config)) } };
+
+  let segredos: Segredos | undefined;
+  if (o.removerSegredos) segredos = undefined;
+  else if (o.segredos) {
+    const tokens = tokensDaqui(listas.conectores as Conector[]);
+    const conteudo = limpo({ chave: config.chave || undefined, tokens: Object.keys(tokens).length ? tokens : undefined });
+    // Segredos iguais mantêm o carimbo: senão o arquivo seria regravado a cada leitura.
+    const iguais = lidoSeg !== undefined && hash(limpo({ chave: lidoSeg.chave, tokens: lidoSeg.tokens })) === hash(conteudo);
+    segredos = { em: iguais ? lidoSeg.em : agora, ...conteudo };
+  } else segredos = lidoSeg;
+
+  const retrato: Retrato = { config, ignorados, listas: listas as unknown as Retrato["listas"] };
+  const envelope: EnvelopeAgente = limpo({
+    formato: FORMATO as typeof FORMATO,
+    versao: VERSAO,
+    geradoEm: agora,
+    config: envConfig,
+    ignorados: envIgnorados,
+    registros,
+    segredos,
+  });
+  return { retrato, diario, envelope, mudouLocal: hash(retrato) !== hash(local) };
+}
+
+// ------------------------------------------------------------ leitura e assinatura
+
+const ehObjeto = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
+
+function lerUnico<T>(x: unknown): Unico<T> | undefined {
+  return ehObjeto(x) && typeof x.em === "number" && ehObjeto(x.dado) ? { em: x.em, dado: x.dado as T } : undefined;
+}
+
+function lerRegistro(x: unknown): Registro | null {
+  if (!ehObjeto(x) || typeof x.id !== "string" || typeof x.em !== "number") return null;
+  if (x.apagado === true) return { id: x.id, em: x.em, apagado: true };
+  return x.dado === undefined ? null : { id: x.id, em: x.em, dado: x.dado };
+}
+
+function lerSegredos(x: unknown): Segredos | undefined {
+  if (!ehObjeto(x) || typeof x.em !== "number") return undefined;
+  const tokens = ehObjeto(x.tokens)
+    ? Object.fromEntries(Object.entries(x.tokens).filter((e): e is [string, string] => typeof e[1] === "string"))
+    : undefined;
+  return limpo({ em: x.em, chave: typeof x.chave === "string" ? x.chave : undefined, tokens });
+}
+
+/**
+ * O envelope do arquivo, ou `null` quando não é um arquivo do Agente (o dos
+ * Favoritos, por exemplo). Registro malformado é descartado sem derrubar o
+ * resto; tipo ausente vira lista vazia.
+ */
+export function lerEnvelope(bruto: unknown): EnvelopeAgente | null {
+  if (!ehObjeto(bruto) || bruto.formato !== FORMATO || !ehObjeto(bruto.registros)) return null;
+  const fonte = bruto.registros;
+  const registros = {} as Record<TipoLista, Registro[]>;
+  for (const tipo of TIPOS) {
+    const lista = Array.isArray(fonte[tipo]) ? (fonte[tipo] as unknown[]) : [];
+    registros[tipo] = lista.map(lerRegistro).filter((r): r is Registro => r !== null);
+  }
+  return limpo({
+    formato: FORMATO as typeof FORMATO,
+    versao: typeof bruto.versao === "number" ? bruto.versao : VERSAO,
+    geradoEm: typeof bruto.geradoEm === "number" ? bruto.geradoEm : 0,
+    config: lerUnico<Omit<Config, "chave">>(bruto.config),
+    ignorados: lerUnico<Ignorados>(bruto.ignorados),
+    registros,
+    segredos: lerSegredos(bruto.segredos),
+  });
+}
+
+/** O que identifica o conteúdo do arquivo: tudo menos a hora em que foi gerado. */
+export function assinatura(e: EnvelopeAgente): string {
+  const { geradoEm: _geradoEm, ...resto } = e;
+  return JSON.stringify(resto);
+}
