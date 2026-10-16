@@ -29,8 +29,6 @@ const raiz = document.getElementById("app")!;
 // O ouvinte da porta é registrado já, antes do `load` do iframe, que é quando o content script conecta.
 const conexao = esperarConexaoDaAba(CANAL_LINK_PERMANENTE);
 
-const areaLocal = areaChrome(chrome.storage.local, "local");
-
 const mensagem = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 /** Diálogos do app: <dialog> modais irmãos do modal, e o mais novo fica por cima (top layer). */
@@ -83,6 +81,9 @@ async function iniciarModal(): Promise<void> {
     acompanharTemaDoPainel(document, {
       aoDesligar: async () => aplicarTemaDoContexto(html, await rpcAba.chamar<ContextoApp>("contexto")),
     });
+    // Criada aqui, dentro do try e depois da conexão, e não no topo do módulo: sem `chrome.storage` (contexto
+    // invalidado, permissão) o erro cai no catch, que abre o diálogo com a mensagem e o pedido de fechar à aba.
+    const areaLocal = areaChrome(chrome.storage.local, "local");
     app = new AppLinkPermanente(raiz, {
       rpc,
       ctx,
