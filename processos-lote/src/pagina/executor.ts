@@ -15,6 +15,7 @@ import { criacaoIncerta, criarProcesso } from "../sei/criar";
 import { carregarFormTipo, type FormTipo } from "../sei/formularioTipo";
 import { listarTipos } from "../sei/tipos";
 import type { ContextoLote } from "./contexto";
+import { type ChamadasPosAcao, tratadoresPosAcao } from "./posAcao";
 
 /** As chamadas ao SEI, trocaveis nas provas para forcar cada desfecho sem rede. */
 export interface ChamadasSei {
@@ -32,6 +33,8 @@ export interface DepsExecutor {
   /** Abre o Link Permanente na mesma aba (o app ja gravou a entrada dele). */
   abrirLinkPermanente(): void;
   chamadas?: Partial<ChamadasSei>;
+  /** As funcoes do nucleo das acoes depois da criacao, trocaveis nas provas. */
+  chamadasPosAcao?: Partial<ChamadasPosAcao>;
 }
 
 export type ResultadoCriar =
@@ -172,6 +175,8 @@ export function tratadoresProcessosLote(d: DepsExecutor): Record<string, Tratado
   };
 
   return {
+    // Acoes depois da criacao: posAcaoOpcoes, posAcao e posAcaoBloco.
+    ...tratadoresPosAcao(d.sei, d.chamadasPosAcao),
     contexto: () => {
       const { base: _base, ...publico } = d.ctx;
       return publico;
