@@ -4,6 +4,9 @@
  *
  * Linhas incertas (o SEI nao confirmou) aparecem como "Incerto" com o aviso de conferir no Controle de Processos;
  * nunca entram na repeticao nem na lista do Link Permanente (o numero delas e provisorio).
+ *
+ * O painel "Depois de criar" (posAcao.ts) entra entre os botoes e a tabela, e o resultado das acoes vira a coluna
+ * "Depois de criar", que so aparece depois que alguma acao rodou (antes disso a tabela e a CSV ficam como eram).
  */
 
 import { h, icone } from "@comum/ui/dom";
@@ -22,6 +25,20 @@ export const COLUNAS: ColunaResultado[] = [
   { chave: "link", titulo: "Link", comoLink: true },
 ];
 
+export const COLUNA_DEPOIS: ColunaResultado = { chave: "depois", titulo: "Depois de criar" };
+
+/** O que a tela de resultado precisa do painel "Depois de criar" (posAcao.ts). */
+export interface ExtraResultado {
+  el: HTMLElement;
+  /** Ha resultado de alguma acao: a coluna aparece. */
+  readonly temResultados: boolean;
+  depois(i: ItemProc): string;
+}
+
+export function colunasDoResultado(extra?: ExtraResultado | null): ColunaResultado[] {
+  return extra?.temResultados ? [...COLUNAS, COLUNA_DEPOIS] : COLUNAS;
+}
+
 export const DICA_INCERTO = "Confira no Controle de Processos antes de repetir esta linha.";
 
 const ehIncerto = (i: ItemProc): boolean => i.situacao === "ok" && i.resultado?.incerto === true;
@@ -29,7 +46,8 @@ const ehIncerto = (i: ItemProc): boolean => i.situacao === "ok" && i.resultado?.
 /** O texto que foi (ou seria) enviado ao SEI, como o legado mostrava. */
 const enviada = (esp: string): string => paraLatin1(esp).slice(0, MAX_ESPECIFICACAO).trim();
 
-export function linhasDoResultado(itens: readonly ItemProc[]): LinhaResultado[] {
+export function linhasDoResultado(itens: readonly ItemProc[], extra?: ExtraResultado | null): LinhaResultado[] {
+  const comDepois = !!extra?.temResultados;
   return [...itens]
     .sort((a, b) => a.indice - b.indice)
     .map((i) => {
@@ -58,6 +76,7 @@ export function linhasDoResultado(itens: readonly ItemProc[]): LinhaResultado[] 
           link: url,
         },
       };
+      if (comDepois && extra) linha.campos.depois = extra.depois(i);
       if (url) linha.link = url;
       return linha;
     });
@@ -82,7 +101,28 @@ export interface AcoesResultado {
   descartarENovo?: () => void;
 }
 
-export function montarTelaResultado(itens: readonly ItemProc[], interrompido: boolean, a: AcoesResultado): HTMLElement {
+/** A tabela (com a cor do incerto); redesenhada quando o painel "Depois de criar" muda. */
+function tabelaDoResultado(itens: readonly ItemProc[], extra?: ExtraResultado | null): HTMLTableElement {
+  const tabela = montarTabelaResultado(document, linhasDoResultado(itens, extra), colunasDoResultado(extra));
+  // A cor so reforca: o incerto ja diz "Incerto" na Situacao.
+  const ordenados = [...itens].sort((x, y) => x.indice - y.indice);
+  [...tabela.querySelectorAll("tbody tr")].forEach((tr, k) => {
+    if (ordenados[k] && ehIncerto(ordenados[k])) tr.classList.add("pl-incerto");
+  });
+  return tabela;
+}
+
+/** Troca so a tabela da tela de resultado (o painel, com o que o usuario escolheu, fica). */
+export function atualizarTabelaResultado(tela: HTMLElement, itens: readonly ItemProc[], extra?: ExtraResultado | null): void {
+  tela.querySelector(".pl-tabela")?.replaceChildren(tabelaDoResultado(itens, extra));
+}
+
+export function montarTelaResultado(
+  itens: readonly ItemProc[],
+  interrompido: boolean,
+  a: AcoesResultado,
+  extra?: ExtraResultado | null,
+): HTMLElement {
   const total = itens.length;
   const criados = itens.filter((i) => i.situacao === "ok" && !ehIncerto(i)).length;
   const incertos = itens.filter(ehIncerto).length;
@@ -97,12 +137,7 @@ export function montarTelaResultado(itens: readonly ItemProc[], interrompido: bo
   ].filter(Boolean);
   const botao = (rotulo: string, nome: Parameters<typeof icone>[0], fazer: () => void, classe = "") =>
     h("button", { type: "button", class: `spro-botao pequeno ${classe}`.trim(), onclick: fazer }, icone(nome, 14), rotulo);
-  const tabela = montarTabelaResultado(document, linhasDoResultado(itens), COLUNAS);
-  // A cor so reforca: o incerto ja diz "Incerto" na Situacao.
-  const ordenados = [...itens].sort((x, y) => x.indice - y.indice);
-  [...tabela.querySelectorAll("tbody tr")].forEach((tr, k) => {
-    if (ordenados[k] && ehIncerto(ordenados[k])) tr.classList.add("pl-incerto");
-  });
+  const tabela = tabelaDoResultado(itens, extra);
   return h(
     "section",
     { class: "pl-resultado", "aria-label": "Resultado" },
@@ -132,6 +167,7 @@ export function montarTelaResultado(itens: readonly ItemProc[], interrompido: bo
       botao("Baixar CSV", "baixar", a.baixarCsv),
       a.descartarENovo ? botao("Descartar e começar outro", "lixeira", a.descartarENovo, "fantasma") : null,
     ),
+    extra ? extra.el : null,
     h("div", { class: "pl-tabela" }, tabela),
   );
 }

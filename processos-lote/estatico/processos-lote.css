@@ -368,3 +368,71 @@ table.spro-resultado td a {
 .pl-resultado tr.spro-situacao-pendente td:first-child {
   color: var(--spro-fraco);
 }
+
+/* ---------- Depois de criar (acoes sobre os processos criados) ---------- */
+.pl-pos-acao {
+  border: 1px solid var(--spro-borda);
+  border-radius: var(--spro-raio);
+  background: var(--spro-fundo);
+}
+.pl-pos-abrir {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  background: none;
+  color: var(--spro-texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pl-pos-abrir svg {
+  transform: rotate(-90deg);
+  transition: transform 0.15s;
+}
+.pl-pos-abrir[aria-expanded="true"] svg {
+  transform: none;
+}
+.pl-pos-corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 12px 12px;
+}
+.pl-pos-corpo[hidden] {
+  display: none;
+}
+.pl-pos-avisos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pl-pos-avisos:empty {
+  display: none;
+}
+.pl-pos-bloco {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--spro-borda);
+  border-radius: var(--spro-raio);
+}
+.pl-pos-titulo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.pl-pos-observacao {
+  resize: vertical;
+}
+.pl-pos-status:empty {
+  display: none;
+}
+.pl-acoes > .spro-botao[hidden] {
+  display: none;
+}

@@ -22,14 +22,18 @@ import type { ContextoLote } from "../pagina/contexto";
 import type { LoteEmAndamento, RepositorioLote } from "../repositorio";
 import { type CacheConfig, criarConfirmarSemCancelar, type InfoFormTipo, TelaConfiguracao, type ValoresConfig } from "./configuracao";
 import { ExecucaoLote, MENSAGEM_ASSUMIDO, type ModoRodada, TelaExecucao } from "./execucao";
+import { elegivel, PainelPosAcao } from "./posAcao";
 import { type PedidoPrevia, TelaPrevia } from "./previa";
-import { COLUNAS, linhasDoResultado, montarTelaResultado, numerosParaLink } from "./resultado";
+import { atualizarTabelaResultado, colunasDoResultado, linhasDoResultado, montarTelaResultado, numerosParaLink } from "./resultado";
 
 /** O que o tratador `contexto` devolve: o da aba sem a base (que leva o infra_hash). */
 export type ContextoApp = Omit<ContextoLote, "base">;
 
 export interface DepsApp {
-  /** `tipos`, `formTipo`, `criar`, `abrirLinkPermanente` (e `fechar`/`minimizar`, pelo main), atendidos pela aba. */
+  /**
+   * `tipos`, `formTipo`, `criar`, `abrirLinkPermanente`, as acoes depois de criar (`posAcaoOpcoes`, `posAcao`,
+   * `posAcaoBloco`) e `fechar`/`minimizar` (pelo main), atendidos pela aba.
+   */
   rpc: Pick<Rpc, "chamar">;
   ctx: ContextoApp;
   /** O lote em andamento deste `host|login`. */
@@ -73,6 +77,8 @@ export class AppProcessosLote {
   private previa: TelaPrevia | null = null;
   private execucao: ExecucaoLote | null = null;
   private telaExecucao: TelaExecucao | null = null;
+  /** O painel "Depois de criar" da tela de resultado (so com processo criado e confirmado). */
+  private posAcao: PainelPosAcao | null = null;
   private readonly parar: Array<() => void> = [];
   private readonly conteudo: HTMLElement;
   private readonly cabecalho: HTMLElement;
@@ -152,6 +158,8 @@ export class AppProcessosLote {
   destruir(): void {
     this.destruido = true;
     this.execucao?.pausar();
+    // As acoes depois de criar nao sao gravadas: fechar so para (o processo em voo termina, nada novo sai).
+    this.posAcao?.destruir();
     this.config?.destruir();
     for (const p of this.parar.splice(0)) p();
   }
@@ -162,6 +170,11 @@ export class AppProcessosLote {
     if (this.tela === "configuracao" && tela !== "configuracao") {
       this.config?.destruir();
       this.config = null;
+    }
+    // Saindo do resultado (Tentar de novo, Continuar os que faltam): as acoes param para nao correr junto.
+    if (tela !== "resultado" || this.tela !== "resultado") {
+      this.posAcao?.destruir();
+      this.posAcao = null;
     }
     this.tela = tela;
     this.conteudo.replaceChildren(el);
@@ -412,9 +425,21 @@ export class AppProcessosLote {
     if (this.destruido) return;
     this.telaExecucao = null;
     const interrompido = ex.estado === "cancelado" || restantes > 0;
-    this.mostrar(
-      "resultado",
-      montarTelaResultado(ex.itens, interrompido, {
+    // So com processo criado e confirmado: as linhas incertas nunca entram nas acoes.
+    let tela: HTMLElement | null = null;
+    const painel = ex.itens.some(elegivel)
+      ? new PainelPosAcao(ex.itens, {
+          rpc: this.d.rpc,
+          esperar: this.d.esperar,
+          aoMudar: () => {
+            if (tela && !this.destruido) atualizarTabelaResultado(tela, ex.itens, painel);
+          },
+        })
+      : null;
+    tela = montarTelaResultado(
+      ex.itens,
+      interrompido,
+      {
         copiar: () => void this.copiar(),
         baixarCsv: () => this.baixarCsv(),
         repetirFalhas: () => this.executar(ex.lote, "falhas"),
@@ -429,8 +454,11 @@ export class AppProcessosLote {
                 this.telaConfiguracao();
               }
             : undefined,
-      }),
+      },
+      painel,
     );
+    this.mostrar("resultado", tela);
+    this.posAcao = painel;
   }
 
   /* ------------------------------------------------------------ resultado */
@@ -438,15 +466,16 @@ export class AppProcessosLote {
   private async copiar(): Promise<void> {
     const ex = this.execucao;
     if (!ex) return;
-    const linhas = linhasDoResultado(ex.itens);
+    const linhas = linhasDoResultado(ex.itens, this.posAcao);
+    const colunas = colunasDoResultado(this.posAcao);
     const aviso = this.d.avisar ?? ((t: string) => avisar(t));
     try {
-      const modo = await copiarResultado(linhas, COLUNAS, this.d.clip, this.d.ItemClip);
+      const modo = await copiarResultado(linhas, colunas, this.d.clip, this.d.ItemClip);
       aviso(modo === "rico" ? "Copiado com links clicáveis" : "Copiado como texto");
     } catch (e) {
       // A copia rica pode ser recusada (permissao, foco): tenta so o texto antes de desistir.
       try {
-        await copiarResultado(linhas, COLUNAS, { writeText: (t) => this.d.clip.writeText(t) });
+        await copiarResultado(linhas, colunas, { writeText: (t) => this.d.clip.writeText(t) });
         aviso("Copiado como texto");
       } catch {
         aviso(`Não foi possível copiar: ${mensagem(e)}`);
@@ -457,7 +486,11 @@ export class AppProcessosLote {
   private baixarCsv(): void {
     const ex = this.execucao;
     if (!ex) return;
-    this.d.baixar("processos-em-lote.csv", resultadoComoCsv(linhasDoResultado(ex.itens), COLUNAS), "text/csv;charset=utf-8");
+    this.d.baixar(
+      "processos-em-lote.csv",
+      resultadoComoCsv(linhasDoResultado(ex.itens, this.posAcao), colunasDoResultado(this.posAcao)),
+      "text/csv;charset=utf-8",
+    );
   }
 
   /** Os numeros criados (sem os incertos) vao para o Link Permanente, que abre ja com eles; esta janela fecha. */
