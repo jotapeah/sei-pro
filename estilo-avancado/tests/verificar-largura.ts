@@ -2,10 +2,12 @@ import {
   ATRIBUTO_COMPACTO,
   ATRIBUTO_LARGO,
   ATRIBUTO_ROTULO,
+  ATRIBUTO_SEM_DOCUMENTO,
   aplicarLargura,
   CHAVE_LARGURA,
   CLASSE_ACAO,
   CLASSE_GRUPO,
+  iframeMostraDocumento,
   iniciarBotaoLargura,
   iniciarLarguraDoPapel,
   lerLargo,
@@ -72,4 +74,29 @@ export function verificarLargura(): void {
       tela.querySelectorAll("#pai > a.openNewTab").length === 3 &&
       tela.querySelectorAll(`.${CLASSE_ACAO}`).length === 0,
   );
+
+  // O iframe da visualização: só documento (interno ou externo) leva largura, nova aba e baixar.
+  const comIframe = (busca: string | null) => {
+    const d = instalarDom(
+      `<html><head></head><body><iframe id="ifrVisualizacao" name="ifrVisualizacao"></iframe><div id="pai"><a class="openNewTab"></a><a class="openNewTab"></a></div></body></html>`,
+    );
+    const f = d.querySelector("iframe") as HTMLIFrameElement;
+    const mudar = (b: string | null) =>
+      Object.defineProperty(f, "contentWindow", { value: b === null ? null : { location: { search: b } }, configurable: true });
+    mudar(busca);
+    return { d, mudar };
+  };
+  checar("sem iframe: vale como documento", iframeMostraDocumento(instalarDom("<html><body></body></html>")));
+  checar("iframe de documento", iframeMostraDocumento(comIframe("?acao=documento_visualizar&id_documento=1").d));
+  checar("iframe de formulario nao e documento", !iframeMostraDocumento(comIframe("?acao=bloco_assinatura_cadastrar").d));
+  checar("capa do processo nao e documento", !iframeMostraDocumento(comIframe("?acao=arvore_processar_html").d));
+  checar("iframe ilegivel: vale como documento", iframeMostraDocumento(comIframe(null).d));
+  const vis = comIframe("?acao=bloco_assinatura_cadastrar");
+  const pararVis = iniciarBotaoLargura(vis.d, armazemFalso());
+  const grupoVis = vis.d.querySelector(`.${CLASSE_GRUPO}`);
+  checar("formulario no iframe: o grupo nasce escondido", grupoVis?.hasAttribute(ATRIBUTO_SEM_DOCUMENTO) === true);
+  vis.mudar("?acao=documento_visualizar&id_documento=2");
+  vis.d.dispatchEvent(new (vis.d.defaultView as unknown as { Event: typeof Event }).Event("load"));
+  checar("documento carregado: o grupo volta", grupoVis?.hasAttribute(ATRIBUTO_SEM_DOCUMENTO) === false);
+  pararVis();
 }

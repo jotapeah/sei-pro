@@ -367,6 +367,11 @@
   box-shadow: var(--spro-anel);
 }
 
+/* O iframe da visualização não mostra um documento (formulário, capa): sem botões de largura, nova aba e baixar */
+:root[data-spro-tema-ativo] div.spro-doc-acoes[data-spro-sem-documento] {
+  display: none;
+}
+
 /* Documento rolado: os botões do canto ficam só com o ícone, encostados à direita (os rótulos continuam nos tooltips) */
 :root[data-spro-tema-ativo] div.spro-doc-acoes {
   transition: gap var(--spro-dur) var(--spro-curva);
