@@ -160,7 +160,10 @@ export interface LoteAcoes {
   protocolo: string;
   criadoEm: number;
   atualizadoEm: number;
+  /** Id da aba do SEI que gravou por último (`ContextoAcoes.aba`). */
   aba: string;
+  /** "rodando" só enquanto uma aba executa; pausar, parar, terminar e fechar gravam "parado". Ausente: rodando. */
+  estado?: "rodando" | "parado";
   etapas: ParamsEtapa[];
   planos: PlanoDoc[];
 }

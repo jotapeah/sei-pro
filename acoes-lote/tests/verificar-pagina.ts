@@ -46,6 +46,8 @@ export async function verificarPagina(): Promise<void> {
     );
     checar("tema, cor e base", ctx?.temaEscuro === true && ctx?.corTema === "#123456" && ctx?.base === URL_TELA, ctx);
     igual("origem: caminho ate o controlador.php, sem query", ctx?.origem, "https://treinamento.sei.sp.gov.br/sei/controlador.php");
+    const ctx2 = contextoAcoes(doc, { temaEscuro: true }, URL_TELA);
+    checar("id da aba do SEI: gerado uma vez por pagina", !!ctx?.aba && ctx.aba === ctx2?.aba, [ctx?.aba, ctx2?.aba]);
   }
   {
     const html = readFileSync(FIXTURE, "latin1").replace(/<iframe id="ifrArvore"[^>]*><\/iframe>/, "");

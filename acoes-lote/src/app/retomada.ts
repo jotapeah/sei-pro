@@ -21,8 +21,9 @@ export function loteParado(l: LoteAcoes): boolean {
   return l.planos.some((p) => proximaEtapa(p) !== null);
 }
 
+/** Rodando, gravado há menos de 15 s e por outra aba do SEI (registro sem `estado` conta como rodando). */
 export function emOutraAba(l: LoteAcoes, aba: string, agora: number): boolean {
-  return l.aba !== aba && agora - l.atualizadoEm < JANELA_OUTRA_ABA_MS;
+  return (l.estado ?? "rodando") === "rodando" && l.aba !== aba && agora - l.atualizadoEm < JANELA_OUTRA_ABA_MS;
 }
 
 export interface AcoesRetomada {

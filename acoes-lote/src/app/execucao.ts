@@ -98,7 +98,7 @@ function barrarBlocoIncerto(lote: LoteAcoes): void {
 export interface DepsExecucao {
   rpc: Pick<Rpc, "chamar">;
   repo: Pick<RepositorioAcoes, "salvar" | "descartar">;
-  /** Id desta instância do app (gerado uma vez): identifica quem gravou o lote por último. */
+  /** Id da aba do SEI: identifica quem gravou o lote por último. */
   aba: string;
   /** Lote salvo a retomar; sem ele, nasce um lote novo dos planos do estado. */
   lote?: LoteAcoes;
@@ -229,7 +229,13 @@ class Execucao implements ControleExecucao {
     if (this.estado !== "rodando") return;
     this.estado = "pausado";
     this.executor?.pausar();
+    this.gravarParado();
     this.avisar();
+  }
+
+  /** O registro passa a dizer "parado" já (sem esperar a etapa em voo), para quem reabrir não ver outra aba. */
+  private gravarParado(): void {
+    void this.salvar().catch((e) => console.warn("[SEI Pro] ações em lote: falha ao gravar a pausa", e));
   }
 
   async continuar(senha?: string): Promise<void> {
@@ -279,10 +285,13 @@ class Execucao implements ControleExecucao {
   }
 
   encerrar(): void {
+    if (this.encerrado) return;
     this.encerrado = true;
     this.senha = undefined;
     if (this.estado === "rodando") this.estado = "pausado";
     this.executor?.pausar();
+    // Lote concluído já saiu do registro: gravar agora o traria de volta.
+    if (this.estado !== "concluido" && this.estado !== "cancelado") this.gravarParado();
   }
 
   private acompanhar(p: Promise<void>): Promise<void> {
@@ -308,8 +317,10 @@ class Execucao implements ControleExecucao {
 
   private parar(motivo: string): void {
     this.motivo = motivo;
-    if (this.estado === "rodando") this.estado = "pausado";
+    const rodava = this.estado === "rodando";
+    if (rodava) this.estado = "pausado";
     this.executor?.pausar();
+    if (rodava) this.gravarParado();
   }
 
   private pode(): boolean {
@@ -319,6 +330,7 @@ class Execucao implements ControleExecucao {
   private async salvar(): Promise<void> {
     this.lote.atualizadoEm = this.agora();
     this.lote.aba = this.d.aba;
+    this.lote.estado = this.estado === "rodando" && !this.encerrado ? "rodando" : "parado";
     await this.d.repo.salvar({ ...this.lote, planos: [...this.planos] });
   }
 

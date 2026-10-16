@@ -17,7 +17,7 @@ import {
   TEXTO_EM_VOO,
 } from "../src/app/execucao";
 import { linhasDoResultado, montarResultado } from "../src/app/resultado";
-import { AVISO_OUTRA_ABA, textoRetomada } from "../src/app/retomada";
+import { AVISO_OUTRA_ABA, emOutraAba, textoRetomada } from "../src/app/retomada";
 import { TelaExecucao } from "../src/app/telaExecucao";
 import type { LinhaDoc } from "../src/modelo/documentos";
 import { type LoteAcoes, type ParamsEtapa, planejar } from "../src/modelo/fila";
@@ -1057,5 +1057,97 @@ export async function verificarAppExecucao(): Promise<void> {
     igual(`${via}: seleção limpa`, app.estado!.selecionados.size, 0);
     igual(`${via}: filtros limpos`, app.estado!.filtro, {});
     app.destruir();
+  }
+
+  secao("Outra aba: só com o lote rodando, gravado há pouco, por outra aba do SEI");
+  {
+    const base: LoteAcoes = {
+      id: "L",
+      idProcedimento: "99",
+      protocolo: "p",
+      criadoEm: 1,
+      atualizadoEm: AGORA - 5_000,
+      aba: "pagina-2",
+      etapas: [],
+      planos: [],
+    };
+    checar("rodando, recente, outra aba: avisa", emOutraAba({ ...base, estado: "rodando" }, "pagina-1", AGORA));
+    checar("parado: não avisa", !emOutraAba({ ...base, estado: "parado" }, "pagina-1", AGORA));
+    checar("mesma aba: não avisa", !emOutraAba({ ...base, estado: "rodando" }, "pagina-2", AGORA));
+    checar("antigo: não avisa", !emOutraAba({ ...base, estado: "rodando", atualizadoEm: AGORA - 60_000 }, "pagina-1", AGORA));
+    checar("registro sem estado (versão anterior) conta como rodando", emOutraAba(base, "pagina-1", AGORA));
+  }
+  {
+    // Pausar e fechar na mesma aba do SEI, e reabrir logo: o id vem do contexto da aba, não da instância do app.
+    const { repo } = repoEspiao();
+    const ctxPagina: ContextoApp = { ...CTX, aba: "pagina-1" };
+    let soltar: (() => void) | null = null;
+    const arvore = () => ({ protocolo: "00001.000001/2026-11", sigiloso: false, linhas: [linha(1), linha(2), linha(3)] });
+    const f = rpcFalso({
+      arvore,
+      executar: (a) =>
+        numeroDe(a) !== "5002"
+          ? ok()
+          : new Promise((r) => {
+              soltar = () => r(ok());
+            }),
+    });
+    const doc = instalarDom('<html><body><div id="r"></div></body></html>');
+    const app = new AppAcoesLote(doc.getElementById("r")!, {
+      rpc: f.rpc,
+      ctx: ctxPagina,
+      fechar: () => undefined,
+      repo,
+      agora: () => AGORA,
+      esperar: async () => undefined,
+    });
+    await app.iniciar();
+    const e = app.estado!;
+    e.etapas = [{ acao: "ciencia" }];
+    e.planos = planejar(e.linhas, e.etapas, false);
+    app.executar();
+    await tique(10);
+    igual(
+      "rodando: gravado como rodando, com o id da aba do SEI",
+      [(await repo.doProcesso("99"))?.estado, (await repo.doProcesso("99"))?.aba],
+      ["rodando", "pagina-1"],
+    );
+    (app as unknown as { controle: { pausar(): void } }).controle.pausar();
+    (soltar as unknown as () => void)();
+    await tique(20);
+    igual("pausado: gravado como parado", (await repo.doProcesso("99"))?.estado, "parado");
+    app.destruir();
+    await tique(5);
+
+    const doc2 = instalarDom('<html><body><div id="r"></div></body></html>');
+    const app2 = new AppAcoesLote(doc2.getElementById("r")!, {
+      rpc: rpcFalso({ arvore, executar: () => ok() }).rpc,
+      ctx: ctxPagina,
+      fechar: () => undefined,
+      repo,
+      agora: () => AGORA + 1_000,
+      esperar: async () => undefined,
+    });
+    await app2.iniciar();
+    const raiz2 = doc2.getElementById("r")!;
+    igual("reabrir na mesma aba logo depois: retomada", app2.tela, "retomada");
+    checar("sem aviso de outra aba", !(raiz2.textContent ?? "").includes(AVISO_OUTRA_ABA), raiz2.textContent);
+    checar("sem Continuar mesmo assim", !botao(raiz2, "Continuar mesmo assim") || botao(raiz2, "Continuar mesmo assim")!.hidden);
+    app2.destruir();
+
+    const salvo = (await repo.doProcesso("99"))!;
+    await repo.salvar({ ...salvo, estado: "rodando", aba: "pagina-2", atualizadoEm: AGORA });
+    const doc3 = instalarDom('<html><body><div id="r"></div></body></html>');
+    const app3 = new AppAcoesLote(doc3.getElementById("r")!, {
+      rpc: rpcFalso({ arvore, executar: () => ok() }).rpc,
+      ctx: ctxPagina,
+      fechar: () => undefined,
+      repo,
+      agora: () => AGORA + 1_000,
+      esperar: async () => undefined,
+    });
+    await app3.iniciar();
+    checar("outra aba com o lote rodando: avisa", (doc3.getElementById("r")!.textContent ?? "").includes(AVISO_OUTRA_ABA));
+    app3.destruir();
   }
 }

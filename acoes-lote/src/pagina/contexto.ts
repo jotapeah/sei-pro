@@ -20,6 +20,19 @@ export interface ContextoAcoes {
    * que monta com ele o link de cada documento no resultado (o mesmo formato do Link Permanente).
    */
   origem: string;
+  /**
+   * Id da aba do SEI: gerado uma vez por página pelo content script. Identifica quem grava o lote, para o aviso
+   * de "rodando em outra aba" (o app nasce de novo a cada abertura do modal; a página, não).
+   */
+  aba?: string;
+}
+
+let abaDaPagina: string | null = null;
+
+/** Id desta página do SEI (o content script roda uma vez por página): o mesmo em toda chamada. */
+export function idDaAba(): string {
+  abaDaPagina ??= globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return abaDaPagina;
 }
 
 /** `https://h/sei/controlador.php?...&infra_hash=x` -> `https://h/sei/controlador.php`; endereço inválido -> "". */
@@ -56,6 +69,7 @@ export function contextoAcoes(doc: Document, o: { temaEscuro: boolean; corTema?:
     linkArvore,
     idProcedimento,
     origem: origemDoSei(pagina.url),
+    aba: idDaAba(),
   };
   if (o.corTema) ctx.corTema = o.corTema;
   return ctx;

@@ -106,7 +106,7 @@ export interface DepsApp {
   confirmar?(texto: string, rotuloOk?: string, rotuloDesistir?: string): Promise<boolean>;
   /** Lote em andamento (chrome.storage.local). Sem ele, um repositório em memória (nada sobrevive ao fechar). */
   repo?: RepositorioAcoes;
-  /** Id desta instância (para o aviso de outra aba); gerado uma vez quando ausente. */
+  /** Id da aba do SEI (para o aviso de outra aba); sem ele, o do contexto; sem os dois, um por instância. */
   aba?: string;
   /** A ponte caiu (modal fechado, aba navegada): o lote para de disparar. */
   aoFechar?(cb: () => void): void;
@@ -134,7 +134,7 @@ export class AppAcoesLote {
   private readonly atualizar: HTMLButtonElement;
   private readonly pastilha: HTMLElement;
   private readonly repo: RepositorioAcoes;
-  /** Gerado uma vez por instância do app. */
+  /** Id da aba do SEI (vem do contexto): o mesmo ao reabrir o modal na mesma página. */
   private readonly aba: string;
   private controle: ControleExecucao | null = null;
   private telaExecucao: TelaExecucao | null = null;
@@ -150,7 +150,7 @@ export class AppAcoesLote {
     this.conteudo = h("div", { class: "al-conteudo" });
     this.subtitulo = h("span", { class: "spro-lista-total" });
     this.repo = d.repo ?? new RepositorioAcoes(areaMemoria(), d.ctx.host, d.ctx.login);
-    this.aba = d.aba ?? novaAba();
+    this.aba = d.aba ?? d.ctx.aba ?? novaAba();
     this.pastilha = h("div", { class: "al-pastilha", hidden: true });
     const atualizar = h(
       "button",
