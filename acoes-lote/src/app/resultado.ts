@@ -49,7 +49,8 @@ export function linhasDoResultado(e: EstadoApp): { linhas: LinhaResultado[]; col
   const linhas = e.planos.map((p): LinhaResultado => {
     const campos: Record<string, string> = {
       numero: p.doc.numero,
-      documento: `${p.doc.tipo}${p.doc.titulo && p.doc.titulo !== p.doc.tipo ? ` (${p.doc.titulo})` : ""}`,
+      // O título já começa pelo tipo ("Despacho 0103947"): repeti-lo duplicava o tipo.
+      documento: p.doc.titulo || p.doc.tipo,
     };
     p.etapas.forEach((x, i) => {
       campos[`etapa${i}`] = x.mensagem ? `${TEXTO[x.situacao]}: ${x.mensagem}` : TEXTO[x.situacao];

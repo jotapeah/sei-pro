@@ -969,6 +969,7 @@ export async function verificarAppExecucao(): Promise<void> {
     ];
     const { linhas, colunas } = linhasDoResultado(e);
     igual("uma linha por documento", linhas.length, 2);
+    igual("documento: só o título, sem repetir o tipo", linhas[0]!.campos.documento, e.planos[0]!.doc.titulo);
     const csv = resultadoComoCsv(linhas, colunas);
     const cab = csv.split(/\r?\n/)[0]!;
     checar("CSV com uma coluna por etapa", cab.includes("Alterar nível de acesso") && cab.includes("Duplicar"), cab);

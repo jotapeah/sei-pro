@@ -142,7 +142,7 @@ export function montarPrevia(doc: Document, e: EstadoApp, acoes: AcoesPrevia, de
         h(
           "section",
           { class: "al-previa-doc" },
-          h("h3", { class: "al-previa-titulo" }, `${p.doc.numero} · ${p.doc.tipo}${p.doc.titulo ? ` ${p.doc.titulo}` : ""}`),
+          h("h3", { class: "al-previa-titulo" }, `${p.doc.numero} · ${p.doc.titulo || p.doc.tipo}`),
           h("ul", { class: "al-previa-etapas" }, ...p.etapas.map((_, i) => textoEtapa(p, i))),
         ),
       ),

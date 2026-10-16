@@ -168,6 +168,7 @@ export async function verificarAppPrevia(): Promise<void> {
     checar("segunda etapa a confirmar", texto(l, ".al-previa-etapa")[1]!.includes("a confirmar na execução"));
     checar("mudanca campo a campo", (l.textContent ?? "").includes("Descrição: a → b"));
     igual("rodape", texto(el, ".al-previa-total"), ["3 documentos · 6 etapas · 0 pulados"]);
+    igual("titulo: so numero e titulo, sem repetir o tipo", texto(el, ".al-previa-titulo")[0], "5001 · Despacho 1");
     checar(
       "nao cria bloco: so chamou previa",
       f.chamadas.every((c) => c.op === "previa"),
