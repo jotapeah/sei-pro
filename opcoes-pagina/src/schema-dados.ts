@@ -45,6 +45,8 @@ export const SECOES_GERAL: Secao[] = [
         icone: "fa fa-th-list",
         manual: "GRADECONTROLE",
         padrao: true,
+        // A grade so existe no pacote do Lab: no oficial o interruptor nao faria nada.
+        visivelEm: "lab",
       },
       {
         nome: "gerenciarprazos",
