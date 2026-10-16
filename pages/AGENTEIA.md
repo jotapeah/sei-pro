@@ -164,12 +164,14 @@ Quando uma ferramenta do conector devolve um erro (um login que expirou, um dado
 
 #### Quando o conector precisa de um arquivo
 
-Alguns conectores só leem arquivos do disco, por exemplo para anexar um contrato num sistema. Nesse caso o agente pode **baixar um documento do SEI** para `Downloads/SEI Pro/<número do processo>/` e passar ao conector o caminho do arquivo.
+Alguns conectores recebem arquivos, por exemplo para anexar um contrato num sistema. Nesse caso o agente **baixa o documento do SEI** para `Downloads/SEI Pro/<número do processo>/`, com um nome legível que ele escolhe a partir do documento (a extensão original e o número SEI são sempre mantidos), e passa ao conector o caminho do arquivo.
 
 * **Você aprova cada download.** O cartão mostra o documento e onde ele será salvo, e não existe "permitir sempre" para isso. Rotina nunca baixa sozinha.
 * **A cópia tem os dados reais.** Ela sai do SEI sem máscara e fica no seu computador até você apagar.
 * **Só documento externo** (o arquivo anexado), e só **documentos e imagens**: PDF, Word, Excel, imagem, texto. O cartão mostra o nome, o tipo e o tamanho reais do arquivo. Documento escrito no editor do SEI ainda não. Sigiloso, nunca.
 * **O caminho real do arquivo só é passado a conector do seu próprio computador.**
+* **Conector em outro computador** não lê o seu disco. Se ele aceita receber o arquivo, o SEI Pro relê o documento do SEI, confere se é o mesmo que você aprovou no download (documento, processo, tamanho e uma impressão digital do conteúdo, o SHA-256) e envia o arquivo com o nome aprovado. O agente não vê o conteúdo nem escolhe outro nome.
+* **Esse envio pede a sua aprovação toda vez**, mesmo que a ferramenta esteja em "Sempre permitir". O cartão mostra o documento, o arquivo, o tamanho e o endereço do servidor, e avisa que o documento vai com os dados reais. Se o documento mudou no SEI depois do download, nada é enviado: o agente baixa de novo.
 * **Para apagar**, vá em **Configuração → O que o agente pode → Arquivos baixados pelo agente**: a tela diz quantos arquivos existem e o botão os remove do computador. Os documentos continuam no SEI.
 
 Na primeira vez, o navegador pede a permissão de **downloads**. Ela é opcional: quem não usa essa função nunca é perguntado.

@@ -114,6 +114,24 @@ export interface PedidoExterno {
   argumentos: Record<string, unknown>;
 }
 
+/**
+ * Envio de um documento do SEI, com os bytes, a um conector (ver `mcp/tools.ts`).
+ * O cartão mostra o que vai e para onde; os bytes nunca entram aqui.
+ */
+export interface PedidoTransferencia {
+  conector: string;
+  /** Endereço do servidor que recebe o arquivo. */
+  endereco: string;
+  tool: string;
+  documento: string;
+  processo: string;
+  nome: string;
+  tamanho: number;
+  sha256: string;
+  /** Os demais argumentos da chamada (sem o conteúdo). */
+  argumentos: Record<string, unknown>;
+}
+
 export interface DecisaoExterna {
   permitido: boolean;
   /** Gravar "sempre permitir" para esta ferramenta. */
@@ -143,6 +161,11 @@ export interface InterfaceMotor {
   consentir(tipo: "restrito" | "conector", detalhe: string): Promise<boolean>;
   /** Autoriza uma chamada a conector MCP (só quando a permissão é "aprovar"). */
   aprovarExterno?(p: PedidoExterno): Promise<DecisaoExterna>;
+  /**
+   * Autoriza enviar um documento inteiro, com os dados reais, a um conector.
+   * Sempre perguntado: não existe "permitir sempre" para isto.
+   */
+  aprovarTransferencia?(p: PedidoTransferencia): Promise<boolean>;
   /**
    * Um documento lido trazia conteúdo suspeito (instrução dirigida a IA, texto
    * escondido da tela, caractere invisível). O painel acumula para o relatório

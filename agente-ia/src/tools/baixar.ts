@@ -21,6 +21,7 @@ import { s } from "../motor/esquema";
 import { definirTool, type ContextoTool, type DefTool } from "../motor/tools";
 import type { PreviaItem } from "../motor/tipos";
 import type { Baixado } from "../painel/baixados";
+import { hashArquivo } from "../seguranca/hash";
 
 export interface OpcoesBaixar {
   /** Grava na pasta Downloads e devolve o caminho absoluto que o navegador deu. */
@@ -69,11 +70,16 @@ function pedacoSeguro(texto: string): string {
  * nome porque um processo costuma ter vários "Anexo": sem ele, um
  * sobrescreveria o outro.
  */
-export function nomeDeArquivo(d: { titulo: string; numero: string; nomeOriginal: string; tipo: string }): string {
+export function nomeDeArquivo(d: { titulo: string; numero: string; nomeOriginal: string; tipo: string; nomeLegivel?: string }): string {
   const doOriginal = /\.([A-Za-z0-9]{1,8})$/.exec(d.nomeOriginal.trim())?.[1]?.toLowerCase();
   const extensao = doOriginal ?? POR_TIPO[d.tipo.toLowerCase().split(";")[0].trim()] ?? "bin";
   const fim = ` (${d.numero.replace(/\D/g, "") || "sem numero"}).${extensao}`;
-  const base = pedacoSeguro(d.titulo).slice(0, MAX_NOME - fim.length).trimEnd() || "documento";
+  const escolhido = d.nomeLegivel?.trim();
+  if (escolhido && /[\/\\\u0000-\u001f\u007f]/.test(escolhido)) throw new Error("Informe apenas o nome legível do arquivo, sem caminho nem barras.");
+  // Só sai do fim o que é extensão de verdade: "CUO 004.2023" não perde o ".2023".
+  const semExtensao = escolhido?.replace(/\.([A-Za-z0-9]{1,8})$/, (todo, ext: string) => (ext.toLowerCase() === extensao || EXTENSOES.has(ext.toLowerCase()) ? "" : todo));
+  const titulo = semExtensao ? semExtensao.replace(new RegExp(` \\(${d.numero.replace(/\D/g, "")}\\)$`), "") : d.titulo;
+  const base = pedacoSeguro(titulo).slice(0, MAX_NOME - fim.length).trimEnd() || "documento";
   return `${base}${fim}`;
 }
 
@@ -102,8 +108,8 @@ interface Meta {
 }
 
 /** Nome e destino a partir do que o SEI informou; `erro` quando o tipo não é aceito. */
-function destinoDe(m: Meta): { nome: string; destino: string; erro?: string } {
-  const nome = nomeDeArquivo({ titulo: m.titulo, numero: m.numero, nomeOriginal: m.arquivo?.nome ?? "", tipo: m.arquivo?.tipo ?? "" });
+function destinoDe(m: Meta, nomeLegivel?: string): { nome: string; destino: string; erro?: string } {
+  const nome = nomeDeArquivo({ titulo: m.titulo, numero: m.numero, nomeOriginal: m.arquivo?.nome ?? "", tipo: m.arquivo?.tipo ?? "", nomeLegivel });
   const destino = destinoDoArquivo(m.processo, nome);
   if (EXTENSOES.has(extensaoDe(nome))) return { nome, destino };
   return { nome, destino, erro: `O arquivo do documento ${m.numero} é do tipo .${extensaoDe(nome)}, que o agente não grava no computador (só documentos e imagens: pdf, docx, xlsx, jpg, png, txt...). Peça ao usuário para baixá-lo pelo SEI, se for o caso.` };
@@ -125,15 +131,15 @@ export function toolsBaixar(o: OpcoesBaixar): DefTool[] {
   const baixar = definirTool({
     nome: "documento_baixar",
     descricao:
-      "Baixa um documento do SEI para a pasta Downloads do usuário e devolve o caminho do arquivo. Use quando um conector precisar do arquivo em disco. Só documento externo (PDF e outros anexos); documento escrito no editor do SEI ainda não. O usuário aprova cada download. Passe o 'caminho' devolvido ao conector exatamente como veio.",
-    parametros: s.objeto({ documento: s.texto({ descricao: "Nº SEI do documento." }) }),
+      "Baixa um documento do SEI para a pasta Downloads do usuário e devolve o caminho do arquivo. Use quando um conector precisar do arquivo em disco. Só documento externo (PDF e outros anexos); documento escrito no editor do SEI ainda não. O usuário aprova cada download. Passe o 'caminho' devolvido ao conector exatamente como veio: se o conector roda em outro computador, o SEI Pro envia o conteúdo do arquivo por conta própria, depois de nova aprovação.",
+    parametros: s.objeto({ documento: s.texto({ descricao: "Nº SEI do documento." }), "nome_arquivo?": s.texto({ min: 1, max: 200, descricao: "Nome legível definido pelo agente com base no documento lido, sem caminho. A extensão original e o número SEI serão preservados. Ex.: Contrato de Cessão de Uso 002-2026 - Porto de Itaqui.pdf." }) }),
     efeito: "escrita",
     rotulo: (a) => `Baixar o documento ${String(a.documento)} para o computador`,
     previsualizar: async (a, ctx: ContextoTool): Promise<PreviaItem[]> => {
       const m = await ctx.sei<Meta>("documento.baixar", { numero: String(a.documento), somenteMetadados: true });
       const alvo = `${m.titulo} (SEI ${m.numero})`;
       if (!m.baixavel) return [{ alvo, mudancas: [], resumo: "", erro: NATIVO(m.numero) }];
-      const d = destinoDe(m);
+      const d = destinoDe(m, a.nome_arquivo as string | undefined);
       if (d.erro) return [{ alvo, mudancas: [], resumo: "", erro: d.erro }];
       return [
         {
@@ -150,7 +156,7 @@ export function toolsBaixar(o: OpcoesBaixar): DefTool[] {
     },
     executar: async (a, ctx: ContextoTool) => {
       const r = await ctx.sei<Meta & { arquivo: { base64: string; tipo: string; nome: string; tamanho: number } }>("documento.baixar", { numero: String(a.documento) });
-      const { nome, destino, erro } = destinoDe(r);
+      const { nome, destino, erro } = destinoDe(r, a.nome_arquivo as string | undefined);
       if (erro) throw new Error(erro);
       // Vale o que o usuário viu NO CARTÃO DESTE PASSO (a prévia que o motor
       // entrega junto com a execução), e não uma lembrança guardada aqui: um
@@ -160,14 +166,17 @@ export function toolsBaixar(o: OpcoesBaixar): DefTool[] {
       if (!visto) {
         throw new Error(`O arquivo do documento ${r.numero} não é o que foi aprovado no cartão (o documento mudou no SEI, ou o download não passou pela aprovação). Nada foi gravado: chame documento_baixar de novo, sozinho, para o usuário aprovar.`);
       }
-      const salvo = await o.salvar({ destino, bytes: base64ParaBytes(r.arquivo.base64), tipo: r.arquivo.tipo || "application/octet-stream" });
-      await o.registrar({ id: salvo.id, caminho: salvo.caminho, nome, processo: r.processo, documento: r.numero, tamanho: salvo.tamanho, quando: (o.agora ?? Date.now)() });
+      const bytes = base64ParaBytes(r.arquivo.base64);
+      const sha256 = await hashArquivo(bytes);
+      const salvo = await o.salvar({ destino, bytes, tipo: r.arquivo.tipo || "application/octet-stream" });
+      await o.registrar({ id: salvo.id, caminho: salvo.caminho, nome, processo: r.processo, documento: r.numero, tamanho: bytes.length, sha256, quando: (o.agora ?? Date.now)() });
       return {
         aplicado: true,
         documento: r.numero,
         titulo: r.titulo,
         processo: r.processo,
         caminho: salvo.caminho,
+        nome_arquivo: nome,
         tamanho: salvo.tamanho,
         tipo: salvo.tipo,
         como_usar: "Passe 'caminho' ao conector exatamente como está aqui.",

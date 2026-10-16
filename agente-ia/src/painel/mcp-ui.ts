@@ -15,7 +15,7 @@ import {
   type Permissao,
 } from "../mcp/conectores";
 import { verificarConector } from "../mcp/verificacao";
-import type { DecisaoExterna, PedidoExterno } from "../motor/tipos";
+import type { DecisaoExterna, PedidoExterno, PedidoTransferencia } from "../motor/tipos";
 import { h, icone } from "./dom";
 
 /** O modal da configuração (`App.abrirModal`), passado de fora. */
@@ -360,6 +360,43 @@ export function cartaoExterno(p: PedidoExterno, abrirModal: AbrirModal): Promise
     });
     uma.addEventListener("click", () => ((decidido = { permitido: true }), dlg.close()));
     sempre.addEventListener("click", () => ((decidido = { permitido: true, sempre: true }), dlg.close()));
+    nao.addEventListener("click", () => dlg.close());
+    dlg.addEventListener("close", () => resolver(decidido), { once: true });
+  });
+}
+
+const megas = (bytes: number): string => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1).replace(".", ",")} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
+
+/**
+ * Cartão da transferência de um documento a um conector.
+ *
+ * Diferente de `cartaoExterno`: aqui sai o ARQUIVO inteiro, com os dados reais,
+ * para outro computador. Por isso não há "permitir sempre", e o cartão mostra
+ * o que identifica o arquivo (nome, tamanho, começo do hash) e o servidor.
+ */
+export function cartaoTransferencia(p: PedidoTransferencia, abrirModal: AbrirModal): Promise<boolean> {
+  return new Promise((resolver) => {
+    let decidido = false;
+    const enviar = h("button", { class: "primario" }, "Enviar o documento");
+    const nao = h("button", {}, "Recusar");
+    const linha = (rotulo: string, valor: string) => h("div", { class: "campo" }, h("label", {}, rotulo), h("div", { class: "ajuda" }, valor));
+    const dlg = abrirModal({
+      titulo: `Enviar documento a ${p.conector}`,
+      corpo: [
+        linha("Documento", `SEI ${p.documento}, processo ${p.processo}`),
+        linha("Arquivo", `${p.nome} · ${megas(p.tamanho)} · SHA-256 ${p.sha256.slice(0, 12)}…`),
+        linha("Servidor", `${p.endereco} (ferramenta ${p.tool})`),
+        h("div", { class: "campo" }, h("label", {}, "Junto com o arquivo"), h("pre", { class: "args-externo" }, JSON.stringify(p.argumentos, null, 2))),
+        h(
+          "div",
+          { class: "nota" },
+          icone("escudo", 15),
+          h("span", {}, "O documento sai do SEI com os dados reais, sem máscara, para o servidor acima. Só envie se esse servidor for autorizado a receber este documento."),
+        ),
+      ],
+      acoes: [nao, enviar],
+    });
+    enviar.addEventListener("click", () => ((decidido = true), dlg.close()));
     nao.addEventListener("click", () => dlg.close());
     dlg.addEventListener("close", () => resolver(decidido), { once: true });
   });

@@ -109,8 +109,9 @@ export class ClienteMcp {
   }
 
   /** Executa e devolve o texto do resultado (o que o modelo vai ler). */
-  async chamar(tool: string, args: Record<string, unknown>, sinal: AbortSignal): Promise<string> {
-    const r = await this.pedir<ResultadoToolsCall>("tools/call", { name: tool, arguments: args }, sinal);
+  /** `prazo`: teto desta chamada, em ms (o envio de um arquivo grande pede mais que o padrão). */
+  async chamar(tool: string, args: Record<string, unknown>, sinal: AbortSignal, prazo = PRAZO): Promise<string> {
+    const r = await this.pedir<ResultadoToolsCall>("tools/call", { name: tool, arguments: args }, sinal, prazo);
     const partes: string[] = [];
     for (const c of r.content ?? []) {
       if (c.type === "text" && c.text) partes.push(c.text);
@@ -129,14 +130,14 @@ export class ClienteMcp {
     await this.enviar({ jsonrpc: "2.0", method: metodo }, sinal);
   }
 
-  private async pedir<T>(metodo: string, params: unknown, sinal: AbortSignal): Promise<T> {
+  private async pedir<T>(metodo: string, params: unknown, sinal: AbortSignal, prazo = PRAZO): Promise<T> {
     const id = this.proximoId++;
-    let resposta = await this.enviar({ jsonrpc: "2.0", id, method: metodo, params }, sinal);
+    let resposta = await this.enviar({ jsonrpc: "2.0", id, method: metodo, params }, sinal, prazo);
     // Sessão expirada: o servidor responde 404 a uma sessão que ele esqueceu.
     if (resposta.status === 404 && this.sessao) {
       this.sessao = null;
       if (metodo !== "initialize") await this.iniciar(sinal);
-      resposta = await this.enviar({ jsonrpc: "2.0", id: this.proximoId++, method: metodo, params }, sinal);
+      resposta = await this.enviar({ jsonrpc: "2.0", id: this.proximoId++, method: metodo, params }, sinal, prazo);
     }
     if (!resposta.ok) {
       if (resposta.status === 405 || resposta.status === 404) {
@@ -167,6 +168,7 @@ export class ClienteMcp {
   private async enviar(
     corpo: unknown,
     sinal: AbortSignal,
+    limite = PRAZO,
   ): Promise<{ ok: boolean; status: number; corpo: string; id: number; autenticacao?: string }> {
     // O navegador recusa cabeçalho malformado com um TypeError igual ao de
     // rede, antes de sair qualquer pedido: conferido aqui, para o usuário não
@@ -184,7 +186,7 @@ export class ClienteMcp {
     const controlador = new AbortController();
     const parar = () => controlador.abort();
     sinal.addEventListener("abort", parar, { once: true });
-    const prazo = setTimeout(parar, PRAZO);
+    const prazo = setTimeout(parar, limite);
     try {
       // Solto, e não `this.buscar(...)`: o fetch do navegador recusa ser
       // chamado com outro `this` ("Illegal invocation").
@@ -206,7 +208,7 @@ export class ClienteMcp {
       const autenticacao = r.headers?.get?.("WWW-Authenticate") ?? undefined;
       return { ok: r.ok, status: r.status, corpo: texto, id: (corpo as { id?: number }).id ?? 0, ...(autenticacao ? { autenticacao } : {}) };
     } catch (e) {
-      if (controlador.signal.aborted && !sinal.aborted) throw new ErroMcp("rede", "O servidor não respondeu em 60 segundos.");
+      if (controlador.signal.aborted && !sinal.aborted) throw new ErroMcp("rede", `O servidor não respondeu em ${Math.max(1, Math.round(limite / 1000))} segundos.`);
       if (sinal.aborted) throw new ErroMcp("rede", "Interrompido.");
       // O navegador não diz por que o fetch falhou; num endereço da própria
       // máquina, com a permissão de host já conferida por quem chama, o que
