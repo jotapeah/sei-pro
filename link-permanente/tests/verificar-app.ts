@@ -161,7 +161,18 @@ export async function verificarApp(): Promise<void> {
     const p = montar({ selecionados: ["00001.000001/2026-11"], pendente: "12345678\n87654321" });
     await p.app.iniciar();
     checar("entrada pendente vence os selecionados", p.caixa().value === "12345678\n87654321", p.caixa().value);
+    checar(
+      "entrada pendente alimenta o painel Reconhecidos",
+      /2 n.{1,3} SEI/.test(p.raiz.querySelector(".lp-reconhecidos")?.textContent ?? ""),
+    );
     p.app.destruir();
+
+    const e = montar({ pendente: "123\n456" });
+    await e.app.iniciar();
+    const painelE = (e.raiz.querySelector(".lp-reconhecidos")?.textContent ?? "").replace(/\s+/g, " ");
+    checar("entrada 123/456 pré-preenche a caixa", e.caixa().value === "123\n456", e.caixa().value);
+    checar("entrada 123/456 aparece em Reconhecidos", /Reconhecidos/.test(painelE) && !/Nenhum/.test(painelE), painelE);
+    e.app.destruir();
 
     const f = montar({ selecionados: new Error("sem tela de controle") });
     await f.app.iniciar();

@@ -7,6 +7,7 @@
  * à PRÓPRIA aba (pagina/main.ts), com o app num <dialog> com véu.
  */
 
+import { areaChrome } from "@comum/armazenamento/area";
 import { esperarConexaoDaAba } from "@comum/ponte/conexaoDaAba";
 import type { Rpc } from "@comum/ponte/rpc";
 import { acompanharTemaDoPainel, aplicarTemaDoContexto } from "@comum/tema/painel";
@@ -14,6 +15,7 @@ import { baixar, criarAbrirModal } from "@comum/ui/dialogo";
 import { h } from "@comum/ui/dom";
 import { CANAL_LINK_PERMANENTE } from "../modelo/constantes";
 import { AppLinkPermanente } from "./app";
+import { lerEntradaPendente } from "./entrada";
 import type { ContextoApp } from "./estado";
 
 const parametros = new URLSearchParams(location.hash.slice(1));
@@ -26,6 +28,8 @@ const raiz = document.getElementById("app")!;
 
 // O ouvinte da porta é registrado já, antes do `load` do iframe, que é quando o content script conecta.
 const conexao = esperarConexaoDaAba(CANAL_LINK_PERMANENTE);
+
+const areaLocal = areaChrome(chrome.storage.local, "local");
 
 const mensagem = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
@@ -87,8 +91,8 @@ async function iniciarModal(): Promise<void> {
       clip: navigator.clipboard,
       ItemClip: typeof ClipboardItem === "function" ? ClipboardItem : undefined,
       fechar: () => dlg.close(),
-      // A entrada deixada pelo Processos em Lote (chrome.storage) entra numa tarefa seguinte.
-      lerEntradaPendente: async () => null,
+      // A entrada deixada pelo Processos em Lote (chrome.storage.local), consumida uma vez.
+      lerEntradaPendente: () => lerEntradaPendente(areaLocal),
     });
     mostrar();
     await app.iniciar();
