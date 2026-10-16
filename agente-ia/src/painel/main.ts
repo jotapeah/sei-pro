@@ -57,6 +57,9 @@ import { cartaoDeErro } from "./erro-ui";
 import { envelopar } from "../seguranca/envelope";
 import { secaoRotinas } from "./rotinas-ui";
 import { secaoArquivo, type OpcoesArquivoUi } from "./arquivo-ui";
+import { aplicarModo, mensagemDeErroPdf, type Anexo } from "./anexo";
+import { andamentoDoAnexo, chipDoAnexo, confirmarOcrLongo } from "./anexo-ui";
+import { lerPdfParaAnexo } from "./pdf";
 import { ControleArquivo, escolherArquivoSync, handlesNoIndexedDB, temSeletorDeArquivo } from "@comum/sincronia/arquivo";
 import { areaChrome } from "@comum/armazenamento/area";
 import { adaptadorAgente, type AdaptadorAgente } from "../arquivo/adaptador";
@@ -201,7 +204,9 @@ class App {
   private transcricao: Item[] = [];
   private uso: Uso = { entrada: 0, saida: 0, custo: 0 };
   private tarefas: Tarefa[] = [];
-  private anexo: { nome: string; texto: string } | null = null;
+  private anexo: Anexo | null = null;
+  /** Geração da leitura de anexo em curso: trocar ou remover o anexo invalida a anterior. */
+  private geracaoAnexo = 0;
   private idConversa = crypto.randomUUID();
   /** Skills do usuário (configurações), disponíveis por `/slug` e por `skill_ler`. */
   private skills: SkillUsuario[] = [];
@@ -515,33 +520,49 @@ class App {
     this.elConversa = h("div", { class: "conversa", role: "log", "aria-live": "polite" });
     this.elEntrada = h("textarea", { rows: "2", placeholder: "Pe\u00E7a algo sobre o SEI...", "aria-label": "Mensagem" });
     this.elEnviar = h("button", { class: "enviar" });
-    this.elAnexo = h("div", { class: "anexo", hidden: true });
+    this.elAnexo = h("div", { class: "anexo-area", hidden: true });
     this.elMenu = h("div", { class: "menu", role: "menu", hidden: true });
     this.elPensando = h("div", { class: "pensando", role: "status" }, icone("estrela", 16), h("span", { class: "palavra" }), h("span", { class: "tempo" }));
 
-    const arquivo = h("input", { type: "file", accept: ".csv,.txt,.md,.json,.tsv", class: "sr-only" });
-    const anexar = h("button", { class: "icone", title: "Anexar planilha CSV ou texto", "aria-label": "Anexar arquivo" }, icone("clipe"));
+    const arquivo = h("input", { type: "file", accept: ".pdf,.csv,.txt,.md,.json,.tsv", class: "sr-only" });
+    const anexar = h("button", { class: "icone", title: "Anexar PDF, planilha CSV ou texto", "aria-label": "Anexar arquivo" }, icone("clipe"));
     const sugerir = h("button", { class: "icone", title: "Sugest\u00F5es de pedido", "aria-label": "Sugest\u00F5es de pedido" }, icone("lampada"));
 
     anexar.addEventListener("click", () => arquivo.click());
     arquivo.addEventListener("change", async () => {
       const f = arquivo.files?.[0];
+      arquivo.value = "";
       if (!f) return;
+      const geracao = ++this.geracaoAnexo;
+      this.anexo = null;
       const bytes = new Uint8Array(await f.arrayBuffer());
+      if (/\.pdf$/i.test(f.name) || f.type === "application/pdf") {
+        // O PDF é lido aqui, neste computador: ao serviço de IA vai só o texto.
+        const andamento = andamentoDoAnexo(f.name, () => this.removerAnexo());
+        this.elAnexo.hidden = false;
+        this.elAnexo.replaceChildren(andamento.elemento);
+        try {
+          const lido = await lerPdfParaAnexo(bytes, {
+            aoProgredir: (e) => geracao === this.geracaoAnexo && andamento.atualizar(e),
+            cancelado: () => geracao !== this.geracaoAnexo,
+            confirmarOcr: (p) => confirmarOcrLongo((op) => this.abrirModal(op), p),
+          });
+          if (geracao !== this.geracaoAnexo) return;
+          this.mostrarAnexo({ nome: f.name, texto: lido.texto, paginas: lido.paginas, modo: "inteiro" });
+        } catch (e) {
+          if (geracao !== this.geracaoAnexo) return;
+          this.removerAnexo();
+          if ((e as { name?: string } | null)?.name !== "OperacaoCancelada") this.adicionar({ tipo: "aviso", texto: mensagemDeErroPdf(e) });
+        }
+        return;
+      }
       let texto: string;
       try {
         texto = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
       } catch {
         texto = new TextDecoder("windows-1252").decode(bytes); // CSV do Excel
       }
-      this.anexo = { nome: f.name, texto: texto.slice(0, 60_000) };
-      this.elAnexo.hidden = false;
-      this.elAnexo.replaceChildren(
-        icone("clipe", 13),
-        h("span", {}, `${f.name} \u2014 ${texto.length.toLocaleString("pt-BR")} caracteres`),
-        h("button", { class: "icone pequeno", title: "Remover anexo", "aria-label": "Remover anexo", onclick: () => ((this.anexo = null), (this.elAnexo.hidden = true)) }, icone("fechar", 14)),
-      );
-      arquivo.value = "";
+      this.mostrarAnexo({ nome: f.name, texto, modo: "inteiro" });
     });
 
     sugerir.addEventListener("click", (ev) => {
@@ -2706,7 +2727,7 @@ Voc\u00EA \u00E9 um AUXILIAR: recebeu uma tarefa de leitura de outro agente e n\
     this.motor ??= this.criarMotor();
     let comAnexo = t;
     if (this.anexo) {
-      const varrido = varrer(this.anexo.texto);
+      const varrido = varrer(aplicarModo(this.anexo).texto);
       if (varrido.achados.length) {
         this.integridadeDaConversa.push({ documento: this.anexo.nome, achados: varrido.achados });
         this.adicionar({ tipo: "aviso", texto: textoDaIntegridade(this.anexo.nome, varrido.achados) });
@@ -2718,8 +2739,7 @@ Voc\u00EA \u00E9 um AUXILIAR: recebeu uma tarefa de leitura de outro agente e n\
     const comContexto = comSkills(comAnexo, usadas);
     this.adicionar({ tipo: "usuario", texto: this.anexo ? `${t}\n\u{1F4CE} ${this.anexo.nome}` : t });
     for (const sk of usadas) this.adicionar({ tipo: "tool", rotulo: `Skill: ${sk.nome}`, estado: "ok" });
-    this.anexo = null;
-    this.elAnexo.hidden = true;
+    this.removerAnexo();
     try {
       const promessa = this.motor.enviar(comContexto);
       this.estadoEnvio();
@@ -3189,6 +3209,26 @@ Voc\u00EA \u00E9 um AUXILIAR: recebeu uma tarefa de leitura de outro agente e n\
       this.rolar();
       livre.focus();
     });
+  }
+
+  /** Mostra o chip do anexo; "Cortar em 60 mil" troca o modo e redesenha. */
+  private mostrarAnexo(a: Anexo): void {
+    this.anexo = a;
+    this.elAnexo.hidden = false;
+    this.elAnexo.replaceChildren(
+      chipDoAnexo(a, {
+        remover: () => this.removerAnexo(),
+        cortar: () => this.anexo && this.mostrarAnexo({ ...this.anexo, modo: "cortado" }),
+      }),
+    );
+  }
+
+  /** Tira o anexo e cancela a leitura de PDF em curso, se houver. */
+  private removerAnexo(): void {
+    this.geracaoAnexo += 1;
+    this.anexo = null;
+    this.elAnexo.hidden = true;
+    this.elAnexo.replaceChildren();
   }
 
   // ------------------------------------------------------------- sessão
