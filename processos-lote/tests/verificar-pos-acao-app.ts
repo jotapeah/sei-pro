@@ -493,6 +493,134 @@ export async function verificarPosAcaoApp(): Promise<void> {
     checar("Continuar roda o marcador, não o bloco", m.posDe("marcador").length === 1 && m.rpc.de("posAcaoBloco").length === 1);
   }
 
+  secao("Fix 1: não confirmado no bloco 12 sobrevive a um Aplicar no 13 e nunca é reenviado ao 12");
+  {
+    const m = montarPainel([itemOk(0), itemOk(1)], {
+      bloco: (_a, vez) => (vez === 1 ? new ErroRpc("PRAZO", "A aba do SEI não respondeu a tempo.") : blocoTodos(_a, vez)),
+    });
+    await m.abrir();
+    escolherCombo(m.doc, "Bloco interno", "b7");
+    await m.aplicar();
+    checar("bloco 12: não confirmado", m.p.estado(0, "bloco")?.situacao === "nao-confirmado");
+    escolherCombo(m.doc, "Bloco interno", "b8");
+    checar(
+      "aviso ao trocar para o 13",
+      m.texto().includes("2 processos não confirmados no bloco 12 também serão incluídos no 13."),
+      m.raiz.querySelector(".pl-pos-aviso-bloco")?.textContent,
+    );
+    await m.aplicar();
+    igual("bloco 13: os dois ids", m.rpc.de("posAcaoBloco")[1]?.args, { idBloco: "b8", idsProcedimento: ["101", "102"] });
+    checar(
+      "coluna mantém o 12 e mostra o 13",
+      m.p.depois(itemOk(0)) === "Bloco: ✔ incluído; Bloco: ? não confirmado: confira o bloco 12",
+      m.p.depois(itemOk(0)),
+    );
+    checar("status ainda conta os não confirmados", m.texto().includes("2 não confirmadas (confira o bloco)"));
+    escolherCombo(m.doc, "Bloco interno", "b7");
+    checar("sem aviso com o 12 escolhido", m.raiz.querySelector(".pl-pos-aviso-bloco")?.hasAttribute("hidden") === true);
+    await m.aplicar();
+    const chamadas12 = m.rpc.de("posAcaoBloco").filter((c) => c.args.idBloco === "b7");
+    checar("12 de novo: nenhuma chamada nova", chamadas12.length === 1 && m.rpc.de("posAcaoBloco").length === 2, m.rpc.de("posAcaoBloco"));
+    checar(
+      "nada a enviar com o motivo",
+      m.texto().includes("Nada a enviar: 2 processos têm inclusão não confirmada no bloco 12 (confira o bloco)."),
+      m.raiz.querySelector(".pl-pos-status")?.textContent,
+    );
+    await m.repetir().catch(() => undefined);
+    checar("Tentar de novo também não reenvia", m.rpc.de("posAcaoBloco").length === 2);
+    escolherCombo(m.doc, "Bloco interno", "b8");
+    await m.aplicar();
+    checar("13 de novo: já estão no bloco, nada a enviar", m.rpc.de("posAcaoBloco").length === 2);
+    checar(
+      "motivo: já estão",
+      m.texto().includes("Nada a enviar: 2 processos já estão no bloco 13."),
+      m.raiz.querySelector(".pl-pos-status")?.textContent,
+    );
+  }
+
+  secao("Fix 1: listas com sessão expirada não ficam guardadas");
+  {
+    const m = montarPainel([itemOk(0)], { opcoes: (_a, vez) => (vez === 1 ? { ...OPCOES, blocos: [], parar: true } : OPCOES) });
+    await m.abrir();
+    checar("mensagem da sessão", m.texto().includes(MENSAGEM_SESSAO));
+    disparar(m.raiz.querySelector(".pl-pos-abrir")!, "click");
+    disparar(m.raiz.querySelector(".pl-pos-abrir")!, "click");
+    await ate(() => m.rpc.de("posAcaoOpcoes").length === 2);
+    await tique(10);
+    checar("reabrir carrega de novo", m.rpc.de("posAcaoOpcoes").length === 2);
+    escolherCombo(m.doc, "Bloco interno", "b7");
+    checar("agora com os blocos", botao(m.raiz, "Aplicar")?.disabled === false);
+  }
+
+  secao("Fix 1: rodada nova sobre uma pausada avisa o que não foi enviado");
+  {
+    const m = montarPainel([itemOk(0), itemOk(1)], {
+      posAcao: (_a, vez) =>
+        vez === 1 ? { situacao: "erro", mensagem: "Sessão expirada.", parar: true } : { situacao: "ok", mensagem: "ok" },
+    });
+    await m.abrir();
+    escolherCombo(m.doc, "Marcador", "m1");
+    await m.aplicar();
+    checar("pausado", m.visivel("Continuar"));
+    escolherCombo(m.doc, "Bloco interno", "b7");
+    m.ligar("marcador", false);
+    await m.aplicar();
+    checar(
+      "status diz quantos da pausada não foram",
+      m.texto().includes("1 processo da execução pausada não foi enviado."),
+      m.raiz.querySelector(".pl-pos-status")?.textContent,
+    );
+    checar("o marcador do 2º não foi enviado", m.posDe("marcador").length === 1);
+  }
+
+  secao("Fix 1: número real sem id do processo tem o próprio motivo");
+  {
+    const semId: ItemProc = { ...itemOk(1, 2), resultado: { criado: { numero: numero(2), idProcedimento: " ", url: "" } } };
+    const m = montarPainel([itemOk(0), semId]);
+    checar("fora dos alvos", m.p.alvos.length === 1 && m.p.semId === 1 && m.p.incertas === 0);
+    checar(
+      "motivo próprio",
+      m.texto().includes("1 linha ficou de fora: o processo foi criado, mas o SEI não informou o identificador interno dele."),
+    );
+    checar("sem o motivo de incerta", !m.texto().includes("não confirmou o número"));
+    await m.abrir();
+    escolherCombo(m.doc, "Marcador", "m1");
+    await m.aplicar();
+    checar("só o processo com id", m.posDe("marcador").length === 1 && m.posDe("marcador")[0]?.args.idProcedimento === "101");
+  }
+
+  secao("Fix 1: duplo clique em Tentar de novo e em Continuar");
+  {
+    const m = montarPainel([itemOk(0), itemOk(1)], {
+      posAcao: (a, vez) => (vez === 1 ? { situacao: "erro", mensagem: "falhou" } : { situacao: "ok", mensagem: `${a.acao} ok` }),
+    });
+    await m.abrir();
+    escolherCombo(m.doc, "Marcador", "m1");
+    await m.aplicar();
+    const r = botao(m.raiz, "Tentar de novo as falhas")!;
+    disparar(r, "click");
+    disparar(r, "click");
+    await ate(() => !m.p.rodando);
+    checar("retry uma vez só", m.posDe("marcador").length === 3, m.posDe("marcador").length);
+
+    const c = montarPainel([itemOk(0), itemOk(1)], {
+      posAcao: (_a, vez) =>
+        vez === 1 ? { situacao: "erro", mensagem: "Sessão expirada.", parar: true } : { situacao: "ok", mensagem: "ok" },
+    });
+    await c.abrir();
+    escolherCombo(c.doc, "Marcador", "m1");
+    await c.aplicar();
+    const b = botao(c.raiz, "Continuar")!;
+    disparar(b, "click");
+    disparar(b, "click");
+    await ate(() => !c.p.rodando);
+    checar(
+      "Continuar uma vez só",
+      c.posDe("marcador").length === 2 && c.posDe("marcador")[1]?.args.idProcedimento === "102",
+      c.posDe("marcador"),
+    );
+  }
+
   secao("Depois de criar (app): painel no resultado só com processo confirmado; coluna na tabela e no CSV");
   {
     const a = await montarApp([criadoGravado(1), incertoGravado]);

@@ -9,11 +9,14 @@
  * - Marcador e acompanhamento sao idempotentes no nucleo (o mesmo valor de novo vira "ja estava"): um `erro`
  *   neles, inclusive a ponte que nao respondeu, pode ser repetido sem risco.
  * - A inclusao em bloco e UM POST com todos os ids. Se a ponte cai ou o prazo estoura, o POST pode ter saido:
- *   todos ficam `nao-confirmado` ("confira o bloco") e NUNCA sao reenviados por este painel, nem pelo "Tentar de
- *   novo as falhas" nem por um novo Aplicar no mesmo bloco. `fora-da-pagina` tambem nao e falha a repetir as
- *   cegas: o processo nao estava na pagina do Controle, e o caminho e fazer pelo Controle de Processos.
- * - Nada disto e gravado: fechar o modal so para; ao reabrir, o resultado da etapa 1 volta e repetir e seguro
- *   pelas regras acima.
+ *   todos ficam `nao-confirmado` ("confira o bloco N"). O painel guarda cada par bloco|processo nao confirmado
+ *   (que um Aplicar em outro bloco nao apaga) e NUNCA o reenvia para aquele bloco: nem pelo "Tentar de novo as
+ *   falhas" nem por um novo Aplicar. `fora-da-pagina` tambem nao e falha a repetir as cegas: o processo nao
+ *   estava na pagina do Controle, e o caminho e fazer pelo Controle de Processos.
+ * - Nada disto e gravado. Essa memoria vale so enquanto o painel existe: fechar o modal (ou voltar a etapa 1 com
+ *   "Tentar de novo"/"Continuar") a apaga, e ai o painel novo nao sabe do que ficou nao confirmado. Marcador e
+ *   acompanhamento continuam seguros de repetir (idempotentes); a inclusao em bloco, nao: depois de um "confira
+ *   o bloco", o usuario precisa conferir o bloco antes de aplicar de novo.
  */
 
 import { ExecutorLote, type ItemLote, type SaidaItem } from "@comum/lote/executor";
@@ -52,7 +55,7 @@ const mensagem = (e: unknown): string => (e instanceof Error ? e.message : Strin
 export function elegivel(i: ItemProc): boolean {
   if (i.situacao !== "ok" || !i.resultado || i.resultado.incerto) return false;
   const { numero, idProcedimento } = i.resultado.criado;
-  return !!numero && numero !== NUMERO_INCERTO && numero !== NUMERO_NAO_IDENTIFICADO && !!idProcedimento?.trim();
+  return numeroConfirmado(i) && !!numero && !!idProcedimento?.trim();
 }
 
 const ROTULO_ACAO: Record<AcaoPos, string> = { bloco: "Bloco", marcador: "Marcador", acompanhar: "Acompanhamento" };
@@ -75,12 +78,13 @@ function textoEstado(acao: AcaoPos, e: EstadoPos): string {
 }
 
 /** O texto da coluna "Depois de criar" de um processo: uma parte por acao que ja rodou (ou esta na fila). */
-export function resumoDepois(estados: Partial<Record<AcaoPos, EstadoPos>> | undefined): string {
-  if (!estados) return "";
-  return (["bloco", "marcador", "acompanhar"] as const)
-    .filter((a) => estados[a])
-    .map((a) => `${ROTULO_ACAO[a]}: ${textoEstado(a, estados[a]!)}`)
-    .join("; ");
+export function resumoDepois(estados: Partial<Record<AcaoPos, EstadoPos>> | undefined, outrosBlocos: EstadoPos[] = []): string {
+  const e = estados ?? {};
+  const partes: string[] = [];
+  if (e.bloco) partes.push(`${ROTULO_ACAO.bloco}: ${textoEstado("bloco", e.bloco)}`);
+  for (const b of outrosBlocos) partes.push(`${ROTULO_ACAO.bloco}: ${textoEstado("bloco", b)}`);
+  for (const a of ["marcador", "acompanhar"] as const) if (e[a]) partes.push(`${ROTULO_ACAO[a]}: ${textoEstado(a, e[a]!)}`);
+  return partes.join("; ");
 }
 
 interface ConfigPos {
@@ -110,8 +114,10 @@ export class PainelPosAcao {
   readonly el: HTMLElement;
   /** Os processos em que as acoes podem rodar, na ordem das linhas. */
   readonly alvos: ItemProc[];
-  /** Linhas criadas que ficaram de fora (incertas ou sem numero confirmado). */
+  /** Linhas criadas que ficaram de fora: incertas (sem numero confirmado) e com numero mas sem id do processo. */
   readonly deFora: number;
+  readonly incertas: number;
+  readonly semId: number;
   private readonly estados = new Map<number, Partial<Record<AcaoPos, EstadoPos>>>();
   private opcoes: OpcoesPosAcao | null = null;
   private carregando: Promise<void> | null = null;
@@ -122,6 +128,13 @@ export class PainelPosAcao {
   /** A configuracao com que cada acao rodou por ultimo: o "Tentar de novo as falhas" repete com ela. */
   private readonly usada: ConfigPos = {};
   private motivo: string | null = null;
+  /** Uma frase do que a ultima tentativa nao fez (nada a enviar, execucao pausada descartada). */
+  private nota: string | null = null;
+  /**
+   * Pares `idBloco|idProcedimento` com inclusao nao confirmada: o POST pode ter entrado. Nunca sai daqui (um
+   * Aplicar em outro bloco nao apaga), e nada e reenviado ao mesmo bloco enquanto o painel existir.
+   */
+  private readonly naoConfirmados = new Map<string, { indice: number; idBloco: string; numeroBloco: string }>();
   private destruido = false;
   private aberto = false;
 
@@ -131,6 +144,8 @@ export class PainelPosAcao {
   private readonly carregandoEl: HTMLElement;
   private readonly motivoEl: HTMLElement;
   private readonly status: HTMLElement;
+  /** "N processos nao confirmados no bloco 12 tambem serao incluidos no 13" (so informa). */
+  private readonly avisoBloco: HTMLElement;
   private readonly liga: Record<AcaoPos, HTMLInputElement>;
   private readonly comboBloco: Combo;
   private readonly comboMarcador: Combo;
@@ -147,7 +162,10 @@ export class PainelPosAcao {
   ) {
     const ordenados = [...itens].sort((a, b) => a.indice - b.indice);
     this.alvos = ordenados.filter(elegivel);
-    this.deFora = ordenados.filter((i) => i.situacao === "ok" && !elegivel(i)).length;
+    const fora = ordenados.filter((i) => i.situacao === "ok" && !elegivel(i));
+    this.deFora = fora.length;
+    this.semId = fora.filter((i) => numeroConfirmado(i) && !i.resultado?.criado.idProcedimento?.trim()).length;
+    this.incertas = this.deFora - this.semId;
 
     const caixa = (acao: AcaoPos) => {
       const c = h("input", { type: "checkbox", class: "pl-pos-liga", "data-acao": acao });
@@ -203,6 +221,7 @@ export class PainelPosAcao {
     this.carregandoEl = h("p", { class: "pl-nota", hidden: true }, "Carregando as listas do SEI...");
     this.motivoEl = h("p", { class: "pl-motivo", role: "alert", hidden: true });
     this.status = h("p", { class: "pl-nota pl-pos-status", role: "status" });
+    this.avisoBloco = h("p", { class: "pl-motivo pl-pos-aviso-bloco", hidden: true });
 
     const bloco = (acao: AcaoPos, titulo: string, ...campos: HTMLElement[]) =>
       h("fieldset", { class: "pl-pos-bloco" }, h("legend", {}, h("label", { class: "pl-pos-titulo" }, this.liga[acao], titulo)), ...campos);
@@ -215,17 +234,25 @@ export class PainelPosAcao {
         { class: "pl-nota" },
         `Para ${n === 1 ? "o processo criado" : `os ${n} processos criados`} com número confirmado. Cada ação é opcional e independente das outras.`,
       ),
-      this.deFora
+      this.incertas
         ? h(
             "p",
             { class: "pl-motivo pl-pos-de-fora" },
             icone("alerta", 16),
-            `${this.deFora} ${this.deFora === 1 ? "linha ficou de fora" : "linhas ficaram de fora"}: o SEI não confirmou o número do processo (incerta). Confira no Controle de Processos e faça por lá.`,
+            `${this.incertas} ${this.incertas === 1 ? "linha ficou de fora" : "linhas ficaram de fora"}: o SEI não confirmou o número do processo (incerta). Confira no Controle de Processos e faça por lá.`,
+          )
+        : null,
+      this.semId
+        ? h(
+            "p",
+            { class: "pl-motivo pl-pos-sem-id" },
+            icone("alerta", 16),
+            `${this.semId} ${this.semId === 1 ? "linha ficou de fora" : "linhas ficaram de fora"}: o processo foi criado, mas o SEI não informou o identificador interno dele. Faça pelo Controle de Processos.`,
           )
         : null,
       this.carregandoEl,
       this.avisos,
-      bloco("bloco", "Incluir em bloco interno", this.comboBloco.el),
+      bloco("bloco", "Incluir em bloco interno", this.comboBloco.el, this.avisoBloco),
       bloco("marcador", "Aplicar marcador", this.comboMarcador.el, this.textoMarcador),
       bloco("acompanhar", "Acompanhar", this.comboGrupo.el, this.observacao),
       this.motivoEl,
@@ -250,7 +277,7 @@ export class PainelPosAcao {
 
   /** Ha algo a mostrar na coluna "Depois de criar". */
   get temResultados(): boolean {
-    return this.estados.size > 0;
+    return this.estados.size > 0 || this.naoConfirmados.size > 0;
   }
 
   get rodando(): boolean {
@@ -259,7 +286,16 @@ export class PainelPosAcao {
 
   /** O texto da coluna para uma linha (vazio para as que ficaram de fora). */
   depois(i: ItemProc): string {
-    return resumoDepois(this.estados.get(i.indice));
+    const atual = this.estados.get(i.indice);
+    const b = atual?.bloco;
+    // Um "confira o bloco N" por bloco ainda nao confirmado, mesmo que outro bloco tenha dado certo depois.
+    const extras: EstadoPos[] = [];
+    for (const x of this.naoConfirmados.values()) {
+      if (x.indice !== i.indice) continue;
+      if (b?.situacao === "nao-confirmado" && b.idBloco === x.idBloco) continue;
+      extras.push({ situacao: "nao-confirmado", idBloco: x.idBloco, numeroBloco: x.numeroBloco });
+    }
+    return resumoDepois(atual, extras);
   }
 
   estado(indice: number, acao: AcaoPos): EstadoPos | undefined {
@@ -298,14 +334,16 @@ export class PainelPosAcao {
           PRAZO_OPCOES_MS,
         );
         if (this.destruido) return;
-        this.opcoes = {
+        const opcoes: OpcoesPosAcao = {
           marcadores: lista<OpcaoSei>(r?.marcadores),
           grupos: lista<OpcaoSei>(r?.grupos),
           blocos: lista<OpcaoBloco>(r?.blocos),
           avisos: lista<string>(r?.avisos).filter((a) => typeof a === "string"),
         };
+        // Sessao expirada: as listas vieram pela metade. Nao guarda; fechar e abrir o painel carrega de novo.
         if (r?.parar) this.motivo = MENSAGEM_SESSAO;
-        this.avisos.replaceChildren(...this.opcoes.avisos.map((a) => h("p", { class: "pl-motivo" }, icone("alerta", 16), a)));
+        else this.opcoes = opcoes;
+        this.avisos.replaceChildren(...opcoes.avisos.map((a) => h("p", { class: "pl-motivo" }, icone("alerta", 16), a)));
       } catch (e) {
         if (this.destruido) return;
         this.avisos.replaceChildren(
@@ -339,12 +377,23 @@ export class PainelPosAcao {
     const cfg = this.lerConfig();
     if (!cfg) return Promise.resolve();
     const plano: Plano = { bloco: null, processos: [] };
+    let jaNoBloco = 0;
+    let naoConfirmadosNoBloco = 0;
     if (cfg.bloco) {
       const b = cfg.bloco;
-      // Nao confirmado neste mesmo bloco: o POST pode ter entrado. Nunca reenviado daqui.
       const itens = this.alvos.filter((i) => {
+        // Nao confirmado neste bloco (agora ou antes de um Aplicar em outro): o POST pode ter entrado. Nunca reenviado.
+        if (this.naoConfirmados.has(chavePar(b.id, i))) {
+          naoConfirmadosNoBloco += 1;
+          return false;
+        }
+        // Ja incluido (ou ja estava) neste bloco: nada a fazer.
         const e = this.estado(i.indice, "bloco");
-        return !(e?.situacao === "nao-confirmado" && e.idBloco === b.id);
+        if (e?.idBloco === b.id && (e.situacao === "ok" || e.situacao === "ja-estava")) {
+          jaNoBloco += 1;
+          return false;
+        }
+        return true;
       });
       if (itens.length) plano.bloco = { cfg: b, itens };
       this.usada.bloco = b;
@@ -359,6 +408,19 @@ export class PainelPosAcao {
       this.usada.acompanhar = cfg.acompanhar;
     }
     if (acoes.length) plano.processos = this.alvos.map((item) => ({ item, acoes: [...acoes] }));
+    if (!plano.bloco && !plano.processos.length) {
+      const motivos: string[] = [];
+      if (!this.alvos.length) motivos.push("nenhum processo criado com número confirmado");
+      if (cfg.bloco && jaNoBloco)
+        motivos.push(`${jaNoBloco} ${jaNoBloco === 1 ? "processo já está" : "processos já estão"} no bloco ${cfg.bloco.numero}`);
+      if (cfg.bloco && naoConfirmadosNoBloco)
+        motivos.push(
+          `${naoConfirmadosNoBloco} ${naoConfirmadosNoBloco === 1 ? "processo tem" : "processos têm"} inclusão não confirmada no bloco ${cfg.bloco.numero} (confira o bloco)`,
+        );
+      this.nota = `Nada a enviar: ${motivos.join("; ") || "nenhuma ação a aplicar"}.`;
+      this.desenhar();
+      return Promise.resolve();
+    }
     return this.executar(plano);
   }
 
@@ -384,6 +446,7 @@ export class PainelPosAcao {
     const e = this.executor;
     if (e?.estado === "pausado") {
       this.motivo = null;
+      this.nota = null;
       return this.acompanhar(e.continuar());
     }
     if (this.pendentes.length) {
@@ -396,8 +459,13 @@ export class PainelPosAcao {
 
   private executar(plano: Plano): Promise<void> {
     this.motivo = null;
+    this.nota = null;
+    // Uma rodada nova substitui a pausada: o que ela nao chegou a enviar sai da fila (nao e resultado), e o
+    // usuario fica sabendo.
+    const naoEnviados = [...this.estados.values()].filter((e) => Object.values(e).some((x) => x?.situacao === "aguardando")).length;
+    if (naoEnviados)
+      this.nota = `${naoEnviados} ${naoEnviados === 1 ? "processo da execução pausada não foi enviado" : "processos da execução pausada não foram enviados"}.`;
     this.pendentes = [];
-    // Uma rodada nova substitui a pausada: o que ela nao chegou a enviar sai da fila (nao e resultado).
     this.executor?.cancelar();
     this.executor = null;
     for (const [indice, e] of this.estados) {
@@ -535,6 +603,9 @@ export class PainelPosAcao {
     const atual = this.estados.get(item.indice) ?? {};
     atual[acao] = e;
     this.estados.set(item.indice, atual);
+    if (acao === "bloco" && e.situacao === "nao-confirmado" && e.idBloco) {
+      this.naoConfirmados.set(chavePar(e.idBloco, item), { indice: item.indice, idBloco: e.idBloco, numeroBloco: e.numeroBloco ?? "" });
+    }
   }
 
   /* ------------------------------------------------------------ tela */
@@ -586,7 +657,32 @@ export class PainelPosAcao {
     this.botaoContinuar.hidden = rodando || !(this.executor?.estado === "pausado" || this.pendentes.length > 0);
     this.motivoEl.hidden = !this.motivo;
     this.motivoEl.replaceChildren(...(this.motivo ? [icone("alerta", 16), this.motivo] : []));
-    this.status.textContent = rodando ? this.textoAndamento() : this.textoFinal();
+    const status = rodando ? this.textoAndamento() : this.textoFinal();
+    this.status.textContent = [this.nota, status].filter(Boolean).join(" ");
+    const aviso = this.textoAvisoBloco();
+    this.avisoBloco.hidden = !aviso;
+    this.avisoBloco.textContent = aviso;
+  }
+
+  /** Bloco escolhido diferente de um bloco com inclusao nao confirmada: os mesmos processos entram no novo. */
+  private textoAvisoBloco(): string {
+    if (!this.liga.bloco.checked) return "";
+    const id = this.comboBloco.valor()[0];
+    const escolhido = this.opcoes?.blocos.find((b) => b.id === id);
+    if (!escolhido) return "";
+    const porBloco = new Map<string, { numero: string; n: number }>();
+    for (const x of this.naoConfirmados.values()) {
+      if (x.idBloco === escolhido.id) continue;
+      const atual = porBloco.get(x.idBloco) ?? { numero: x.numeroBloco || x.idBloco, n: 0 };
+      atual.n += 1;
+      porBloco.set(x.idBloco, atual);
+    }
+    return [...porBloco.values()]
+      .map(
+        ({ numero, n }) =>
+          `${n} ${n === 1 ? "processo não confirmado" : "processos não confirmados"} no bloco ${numero} também ${n === 1 ? "será incluído" : "serão incluídos"} no ${escolhido.numero}.`,
+      )
+      .join(" ");
   }
 
   private contar(s: SituacaoPos): number {
@@ -601,12 +697,12 @@ export class PainelPosAcao {
   }
 
   private textoFinal(): string {
-    if (!this.estados.size) return "";
+    if (!this.estados.size && !this.naoConfirmados.size) return "";
     const partes = [
       [this.contar("ok"), "feita", "feitas"],
       [this.contar("ja-estava"), "já estava", "já estavam"],
       [this.contar("erro"), "com erro", "com erro"],
-      [this.contar("nao-confirmado"), "não confirmada (confira o bloco)", "não confirmadas (confira o bloco)"],
+      [this.naoConfirmados.size, "não confirmada (confira o bloco)", "não confirmadas (confira o bloco)"],
       [this.contar("fora-da-pagina"), "fora da página do Controle", "fora da página do Controle"],
       [this.contar("aguardando"), "não enviada", "não enviadas"],
     ] as const;
@@ -617,6 +713,13 @@ export class PainelPosAcao {
     return texto ? `Ações: ${texto}.` : "";
   }
 }
+
+function numeroConfirmado(i: ItemProc): boolean {
+  const n = i.resultado?.criado.numero;
+  return !i.resultado?.incerto && !!n && n !== NUMERO_INCERTO && n !== NUMERO_NAO_IDENTIFICADO;
+}
+
+const chavePar = (idBloco: string, i: ItemProc): string => `${idBloco}|${i.resultado?.criado.idProcedimento.trim() ?? ""}`;
 
 function rotuloBloco(b: OpcaoBloco): string {
   return b.descricao ? `${b.numero} — ${b.descricao}` : b.numero;
