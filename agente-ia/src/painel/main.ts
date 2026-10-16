@@ -61,9 +61,10 @@ import { ControleArquivo, escolherArquivoSync, handlesNoIndexedDB, temSeletorDeA
 import { areaChrome } from "@comum/armazenamento/area";
 import { adaptadorAgente, type AdaptadorAgente } from "../arquivo/adaptador";
 import type { EnvelopeAgente } from "../arquivo/envelope";
-import { CHAVE_SEGREDOS, CHAVE_STATUS, fontesDoNavegador } from "../arquivo/retrato";
-import { deveAgendar, exportarBackup, importarBackup, NOME_DO_BACKUP } from "../arquivo/gatilho";
-import { aoAvisar, aplicarConfigDoSync, aplicarDoSync, CHAVE_MIGRADO, espelharConfig, ESPELHOS, unirNaPrimeiraVez } from "./espelho";
+import { CHAVE_SEGREDOS, CHAVE_STATUS, fontesDoNavegador, type Mudancas } from "../arquivo/retrato";
+import { criarFila, deveAgendar, exportarBackup, fontesQueAvisam, importarBackup, NOME_DO_BACKUP, travarAdaptador } from "../arquivo/gatilho";
+import { espelharListas, lerListasDoLocal, trazerDoSync } from "./sincronia-listas";
+import { aoAvisar, aplicarConfigDoSync, CHAVE_MIGRADO, espelharConfig } from "./espelho";
 import {
   baixarColecao,
   baixarSkillSeMudou,
@@ -252,18 +253,25 @@ class App {
   private controleArquivo: ControleArquivo<EnvelopeAgente> | null = null;
 
   /**
-   * Liga o backup em arquivo. As fontes avisam o painel quando a mescla
-   * gravou no local (veio coisa do arquivo), para as listas na memória
-   * acompanharem.
+   * Trava comum da sincronia do `storage.sync` e da mescla do arquivo: as duas
+   * leem as listas e as regravam, e a do sync parte da memória do painel.
+   * Rodando juntas, uma regravaria a lista velha por cima da outra.
+   */
+  private travaLocal = criarFila();
+  /** Uma sincronização do arquivo (ou Exportar/Importar) de cada vez. */
+  private filaArquivo = criarFila();
+  private esperaArquivo: ReturnType<typeof setTimeout> | undefined;
+  /** O foco volta muitas vezes seguidas: no máximo uma leitura a cada 30 s por ele. */
+  private ultimoFoco = 0;
+
+  /**
+   * Liga o backup em arquivo. Depois de a mescla gravar no local (ainda na
+   * trava), o painel relê as listas, espera o espelho no `sync` e espelha a
+   * configuração: quando a sincronia do sync rodar, encontra tudo em dia.
    */
   private ligarArquivo(): void {
-    const fontes = fontesDoNavegador();
-    const aplicar = fontes.aplicar.bind(fontes);
-    fontes.aplicar = async (antes, depois) => {
-      await aplicar(antes, depois);
-      await this.recarregarDoLocal().catch(() => undefined);
-    };
-    this.adaptadorArquivo = adaptadorAgente(fontes);
+    const fontes = fontesQueAvisam(fontesDoNavegador(), (m) => this.depoisDoArquivo(m).catch(() => undefined));
+    this.adaptadorArquivo = travarAdaptador(adaptadorAgente(fontes), this.travaLocal);
     if (!temSeletorDeArquivo(window)) return;
     this.controleArquivo = new ControleArquivo<EnvelopeAgente>({
       area: areaChrome(chrome.storage.local, "local"),
@@ -276,34 +284,38 @@ class App {
     });
   }
 
-  /** Grava o arquivo daqui a pouco (o controle junta as mudanças seguidas). */
+  /** Na fila do arquivo; o que falhar não derruba o painel (a sincronia já vira `StatusArquivo`). */
+  private naFilaDoArquivo<T>(tarefa: () => Promise<T>): Promise<T> {
+    return this.filaArquivo(tarefa);
+  }
+
+  /** Grava o arquivo daqui a 15 s, juntando as mudanças seguidas (pela fila, como as outras). */
   private agendarArquivo(): void {
-    this.controleArquivo?.agendar();
+    if (!this.controleArquivo) return;
+    clearTimeout(this.esperaArquivo);
+    this.esperaArquivo = setTimeout(() => void this.sincronizarArquivo(), 15_000);
   }
 
-  /** Sincroniza agora; falha vira `StatusArquivo`, e o que sobrar não derruba o painel. */
+  /** Sincroniza agora (na fila); falha vira `StatusArquivo`, e o que sobrar não derruba o painel. */
   private sincronizarArquivo(pedir = false): Promise<unknown> {
-    return this.controleArquivo?.sincronizar(pedir).catch(() => undefined) ?? Promise.resolve();
+    const controle = this.controleArquivo;
+    if (!controle) return Promise.resolve();
+    return this.naFilaDoArquivo(() => controle.sincronizar(pedir)).catch(() => undefined);
   }
 
-  /**
-   * Relê do `local` o que a mescla do arquivo pode ter mudado: a configuração
-   * (e a espelha no sync, que não passa por `aplicarConfig`) e as listas.
-   */
-  private async recarregarDoLocal(): Promise<void> {
-    const salvo = ((await chrome.storage.local.get(CHAVE_CONFIG).catch(() => ({}) as Record<string, unknown>))[CHAVE_CONFIG] ?? undefined) as Partial<Config> | undefined;
-    if (salvo && JSON.stringify({ ...this.config, ...salvo }) !== JSON.stringify(this.config)) {
+  /** O que a mescla do arquivo gravou no local passa à memória do painel e ao `sync`. */
+  private async depoisDoArquivo(m: Mudancas): Promise<void> {
+    if (m.config) {
+      const salvo = (await chrome.storage.local.get(CHAVE_CONFIG))[CHAVE_CONFIG] as Partial<Config> | undefined;
       this.config = { ...this.config, ...salvo };
-      void espelharConfig(this.config);
+      // A configuração do arquivo não passa por `aplicarConfig`: sem isto o
+      // `sync` (velho) ganharia de volta na próxima sincronia.
+      await espelharConfig(this.config);
     }
-    this.skills = await listarSkills();
-    this.colecoes = await listarColecoes();
-    this.regras = await listarRegras();
-    this.memoria = await listarMemoria();
-    this.rotinas = await listarRotinas();
-    this.conectores = await listarConectores();
-    this.fluxos = await listarFluxos();
+    ({ skills: this.skills, colecoes: this.colecoes, regras: this.regras, memoria: this.memoria, rotinas: this.rotinas, conectores: this.conectores, fluxos: this.fluxos } =
+      await lerListasDoLocal());
     this.fluxosIgnorados = await listarIgnorados();
+    await espelharListas({ skills: this.skills, colecoes: this.colecoes, regras: this.regras, memoria: this.memoria, rotinas: this.rotinas, conectores: this.conectores, fluxos: this.fluxos });
     for (const redesenhar of this.redesenharConfig) redesenhar();
   }
 
@@ -316,10 +328,16 @@ class App {
       temSeletor: Boolean(controle),
       configurado: async () => (controle ? controle.configurado() : false),
       status: async () => (controle ? controle.status() : null),
+      // Escolher, reconectar e "agora" pedem o seletor ou a permissão, que só
+      // valem logo depois do clique: não esperam na fila atrás de uma
+      // sincronização lenta. A mescla do local continua na `travaLocal`.
       escolher: async (m) => void (await controle?.escolher(m)),
       reconectar: async () => void (await controle?.reconectar()),
-      agora: async () => void (await this.sincronizarArquivo(true)),
-      esquecer: async () => void (await controle?.esquecer()),
+      agora: async () => void (await controle?.sincronizar(true)),
+      esquecer: async () => {
+        clearTimeout(this.esperaArquivo);
+        if (controle) await this.naFilaDoArquivo(() => controle.esquecer());
+      },
       segredos: {
         ler: async () => (await chrome.storage.local.get(CHAVE_SEGREDOS))[CHAVE_SEGREDOS] === true,
         gravar: async (v) => {
@@ -336,13 +354,16 @@ class App {
       exportar: async () => {
         // O mesmo envelope da sincronia (diário carimbado, caixa dos segredos
         // daqui), sem consumir o "remover segredos" pendente.
-        const url = URL.createObjectURL(new Blob([await exportarBackup(adaptador)], { type: "application/json" }));
+        const url = URL.createObjectURL(new Blob([await this.naFilaDoArquivo(() => exportarBackup(adaptador))], { type: "application/json" }));
         const a = h("a", { href: url, download: NOME_DO_BACKUP });
         a.click();
         setTimeout(() => URL.revokeObjectURL(url), 5000);
       },
       // A mescla grava no local; as fontes recarregam o painel e o `onChanged` agenda o arquivo.
-      importar: async (arquivo) => importarBackup(await arquivo.text(), adaptador),
+      importar: async (arquivo) => {
+        const texto = await arquivo.text();
+        return this.naFilaDoArquivo(() => importarBackup(texto, adaptador));
+      },
     };
   }
 
@@ -452,7 +473,11 @@ class App {
       .catch(() => undefined);
     // O arquivo pode ter mudado em outro computador: lê ao abrir e quando o painel volta ao foco.
     void this.sincronizarArquivo();
-    window.addEventListener("focus", () => void this.sincronizarArquivo());
+    window.addEventListener("focus", () => {
+      if (Date.now() - this.ultimoFoco < 30_000) return;
+      this.ultimoFoco = Date.now();
+      void this.sincronizarArquivo();
+    });
     if (!this.config.chave) this.abrirConfig(true);
   }
 
@@ -2473,38 +2498,21 @@ Voc\u00EA \u00E9 um AUXILIAR: recebeu uma tarefa de leitura de outro agente e n\
       this.adicionar({ tipo: "aviso", texto });
     });
     try {
-      if (primeira) {
-        this.skills = await unirNaPrimeiraVez(ESPELHOS.skills, this.skills);
-        this.colecoes = await unirNaPrimeiraVez(ESPELHOS.colecoes, this.colecoes);
-        this.regras = await unirNaPrimeiraVez(ESPELHOS.regras, this.regras);
-        this.memoria = await unirNaPrimeiraVez(ESPELHOS.memoria, this.memoria);
-        this.rotinas = await unirNaPrimeiraVez(ESPELHOS.rotinas, this.rotinas);
-        this.conectores = await unirNaPrimeiraVez(ESPELHOS.conectores, this.conectores);
-        this.fluxos = await unirNaPrimeiraVez(ESPELHOS.fluxos, this.fluxos);
-        void espelharConfig(this.config);
-        await chrome.storage.local.set({ [CHAVE_MIGRADO]: Date.now() });
-      } else {
-        this.skills = (await aplicarDoSync(ESPELHOS.skills, this.skills)).lista;
-        this.colecoes = (await aplicarDoSync(ESPELHOS.colecoes, this.colecoes)).lista;
-        this.regras = (await aplicarDoSync(ESPELHOS.regras, this.regras)).lista;
-        this.memoria = (await aplicarDoSync(ESPELHOS.memoria, this.memoria)).lista;
-        this.rotinas = (await aplicarDoSync(ESPELHOS.rotinas, this.rotinas)).lista;
-        this.conectores = (await aplicarDoSync(ESPELHOS.conectores, this.conectores)).lista;
-        this.fluxos = (await aplicarDoSync(ESPELHOS.fluxos, this.fluxos)).lista;
-      }
-      const cfg = await aplicarConfigDoSync(this.config);
-      if (cfg.mudou) this.config = cfg.config;
-      // O que veio de fora tem de ficar gravado aqui também: é do `local` que
-      // a conversa lê.
-      await Promise.all([
-        guardarSkills(this.skills),
-        guardarColecoes(this.colecoes),
-        guardarRegras(this.regras),
-        guardarMemoria(this.memoria),
-        guardarRotinas(this.rotinas),
-        guardarConectores(this.conectores),
-        guardarFluxos(this.fluxos),
-      ]);
+      // Na trava comum com o arquivo: parte das listas da memória, e o
+      // arquivo não pode estar no meio de gravar o local (ver `ligarArquivo`).
+      await this.travaLocal(async () => {
+        const l = await trazerDoSync(
+          { skills: this.skills, colecoes: this.colecoes, regras: this.regras, memoria: this.memoria, rotinas: this.rotinas, conectores: this.conectores, fluxos: this.fluxos },
+          primeira,
+        );
+        ({ skills: this.skills, colecoes: this.colecoes, regras: this.regras, memoria: this.memoria, rotinas: this.rotinas, conectores: this.conectores, fluxos: this.fluxos } = l);
+        if (primeira) {
+          void espelharConfig(this.config);
+          await chrome.storage.local.set({ [CHAVE_MIGRADO]: Date.now() });
+        }
+        const cfg = await aplicarConfigDoSync(this.config);
+        if (cfg.mudou) this.config = cfg.config;
+      });
     } catch {
       /* sem sincronização (Firefox sem conta, API ausente): segue só com o local */
     } finally {

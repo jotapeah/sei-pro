@@ -141,6 +141,18 @@ export async function verificarArquivoUi(): Promise<void> {
     checar(`falha em ${falha}: mostra o erro`, conteudo.includes(texto), conteudo);
   }
 
+  secao("arquivo/ui: o erro de leitura some quando a leitura volta");
+  {
+    const o: Parameters<typeof montar>[0] = { configurado: true, status: { estado: "ok", quando: 1, nome: "a.json" }, falha: "status" };
+    const { ui } = montar(o);
+    await esperar();
+    checar("erro de leitura aparece", (ui.elemento.textContent ?? "").includes("Storage fora do ar."));
+    o!.falha = undefined;
+    ui.redesenhar();
+    await esperar();
+    checar("erro de leitura some no redesenho bom", !(ui.elemento.textContent ?? "").includes("Storage fora do ar.") && Boolean(botao(ui.elemento, "Sincronizar agora")), ui.elemento.textContent);
+  }
+
   secao("arquivo/ui: sem titulo repetido");
   {
     const { ui } = montar();

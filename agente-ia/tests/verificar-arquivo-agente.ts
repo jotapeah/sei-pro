@@ -19,7 +19,8 @@ import {
   type Retrato,
 } from "../src/arquivo/envelope";
 import { adaptadorAgente } from "../src/arquivo/adaptador";
-import { CHAVES_DO_AGENTE, deveAgendar, exportarBackup, importarBackup, MSG_IMPORTADO, MSG_NAO_E_BACKUP } from "../src/arquivo/gatilho";
+import { CHAVES_DO_AGENTE, criarFila, deveAgendar, exportarBackup, fontesQueAvisam, importarBackup, MSG_IMPORTADO, MSG_NAO_E_BACKUP, travarAdaptador } from "../src/arquivo/gatilho";
+import { espelharListas, lerListasDoLocal, trazerDoSync, type ListasEspelhadas } from "../src/painel/sincronia-listas";
 import { fontesDoNavegador, lerListas, mudancas, type FontesRetrato } from "../src/arquivo/retrato";
 import { MAX_LEMBRANCAS } from "../src/painel/memoria";
 import { validarItem } from "../src/arquivo/validar";
@@ -752,10 +753,186 @@ export async function verificarGatilhoAgente(): Promise<void> {
   }
 }
 
+/**
+ * `chrome.storage` com `local` e `sync` separados e `onChanged` assíncrono,
+ * só das chaves que mudaram de verdade (como no navegador). `lento`: o espelho
+ * dessas chaves do `sync` demora (o item novo chega lá depois dos outros).
+ */
+function navegadorComAvisos(lento = "spro_regra_") {
+  const dados = { local: {} as Record<string, unknown>, sync: {} as Record<string, unknown> };
+  const ouvintes: Array<(m: Record<string, { newValue?: unknown; oldValue?: unknown }>, area: string) => void> = [];
+  const area = (nome: "local" | "sync") => {
+    const d = dados[nome];
+    const avisar = (m: Record<string, { newValue?: unknown; oldValue?: unknown }>) => {
+      if (Object.keys(m).length) setTimeout(() => ouvintes.forEach((o) => o(m, nome)), 0);
+    };
+    return {
+      get: async (chaves?: string | string[] | null) => {
+        if (!chaves) return structuredClone(d);
+        const lista = Array.isArray(chaves) ? chaves : [chaves];
+        return structuredClone(Object.fromEntries(lista.filter((k) => k in d).map((k) => [k, d[k]])));
+      },
+      set: async (itens: Record<string, unknown>) => {
+        const demora = nome === "sync" && Object.keys(itens).some((k) => k.startsWith(lento)) ? 30 : 1;
+        await new Promise((r) => setTimeout(r, demora));
+        const m: Record<string, { newValue?: unknown; oldValue?: unknown }> = {};
+        for (const [k, v] of Object.entries(structuredClone(itens))) {
+          if (JSON.stringify(d[k]) !== JSON.stringify(v)) m[k] = { newValue: v, oldValue: d[k] };
+          d[k] = v;
+        }
+        avisar(m);
+      },
+      remove: async (chaves: string | string[]) => {
+        await new Promise((r) => setTimeout(r, 1));
+        const m: Record<string, { newValue?: unknown; oldValue?: unknown }> = {};
+        for (const k of Array.isArray(chaves) ? chaves : [chaves]) {
+          if (k in d) m[k] = { oldValue: d[k] };
+          delete d[k];
+        }
+        avisar(m);
+      },
+      getBytesInUse: async () => JSON.stringify(d).length,
+    };
+  };
+  const chrome = { storage: { local: area("local"), sync: area("sync"), onChanged: { addListener: (o: (typeof ouvintes)[number]) => ouvintes.push(o) } } };
+  return { dados, chrome, ouvintes };
+}
+
+const vazias = (): ListasEspelhadas => ({ skills: [], colecoes: [], regras: [], memoria: [], rotinas: [], conectores: [], fluxos: [] });
+
+/**
+ * O painel em miniatura: as listas na memória, a sincronia do `storage.sync`
+ * disparada pelo `onChanged` (como em `main.ts`) e o adaptador do arquivo.
+ * `coordenado` liga a trava comum e o aviso das fontes (o conserto).
+ */
+function painelDeMentira(nav: ReturnType<typeof navegadorComAvisos>, coordenado: boolean, relogio: () => number) {
+  const trava = criarFila();
+  const p = {
+    listas: vazias(),
+    sincronizando: false,
+    async aplicarSincronizacao() {
+      if (p.sincronizando) return;
+      p.sincronizando = true;
+      try {
+        const corpo = async () => void (p.listas = await trazerDoSync(p.listas, false));
+        await (coordenado ? trava(corpo) : corpo());
+      } finally {
+        p.sincronizando = false;
+      }
+    },
+  };
+  nav.ouvintes.push((m, area) => {
+    if (area === "sync" && Object.keys(m).some((k) => k.startsWith("spro_"))) void p.aplicarSincronizacao();
+  });
+  const fontes = fontesQueAvisam(fontesDoNavegador({ todas: async () => [], gravarVarias: async () => undefined }), async () => {
+    if (!coordenado) return;
+    p.listas = await lerListasDoLocal();
+    await espelharListas(p.listas);
+  });
+  const cru = adaptadorAgente(fontes, relogio);
+  return { p, adaptador: coordenado ? travarAdaptador(cru, trava) : cru };
+}
+
+const assentar = async () => {
+  for (let i = 0; i < 40; i++) await new Promise((r) => setTimeout(r, 3));
+};
+
+export async function verificarCoordenacaoArquivo(): Promise<void> {
+  secao("arquivo do agente: trava com a sincronia do storage.sync");
+  let t = 90_000;
+  const relogio = () => (t += 1_000);
+
+  // fila: uma de cada vez, na ordem; a falha não trava a seguinte
+  {
+    const fila = criarFila();
+    const ordem: string[] = [];
+    const lenta = (nome: string, ms: number, falhar = false) => () =>
+      new Promise<string>((ok, erro) =>
+        setTimeout(() => {
+          ordem.push(nome);
+          if (falhar) erro(new Error(nome));
+          else ok(nome);
+        }, ms),
+      );
+    const r = await Promise.allSettled([fila(lenta("a", 15)), fila(lenta("b", 1, true)), fila(lenta("c", 1))]);
+    checar("fila: na ordem de chegada", ordem.join() === "a,b,c", ordem);
+    checar("fila: a falha nao trava a seguinte", r[1].status === "rejected" && r[2].status === "fulfilled", r);
+  }
+
+  // duas importações ao mesmo tempo: a segunda lê o que a primeira gravou
+  {
+    const backup = async (r: Partial<Listas>) => exportarBackup(adaptadorAgente(computador(retrato(r)), relogio));
+    const t1 = await backup({ regras: [regra({ id: "r1" })] });
+    const t2 = await backup({ regras: [regra({ id: "r2", nome: "Outra" })] });
+    const montar = (travar: boolean) => {
+      const c = computador(retrato());
+      const aplicar = c.aplicar;
+      c.aplicar = async (a, d) => {
+        await new Promise((r) => setTimeout(r, 10));
+        await aplicar(a, d);
+      };
+      const ad = adaptadorAgente(c, relogio);
+      return { c, ad: travar ? travarAdaptador(ad, criarFila()) : ad };
+    };
+    const sem = montar(false);
+    await Promise.all([importarBackup(t1, sem.ad), importarBackup(t2, sem.ad)]);
+    checar("sem trava: a segunda importacao apaga a primeira (controle)", sem.c.r.listas.regras.length === 1, sem.c.r.listas.regras);
+    const com = montar(true);
+    await Promise.all([importarBackup(t1, com.ad), importarBackup(t2, com.ad)]);
+    const ids = com.c.r.listas.regras.map((r) => r.id).sort();
+    checar("com trava: as duas importacoes ficam", ids.join() === "r1,r2", ids);
+  }
+
+  // Importar num perfil limpo (ou a 1a sincronia do 2o computador) com a sincronia do sync ligada
+  const antes = (globalThis as { chrome?: unknown }).chrome;
+  try {
+    const origem = computador(retrato({ skills: [skill({ texto: "corpo da skill" })], regras: [regra({ id: "rn" })] }));
+    const texto = await exportarBackup(adaptadorAgente(origem, relogio));
+
+    for (const coordenado of [false, true]) {
+      const nav = navegadorComAvisos();
+      (globalThis as { chrome?: unknown }).chrome = nav.chrome;
+      const { p, adaptador } = painelDeMentira(nav, coordenado, relogio);
+      // Basta sumir uma vez do local: a sincronia do arquivo que rodasse nesse
+      // instante carimbaria a lápide e espalharia a exclusão.
+      let teve = false;
+      let sumiu = false;
+      nav.ouvintes.push((m, area) => {
+        if (area !== "local" || !m.agenteIA_regras) return;
+        const tem = ((m.agenteIA_regras.newValue as Regra[] | undefined) ?? []).some((r) => r.id === "rn");
+        if (teve && !tem) sumiu = true;
+        teve ||= tem;
+      });
+      const msg = await importarBackup(texto, adaptador);
+      await assentar();
+      const skills = (nav.dados.local.agenteIA_skills as SkillUsuario[] | undefined) ?? [];
+      const regras = (nav.dados.local.agenteIA_regras as Regra[] | undefined) ?? [];
+      const textoOk = skills[0]?.texto === "corpo da skill";
+      const regraOk = regras.some((r) => r.id === "rn");
+      if (!coordenado) {
+        checar("sem coordenacao: a sincronia do sync estraga o que veio do arquivo (controle)", msg === MSG_IMPORTADO && !(textoOk && regraOk), { skills, regras });
+        continue;
+      }
+      checar("coordenado: importou", msg === MSG_IMPORTADO, msg);
+      checar("coordenado: o texto da skill sobrevive a sincronia do sync", textoOk, skills);
+      checar("coordenado: o item novo sobrevive (nao vira exclusao)", regraOk, regras);
+      checar("coordenado: o item novo nunca some do local, nem por um instante", teve && !sumiu);
+      checar("coordenado: o sync recebe o item novo", "spro_regra_rn" in nav.dados.sync, Object.keys(nav.dados.sync));
+      checar("coordenado: as listas da memoria acompanham", p.listas.regras.some((r) => r.id === "rn") && p.listas.skills[0]?.texto === "corpo da skill", p.listas);
+      // E a próxima sincronia do arquivo não espalha nada apagado.
+      const env = lerEnvelope(JSON.parse(await exportarBackup(adaptador)));
+      checar("coordenado: o arquivo seguinte sem lapide", Object.values(env?.registros ?? {}).every((l) => l.every((r) => !r.apagado)), env?.registros);
+    }
+  } finally {
+    (globalThis as { chrome?: unknown }).chrome = antes;
+  }
+}
+
 // Execução avulsa: `npx tsx tests/verificar-arquivo-agente.ts`.
 if (process.argv[1]?.endsWith("verificar-arquivo-agente.ts")) {
   verificarArquivoAgente();
   await verificarAdaptadorAgente();
   await verificarGatilhoAgente();
+  await verificarCoordenacaoArquivo();
   resumo();
 }

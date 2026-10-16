@@ -72,6 +72,8 @@ export function secaoArquivo(o: OpcoesArquivoUi): { elemento: HTMLElement; redes
   const importar = h("button", { onclick: () => input.click() }, "Importar arquivo");
 
   let geracao = 0;
+  /** O aviso na tela é de uma leitura que falhou: some quando a leitura voltar a dar certo. */
+  let avisoDaLeitura = false;
   async function desenhar(): Promise<void> {
     const minha = ++geracao;
     let configurado = false;
@@ -91,7 +93,13 @@ export function secaoArquivo(o: OpcoesArquivoUi): { elemento: HTMLElement; redes
       falha = e instanceof Error ? e.message : String(e);
     }
     if (minha !== geracao) return; // um redesenho mais novo já está a caminho
-    if (falha) aviso.textContent = falha;
+    if (falha) {
+      aviso.textContent = falha;
+      avisoDaLeitura = true;
+    } else if (avisoDaLeitura) {
+      aviso.textContent = "";
+      avisoDaLeitura = false;
+    }
 
     const filhos: Array<Node | null> = [];
 

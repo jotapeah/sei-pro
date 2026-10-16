@@ -19,7 +19,7 @@ import { CHAVE_ROTINAS } from "../painel/rotinas";
 import { CHAVE_COLECOES, CHAVE_SKILLS } from "../painel/skills";
 import type { AdaptadorAgente } from "./adaptador";
 import { FORMATO, lerEnvelope, VERSAO } from "./envelope";
-import { CHAVE_DIARIO, CHAVE_SEGREDOS, CHAVE_STATUS } from "./retrato";
+import { CHAVE_DIARIO, CHAVE_SEGREDOS, CHAVE_STATUS, mudancas, type FontesRetrato, type Mudancas } from "./retrato";
 
 /** O que, mudando no `chrome.storage.local`, precisa ir ao arquivo. */
 export const CHAVES_DO_AGENTE: string[] = [
@@ -67,4 +67,56 @@ export async function importarBackup(texto: string, adaptador: AdaptadorAgente):
   if (!env) return MSG_NAO_E_BACKUP;
   await adaptador.importar(env);
   return MSG_IMPORTADO;
+}
+
+/* ---- Uma coisa de cada vez ---- */
+
+export type Fila = <T>(tarefa: () => Promise<T>) => Promise<T>;
+
+/**
+ * Roda as tarefas uma depois da outra, na ordem de chegada; a falha de uma
+ * não trava as seguintes. NÃO é reentrante: uma tarefa que espera outra da
+ * mesma fila trava as duas.
+ */
+export function criarFila(): Fila {
+  let fim: Promise<unknown> = Promise.resolve();
+  return <T>(tarefa: () => Promise<T>): Promise<T> => {
+    const vez = fim.then(tarefa, tarefa);
+    fim = vez.catch(() => undefined);
+    return vez;
+  };
+}
+
+/**
+ * O adaptador com cada leitura-mescla-gravação do local dentro da `trava`,
+ * a mesma que a sincronia do `storage.sync` usa: nenhuma das duas lê o local
+ * enquanto a outra está no meio de gravá-lo.
+ */
+export function travarAdaptador(ad: AdaptadorAgente, trava: Fila): AdaptadorAgente {
+  return {
+    ...ad,
+    importar: (env) => trava(() => ad.importar(env)),
+    exportar: (lido) => trava(() => ad.exportar(lido)),
+    exportarSemArquivo: () => trava(() => ad.exportarSemArquivo()),
+    removerSegredosNaProxima: () => ad.removerSegredosNaProxima(),
+  };
+}
+
+/**
+ * As fontes, com um aviso depois de a mescla gravar no local: o painel relê
+ * as listas, espera o espelho no `sync` e espelha a configuração. Roda
+ * dentro da trava do adaptador (não pode pedir a mesma trava).
+ */
+export function fontesQueAvisam(f: FontesRetrato, depois: (m: Mudancas) => Promise<void>): FontesRetrato {
+  return {
+    lerRetrato: () => f.lerRetrato(),
+    lerDiario: () => f.lerDiario(),
+    gravarDiario: (d) => f.gravarDiario(d),
+    segredos: () => f.segredos(),
+    preservados: () => f.preservados?.() ?? {},
+    async aplicar(antes, novo) {
+      await f.aplicar(antes, novo);
+      await depois(mudancas(antes, novo));
+    },
+  };
 }
