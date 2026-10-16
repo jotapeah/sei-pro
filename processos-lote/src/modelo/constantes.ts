@@ -15,3 +15,12 @@ export const PAUSA_MAXIMA = 10000;
 export const CUSTO_REQUISICAO_MS = 900;
 /** O campo Especificacao do SEI aceita no maximo 100 caracteres. */
 export const MAX_ESPECIFICACAO = 100;
+
+/**
+ * Chave em chrome.storage.local com a entrada que o Link Permanente le ao abrir (uso unico). E a MESMA string de
+ * CHAVE_ENTRADA em link-permanente/src/modelo/constantes.ts, duplicada aqui para os pacotes nao se importarem:
+ * mudou la, muda aqui.
+ */
+export const CHAVE_ENTRADA_LINK = "link-permanente/entrada";
+/** Prazo do `criar` pela ponte: a aba pode fazer 2 POSTs (refaz o formulario uma vez) num SEI lento. */
+export const PRAZO_CRIAR_MS = 60_000;

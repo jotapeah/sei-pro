@@ -208,6 +208,10 @@ export async function verificarPagina(): Promise<void> {
     checar("sem tipo: erro sem POST", r.situacao === "erro" && n.posts === 0, { r, n });
     const r2 = (await t.criar({ idTipo: "1", linha: {} })) as { situacao: string };
     checar("sem especificacao: erro sem POST", r2.situacao === "erro" && n.posts === 0, { r2, n });
+    // Modo quantidade do legado: especificacao vazia abre o processo sem especificacao.
+    const vazia = falso([() => ({ numero: "00001.000009/2026-19", idProcedimento: "9", url: "u" })]);
+    const r3 = (await vazia.t.criar({ idTipo: "1", linha: { especificacao: "" } })) as { situacao: string };
+    checar("especificacao vazia: cria (modo quantidade)", r3.situacao === "ok" && vazia.n.posts === 1, { r3, n: vazia.n });
     const rf = await lanca(() => t.formTipo({ idTipo: "" }));
     checar("formTipo sem tipo: erro claro, sem buscar", !!rf && (rf.message ?? "").includes("Tipo de processo") && n.forms === 0, {
       rf,

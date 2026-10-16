@@ -99,7 +99,9 @@ function lerPedido(args: unknown): PedidoCriar | string {
   const idTipo = lerIdTipo(a.idTipo);
   if (!idTipo) return ERRO_SEM_TIPO;
   const l = (a.linha ?? {}) as Record<string, unknown>;
-  if (typeof l.especificacao !== "string" || !l.especificacao.trim()) return "Linha sem especificação.";
+  // Especificacao vazia e valida: o modo "quantidade" do legado abre processos sem especificacao. So a falta do campo
+  // (pedido malformado) e recusada.
+  if (typeof l.especificacao !== "string") return "Linha sem especificação.";
   const linha: LinhaLote = { especificacao: l.especificacao };
   if (typeof l.interessado === "string") linha.interessado = l.interessado;
   if (typeof l.observacao === "string") linha.observacao = l.observacao;

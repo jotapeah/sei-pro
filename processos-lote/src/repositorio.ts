@@ -24,7 +24,11 @@ export interface LoteEmAndamento {
   iniciadoEm: number;
   parametros: Parametros;
   linhas: LinhaLote[];
-  itens: Array<{ situacao: "pendente" | "ok" | "erro"; criado?: Criado; erro?: string }>;
+  /**
+   * `aviso` e `incerto` acompanham um "ok": o SEI pode nao ter confirmado (incerto, com numero provisorio) ou ter
+   * criado sem devolver o numero. Os dois sao "ok" de proposito: nada que talvez exista no SEI e repetido.
+   */
+  itens: Array<{ situacao: "pendente" | "ok" | "erro"; criado?: Criado; erro?: string; aviso?: string; incerto?: boolean }>;
 }
 
 type Item = LoteEmAndamento["itens"][number];
