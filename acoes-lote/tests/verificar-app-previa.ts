@@ -352,7 +352,8 @@ export async function verificarAppPrevia(): Promise<void> {
     botao(raiz, "Executar")!.click();
     await tique(5);
     igual("tela execucao", app.tela, "execucao");
-    igual("senha mantida para a execucao", app.senhaAssinatura, "segredo");
+    // A senha passa ao controle da execucao (Task 10) e sai do app.
+    igual("senha entregue a execucao e fora do app", app.senhaAssinatura, undefined);
     app.abrirPrevia(undefined);
     botao(raiz, "Voltar")!.click();
     igual("voltar vai a configuracao", app.tela, "configuracao");

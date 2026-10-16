@@ -283,3 +283,111 @@ table.al-documentos tr.al-marcada td {
 .al-previa-aviso:empty {
   display: none;
 }
+
+/* ---------- Execucao ---------- */
+.al-execucao,
+.al-retomada,
+.al-resultado {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.al-titulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+}
+.al-progresso-texto {
+  margin: 0;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.al-progresso-barra {
+  height: 10px;
+  overflow: hidden;
+  background: var(--spro-fundo-3, var(--spro-borda));
+  border-radius: 6px;
+}
+.al-progresso-cheia {
+  height: 100%;
+  width: 0;
+  background: var(--spro-destaque);
+  transition: width 0.2s;
+}
+.al-motivo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.al-motivo[hidden],
+.al-campo[hidden] {
+  display: none;
+}
+.al-erro:empty {
+  display: none;
+}
+
+/* ---------- Resultado ---------- */
+table.spro-resultado {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+table.spro-resultado th,
+table.spro-resultado td {
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--spro-borda);
+}
+table.spro-resultado th {
+  position: sticky;
+  top: 0;
+  font-weight: 600;
+  color: var(--spro-suave);
+  background: var(--spro-fundo);
+}
+table.spro-resultado td a {
+  color: var(--spro-destaque);
+}
+.al-resultado tr.spro-situacao-ok td:first-child {
+  color: var(--spro-ok);
+  font-weight: 600;
+}
+.al-resultado tr.spro-situacao-erro td:first-child {
+  color: var(--spro-perigo);
+  font-weight: 600;
+}
+.al-resultado tr.spro-situacao-pendente td:first-child {
+  color: var(--spro-aviso);
+  font-weight: 600;
+}
+
+/* ---------- Pastilha (minimizado) ---------- */
+.al-pastilha {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 62px;
+  padding: 8px 12px;
+}
+.al-pastilha[hidden] {
+  display: none;
+}
+.al-pastilha-texto {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.al-pastilha-conta {
+  color: var(--spro-suave);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

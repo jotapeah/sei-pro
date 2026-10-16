@@ -84,7 +84,8 @@ export interface PlanoDoc {
   etapas: EtapaDoc[];
 }
 
-const ANTERIOR = "Etapa anterior não concluída";
+/** Motivo das etapas derrubadas por um erro ou pulo anterior (a repetição das falhas as reabre). */
+export const ANTERIOR = "Etapa anterior não concluída";
 
 /** O que uma etapa deixa no documento, para a elegibilidade das seguintes (só estes efeitos). */
 function aplicarEfeito(l: LinhaDoc, e: ParamsEtapa): LinhaDoc {

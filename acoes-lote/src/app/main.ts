@@ -6,12 +6,15 @@
  * do SEI, ligado a PROPRIA aba (pagina/main.ts), com o app num <dialog> com veu.
  */
 
+import { areaChrome } from "@comum/armazenamento/area";
 import { esperarConexaoDaAba } from "@comum/ponte/conexaoDaAba";
 import type { Rpc, Tratador } from "@comum/ponte/rpc";
 import { aplicarTemaDoContexto } from "@comum/tema/painel";
 import { criarAbrirModal, criarConfirmar } from "@comum/ui/dialogo";
 import { h } from "@comum/ui/dom";
+import { OP_RESTAURADO } from "@comum/ui/modalIframe";
 import { CANAL_ACOES_LOTE } from "../modelo/constantes";
+import { RepositorioAcoes } from "../repositorio";
 import { AppAcoesLote, type ContextoApp } from "./app";
 
 const parametros = new URLSearchParams(location.hash.slice(1));
@@ -31,9 +34,16 @@ async function iniciarModal(): Promise<void> {
   dlg.append(raiz);
   document.body.append(dlg);
   let rpc: Rpc | null = null;
+  let app: AppAcoesLote | null = null;
   // Fechar o dialogo (X, Esc, veu) pede a aba que tire o iframe; sem o pedido a tela do SEI fica presa sob ele.
+  // O pedido vai primeiro; depois o app para de disparar (a etapa em voo ja foi gravada como incerta).
   dlg.addEventListener("close", () => {
     void rpc?.chamar("fechar", undefined, 3000).catch(() => undefined);
+    app?.destruir();
+  });
+  // Minimizado, o Esc nativo do <dialog> nao fecha a pastilha (a pagina e do usuario).
+  dlg.addEventListener("cancel", (ev) => {
+    if (document.documentElement.hasAttribute("data-minimizado")) ev.preventDefault();
   });
   raiz.replaceChildren(h("p", {}, "Carregando…"));
   dlg.showModal();
@@ -41,7 +51,21 @@ async function iniciarModal(): Promise<void> {
     rpc = await conexao;
     const ctx = await rpc.chamar<ContextoApp>("contexto");
     aplicarTemaDoContexto(document.documentElement, ctx);
-    await new AppAcoesLote(raiz, { rpc, ctx, fechar: () => dlg.close(), confirmar: criarConfirmar(criarAbrirModal()) }).iniciar();
+    const ponte = rpc;
+    app = new AppAcoesLote(raiz, {
+      rpc: ponte,
+      ctx,
+      fechar: () => dlg.close(),
+      confirmar: criarConfirmar(criarAbrirModal()),
+      repo: new RepositorioAcoes(areaChrome(chrome.storage.local, "local"), ctx.host, ctx.login),
+      aoFechar: (cb) => ponte.aoFechar(cb),
+    });
+    const aberto = app;
+    tratadoresDoApp[OP_RESTAURADO] = () => {
+      aberto.restaurado();
+      return true;
+    };
+    await app.iniciar();
   } catch (e) {
     raiz.replaceChildren(
       h("p", { class: "spro-lista-erro" }, `Não foi possível abrir as Ações em Lote: ${e instanceof Error ? e.message : String(e)}`),

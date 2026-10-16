@@ -1,5 +1,6 @@
 import { resumo } from "./util";
 import { verificarAppConfiguracao } from "./verificar-app-configuracao";
+import { verificarAppExecucao } from "./verificar-app-execucao";
 import { verificarAppPrevia } from "./verificar-app-previa";
 import { verificarAppSelecao } from "./verificar-app-selecao";
 import { verificarDocumentos } from "./verificar-documentos";
@@ -16,4 +17,5 @@ await verificarExecutor();
 await verificarAppSelecao();
 await verificarAppConfiguracao();
 await verificarAppPrevia();
+await verificarAppExecucao();
 resumo();

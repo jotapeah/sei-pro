@@ -1,21 +1,29 @@
 /**
  * O app das Ações em Lote (a janela dentro do iframe): estado compartilhado entre as telas e a troca delas.
  * Não toca o navegador direto (aba do SEI e fechar chegam por `DepsApp`), e por isso roda inteiro nos testes
- * com linkedom. Seleção, configuração e prévia existem; a execução é um marcador que a Task 10 substitui.
+ * com linkedom. Ao abrir, um lote parado neste processo é oferecido para retomar (retomada.ts); a execução e o
+ * resultado moram em execucao.ts e resultado.ts. Minimizado, o app vira a pastilha de progresso.
  */
 
+import { areaMemoria } from "@comum/armazenamento/area";
 import type { Rpc } from "@comum/ponte/rpc";
+import { baixar } from "@comum/ui/dialogo";
 import { h, icone } from "@comum/ui/dom";
 import type { AcaoId } from "../modelo/acoes";
 import type { LinhaDoc } from "../modelo/documentos";
-import type { ParamsEtapa, PlanoDoc } from "../modelo/fila";
+import type { LoteAcoes, ParamsEtapa, PlanoDoc } from "../modelo/fila";
 import type { Filtro } from "../modelo/filtros";
 import type { ContextoAcoes } from "../pagina/contexto";
+import { RepositorioAcoes } from "../repositorio";
 import { montarConfiguracao } from "./configuracao";
+import { type ControleExecucao, type DepsExecucao, executarLote } from "./execucao";
 import { montarPrevia } from "./previa";
+import { type DepsResultado, montarResultado } from "./resultado";
+import { loteParado, montarRetomada } from "./retomada";
 import { montarSelecao } from "./selecao";
+import { TelaExecucao } from "./telaExecucao";
 
-export type Tela = "selecao" | "configuracao" | "previa" | "execucao" | "resultado";
+export type Tela = "selecao" | "configuracao" | "previa" | "retomada" | "execucao" | "resultado";
 
 /** O que o tratador `contexto` devolve: o da aba sem a base e o link da árvore (levam o infra_hash). */
 export type ContextoApp = Omit<ContextoAcoes, "base" | "linkArvore">;
@@ -93,7 +101,22 @@ export interface DepsApp {
   fechar(): void;
   /** Confirmação de ação destrutiva (modal com Confirmar). Sem ela, a execução nunca é confirmada. */
   confirmar?(texto: string, rotuloOk?: string): Promise<boolean>;
+  /** Lote em andamento (chrome.storage.local). Sem ele, um repositório em memória (nada sobrevive ao fechar). */
+  repo?: RepositorioAcoes;
+  /** Id desta instância (para o aviso de outra aba); gerado uma vez quando ausente. */
+  aba?: string;
+  /** A ponte caiu (modal fechado, aba navegada): o lote para de disparar. */
+  aoFechar?(cb: () => void): void;
+  agora?(): number;
+  esperar?(ms: number): Promise<void>;
+  /** Copiar e CSV do resultado; trocáveis nas provas. */
+  baixar?(nome: string, conteudo: string, tipo: string): void;
+  clip?: DepsResultado["clip"];
+  ItemClip?: typeof ClipboardItem;
+  avisar?(texto: string): void;
 }
+
+const novaAba = (): string => globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
 const mensagem = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
@@ -104,6 +127,16 @@ export class AppAcoesLote {
   private senha: string | undefined;
   private readonly conteudo: HTMLElement;
   private readonly subtitulo: HTMLElement;
+  private readonly cabecalho: HTMLElement;
+  private readonly atualizar: HTMLButtonElement;
+  private readonly pastilha: HTMLElement;
+  private readonly repo: RepositorioAcoes;
+  /** Gerado uma vez por instância do app. */
+  private readonly aba: string;
+  private controle: ControleExecucao | null = null;
+  private telaExecucao: TelaExecucao | null = null;
+  private minimizado = false;
+  private destruido = false;
 
   constructor(
     private readonly raiz: HTMLElement,
@@ -111,6 +144,9 @@ export class AppAcoesLote {
   ) {
     this.conteudo = h("div", { class: "al-conteudo" });
     this.subtitulo = h("span", { class: "spro-lista-total" });
+    this.repo = d.repo ?? new RepositorioAcoes(areaMemoria(), d.ctx.host, d.ctx.login);
+    this.aba = d.aba ?? novaAba();
+    this.pastilha = h("div", { class: "al-pastilha", hidden: true });
     const atualizar = h(
       "button",
       {
@@ -127,19 +163,94 @@ export class AppAcoesLote {
       { type: "button", class: "spro-botao-icone", "aria-label": "Fechar", title: "Fechar (Esc)", onclick: () => this.d.fechar() },
       icone("fechar", 18),
     );
+    this.atualizar = atualizar;
     const cabecalho = h(
       "header",
       { class: "spro-lista-topo" },
       h("div", { class: "spro-lista-titulo" }, icone("documento", 18), h("h1", {}, "Ações em Lote"), this.subtitulo),
       h("div", { class: "spro-lista-topo-acoes" }, atualizar, fechar),
     );
-    raiz.replaceChildren(cabecalho, this.conteudo);
+    this.cabecalho = cabecalho;
+    raiz.replaceChildren(cabecalho, this.conteudo, this.pastilha);
     this.conteudo.replaceChildren(h("p", { class: "al-nota" }, "Carregando…"));
+    d.aoFechar?.(() => this.destruir());
   }
 
-  /** Primeira leitura da árvore e abertura da seleção. */
+  /** Primeira leitura da árvore; com lote parado neste processo, a retomada; senão, a seleção. */
   async iniciar(): Promise<void> {
     await this.carregar(false);
+    if (!this.estado || this.destruido) return;
+    let lote: LoteAcoes | null = null;
+    try {
+      lote = await this.repo.doProcesso(this.d.ctx.idProcedimento);
+    } catch (e) {
+      console.warn("[SEI Pro] ações em lote: registro ilegível", e);
+    }
+    if (!lote || this.destruido) return;
+    // Nada a executar (o app saiu antes de apagar o registro): não há o que retomar.
+    if (!loteParado(lote)) {
+      await this.repo.descartar(lote.id).catch(() => undefined);
+      return;
+    }
+    this.retomada(lote);
+  }
+
+  /** Modal fechado: nada novo é disparado; o lote fica salvo para a retomada. */
+  destruir(): void {
+    this.destruido = true;
+    this.controle?.encerrar();
+  }
+
+  private retomada(lote: LoteAcoes): void {
+    this.tela = "retomada";
+    this.atualizar.hidden = true;
+    this.conteudo.replaceChildren(
+      montarRetomada(
+        lote,
+        { aba: this.aba, agora: (this.d.agora ?? Date.now)() },
+        {
+          continuar: (senha) => {
+            if (!this.estado || this.destruido) return;
+            this.rodar(executarLote(this.estado, senha, this.depsExecucao(lote)));
+          },
+          descartar: () => {
+            void this.repo
+              .descartar(lote.id)
+              .catch((e) => console.warn("[SEI Pro] ações em lote: falha ao descartar", e))
+              .then(() => {
+                if (!this.destruido) this.mostrar("selecao");
+              });
+          },
+        },
+      ),
+    );
+  }
+
+  private depsExecucao(lote?: LoteAcoes): DepsExecucao {
+    const d: DepsExecucao = {
+      rpc: this.d.rpc,
+      repo: this.repo,
+      aba: this.aba,
+      aoMudar: () => this.aoMudar(),
+      aoTerminar: () => {
+        if (!this.destruido) this.mostrar("resultado");
+      },
+    };
+    if (lote) d.lote = lote;
+    if (this.d.agora) d.agora = this.d.agora;
+    if (this.d.esperar) d.esperar = this.d.esperar;
+    return d;
+  }
+
+  private rodar(c: ControleExecucao): void {
+    this.controle = c;
+    this.mostrar("execucao");
+  }
+
+  private aoMudar(): void {
+    if (this.destruido) return;
+    this.telaExecucao?.atualizar();
+    this.desenharPastilha();
   }
 
   private async carregar(forcar: boolean): Promise<void> {
@@ -155,6 +266,9 @@ export class AppAcoesLote {
 
   private mostrar(tela: Tela): void {
     this.tela = tela;
+    // Reler a árvore no meio da execução trocaria a tela e perderia o controle do lote.
+    this.atualizar.hidden = tela === "execucao" || tela === "resultado" || tela === "retomada";
+    if (tela !== "execucao") this.telaExecucao = null;
     const e = this.estado;
     if (!e) return;
     if (tela === "selecao") {
@@ -187,9 +301,95 @@ export class AppAcoesLote {
           { rpc: this.d.rpc, senha: this.senha, confirmar: (t, r) => this.d.confirmar?.(t, r) ?? Promise.resolve(false) },
         ),
       );
-    } else if (tela === "execucao") {
-      this.conteudo.replaceChildren(h("p", { class: "al-nota" }, "A execução será montada na próxima etapa."));
+    } else if (tela === "execucao" && this.controle) {
+      this.telaExecucao = new TelaExecucao(this.controle, { minimizar: () => void this.minimizar(true) });
+      this.conteudo.replaceChildren(this.telaExecucao.el);
+    } else if (tela === "resultado" && this.controle) {
+      const c = this.controle;
+      this.conteudo.replaceChildren(
+        montarResultado(this.raiz.ownerDocument, e, {
+          repetirFalhas: () => {
+            void c.repetirFalhas();
+            this.mostrar("execucao");
+          },
+          baixar: this.d.baixar ?? baixar,
+          interrompido: c.estado === "cancelado",
+          ...(this.d.clip ? { clip: this.d.clip } : {}),
+          ...(this.d.ItemClip ? { ItemClip: this.d.ItemClip } : {}),
+          ...(this.d.avisar ? { avisar: this.d.avisar } : {}),
+        }),
+      );
     }
+    this.desenharPastilha();
+  }
+
+  /* ------------------------------------------------------------ pastilha */
+
+  private async minimizar(m: boolean): Promise<void> {
+    if (this.destruido || m === this.minimizado) return;
+    try {
+      // Primeiro a aba: se ela não encolher o iframe, o app não pode virar pastilha numa tela cheia.
+      await this.d.rpc.chamar("minimizar", { minimizado: m });
+    } catch (e) {
+      console.warn("[SEI Pro] ações em lote: não foi possível minimizar", e);
+      return;
+    }
+    if (!this.destruido) this.marcarMinimizado(m);
+  }
+
+  /** A aba já restaurou a janela (clique no item do menu): só volta a desenhar a tela cheia. */
+  restaurado(): void {
+    if (!this.destruido && this.minimizado) this.marcarMinimizado(false);
+  }
+
+  private marcarMinimizado(m: boolean): void {
+    this.minimizado = m;
+    const html = this.raiz.ownerDocument.documentElement;
+    if (m) html.setAttribute("data-minimizado", "1");
+    else html.removeAttribute("data-minimizado");
+    this.cabecalho.hidden = m;
+    this.conteudo.hidden = m;
+    this.desenharPastilha();
+  }
+
+  private desenharPastilha(): void {
+    this.pastilha.hidden = !this.minimizado;
+    if (!this.minimizado) return;
+    const c = this.controle;
+    const p = c?.progresso() ?? { feitos: 0, total: 0, falhas: 0 };
+    const estado =
+      this.tela === "resultado"
+        ? "Concluído"
+        : c?.motivo
+          ? `Parado: ${c.motivo}`
+          : c?.estado === "pausado" && !c.rodando
+            ? "Pausado"
+            : "Executando";
+    this.pastilha.replaceChildren(
+      h(
+        "div",
+        { class: "al-pastilha-texto" },
+        h("strong", {}, "Ações em Lote"),
+        h(
+          "span",
+          { class: "al-pastilha-conta", role: "status" },
+          `${p.feitos}/${p.total} · ${estado}`,
+          p.falhas ? ` (${p.falhas} com erro)` : "",
+        ),
+      ),
+      h(
+        "button",
+        {
+          type: "button",
+          class: "spro-botao",
+          "aria-label": "Restaurar",
+          title: "Restaurar a janela",
+          onclick: () => void this.minimizar(false),
+        },
+        icone("expandir", 14),
+        "Restaurar",
+      ),
+    );
   }
 
   /** A senha da assinatura digitada na configuração, para a execução (Task 10). */
@@ -203,9 +403,12 @@ export class AppAcoesLote {
     this.mostrar("previa");
   }
 
-  /** Prévia confirmada: a Task 10 troca o marcador pela tela de execução (lê `senhaAssinatura`). */
+  /** Prévia confirmada: o lote nasce dos planos da prévia e começa a rodar. A senha passa ao controle e sai daqui. */
   executar(): void {
-    this.mostrar("execucao");
+    if (!this.estado || this.destruido || this.controle?.rodando) return;
+    const senha = this.senha;
+    this.senha = undefined;
+    this.rodar(executarLote(this.estado, senha, this.depsExecucao()));
   }
 
   private configurar(acao?: AcaoId): void {
