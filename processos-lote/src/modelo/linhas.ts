@@ -10,7 +10,11 @@ const NOMES_SEM_CABECALHO = ["especificacao", "interessado", "observacao", "nive
 
 /** Minuscula e sem acento, para reconhecer cabecalhos e niveis escritos de qualquer jeito. */
 function normalizar(s: string): string {
-  return s.normalize("NFD").replace(/[\u0300-\u036F]/g, "").toLowerCase().trim();
+  return s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036F]/g, "")
+    .toLowerCase()
+    .trim();
 }
 
 /** Nome canonico da coluna a partir do texto do cabecalho (ou o proprio texto normalizado). */
