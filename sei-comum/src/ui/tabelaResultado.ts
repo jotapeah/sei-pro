@@ -46,6 +46,14 @@ function celulas(l: LinhaResultado, colunas: ColunaResultado[]): string[] {
   return [rotuloDaLinha(l), ...colunas.map((c) => l.campos[c.chave] ?? "")];
 }
 
+/**
+ * Só http(s) vira link: o endereço vem de fora (SEI, texto colado) e um
+ * `javascript:` ou `data:` clicável na tabela ou no HTML copiado seria execução.
+ */
+function linkSeguro(l: LinhaResultado): string | undefined {
+  return l.link && /^https?:\/\//i.test(l.link) ? l.link : undefined;
+}
+
 export function montarTabelaResultado(doc: Document, linhas: LinhaResultado[], colunas: ColunaResultado[]): HTMLTableElement {
   const tabela = doc.createElement("table");
   tabela.className = "spro-resultado";
@@ -56,7 +64,8 @@ export function montarTabelaResultado(doc: Document, linhas: LinhaResultado[], c
     const tr = h("tr", { class: `spro-situacao-${l.situacao}` }, h("td", {}, rotuloDaLinha(l)));
     for (const c of colunas) {
       const texto = l.campos[c.chave] ?? "";
-      const conteudo = c.comoLink && l.link ? h("a", { href: l.link, target: "_blank", rel: "noopener" }, texto) : texto;
+      const link = c.comoLink ? linkSeguro(l) : undefined;
+      const conteudo = link ? h("a", { href: link, target: "_blank", rel: "noopener" }, texto) : texto;
       tr.append(h("td", {}, conteudo));
     }
     corpo.append(tr);
@@ -65,9 +74,17 @@ export function montarTabelaResultado(doc: Document, linhas: LinhaResultado[], c
   return tabela;
 }
 
-/** TSV: tabulação e quebra de linha dentro de célula quebrariam as colunas ao colar. */
+/**
+ * TSV: tabulação e quebra de linha dentro de célula quebrariam as colunas ao
+ * colar. Colado numa planilha, o TSV tem o mesmo risco do CSV: célula que
+ * começa com = + - @ ganha apóstrofo (a mesma regra do gerarCsv). A
+ * neutralização fica aqui, e não em `celulas`, para o CSV não ganhar dois.
+ */
 export function resultadoComoTexto(linhas: LinhaResultado[], colunas: ColunaResultado[]): string {
-  const limpa = (t: string) => t.replace(/[\t\r\n]+/g, " ");
+  const limpa = (t: string) => {
+    const v = t.replace(/[\t\r\n]+/g, " ");
+    return /^[=+\-@]/.test(v) ? `'${v}` : v;
+  };
   return [cabecalho(colunas), ...linhas.map((l) => celulas(l, colunas))].map((l) => l.map(limpa).join("\t")).join("\n");
 }
 
@@ -83,7 +100,8 @@ export function resultadoComoHtml(linhas: LinhaResultado[], colunas: ColunaResul
   const corpo = linhas.map((l) => {
     const tds = colunas.map((c) => {
       const texto = esc(l.campos[c.chave] ?? "");
-      return `<td>${c.comoLink && l.link ? `<a href="${esc(l.link)}">${texto}</a>` : texto}</td>`;
+      const link = c.comoLink ? linkSeguro(l) : undefined;
+      return `<td>${link ? `<a href="${esc(link)}">${texto}</a>` : texto}</td>`;
     });
     return `<tr><td>${esc(rotuloDaLinha(l))}</td>${tds.join("")}</tr>`;
   });
@@ -94,7 +112,11 @@ export function resultadoComoCsv(linhas: LinhaResultado[], colunas: ColunaResult
   return gerarCsv([cabecalho(colunas), ...linhas.map((l) => celulas(l, colunas))]);
 }
 
-/** Cópia rica (HTML com links + texto) quando o navegador permite; senão só texto. */
+/**
+ * Cópia rica (HTML com links + texto) quando o navegador permite; senão só
+ * texto. O `write` rejeita com o documento sem foco ou permissão negada: aí
+ * tenta o `writeText`, e se este também falhar o erro sobe para quem chamou.
+ */
 export async function copiarResultado(
   linhas: LinhaResultado[],
   colunas: ColunaResultado[],
@@ -104,13 +126,17 @@ export async function copiarResultado(
   const texto = resultadoComoTexto(linhas, colunas);
   if (clip.write && Item) {
     const html = resultadoComoHtml(linhas, colunas);
-    await clip.write([
-      new Item({
-        "text/html": new Blob([html], { type: "text/html" }),
-        "text/plain": new Blob([texto], { type: "text/plain" }),
-      }),
-    ]);
-    return "rico";
+    try {
+      await clip.write([
+        new Item({
+          "text/html": new Blob([html], { type: "text/html" }),
+          "text/plain": new Blob([texto], { type: "text/plain" }),
+        }),
+      ]);
+      return "rico";
+    } catch {
+      // segue para a cópia só de texto
+    }
   }
   await clip.writeText(texto);
   return "texto";

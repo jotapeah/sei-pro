@@ -8,7 +8,7 @@ import {
   resultadoComoTexto,
   rotuloSituacao,
 } from "../src/ui/tabelaResultado";
-import { checar, instalarDom, secao } from "./util";
+import { checar, instalarDom, lanca, secao } from "./util";
 
 export async function verificarTabelaResultado(): Promise<void> {
   const doc = instalarDom();
@@ -75,4 +75,62 @@ export async function verificarTabelaResultado(): Promise<void> {
   checar("sem write cai no texto", r2 === "texto" && chamadas[1] === "texto:4", chamadas);
   const r3 = await copiarResultado(linhas, colunas, clip);
   checar("sem Item cai no texto", r3 === "texto");
+
+  {
+    // Documento sem foco ou permissao negada: write rejeita e a copia simples ainda funciona.
+    const feitas: string[] = [];
+    const recusa = {
+      write: async () => {
+        throw new Error("Document is not focused");
+      },
+      writeText: async (t: string) => {
+        feitas.push(t);
+      },
+    };
+    const r4 = await copiarResultado(linhas, colunas, recusa, ItemFalso as unknown as typeof ClipboardItem);
+    checar("write rejeitado cai no writeText", r4 === "texto" && feitas.length === 1, { r4, feitas });
+    const nada = {
+      write: async () => {
+        throw new Error("negado");
+      },
+      writeText: async () => {
+        throw new Error("texto negado");
+      },
+    };
+    const erro = await lanca(() => copiarResultado(linhas, colunas, nada, ItemFalso as unknown as typeof ClipboardItem));
+    checar("writeText rejeitado propaga o erro", erro?.message === "texto negado", erro);
+  }
+
+  secao("tabela de resultado: formula no TSV e link so http(s)");
+  {
+    const perigosas: LinhaResultado[] = [
+      { situacao: "ok", campos: { numero: "+1", nota: "=SOMA(1)" } },
+      { situacao: "ok", campos: { numero: "-2", nota: "@x" } },
+      { situacao: "ok", campos: { numero: "a=b", nota: "" } },
+    ];
+    const t = resultadoComoTexto(perigosas, colunas).split("\n");
+    checar("TSV neutraliza = e +", t[1] === "Encontrado\t'+1\t'=SOMA(1)", t[1]);
+    checar("TSV neutraliza - e @", t[2] === "Encontrado\t'-2\t'@x", t[2]);
+    checar("TSV nao mexe no = do meio", t[3] === "Encontrado\ta=b\t", t[3]);
+    const c = resultadoComoCsv(perigosas, colunas);
+    checar("CSV nao ganha apostrofo duplo", c.includes(";'+1;'=SOMA(1)") && !c.includes("''"), c);
+
+    const links: LinhaResultado[] = [
+      { situacao: "ok", campos: { numero: "js", nota: "" }, link: "javascript:alert(1)" },
+      { situacao: "ok", campos: { numero: "dado", nota: "" }, link: "data:text/html,oi" },
+      { situacao: "ok", campos: { numero: "http", nota: "" }, link: "http://sei/a" },
+      { situacao: "ok", campos: { numero: "https", nota: "" }, link: "HTTPS://sei/b" },
+    ];
+    const tl = montarTabelaResultado(doc, links, colunas);
+    const hrefs = [...tl.querySelectorAll("a")].map((a) => a.getAttribute("href"));
+    checar("tabela: so http(s) vira ancora", JSON.stringify(hrefs) === JSON.stringify(["http://sei/a", "HTTPS://sei/b"]), hrefs);
+    checar("tabela: link recusado fica como texto", (tl.querySelectorAll("tbody tr")[0]?.textContent ?? "").includes("js"));
+    const hl = resultadoComoHtml(links, colunas);
+    checar("html: javascript: nao vira ancora", !hl.includes("javascript:") && hl.includes("<td>js</td>"), hl);
+    checar("html: data: nao vira ancora", !hl.includes("data:") && hl.includes("<td>dado</td>"));
+    checar(
+      "html: http(s) continua ancora",
+      hl.includes('<a href="http://sei/a">http</a>') && hl.includes('<a href="HTTPS://sei/b">https</a>'),
+    );
+  }
 }

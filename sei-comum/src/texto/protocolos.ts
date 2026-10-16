@@ -12,8 +12,13 @@ export interface ProtocoloReconhecido {
   tipo: TipoProtocolo;
 }
 
-const PROCESSO = /\d{4,6}\.\d[\d.-]*\/\d{4}-\d{2}/g;
-const NUMERO_SEI = /(?<![\d./-])\d{6,10}(?![\d./-])/g;
+// Prefixo de 3 a 6 dígitos: há órgãos com 3 (ex.: "026.00000052/2023-47"). O
+// lookbehind impede começar no meio de outro número: sem ele, o CNPJ
+// "12.345.678/0001-90" casaria a partir de "345.678/...".
+const PROCESSO = /(?<![\d.])\d{3,6}\.\d[\d.-]*\/\d{4}-\d{2}/g;
+// Depois do número, um "." só vale como ponto final de frase (seguido de espaço
+// ou do fim do texto); "12345678.9", "12345678./" e "12345678.-" continuam fora.
+const NUMERO_SEI = /(?<![\d./-])\d{6,10}(?![\d/-])(?!\.(?!\s|$))/g;
 const LIMITE_OUTRO = 40;
 
 export function extrairProtocolos(texto: string): ProtocoloReconhecido[] {

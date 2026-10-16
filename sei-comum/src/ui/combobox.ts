@@ -57,6 +57,8 @@ export interface Combo {
   definir(valores: string[], avisar?: boolean): void;
   /** Redesenha o botão (as opções ou as contagens mudaram). */
   atualizar(): void;
+  /** Troca o texto do botão sem nada escolhido (ex.: "carregando..." vira "selecione..." quando a lista chega). */
+  definirVazio(texto: string): void;
   abrir(termo?: string): void;
   fechar(): void;
 }
@@ -138,6 +140,7 @@ export function criarCombo(cfg: ConfigCombo): Combo {
   let ativo = 0;
   let visiveis: OpcaoCombo[] = [];
   let flut: Flutuante | null = null;
+  let vazio = cfg.vazio ?? "Escolher…";
 
   const botao = h("button", {
     type: "button",
@@ -158,7 +161,7 @@ export function criarCombo(cfg: ConfigCombo): Combo {
     const texto = h("span", { class: "spro-combo-texto" });
     if (!nomes.length) {
       texto.classList.add("spro-combo-vazio");
-      texto.append(cfg.vazio ?? "Escolher…");
+      texto.append(vazio);
     } else {
       const primeira = nomes[0]!;
       if (primeira.cor) texto.append(h("span", { class: "spro-combo-cor", style: `background:${primeira.cor}` }));
@@ -496,6 +499,10 @@ export function criarCombo(cfg: ConfigCombo): Combo {
     atualizar() {
       desenharBotao();
       desenharLista();
+    },
+    definirVazio(texto) {
+      vazio = texto;
+      desenharBotao();
     },
     abrir,
     fechar: () => fechar(false),

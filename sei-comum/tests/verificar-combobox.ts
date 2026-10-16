@@ -52,6 +52,18 @@ export async function verificarCombobox(): Promise<void> {
   doc.getElementById("r")!.append(combo.el);
   checar("botao mostra o texto de vazio", (combo.el.textContent ?? "").includes("Todas as pastas"));
   checar("acessivel como combobox", combo.el.getAttribute("role") === "combobox" && combo.el.getAttribute("aria-expanded") === "false");
+  {
+    // O texto de vazio muda depois de criado (ex.: "carregando..." -> "selecione..."), sem mexer na escolha.
+    const c2 = criarCombo({ rotulo: "Tipo", opcoes: [], vazio: "carregando..." });
+    c2.definirVazio("selecione o tipo");
+    checar(
+      "definirVazio troca o texto do botao",
+      (c2.el.textContent ?? "").includes("selecione o tipo") && !(c2.el.textContent ?? "").includes("carregando"),
+    );
+    const c3 = criarCombo({ rotulo: "Tipo", opcoes: PASTAS, valor: ["a"], vazio: "nada" });
+    c3.definirVazio("outro vazio");
+    checar("definirVazio com escolha mostra a escolha", (c3.el.textContent ?? "").includes("Licitações") && c3.valor().join() === "a");
+  }
   combo.el.click();
   await tique();
   const pop = () => doc.querySelector(".spro-combo-pop");
