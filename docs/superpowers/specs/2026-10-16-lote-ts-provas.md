@@ -61,4 +61,4 @@ antes da atualizacao devolve "Operacao desconhecida: posAcaoOpcoes"; um app novo
 | Combo de tipos mostra "selecione o tipo de processo" depois de carregar; aviso de cautela num paragrafo so | ok | ok |
 
 Processos de teste desta etapa: MJ `00000.000018/2026-59` a `00000.000021/2026-72` (4), SP `99906.713-630.000025/2026-61` e `...026/2026-14`.
-Os de MJ `...018` e `...019`... e os `...020`, `...021` ficaram incluidos no bloco "teste" (408164); os do SP no bloco "TESTE ALINE" (16991).
+No MJ, os processos `...020` e `...021` ficaram incluidos no bloco "teste" (408164) e levam o marcador "Teste"; no SP, os dois ficaram no bloco "TESTE ALINE" (16991) com o marcador "Marcador Teste 1". Tambem ficou no bloco "teste" do MJ o processo `00000.000007/2026-79` (experimento de reconhecimento do protocolo).
