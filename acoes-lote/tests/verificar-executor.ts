@@ -23,6 +23,7 @@ const CTX: ContextoAcoes = {
   base: "https://sei.x.gov.br/sei/controlador.php?acao=procedimento_trabalhar&infra_hash=zzz",
   linkArvore: "https://sei.x.gov.br/sei/controlador.php?acao=procedimento_visualizar&id_procedimento=55&infra_hash=yyy",
   idProcedimento: "55",
+  origem: "https://sei.x.gov.br/sei/controlador.php",
 };
 
 const RESULTADO: ResultadoEscrita = {
@@ -50,7 +51,7 @@ function doc(id: string, numero: string, titulo: string, nivel: "publico" | "res
     assinaturas: [],
     cancelado: false,
     unidadeGeradora: "UNID",
-    link: "",
+    link: `https://sei.x.gov.br/sei/controlador.php?acao=arvore_visualizar&id_documento=${id}&infra_hash=hh`,
     src: "",
     acoes: [],
     botoes: [],
@@ -143,6 +144,7 @@ export async function verificarExecutor(): Promise<void> {
     const c = (await t.contexto(undefined)) as Record<string, unknown>;
     checar("sem base nem linkArvore", !("base" in c) && !("linkArvore" in c) && !JSON.stringify(c).includes("infra_hash"), c);
     igual("campos publicos", [c.host, c.login, c.idProcedimento], ["sei.x.gov.br", "ana", "55"]);
+    igual("origem sem query", c.origem, "https://sei.x.gov.br/sei/controlador.php");
   }
 
   secao("Executor: cada etapa chama a funcao certa (previa e executar)");
@@ -352,6 +354,10 @@ export async function verificarExecutor(): Promise<void> {
     await t.arvore({});
     igual("recarregarArvore limpa", log.filter((x) => x.fn === "abrirArvore").length, 3);
     checar("nada do SEI vaza (base/link)", !JSON.stringify(r).includes("infra_hash"));
+    checar(
+      "linhas sem link (a arvore do nucleo traz link com infra_hash)",
+      r.linhas.every((l) => !("link" in l)),
+    );
   }
   {
     const { t } = falso({ andamentos: falha(new ErroSei("SEI_ACAO_INDISPONIVEL", "sem historico")) as never });

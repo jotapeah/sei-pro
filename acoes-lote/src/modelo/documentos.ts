@@ -20,11 +20,6 @@ export interface LinhaDoc {
   pasta: string | null;
   /** A árvore não traz a data; a prévia (Task 6) a preenche. */
   data?: string;
-  /**
-   * Link assinado do documento na árvore, colhido da página (para o resultado). Leva o infra_hash: só vive na
-   * memória, o lote persistido nunca o grava.
-   */
-  link?: string;
 }
 
 /** "Despacho 12" -> "Despacho"; títulos sem número no fim ficam como estão. */
@@ -47,7 +42,6 @@ export function linhasDaArvore(a: Arvore): LinhaDoc[] {
     cancelado: d.cancelado,
     unidade: d.unidadeGeradora ?? "",
     pasta: d.pasta,
-    ...(d.link ? { link: d.link } : {}),
   }));
 }
 

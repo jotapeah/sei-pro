@@ -7,7 +7,14 @@ import { type Area, areaMemoria } from "@comum/armazenamento/area";
 import { ErroRpc } from "@comum/ponte/rpc";
 import { resultadoComoCsv } from "@comum/ui/tabelaResultado";
 import { AppAcoesLote, type ContextoApp, type EstadoApp } from "../src/app/app";
-import { type ControleExecucao, type DepsExecucao, executarLote, MSG_SEM_RESPOSTA, TEXTO_EM_VOO } from "../src/app/execucao";
+import {
+  BLOCO_NAO_CONFIRMADO,
+  type ControleExecucao,
+  type DepsExecucao,
+  executarLote,
+  MSG_SEM_RESPOSTA,
+  TEXTO_EM_VOO,
+} from "../src/app/execucao";
 import { linhasDoResultado, montarResultado } from "../src/app/resultado";
 import { AVISO_OUTRA_ABA, textoRetomada } from "../src/app/retomada";
 import type { LinhaDoc } from "../src/modelo/documentos";
@@ -22,6 +29,7 @@ const CTX: ContextoApp = {
   unidadeSigla: "ANA/SUP",
   temaEscuro: false,
   idProcedimento: "99",
+  origem: "https://sei.x.gov.br/sei/controlador.php",
 };
 const AGORA = 1_000_000;
 const SENHA = "s3nh@-Secreta";
@@ -41,7 +49,6 @@ function linha(n: number, o: Partial<LinhaDoc> = {}): LinhaDoc {
     cancelado: false,
     unidade: "ANA/SUP",
     pasta: null,
-    link: `https://sei.x.gov.br/sei/controlador.php?acao=arvore_visualizar&id_documento=${1000 + n}&infra_hash=abc`,
     ...o,
   };
 }
@@ -377,6 +384,101 @@ export async function verificarAppExecucao(): Promise<void> {
     igual("persistido como {id}", (await repo.doProcesso("99"))?.etapas[0], { acao: "incluir-bloco", bloco: { id: "88", texto: "B" } });
   }
 
+  secao("Bloco novo com criação incerta: {novo} nunca sai de novo");
+  {
+    // Mesma sessão: o envio da criação estoura o prazo (incerto + pausa); Continuar não reenvia {novo}.
+    const { repo } = repoEspiao();
+    const f = rpcFalso({
+      executar: (a) => {
+        if (numeroDe(a) === "5001") throw new ErroRpc("PRAZO", "A aba do SEI não respondeu a tempo.");
+        return ok("Incluído.", { bloco: "99" });
+      },
+    });
+    const e = estado(
+      [
+        { acao: "incluir-bloco", bloco: { novo: "Meu bloco" } },
+        { acao: "assinar", cargo: "Diretor" },
+      ],
+      3,
+    );
+    const c = executarLote(e, SENHA, deps(f.rpc, repo));
+    await c.rodada();
+    igual("pausado no 1", [c.estado, f.de("executar").length], ["pausado", 1]);
+    igual(
+      "os outros já pulados",
+      e.planos.slice(1).map((p) => p.etapas[0]!.mensagem),
+      [BLOCO_NAO_CONFIRMADO, BLOCO_NAO_CONFIRMADO],
+    );
+    igual("e a etapa seguinte cai junto", e.planos[1]!.etapas[1]!.situacao, "pulado");
+    await c.continuar();
+    igual("continuar não envia nada", f.de("executar").length, 1);
+    igual("concluído", c.estado, "concluido");
+  }
+  {
+    // Retomada: registro com a criação incerta no 1 e os demais ainda pendentes com {novo}.
+    const { repo } = repoEspiao();
+    const etapas: ParamsEtapa[] = [{ acao: "incluir-bloco", bloco: { novo: "B" } }];
+    const planos = planejar([linha(1), linha(2), linha(3)], etapas, false);
+    planos[0]!.etapas[0] = { acao: "incluir-bloco", situacao: "incerto", mensagem: TEXTO_EM_VOO };
+    const salvo: LoteAcoes = { id: "LB", idProcedimento: "99", protocolo: "p", criadoEm: 1, atualizadoEm: 1, aba: "x", etapas, planos };
+    await repo.salvar(salvo);
+    const f = rpcFalso({ executar: () => ok("Incluído.", { bloco: "5" }) });
+    const e = estado(etapas, 3);
+    const c = executarLote(e, undefined, deps(f.rpc, repo, { lote: (await repo.doProcesso("99"))! }));
+    await c.rodada();
+    igual("retomada sem executar {novo}", f.de("executar").length, 0);
+    igual(
+      "pendentes viram pulados com o motivo",
+      e.planos.map((p) => p.etapas[0]!.situacao),
+      ["incerto", "pulado", "pulado"],
+    );
+    igual(
+      "motivo exato",
+      e.planos[2]!.etapas[0]!.mensagem,
+      "A criação do bloco não foi confirmada. Confira os blocos no SEI e inclua os documentos pelo bloco certo.",
+    );
+  }
+
+  secao("Tentar de novo só as falhas depois de Parar lote: só os documentos com erro");
+  {
+    const { repo } = repoEspiao();
+    let c: ControleExecucao | null = null;
+    let rodada = 1;
+    const f = rpcFalso({
+      executar: (a) => {
+        if (rodada === 1 && numeroDe(a) === "5001") {
+          c?.cancelar();
+          return { situacao: "erro", erro: "Falhou." };
+        }
+        return ok();
+      },
+    });
+    const e = estado([{ acao: "ciencia" }, { acao: "pdf" }], 3);
+    const fp = f.rpc;
+    const pdfs: unknown[] = [];
+    const rpc = {
+      async chamar<T>(op: string, args?: unknown): Promise<T> {
+        if (op === "pdf") {
+          pdfs.push((args as Args).numeros);
+          return ok("PDF baixado.") as T;
+        }
+        return fp.chamar<T>(op, args);
+      },
+    };
+    c = executarLote(e, undefined, deps(rpc, repo));
+    await c.rodada();
+    igual("parado com 2 e 3 pendentes", [c.estado, situacoes(e)], ["cancelado", ["erro", "pendente", "pendente"]]);
+    rodada = 2;
+    await c.repetirFalhas();
+    igual(
+      "só o documento 1 roda",
+      f.de("executar").map((x) => numeroDe(x.args)),
+      ["5001", "5001"],
+    );
+    igual("PDF só com o 1", pdfs, [["5001"]]);
+    igual("2 e 3 continuam pendentes", situacoes(e).slice(1), ["pendente", "pendente"]);
+  }
+
   secao("PDF no fim, uma vez, só com quem chegou sem falha");
   {
     const { repo } = repoEspiao();
@@ -698,7 +800,12 @@ export async function verificarAppExecucao(): Promise<void> {
     checar("CSV com uma coluna por etapa", cab.includes("Alterar nível de acesso") && cab.includes("Duplicar"), cab);
     checar("número do duplicado", csv.includes("7777"));
     checar("incerto vira Confira", csv.includes("Confira"));
-    igual("link do documento", linhas[0]!.link, linha(1).link);
+    igual(
+      "link do documento montado sem infra_hash",
+      linhas[0]!.link,
+      "https://sei.x.gov.br/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento=99&id_documento=1001",
+    );
+    checar("CSV sem infra_hash", !csv.includes("infra_hash"));
     const doc = instalarDom('<html><body><div id="r"></div></body></html>');
     let repetiu = 0;
     const el = montarResultado(doc, e, { repetirFalhas: () => repetiu++, baixar: () => undefined });
@@ -714,5 +821,19 @@ export async function verificarAppExecucao(): Promise<void> {
     const el3 = montarResultado(doc, e, { repetirFalhas: () => undefined, baixar: (_n, c) => (csvBaixado = c) });
     botao(el3, "Baixar CSV")!.click();
     checar("Baixar CSV entrega o CSV", csvBaixado.includes("Alterar nível de acesso"));
+    let copiado = "";
+    const el4 = montarResultado(doc, e, {
+      repetirFalhas: () => undefined,
+      baixar: () => undefined,
+      clip: {
+        writeText: async (t) => {
+          copiado = t;
+        },
+      },
+      avisar: () => undefined,
+    });
+    botao(el4, "Copiar")!.click();
+    await tique(5);
+    checar("Copiar entrega o texto, sem infra_hash", copiado.includes("5001") && !copiado.includes("infra_hash"), copiado);
   }
 }

@@ -16,6 +16,7 @@ const CTX: ContextoApp = {
   unidadeSigla: "ANA/SUP",
   temaEscuro: false,
   idProcedimento: "99",
+  origem: "https://sei.x.gov.br/sei/controlador.php",
 };
 
 function linha(n: number, o: Partial<LinhaDoc> = {}): LinhaDoc {

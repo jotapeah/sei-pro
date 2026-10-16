@@ -18,7 +18,6 @@
 import { ExecutorLote, type ItemLote, RitmoAdaptativo, type SaidaItem } from "@comum/lote/executor";
 import type { Rpc } from "@comum/ponte/rpc";
 import { ACOES } from "../modelo/acoes";
-import type { LinhaDoc } from "../modelo/documentos";
 import { ANTERIOR, type EtapaDoc, type LoteAcoes, type ParamsEtapa, type PlanoDoc, proximaEtapa, registrar } from "../modelo/fila";
 import type { RepositorioAcoes } from "../repositorio";
 import type { EstadoApp } from "./app";
@@ -70,10 +69,22 @@ function normalizarRetomada(p: PlanoDoc): PlanoDoc {
   return { ...p, etapas: p.etapas.map((e, k) => (k > i && e.situacao === "pendente" ? pulaPorIncerto(e) : e)) };
 }
 
-/** O documento sem o link assinado (infra_hash), para o registro. */
-function semLink(d: LinhaDoc): LinhaDoc {
-  const { link: _link, ...resto } = d;
-  return resto;
+export const BLOCO_NAO_CONFIRMADO =
+  "A criação do bloco não foi confirmada. Confira os blocos no SEI e inclua os documentos pelo bloco certo.";
+
+/**
+ * Bloco novo cuja criação ficou incerta: reenviar `{novo}` poderia criar um segundo bloco (o cache da aba não
+ * sobrevive ao modal, e um envio que estourou o prazo nem chegou a preenchê-lo). Toda etapa pendente naquela
+ * posição vira pulada (e derruba as seguintes); o `{novo}` nunca mais sai neste lote.
+ */
+function barrarBlocoIncerto(lote: LoteAcoes): void {
+  lote.etapas.forEach((et, i) => {
+    if (et.acao !== "incluir-bloco" || !("novo" in et.bloco)) return;
+    if (!lote.planos.some((p) => p.etapas[i]?.situacao === "incerto")) return;
+    lote.planos.forEach((p, k) => {
+      if (p.etapas[i]?.situacao === "pendente") lote.planos[k] = registrar(p, i, { situacao: "pulado", mensagem: BLOCO_NAO_CONFIRMADO });
+    });
+  });
 }
 
 export interface DepsExecucao {
@@ -124,6 +135,8 @@ class Execucao implements ControleExecucao {
   private atual: Promise<void> | null = null;
   private incertosSeguidos = 0;
   private encerrado = false;
+  /** "Tentar de novo só as falhas": só os documentos reabertos rodam (os parados pelo usuário ficam). */
+  private recorte: Set<number> | null = null;
   private readonly agora: () => number;
 
   constructor(
@@ -136,6 +149,7 @@ class Execucao implements ControleExecucao {
     if (d.lote) {
       this.lote = d.lote;
       this.lote.planos = this.lote.planos.map(normalizarRetomada);
+      barrarBlocoIncerto(this.lote);
     } else {
       const t = this.agora();
       this.lote = {
@@ -229,7 +243,8 @@ class Execucao implements ControleExecucao {
 
   async repetirFalhas(): Promise<void> {
     if (this.encerrado || this.atual) return this.rodada();
-    this.lote.planos = this.planos.map((p) => {
+    const reabertos = new Set<number>();
+    this.lote.planos = this.planos.map((p, k) => {
       let reabriu = false;
       const etapas = p.etapas.map((x): EtapaDoc => {
         if (x.situacao === "erro" || (reabriu && x.situacao === "pulado" && x.mensagem === ANTERIOR)) {
@@ -238,9 +253,12 @@ class Execucao implements ControleExecucao {
         }
         return x;
       });
-      return reabriu ? { ...p, etapas } : p;
+      if (!reabriu) return p;
+      reabertos.add(k);
+      return { ...p, etapas };
     });
     this.e.planos = this.lote.planos;
+    this.recorte = reabertos;
     this.estado = "rodando";
     this.motivo = null;
     this.atual = this.acompanhar(this.primeira());
@@ -250,6 +268,7 @@ class Execucao implements ControleExecucao {
 
   encerrar(): void {
     this.encerrado = true;
+    this.senha = undefined;
     if (this.estado === "rodando") this.estado = "pausado";
     this.executor?.pausar();
   }
@@ -288,7 +307,7 @@ class Execucao implements ControleExecucao {
   private async salvar(): Promise<void> {
     this.lote.atualizadoEm = this.agora();
     this.lote.aba = this.d.aba;
-    await this.d.repo.salvar({ ...this.lote, planos: this.planos.map((p) => ({ ...p, doc: semLink(p.doc) })) });
+    await this.d.repo.salvar({ ...this.lote, planos: [...this.planos] });
   }
 
   private definir(k: number, p: PlanoDoc): void {
@@ -297,10 +316,13 @@ class Execucao implements ControleExecucao {
 
   /** Uma rodada: os documentos com etapa pendente (fora as do fim), depois a etapa do fim. */
   private async rodar(): Promise<void> {
+    if (!this.pode()) return this.depoisDaRodada();
     this.incertosSeguidos = 0;
+    // Continuar depois de uma criação de bloco incerta não pode reenviar `{novo}`.
+    barrarBlocoIncerto(this.lote);
     const docs = this.planos.flatMap((p, k) => {
       const i = proximaEtapa(p);
-      return i !== null && !ehDoFim(this.lote.etapas[i]) ? [k] : [];
+      return i !== null && !ehDoFim(this.lote.etapas[i]) && this.noRecorte(k) ? [k] : [];
     });
     const itens: ItemLote<number, true>[] = docs.map((k, indice) => ({ indice, entrada: k, situacao: "pendente", tentativas: 0 }));
     const executor = new ExecutorLote<number, true>(itens, {
@@ -318,6 +340,10 @@ class Execucao implements ControleExecucao {
     if (!this.pode()) return this.depoisDaRodada();
     this.estado = "concluido";
     await this.terminar();
+  }
+
+  private noRecorte(k: number): boolean {
+    return this.recorte === null || this.recorte.has(k);
   }
 
   /** Pausa: nada a fazer (o registro já está gravado). Cancelado: termina. */
@@ -377,6 +403,7 @@ class Execucao implements ControleExecucao {
     this.ritmo.registrar(this.agora() - inicio);
     let parar: string | null = null;
     if (falha !== null) {
+      if (!grava) this.incertosSeguidos = 0;
       // O envio pode ter saído: escrita fica incerta; leitura é só erro (repetir não estraga nada).
       this.definir(
         k,
@@ -403,6 +430,8 @@ class Execucao implements ControleExecucao {
         this.definir(k, registrar(p, i, { situacao: r!.situacao, mensagem: r!.erro }));
       }
     }
+    // Criação de bloco incerta: os documentos seguintes não tentam de novo (nem aqui, nem ao continuar).
+    barrarBlocoIncerto(this.lote);
     try {
       await this.salvar();
     } catch (e) {
@@ -430,7 +459,7 @@ class Execucao implements ControleExecucao {
     const f = this.lote.etapas.length - 1;
     const et = this.lote.etapas[f];
     if (!ehDoFim(et)) return;
-    const ks = this.planos.flatMap((p, k) => (proximaEtapa(p) === f ? [k] : []));
+    const ks = this.planos.flatMap((p, k) => (proximaEtapa(p) === f && this.noRecorte(k) ? [k] : []));
     if (ks.length === 0) return;
     if (et!.acao === "pdf") await this.pdf(f, ks);
     else await this.zip(f, ks);
@@ -505,6 +534,8 @@ class Execucao implements ControleExecucao {
 
   /** Fim (concluído ou parado de vez): árvore recarregada uma vez; sem nada pendente, o registro sai. */
   private async terminar(): Promise<void> {
+    this.senha = undefined;
+    this.recorte = null;
     if (this.estado === "cancelado" && ehDoFim(this.lote.etapas.at(-1)) && this.lote.etapas.at(-1)!.acao === "baixar") {
       await this.d.rpc.chamar("zipDescartar").catch(() => undefined);
     }

@@ -15,6 +15,25 @@ export interface ContextoAcoes {
   /** Endereco da arvore do processo, lido do `#ifrArvore` da tela (colhido da pagina, nunca montado). */
   linkArvore: string;
   idProcedimento: string;
+  /**
+   * Caminho até o `controlador.php` do SEI (esquema, host e diretório, sem query nem infra_hash). Vai para o app,
+   * que monta com ele o link de cada documento no resultado (o mesmo formato do Link Permanente).
+   */
+  origem: string;
+}
+
+/** `https://h/sei/controlador.php?...&infra_hash=x` -> `https://h/sei/controlador.php`; endereço inválido -> "". */
+export function origemDoSei(base: string): string {
+  try {
+    const url = new URL(base);
+    const diretorio = url.pathname
+      .replace(/\/+$/, "")
+      .replace(/controlador\.php$/, "")
+      .replace(/\/+$/, "");
+    return `${url.origin}${diretorio}/controlador.php`;
+  } catch {
+    return "";
+  }
 }
 
 /** Sem login lido ou sem arvore (tela que nao e `procedimento_trabalhar`) nao ha o que fazer: devolve null. */
@@ -36,6 +55,7 @@ export function contextoAcoes(doc: Document, o: { temaEscuro: boolean; corTema?:
     base: pagina.url,
     linkArvore,
     idProcedimento,
+    origem: origemDoSei(pagina.url),
   };
   if (o.corTema) ctx.corTema = o.corTema;
   return ctx;

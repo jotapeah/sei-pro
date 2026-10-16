@@ -55,8 +55,10 @@ export function linhasDoResultado(e: EstadoApp): { linhas: LinhaResultado[]; col
       campos[`etapa${i}`] = x.mensagem ? `${TEXTO[x.situacao]}: ${x.mensagem}` : TEXTO[x.situacao];
     });
     if (iDuplicar >= 0) campos.duplicado = p.etapas[iDuplicar]?.dados?.numero ?? "";
-    // O link vem da árvore lida agora (o registro não o guarda): por id, igualdade exata.
-    const link = e.linhas.find((l) => l.id === p.doc.id)?.link ?? p.doc.link;
+    // Sem infra_hash: só o caminho até o controlador.php (como o Link Permanente); o SEI pede o hash ao abrir.
+    const link = e.ctx.origem
+      ? `${e.ctx.origem}?acao=procedimento_trabalhar&id_procedimento=${encodeURIComponent(e.ctx.idProcedimento)}&id_documento=${encodeURIComponent(p.doc.id)}`
+      : "";
     return { ...resumoDoc(p), campos, ...(link ? { link } : {}) };
   });
   return { linhas, colunas };
