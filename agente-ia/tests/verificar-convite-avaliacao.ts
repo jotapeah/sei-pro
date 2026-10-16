@@ -22,7 +22,7 @@ interface Convite {
   lerPedido(hash: string): { loja: string; versao: string | null } | null;
   podeMostrar(registro: unknown, agora: number): boolean;
   registroDepois(acao: "avaliar" | "adiar", agora: number): unknown;
-  textoDoDia(agora: number): number;
+  sortearTexto(aleatorio?: () => number): number;
 }
 
 function carregar(): Convite {
@@ -54,15 +54,15 @@ export function verificarConviteDeAvaliacao(): void {
   checar("quem disse agora nao, nao ve antes de 60 dias", c.podeMostrar(adiado, agora + 59 * DIA) === false);
   checar("e volta a ver depois de 60 dias", c.podeMostrar(adiado, agora + 60 * DIA) === true);
 
-  secao("convite de avaliacao: texto do dia");
+  secao("convite de avaliacao: texto sorteado a cada abertura");
   const n = c.TEXTOS.length;
-  // 01/10/2026 em Brasília (UTC-3): das 00:05 às 23:55 é o mesmo dia.
-  const madrugada = c.textoDoDia(Date.UTC(2026, 9, 1, 3, 5));
-  const noite = c.textoDoDia(Date.UTC(2026, 9, 2, 2, 55));
-  checar("o mesmo texto o dia todo, no horario de Brasilia", madrugada === noite, { madrugada, noite });
-  checar("as 23h de Brasilia ainda contam como o dia anterior", c.textoDoDia(Date.UTC(2026, 9, 1, 2, 0)) === (madrugada - 1 + n) % n);
-  checar("no dia seguinte troca para o proximo", c.textoDoDia(Date.UTC(2026, 9, 2, 3, 5)) === (madrugada + 1) % n);
-  checar("o indice cabe na lista", madrugada >= 0 && madrugada < n);
+  checar("sorteio 0 pega o primeiro texto", c.sortearTexto(() => 0) === 0);
+  checar("sorteio perto de 1 pega o ultimo texto", c.sortearTexto(() => 0.9999999) === n - 1);
+  checar("sorteio no meio pega o texto do meio", c.sortearTexto(() => 0.5) === Math.floor(n / 2));
+  const vistos = new Set<number>();
+  for (let i = 0; i < 4000; i++) vistos.add(c.sortearTexto());
+  checar("com sorteio de verdade, todos os textos aparecem", vistos.size === n, vistos.size);
+  checar("o indice sempre cabe na lista", [...vistos].every((i) => Number.isInteger(i) && i >= 0 && i < n));
 
   secao("convite de avaliacao: os textos aprovados");
   checar("sao 34", n === 34, n);

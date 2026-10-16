@@ -9,8 +9,9 @@
    jeito só volta a ver depois de 60 dias. O registro fica no navegador da
    pessoa (localStorage de seipro.app) e não vai para lugar nenhum.
 
-   Os textos se revezam por dia, no horário de Brasília: todo mundo vê o mesmo
-   texto no mesmo dia. {loja} vira o nome da loja em negrito. */
+   O texto é sorteado a cada abertura do convite (aleatoriedade simples, sem
+   memória): recarregar a página pode mostrar outro. {loja} vira o nome da loja
+   em negrito. */
 (function () {
   'use strict';
 
@@ -132,7 +133,6 @@
   var CHAVE = 'seipro-convite-avaliacao';
   var DIA = 24 * 3600 * 1000;
   var ADIAMENTO = 60 * DIA;
-  var BRASILIA = -3 * 3600 * 1000; /* UTC-3, sem horário de verão desde 2019 */
 
   function lerPedido(hash) {
     var m = /^#avaliar=([a-z]+)(?:&versao=([^&]*))?$/.exec(hash || '');
@@ -150,13 +150,13 @@
     return acao === 'avaliar' ? { avaliou: true } : { adiadoAte: agora + ADIAMENTO };
   }
 
-  function textoDoDia(agora) {
-    return Math.floor((agora + BRASILIA) / DIA) % TEXTOS.length;
+  function sortearTexto(aleatorio) {
+    return Math.floor((aleatorio || Math.random)() * TEXTOS.length);
   }
 
   /* Nos testes (Node), o arquivo entrega só a lógica. */
   if (typeof module === 'object' && module && module.exports) {
-    module.exports = { TEXTOS: TEXTOS, LOJAS: LOJAS, lerPedido: lerPedido, podeMostrar: podeMostrar, registroDepois: registroDepois, textoDoDia: textoDoDia };
+    module.exports = { TEXTOS: TEXTOS, LOJAS: LOJAS, lerPedido: lerPedido, podeMostrar: podeMostrar, registroDepois: registroDepois, sortearTexto: sortearTexto };
     return;
   }
 
@@ -213,7 +213,7 @@
 
   function mostrar() {
     var loja = LOJAS[pedido.loja];
-    var x = TEXTOS[textoDoDia(Date.now())];
+    var x = TEXTOS[sortearTexto()];
     var dialogo = el('dialog', { 'class': 'convite', closedby: 'any', 'aria-labelledby': 'convite-titulo', 'aria-describedby': 'convite-texto' });
 
     var fechar = el('button', { type: 'button', 'class': 'convite-fechar', 'aria-label': 'Fechar' });
