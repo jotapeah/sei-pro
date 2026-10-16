@@ -1,0 +1,538 @@
+/**
+ * O que o app das Ações em Lote pede à aba do SEI: contexto, árvore do processo, prévia e execução de cada etapa,
+ * listas de apoio (blocos, hipóteses, contatos, assuntos, processo de destino) e downloads. Roda na aba porque
+ * usa a sessão dela; o app nunca vê tipos de exceção nem links do SEI (nada com `infra_hash` atravessa a ponte).
+ *
+ * Tudo volta como JSON simples: `situacao`, `erro`, `parar`, `incerto`. Quem decide repetir ou parar é o app.
+ */
+import type { Tratador } from "@comum/ponte/rpc";
+import { cancelarAssinatura, cancelarDocumento, darCiencia, excluirDocumento } from "@nucleo/dominio/acoesDocumento";
+import { type Arvore, abrirArvore } from "@nucleo/dominio/arvore";
+import { criarBloco, incluirNoBloco, listarBlocosParaInclusao } from "@nucleo/dominio/blocos";
+import {
+  type AlteracaoDocumento,
+  alterarDocumento,
+  duplicarDocumento,
+  lerConteudo,
+  localizarDocumento,
+  pesquisarAssuntos,
+  pesquisarContatos,
+} from "@nucleo/dominio/documento";
+import { hipotesesDoFormulario, type OpcoesEscrita, type ResultadoEscrita } from "@nucleo/dominio/escrita";
+import { type Andamento, andamentos } from "@nucleo/dominio/historico";
+import { moverDocumento, resolverProcessoDestino } from "@nucleo/dominio/moverDocumento";
+import { gerarPdfDocumentos } from "@nucleo/dominio/pdfProcesso";
+import { assinarDocumento } from "@nucleo/dominio/tramitacao";
+import { Formulario } from "@nucleo/formulario/formulario";
+import { linkDaAcao } from "@nucleo/links/links";
+import type { Sei } from "@nucleo/sei";
+import { ehErroSei } from "@nucleo/sessao/erros";
+import type { Arquivo } from "@nucleo/sessao/http";
+import { ACOES, type AcaoId } from "../modelo/acoes";
+import { type LinhaDoc, linhasDaArvore, MOTIVO_SIGILOSO } from "../modelo/documentos";
+import type { ItemLista, ParamsEtapa } from "../modelo/fila";
+import { AcumuladorZip, baixarBytes, extensaoDe, nomeArquivo } from "../sei/download";
+import type { ContextoAcoes } from "./contexto";
+
+/** As chamadas ao SEI, trocáveis nas provas para forçar cada desfecho sem rede. */
+export interface ChamadasSei {
+  darCiencia: typeof darCiencia;
+  excluirDocumento: typeof excluirDocumento;
+  cancelarDocumento: typeof cancelarDocumento;
+  cancelarAssinatura: typeof cancelarAssinatura;
+  assinarDocumento: typeof assinarDocumento;
+  alterarDocumento: typeof alterarDocumento;
+  duplicarDocumento: typeof duplicarDocumento;
+  pesquisarContatos: typeof pesquisarContatos;
+  pesquisarAssuntos: typeof pesquisarAssuntos;
+  resolverProcessoDestino: typeof resolverProcessoDestino;
+  moverDocumento: typeof moverDocumento;
+  gerarPdfDocumentos: typeof gerarPdfDocumentos;
+  listarBlocosParaInclusao: typeof listarBlocosParaInclusao;
+  incluirNoBloco: typeof incluirNoBloco;
+  criarBloco: typeof criarBloco;
+  andamentos: typeof andamentos;
+  /** Árvore do processo aberto, pelo link colhido da página. */
+  abrirArvore(sei: Sei, link: string): Promise<Arvore>;
+  /** Árvore de OUTRO processo, pela referência (protocolo ou nº SEI); usada para conferir o sigilo do destino. */
+  arvoreDe(sei: Sei, referencia: string): Promise<Arvore>;
+  invalidar(sei: Sei, idProcedimento: string): void;
+  /** Conteúdo bruto do documento (arquivo do anexo ou HTML do documento interno), com a recusa de sigiloso. */
+  conteudo(sei: Sei, numero: string): Promise<{ titulo: string; numero: string; arquivo?: Arquivo; html?: string }>;
+  baixarLink(sei: Sei, link: string): Promise<Arquivo>;
+  /** Hipóteses legais, lidas da tela de alteração do documento `numero` (`nivel` "1" restrito). */
+  hipoteses(sei: Sei, numero: string, nivel: string): Promise<ItemLista[]>;
+}
+
+export const chamadasPadrao: ChamadasSei = {
+  darCiencia,
+  excluirDocumento,
+  cancelarDocumento,
+  cancelarAssinatura,
+  assinarDocumento,
+  alterarDocumento,
+  duplicarDocumento,
+  pesquisarContatos,
+  pesquisarAssuntos,
+  resolverProcessoDestino,
+  moverDocumento,
+  gerarPdfDocumentos,
+  listarBlocosParaInclusao,
+  incluirNoBloco,
+  criarBloco,
+  andamentos,
+  abrirArvore: (sei, link) => abrirArvore(sei.http, link),
+  arvoreDe: (sei, ref) => sei.arvore(ref),
+  invalidar: (sei, id) => sei.invalidar(id),
+  conteudo: async (sei, numero) => {
+    const d = await localizarDocumento(sei, numero);
+    const c = await lerConteudo(sei, d);
+    const base = { titulo: d.documento.titulo, numero: d.documento.numero };
+    return c.forma === "arquivo" ? { ...base, arquivo: c.arquivo } : { ...base, html: c.html };
+  },
+  baixarLink: (sei, link) => sei.http.baixar(link),
+  hipoteses: async (sei, numero, nivel) => {
+    const d = await localizarDocumento(sei, numero);
+    if (d.documento.nivel === "sigiloso" || d.arvore.nivel === "sigiloso") {
+      throw new Error(MOTIVO_SIGILOSO);
+    }
+    const link =
+      linkDaAcao(d.documento.acoes, d.documento.externo ? "documento_alterar_recebido" : "documento_alterar") ??
+      linkDaAcao(d.documento.acoes, /^documento_alterar/);
+    if (!link) throw new Error(`O SEI não oferece alterar o documento ${d.documento.numero} para você.`);
+    const form = await Formulario.abrir(sei.http, link, "#frmDocumentoCadastro");
+    return hipotesesDoFormulario(sei, form, nivel);
+  },
+};
+
+export interface DepsExecutor {
+  sei: Sei;
+  ctx: ContextoAcoes;
+  /** Só no modal: tira o iframe da tela. */
+  fechar?: () => void;
+  minimizar?: (minimizado: boolean) => void;
+  chamadas?: Partial<ChamadasSei>;
+  /** Entrega bytes ao usuário (`<a download>`); trocável nas provas. */
+  baixar?: (bytes: Uint8Array, nome: string, tipo: string) => void;
+}
+
+export type RespostaEtapa =
+  | { situacao: "ok"; resumo: string; mudancas: ResultadoEscrita["mudancas"]; dados?: Record<string, string>; incerto?: boolean }
+  | { situacao: "pulado" | "erro"; erro: string; parar?: boolean };
+
+export type RespostaDestino =
+  | { situacao: "ok"; destino: { protocolo: string; idProcedimento: string; tipo: string } }
+  | { situacao: "erro"; erro: string };
+
+export interface RespostaArvore {
+  protocolo: string;
+  sigiloso: boolean;
+  linhas: LinhaDoc[];
+  /** O histórico falhou: as linhas vão sem data e o filtro de período fica desligado. */
+  datasIndisponiveis?: boolean;
+}
+
+export const TEXTO_SENHA = "Senha incorreta: o lote foi pausado para não bloquear sua conta.";
+export const TEXTO_INCERTO = "O SEI não confirmou. Confira o documento antes de repetir.";
+export const AVISO_DATAS = "Datas indisponíveis neste processo.";
+export const ERRO_DESTINO_SIGILOSO = "O processo de destino é sigiloso: fora das Ações em Lote.";
+export const ERRO_DESTINO_IGUAL = "O processo de destino é o próprio processo aberto.";
+
+const mensagem = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+/** Minúsculas e sem acento, para achar palavras nas mensagens do SEI. */
+const plano = (s: string): string => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+/**
+ * Traduz uma falha do núcleo. Mensagens de pulado/erro trazem o motivo por extenso.
+ * `aplicou`: o POST pode ter saído; nesse caso falhas que não provam "não gravou" viram `incerto` (nunca `erro`,
+ * que o app trataria como repetível e poderia duplicar/aplicar duas vezes).
+ */
+export function mapearErro(e: unknown, o: { aplicou: boolean; assinatura?: boolean }): RespostaEtapa {
+  if (ehErroSei(e)) {
+    const texto = plano(`${e.message} ${e.detalhe ?? ""}`);
+    if (e.codigo === "SEI_SESSAO_EXPIRADA" || texto.includes("captcha")) return { situacao: "erro", erro: e.message, parar: true };
+    if (o.assinatura && texto.includes("senha")) return { situacao: "erro", erro: TEXTO_SENHA, parar: true };
+    if (e.codigo === "SEI_SIGILOSO") return { situacao: "pulado", erro: MOTIVO_SIGILOSO };
+    if (e.codigo === "SEI_ACAO_INDISPONIVEL") return { situacao: "pulado", erro: e.message };
+    if (o.aplicou && (e.codigo === "CANCELADO" || e.codigo === "SEI_REDE" || e.codigo === "SEI_RESPOSTA_INESPERADA")) return incerta();
+    return { situacao: "erro", erro: e.message };
+  }
+  if (o.aplicou) return incerta();
+  return { situacao: "erro", erro: mensagem(e) };
+}
+
+function incerta(): RespostaEtapa {
+  return { situacao: "ok", resumo: TEXTO_INCERTO, mudancas: [], incerto: true };
+}
+
+function ok(r: ResultadoEscrita): RespostaEtapa {
+  const o: RespostaEtapa = { situacao: "ok", resumo: r.resumo, mudancas: r.mudancas };
+  if (r.dados && Object.keys(r.dados).length) o.dados = r.dados;
+  return o;
+}
+
+const ACOES_CONHECIDAS = new Set<string>(ACOES.map((a) => a.id));
+const naoVazio = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
+
+/** "dd/mm/aaaa hh:mm" -> "aaaa-mm-dd" (ou null). */
+export function dataIso(dataSei: string): string | null {
+  const m = /(\d{2})\/(\d{2})\/(\d{4})/.exec(dataSei);
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
+}
+
+/**
+ * Data de geração por número SEI: a do andamento mais antigo que cita o número como item inteiro (não como parte de
+ * um número maior). O histórico vem do mais recente para o mais antigo; ciência, assinatura etc. também citam o
+ * número, por isso vale o menor dia entre as citações.
+ */
+export function datasPorNumero(linhas: LinhaDoc[], historico: Andamento[]): Map<string, string> {
+  const r = new Map<string, string>();
+  const eventos = historico
+    .map((a) => ({ iso: dataIso(a.data), texto: a.descricao }))
+    .filter((a): a is { iso: string; texto: string } => a.iso !== null);
+  for (const l of linhas) {
+    const n = l.numero.replace(/\D/g, "");
+    if (!n) continue;
+    const re = new RegExp(`(?<!\\d)${n}(?!\\d)`);
+    let menor: string | null = null;
+    for (const ev of eventos) if (re.test(ev.texto) && (menor === null || ev.iso < menor)) menor = ev.iso;
+    if (menor) r.set(l.numero, menor);
+  }
+  return r;
+}
+
+export function tratadoresAcoesLote(d: DepsExecutor): Record<string, Tratador> {
+  const c: ChamadasSei = { ...chamadasPadrao, ...d.chamadas };
+  const entregar = d.baixar ?? baixarBytes;
+  const zip = new AcumuladorZip();
+  /**
+   * Árvore já lida nesta aba (a do processo aberto). `recarregarArvore` e `arvore({forcar})` a refazem.
+   * Também serve de lista numero -> id para o PDF e de referência (um documento qualquer) para as pesquisas.
+   */
+  let cache: RespostaArvore | null = null;
+  /**
+   * Blocos criados por este lote: descrição -> número do bloco. Vive enquanto a página viver (o modal reabre sem
+   * recarregar), para o lote criar o bloco UMA vez e o documento seguinte só incluir nele. A prévia nunca cria.
+   * `null` marca criação incerta: os documentos seguintes não tentam criar de novo (evita bloco em duplicata).
+   */
+  const blocosCriados = new Map<string, string | null>();
+
+  const carregarArvore = async (forcar: boolean): Promise<RespostaArvore> => {
+    if (cache && !forcar) return cache;
+    if (forcar) c.invalidar(d.sei, d.ctx.idProcedimento);
+    const arv = await c.abrirArvore(d.sei, d.ctx.linkArvore);
+    const sigiloso = arv.nivel === "sigiloso";
+    let linhas = linhasDaArvore(arv);
+    let datasIndisponiveis = false;
+    if (sigiloso) {
+      datasIndisponiveis = true;
+    } else {
+      try {
+        const h = await c.andamentos(d.sei, arv.protocolo, { tipo: "total", limite: 5000 });
+        const datas = datasPorNumero(linhas, h.andamentos);
+        linhas = linhas.map((l) => (datas.has(l.numero) ? { ...l, data: datas.get(l.numero) } : l));
+      } catch {
+        datasIndisponiveis = true;
+      }
+    }
+    cache = { protocolo: arv.protocolo, sigiloso, linhas, ...(datasIndisponiveis ? { datasIndisponiveis } : {}) };
+    return cache;
+  };
+
+  /** Número de um documento qualquer não sigiloso, para as telas que só abrem a partir de um documento. */
+  const documentoDeReferencia = async (numero: unknown): Promise<string> => {
+    const n = naoVazio(numero);
+    if (n) return n;
+    const a = await carregarArvore(false);
+    const l = a.linhas.find((x) => x.nivel !== "sigiloso" && !x.cancelado) ?? a.linhas[0];
+    if (!l) throw new Error("O processo não tem documentos.");
+    return l.numero;
+  };
+
+  const lerEtapa = (args: unknown): { etapa: ParamsEtapa; numero: string; senha: string } | string => {
+    const a = (args ?? {}) as Record<string, unknown>;
+    const etapa = a.etapa as ParamsEtapa | undefined;
+    if (!etapa || typeof etapa !== "object" || !ACOES_CONHECIDAS.has(etapa.acao)) return "Ação desconhecida.";
+    const numero = naoVazio(a.numero);
+    if (!numero) return "Documento não informado.";
+    return { etapa, numero, senha: typeof a.senha === "string" ? a.senha : "" };
+  };
+
+  /** Um passo de escrita do núcleo, com `aplicar` já resolvido. */
+  const passo = async (etapa: ParamsEtapa, numero: string, senha: string, aplicar: boolean): Promise<ResultadoEscrita> => {
+    const op: OpcoesEscrita = { aplicar };
+    switch (etapa.acao) {
+      case "ciencia":
+        return c.darCiencia(d.sei, numero, {}, op);
+      case "excluir":
+        return c.excluirDocumento(d.sei, numero, op);
+      case "cancelar-assinatura":
+        return c.cancelarAssinatura(d.sei, numero, op);
+      case "cancelar-documento":
+        return c.cancelarDocumento(d.sei, numero, etapa.motivo, op);
+      case "duplicar":
+        return c.duplicarDocumento(d.sei, numero, op);
+      case "alterar-nivel": {
+        const alt: AlteracaoDocumento = { nivel: etapa.nivel };
+        if (etapa.nivel === "restrito" && etapa.hipotese) alt.hipotese = etapa.hipotese;
+        return c.alterarDocumento(d.sei, numero, alt, op);
+      }
+      case "alterar-dados": {
+        const alt: AlteracaoDocumento = {};
+        // Em branco significa "manter o atual": o núcleo trata "" como "esvaziar", por isso vai undefined.
+        if (etapa.descricao?.trim()) alt.descricao = etapa.descricao;
+        if (etapa.observacao?.trim()) alt.observacao = etapa.observacao;
+        if (etapa.nivel) alt.nivel = etapa.nivel;
+        if (etapa.nivel === "restrito" && etapa.hipotese) alt.hipotese = etapa.hipotese;
+        if (etapa.interessados?.itens.length) alt.interessados = etapa.interessados;
+        if (etapa.assuntos?.itens.length) alt.assuntos = etapa.assuntos;
+        return c.alterarDocumento(d.sei, numero, alt, op);
+      }
+      case "assinar":
+        return c.assinarDocumento(d.sei, numero, aplicar ? { cargo: etapa.cargo, senha } : { cargo: etapa.cargo }, op);
+      case "mover":
+        return c.moverDocumento(
+          d.sei,
+          numero,
+          { idProcedimento: etapa.destino.idProcedimento, protocolo: etapa.destino.protocolo },
+          etapa.motivo,
+          op,
+        );
+      case "incluir-bloco": {
+        if ("id" in etapa.bloco) return c.incluirNoBloco(d.sei, etapa.bloco.id, [numero], {}, op);
+        const desc = etapa.bloco.novo.trim();
+        const feito = blocosCriados.get(desc);
+        if (!aplicar) {
+          return {
+            alvo: numero,
+            mudancas: [{ campo: "Bloco", antes: "", depois: `novo bloco de assinatura "${desc}" (criado uma vez para o lote)` }],
+            aplicado: false,
+            resumo: feito ? `Vai incluir o documento no bloco ${feito}.` : `Vai criar o bloco "${desc}" e incluir o documento nele.`,
+          };
+        }
+        if (feito === null) {
+          throw new ErroBlocoIncerto(desc);
+        }
+        let bloco = feito;
+        if (bloco === undefined) {
+          try {
+            const criado = await c.criarBloco(d.sei, { tipo: "assinatura", descricao: desc }, op);
+            const numeroBloco = criado.dados?.bloco;
+            if (!numeroBloco) throw new ErroBlocoIncerto(desc);
+            bloco = numeroBloco;
+            blocosCriados.set(desc, bloco);
+          } catch (e) {
+            if (!(e instanceof ErroBlocoIncerto) && !mapearEhIncerto(e)) throw e;
+            blocosCriados.set(desc, null);
+            throw new ErroBlocoIncerto(desc);
+          }
+        }
+        return c.incluirNoBloco(d.sei, bloco, [numero], {}, op);
+      }
+      case "baixar":
+      case "pdf":
+        return {
+          alvo: numero,
+          mudancas: [],
+          aplicado: false,
+          resumo: etapa.acao === "pdf" ? "Vai incluir o documento no PDF único." : "Vai baixar o documento.",
+        };
+    }
+  };
+
+  const rodar = async (args: unknown, aplicar: boolean): Promise<RespostaEtapa> => {
+    const p = lerEtapa(args);
+    if (typeof p === "string") return { situacao: "erro", erro: p };
+    const { etapa, numero, senha } = p;
+    const assinatura = etapa.acao === "assinar";
+    if (aplicar && etapa.acao === "assinar" && !senha) return { situacao: "erro", erro: "Informe a senha para assinar.", parar: true };
+    if (aplicar && etapa.acao === "pdf") return { situacao: "erro", erro: "O PDF único é gerado pelo tratador pdf, não por executar." };
+    if (aplicar && etapa.acao === "baixar") return etapa.modo === "zip" ? zipAdicionar({ numero }) : baixarArquivo({ numero });
+    try {
+      return ok(await passo(etapa, numero, senha, aplicar));
+    } catch (e) {
+      if (e instanceof ErroBlocoIncerto) {
+        return { situacao: "erro", erro: e.message, parar: true };
+      }
+      // Só a escrita de verdade pode ter gravado; a prévia falha sempre como erro comum.
+      return mapearErro(e, { aplicou: aplicar && ACOES.find((a) => a.id === etapa.acao)?.escreve === true, assinatura });
+    }
+  };
+
+  const sanitizarNome = (r: { titulo: string; numero: string; arquivo?: Arquivo; html?: string }) => {
+    if (r.arquivo) {
+      const ext = extensaoDe(r.arquivo.nome);
+      return { nome: nomeArquivo(r.numero, r.titulo, ext), bytes: r.arquivo.bytes, tipo: r.arquivo.tipo || "application/octet-stream" };
+    }
+    return {
+      nome: nomeArquivo(r.numero, r.titulo, "html"),
+      bytes: new TextEncoder().encode(r.html ?? ""),
+      tipo: "text/html;charset=utf-8",
+    };
+  };
+
+  const baixarArquivo = async (args: unknown): Promise<RespostaEtapa> => {
+    const numero = naoVazio((args as { numero?: unknown } | undefined)?.numero);
+    if (!numero) return { situacao: "erro", erro: "Documento não informado." };
+    try {
+      const f = sanitizarNome(await c.conteudo(d.sei, numero));
+      entregar(f.bytes, f.nome, f.tipo);
+      return { situacao: "ok", resumo: `Arquivo baixado: ${f.nome}`, mudancas: [], dados: { arquivo: f.nome } };
+    } catch (e) {
+      return mapearErro(e, { aplicou: false });
+    }
+  };
+
+  const zipAdicionar = async (args: unknown): Promise<RespostaEtapa> => {
+    const numero = naoVazio((args as { numero?: unknown } | undefined)?.numero);
+    if (!numero) return { situacao: "erro", erro: "Documento não informado." };
+    try {
+      const f = sanitizarNome(await c.conteudo(d.sei, numero));
+      const nome = zip.adicionar(f.nome, f.bytes);
+      return { situacao: "ok", resumo: `Guardado para o ZIP: ${nome}`, mudancas: [], dados: { arquivo: nome } };
+    } catch (e) {
+      return mapearErro(e, { aplicou: false });
+    }
+  };
+
+  const zipFechar = (args: unknown): RespostaEtapa => {
+    const bruto = naoVazio((args as { nome?: unknown } | undefined)?.nome);
+    const bytes = zip.fechar();
+    if (!bytes) return { situacao: "erro", erro: "Nenhum arquivo foi guardado para o ZIP." };
+    const nome = `${nomeArquivo("", bruto || "documentos").replace(/\.zip$/i, "")}.zip`;
+    entregar(bytes, nome, "application/zip");
+    return { situacao: "ok", resumo: `ZIP baixado: ${nome}`, mudancas: [], dados: { arquivo: nome } };
+  };
+
+  const pdf = async (args: unknown): Promise<RespostaEtapa> => {
+    const numeros = (Array.isArray((args as { numeros?: unknown } | undefined)?.numeros) ? (args as { numeros: unknown[] }).numeros : [])
+      .map(naoVazio)
+      .filter(Boolean);
+    if (!numeros.length) return { situacao: "erro", erro: "Nenhum documento para o PDF." };
+    try {
+      const a = await carregarArvore(false);
+      const ids: string[] = [];
+      const porId = new Map<string, string>();
+      for (const n of numeros) {
+        const l = a.linhas.find((x) => x.numero === n);
+        if (!l) return { situacao: "erro", erro: `O documento ${n} não está na árvore do processo.` };
+        ids.push(l.id);
+        porId.set(l.id, l.numero);
+      }
+      const g = await c.gerarPdfDocumentos(d.sei, a.protocolo, ids);
+      const arq = await c.baixarLink(d.sei, g.link);
+      const nome = nomeArquivo("", g.nome.replace(/\.pdf$/i, "") || `Processo ${a.protocolo}`, "pdf");
+      entregar(arq.bytes, nome, "application/pdf");
+      const fora = g.foraDoPdf.map((id) => porId.get(id) ?? id);
+      const dados: Record<string, string> = { arquivo: nome };
+      if (fora.length) dados.foraDoPdf = fora.join(",");
+      return {
+        situacao: "ok",
+        resumo: fora.length ? `PDF baixado: ${nome}. Ficaram de fora: ${fora.join(", ")}.` : `PDF baixado: ${nome}`,
+        mudancas: [],
+        dados,
+      };
+    } catch (e) {
+      return mapearErro(e, { aplicou: false });
+    }
+  };
+
+  const destino = async (args: unknown): Promise<RespostaDestino> => {
+    const a = (args ?? {}) as Record<string, unknown>;
+    const protocolo = naoVazio(a.protocolo);
+    const numero = naoVazio(a.numero);
+    if (!protocolo) return { situacao: "erro", erro: "Informe o número do processo de destino." };
+    try {
+      const alvo = await c.resolverProcessoDestino(d.sei, numero || (await documentoDeReferencia(undefined)), protocolo);
+      if (alvo.idProcedimento === d.ctx.idProcedimento) return { situacao: "erro", erro: ERRO_DESTINO_IGUAL };
+      // O núcleo não informa o sigilo do destino: confere pela árvore dele. Sem conseguir conferir, não segue.
+      let arv: Arvore;
+      try {
+        arv = await c.arvoreDe(d.sei, alvo.protocolo);
+      } catch (e) {
+        return { situacao: "erro", erro: `Não foi possível conferir o nível de acesso do processo de destino: ${mensagem(e)}` };
+      }
+      if (arv.nivel === "sigiloso") return { situacao: "erro", erro: ERRO_DESTINO_SIGILOSO };
+      return { situacao: "ok", destino: { protocolo: alvo.protocolo, idProcedimento: alvo.idProcedimento, tipo: alvo.tipo } };
+    } catch (e) {
+      const r = mapearErro(e, { aplicou: false });
+      return { situacao: "erro", erro: r.situacao === "ok" ? TEXTO_INCERTO : r.erro };
+    }
+  };
+
+  return {
+    contexto: () => {
+      const { base: _base, linkArvore: _link, ...publico } = d.ctx;
+      return publico;
+    },
+    arvore: (args) => carregarArvore((args as { forcar?: unknown } | undefined)?.forcar === true),
+    previa: (args) => rodar(args, false),
+    executar: (args) => rodar(args, true),
+    cargos: async (args) => {
+      const numero = naoVazio((args as { numero?: unknown } | undefined)?.numero);
+      if (!numero) throw new Error("Documento não informado.");
+      const r = await c.assinarDocumento(d.sei, numero, {}, { aplicar: false });
+      return (r.dados?.cargos ?? "")
+        .split("|")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    },
+    blocos: async (): Promise<ItemLista[]> =>
+      (await c.listarBlocosParaInclusao(d.sei)).map((b) => ({ id: b.numero, texto: `${b.numero} - ${b.descricao}` })),
+    hipoteses: async (args) => {
+      const a = (args ?? {}) as Record<string, unknown>;
+      const codigo = a.nivel === "restrito" || a.nivel === "1" ? "1" : "";
+      if (!codigo) return [];
+      return c.hipoteses(d.sei, await documentoDeReferencia(a.numero), codigo);
+    },
+    contatos: async (args) => {
+      const a = (args ?? {}) as Record<string, unknown>;
+      return (await c.pesquisarContatos(d.sei, await documentoDeReferencia(a.numero), naoVazio(a.termo))).map(({ id, texto }) => ({
+        id,
+        texto,
+      }));
+    },
+    assuntos: async (args) => {
+      const a = (args ?? {}) as Record<string, unknown>;
+      return (await c.pesquisarAssuntos(d.sei, await documentoDeReferencia(a.numero), naoVazio(a.termo))).map(({ id, texto }) => ({
+        id,
+        texto,
+      }));
+    },
+    destino,
+    baixarArquivo,
+    zipAdicionar,
+    zipFechar,
+    pdf,
+    recarregarArvore: async () => {
+      cache = null;
+      c.invalidar(d.sei, d.ctx.idProcedimento);
+      return true;
+    },
+    fechar: () => {
+      if (!d.fechar) return false;
+      d.fechar();
+      return true;
+    },
+    minimizar: (args) => {
+      if (!d.minimizar) return false;
+      d.minimizar((args as { minimizado?: unknown } | undefined)?.minimizado === true);
+      return true;
+    },
+  };
+}
+
+/** Criação do bloco sem confirmação: o lote para, porque tentar de novo poderia duplicar o bloco. */
+class ErroBlocoIncerto extends Error {
+  constructor(descricao: string) {
+    super(`A criação do bloco "${descricao}" não foi confirmada. Confira seus blocos de assinatura antes de continuar.`);
+  }
+}
+
+/** A falha de uma escrita pode ter gravado (não é erro comprovado do SEI)? Mesmas regras de `mapearErro`. */
+function mapearEhIncerto(e: unknown): boolean {
+  const r = mapearErro(e, { aplicou: true });
+  return r.situacao === "ok" && r.incerto === true;
+}
+
+export type { AcaoId };

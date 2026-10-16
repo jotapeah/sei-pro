@@ -57,6 +57,15 @@ const css = await Promise.all(
 );
 await writeFile(join(DIST, "css", "acoes-lote.css"), `/* GERADO por acoes-lote/build.mjs. NAO EDITE ESTE ARQUIVO. */\n${css.join("\n")}`);
 
+// O esbuild escapa os acentos das strings, mas deixa crua a faixa de combinacao de uma regex minificada
+// (/[\u0300-\u036f]/ do nucleo). Dentro de regex e de string o escape \uXXXX vale igual, entao escapa-se aqui o que sobrou.
+for (const f of SAIDAS.filter((x) => x.endsWith(".js"))) {
+  const caminho = join(DIST, f);
+  const texto = await readFile(caminho, "utf8");
+  const limpo = texto.replace(/[^\x00-\x7f]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
+  if (limpo !== texto) await writeFile(caminho, limpo);
+}
+
 // Regra do projeto: JS da extensao so com ASCII (conferencia byte a byte, como no Favoritos).
 for (const f of SAIDAS) {
   const bytes = await readFile(join(DIST, f));

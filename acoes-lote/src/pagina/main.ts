@@ -9,9 +9,11 @@ import { lerOpcaoLegada } from "@comum/opcoes/legadas";
 import { corDoTemaSei, manterTemaNoContexto, seiEscuro } from "@comum/pagina/tema";
 import type { PortaRpc } from "@comum/ponte/rpc";
 import { criarControleModal, ligarAvisoSemModal } from "@comum/ui/modalIframe";
-import { documentoTopo } from "@nucleo/sessao/pagina";
+import { Sei } from "@nucleo/sei";
+import { documentoTopo, paginaDe } from "@nucleo/sessao/pagina";
 import { CANAL_ACOES_LOTE } from "../modelo/constantes";
 import { type ContextoAcoes, contextoAcoes } from "./contexto";
+import { tratadoresAcoesLote } from "./executor";
 import { marcarAtivo } from "./marca";
 import { armarSeLigado, CONFIG_MODAL } from "./modal";
 
@@ -57,12 +59,12 @@ async function principal(): Promise<void> {
 }
 
 function ligarModal(ctx: ContextoAcoes): void {
+  const sei = new Sei(location.href, () => paginaDe(document, location.href));
   criarControleModal(document, CONFIG_MODAL, {
     // O tema vai no endereco: o app ja nasce com o esquema de cores do iframe (sem fundo opaco).
     urlApp: () => chrome.runtime.getURL(`html/acoes-lote.html#modo=modal&tema=${ctx.temaEscuro ? "escuro" : "claro"}`),
     temaEscuro: ctx.temaEscuro,
     conectar: () => chrome.runtime.connect({ name: CANAL_ACOES_LOTE }) as unknown as PortaRpc,
-    // Os tratadores entram nas tarefas seguintes (modelo, executor e telas).
-    tratadores: () => ({}),
+    tratadores: (fechar, minimizar) => tratadoresAcoesLote({ sei, ctx, fechar, minimizar }),
   });
 }
