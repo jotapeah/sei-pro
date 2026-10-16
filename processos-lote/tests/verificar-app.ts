@@ -7,9 +7,11 @@
  * o defeito que este modulo nao pode ter.
  */
 
+import { readFileSync } from "node:fs";
 import { type Area, areaMemoria } from "@comum/armazenamento/area";
 import { ErroRpc } from "@comum/ponte/rpc";
 import { AppProcessosLote, type DepsApp } from "@pl/app/app";
+import { TelaConfiguracao } from "@pl/app/configuracao";
 import { MENSAGEM_ASSUMIDO, MENSAGEM_GRAVAR } from "@pl/app/execucao";
 import { partesEnviadas } from "@pl/app/previa";
 import { CHAVE_ENTRADA_LINK, JANELA_OUTRA_ABA_MS } from "@pl/modelo/constantes";
@@ -822,5 +824,114 @@ export async function verificarApp(): Promise<void> {
     await ate(() => !!combo(z.raiz, "Tipo de processo"));
     checar("tudo confirmado: descarta e vai à configuração", (await z.lote()) === undefined);
     z.app.destruir();
+  }
+
+  secao("Correção: texto do tipo de processo depois de carregar (carregando, selecione, indisponíveis)");
+  {
+    const m = montar();
+    await m.app.iniciar();
+    await ate(
+      () => m.chamadas.some((c) => c.op === "tipos") && !(combo(m.raiz, "Tipo de processo")?.textContent ?? "").includes("carregando"),
+    );
+    const texto = combo(m.raiz, "Tipo de processo")?.textContent ?? "";
+    checar("tipos carregados: pede a escolha", texto.includes("selecione o tipo de processo") && !texto.includes("carregando"), texto);
+    m.app.destruir();
+
+    instalarDom();
+    const nunca = new TelaConfiguracao({
+      rpc: { chamar: (() => new Promise(() => undefined)) as never },
+      cache: { tipos: null, forms: new Map() },
+      verPrevia: () => undefined,
+    });
+    void nunca.iniciar();
+    await tique(5);
+    checar(
+      "enquanto carrega: carregando",
+      (combo(nunca.el, "Tipo de processo")?.textContent ?? "").includes("carregando tipos de processo..."),
+    );
+    nunca.destruir();
+
+    const falha = new TelaConfiguracao({
+      rpc: { chamar: (async () => Promise.reject(new Error("caiu"))) as never },
+      cache: { tipos: null, forms: new Map() },
+      verPrevia: () => undefined,
+    });
+    await falha.iniciar();
+    const tf = combo(falha.el, "Tipo de processo")?.textContent ?? "";
+    checar("falhou ao carregar: indisponíveis", tf.includes("tipos indisponíveis") && !tf.includes("carregando"), tf);
+    falha.destruir();
+  }
+
+  secao("Correção: aviso de cautela num parágrafo só, com o negrito no meio da frase");
+  {
+    const m = montar();
+    await m.app.iniciar();
+    const aviso = m.raiz.querySelector(".pl-cautela-forte");
+    const ps = aviso ? [...aviso.querySelectorAll("p")] : [];
+    checar("um parágrafo só", ps.length === 1, ps.length);
+    const p = ps[0];
+    const fortes = p ? [...p.children].filter((c) => c.tagName === "STRONG").map((c) => c.textContent) : [];
+    checar(
+      "negritos são filhos diretos do parágrafo",
+      JSON.stringify(fortes) === JSON.stringify(["para todos os usuários", "fora do horário comercial"]),
+      fortes,
+    );
+    const textos = p ? [...p.childNodes].filter((n) => n.nodeType === 3 && (n.textContent ?? "").trim()).length : 0;
+    checar("texto corrido entre os negritos (nós de texto no mesmo parágrafo)", textos >= 3, textos);
+    checar(
+      "nenhum negrito do parágrafo tem classe (fica inline)",
+      p ? [...p.querySelectorAll("strong")].every((x) => !x.getAttribute("class")) : false,
+    );
+    const css = readFileSync(new URL("../estatico/processos-lote.css", import.meta.url), "utf8");
+    checar("o CSS não transforma negrito do aviso em bloco", !/\.pl-cautela-forte\s+strong/.test(css));
+    m.app.destruir();
+  }
+
+  secao("Correção: aba parada por 'assumido' não descarta o lote de outra aba");
+  {
+    const area = areaMemoria();
+    const relogio = { t: 1_000_000 };
+    const sa = segurar<ResultadoCriar>();
+    const a = montar({ area, relogio, roteiro: (esp) => (esp === "Alfa" ? sa.p : criado(esp, ++numeroSeq)) });
+    await a.app.iniciar();
+    await a.configurar("Alfa");
+    a.clicar("Ver prévia");
+    a.clicar("Iniciar");
+    await ate(() => a.quantas("Alfa") === 1);
+    const idDeA = (await a.lote())?.id;
+
+    // Outra aba: o lote de A aparece para conferir (Alfa em voo); ela descarta e começa o seu.
+    const sb = segurar<ResultadoCriar>();
+    const b = montar({ area, relogio, roteiro: (esp) => (esp === "Xis" ? sb.p : criado(esp, ++numeroSeq)) });
+    const descartes: Array<string | undefined> = [];
+    const descartarOriginal = b.repo.descartar.bind(b.repo);
+    b.repo.descartar = (id?: string) => {
+      descartes.push(id);
+      return descartarOriginal(id);
+    };
+    await b.app.iniciar();
+    await ate(() => b.visivel("Descartar e começar outro"));
+    b.clicar("Descartar e começar outro");
+    await ate(() => !!combo(b.raiz, "Tipo de processo"));
+    checar("o app passa o id do próprio lote ao descartar", descartes.length === 1 && descartes[0] === idDeA, { descartes, idDeA });
+    await b.configurar("Xis");
+    b.clicar("Ver prévia");
+    b.clicar("Iniciar");
+    await ate(() => b.quantas("Xis") === 1);
+    const idDeB = (await b.lote())?.id;
+    checar("B gravou um lote novo", !!idDeB && idDeB !== idDeA);
+
+    // A recebe a resposta de Alfa: a regravação é recusada (outro id) e A para como "assumido".
+    sa.soltar(criado("Alfa", ++numeroSeq));
+    await ate(() => a.textoVisivel(MENSAGEM_ASSUMIDO));
+    checar("A parou como assumido", a.textoVisivel(MENSAGEM_ASSUMIDO));
+    a.clicar("Cancelar");
+    await ate(() => !!a.raiz.querySelector(".pl-resultado"));
+    await tique(10);
+    checar("o lote de B continua gravado depois do Cancelar de A", (await b.lote())?.id === idDeB, (await b.lote())?.id);
+    sb.soltar(criado("Xis", ++numeroSeq));
+    await ate(() => !!b.raiz.querySelector(".pl-resultado"));
+    a.app.destruir();
+    b.app.destruir();
   }
 }

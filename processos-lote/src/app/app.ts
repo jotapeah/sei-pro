@@ -20,7 +20,7 @@ import type { LinhaLote } from "../modelo/linhas";
 import type { ContextoLote } from "../pagina/contexto";
 import type { LoteEmAndamento, RepositorioLote } from "../repositorio";
 import { type CacheConfig, type InfoFormTipo, TelaConfiguracao, type ValoresConfig } from "./configuracao";
-import { ExecucaoLote, type ModoRodada, TelaExecucao } from "./execucao";
+import { ExecucaoLote, MENSAGEM_ASSUMIDO, type ModoRodada, TelaExecucao } from "./execucao";
 import { type PedidoPrevia, TelaPrevia } from "./previa";
 import { COLUNAS, linhasDoResultado, montarTelaResultado, numerosParaLink } from "./resultado";
 
@@ -141,7 +141,7 @@ export class AppProcessosLote {
       return;
     }
     // Tudo criado e confirmado (o app saiu antes de descartar): nada a retomar.
-    if (lote && meu) await this.d.repo.descartar().catch(() => undefined);
+    if (lote && meu) await this.d.repo.descartar(lote.id).catch(() => undefined);
     this.telaConfiguracao();
   }
 
@@ -238,7 +238,7 @@ export class AppProcessosLote {
             "Descartar",
           );
           if (!sim || this.destruido) return;
-          await this.d.repo.descartar().catch((e) => console.warn("[SEI Pro] processos em lote: falha ao descartar", e));
+          await this.d.repo.descartar(lote.id).catch((e) => console.warn("[SEI Pro] processos em lote: falha ao descartar", e));
           this.telaConfiguracao();
         },
       },
@@ -393,12 +393,16 @@ export class AppProcessosLote {
   /**
    * Fim (concluido ou cancelado): sem nada pendente, com erro ou a conferir (incerto, aviso), o registro some;
    * senao fica, retomavel ou para conferir ao reabrir.
+   *
+   * Parada por "assumido/descartado" nunca descarta: o registro ja e de outra aba (ou nao existe). E todo descarte
+   * leva o id do proprio lote, para nao apagar um lote mais novo gravado por outra aba.
    */
   private async finalizar(ex: ExecucaoLote): Promise<void> {
     const { falhas, restantes } = ex.progresso;
     const conferir = aConferir(ex);
-    if (falhas === 0 && restantes === 0 && conferir === 0) {
-      await this.d.repo.descartar().catch((e) => console.warn("[SEI Pro] processos em lote: falha ao descartar", e));
+    const assumido = ex.motivo === MENSAGEM_ASSUMIDO;
+    if (!assumido && falhas === 0 && restantes === 0 && conferir === 0) {
+      await this.d.repo.descartar(ex.lote.id).catch((e) => console.warn("[SEI Pro] processos em lote: falha ao descartar", e));
     }
     if (this.destruido) return;
     this.telaExecucao = null;
@@ -414,7 +418,7 @@ export class AppProcessosLote {
         descartarENovo:
           falhas === 0 && restantes === 0 && conferir > 0
             ? async () => {
-                await this.d.repo.descartar().catch((e) => console.warn("[SEI Pro] processos em lote: falha ao descartar", e));
+                await this.d.repo.descartar(ex.lote.id).catch((e) => console.warn("[SEI Pro] processos em lote: falha ao descartar", e));
                 if (this.destruido) return;
                 this.execucao = null;
                 this.telaConfiguracao();

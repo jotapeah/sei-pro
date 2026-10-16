@@ -82,6 +82,17 @@ export async function verificarRepositorio(): Promise<void> {
   checar("depois de assumido, marcar do id antigo devolve false", (await ass.marcar(0, { situacao: "pendente" }, "l1")) === false);
   checar("o novo id marca", (await ass.marcar(0, { situacao: "pendente" }, "l2")) === true);
 
+  // Descartar com id: so apaga se o registro ainda for daquele lote (outra aba pode ter gravado um novo).
+  const des = new RepositorioLote(areaMemoria(), escopo, () => 8000);
+  await des.gravar(exemplo());
+  checar("descartar de outro id devolve false", (await des.descartar("outro")) === false);
+  igual("descartar de outro id nao apaga", (await des.ler())?.id, "l1");
+  checar("descartar do proprio id devolve true", (await des.descartar("l1")) === true);
+  igual("descartar do proprio id apaga", await des.ler(), null);
+  checar("descartar com id e sem registro devolve false", (await des.descartar("l1")) === false);
+  await des.gravar(exemplo());
+  checar("descartar sem id apaga o que houver", (await des.descartar()) === true && (await des.ler()) === null);
+
   const k = `lote/${escopo}/atual`;
   const sem = exemplo() as unknown as Record<string, unknown>;
   sem.parametros = { nomeTipo: "x" };

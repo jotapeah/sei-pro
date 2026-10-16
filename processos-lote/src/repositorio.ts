@@ -127,6 +127,11 @@ export class RepositorioLote {
   /**
    * Retomada: troca o `id` do lote gravado (se ainda for `idEsperado`) e devolve o registro fresco. Outra aba que
    * ainda execute o lote antigo passa a receber `false` do `marcar` e para antes do proximo POST.
+   *
+   * Nao e atomico entre abas: o `chrome.storage` nao tem compare-and-set, entao entre a releitura e a gravacao
+   * fica uma janela de milissegundos em que um `marcar` da outra aba ainda pode gravar (e postar) sobre o id
+   * antigo, ou duas abas assumirem juntas (a ultima gravacao vence). A releitura e o aviso de "lote recente" na
+   * tela estreitam essa janela; nao a eliminam.
    */
   assumir(idEsperado: string, idNovo: string): Promise<LoteEmAndamento | null> {
     return this.enfileirar(async () => {
@@ -138,8 +143,20 @@ export class RepositorioLote {
     });
   }
 
-  descartar(): Promise<void> {
-    return this.enfileirar(() => this.area.remover(this.chave));
+  /**
+   * Apaga o registro. Com `idDoLote`, so apaga se o gravado ainda for aquele lote: uma aba que termina ou cancela
+   * nao pode apagar o lote NOVO que outra aba gravou depois. Devolve se apagou. (Mesma janela do `assumir`: a
+   * releitura e a remocao nao sao atomicas entre abas.)
+   */
+  descartar(idDoLote?: string): Promise<boolean> {
+    return this.enfileirar(async () => {
+      if (idDoLote !== undefined) {
+        const atual = await this.ler();
+        if (!atual || atual.id !== idDoLote) return false;
+      }
+      await this.area.remover(this.chave);
+      return true;
+    });
   }
 
   pendentes(l: LoteEmAndamento): number[] {

@@ -40,6 +40,13 @@ export interface CacheConfig {
   forms: Map<string, InfoFormTipo>;
 }
 
+/** Texto do seletor de tipo sem escolha, conforme a lista: carregando, carregada ou indisponivel. */
+export const VAZIO_TIPO = {
+  carregando: "carregando tipos de processo...",
+  carregado: "selecione o tipo de processo",
+  falhou: "tipos indisponíveis",
+} as const;
+
 export const ERROS = {
   semTipo: "Selecione um tipo de processo e aguarde o carregamento do formulário.",
   semLinhas: "Informe as especificações (uma por linha) ou uma quantidade.",
@@ -102,7 +109,7 @@ export class TelaConfiguracao {
       rotulo: "Tipo de processo",
       opcoes: () => this.tipos.map((t) => ({ valor: t.id, rotulo: t.nome })),
       valor: v.idTipo ? [v.idTipo] : [],
-      vazio: "carregando tipos de processo...",
+      vazio: VAZIO_TIPO.carregando,
       busca: true,
       larguraLista: 420,
       aoMudar: (vs) => void this.selecionarTipo(vs[0] ?? ""),
@@ -160,21 +167,18 @@ export class TelaConfiguracao {
     this.el = h(
       "section",
       { class: "pl-configuracao", "aria-label": "Configuração" },
+      // Titulo com classe propria e UM paragrafo de texto corrido com o negrito inline: um seletor de "strong" no
+      // aviso pegava tambem o negrito do meio da frase e o quebrava em linha separada.
       h(
         "div",
         { class: "pl-cautela-forte" },
-        h("strong", {}, icone("alerta", 16), "Use com cautela."),
+        h("div", { class: "pl-cautela-titulo" }, icone("alerta", 16), "Use com cautela."),
         h(
           "p",
           {},
           "A abertura de processos em lote gera uma sequência longa de requisições ao servidor. Em alguns órgãos isso deixa o SEI lento ",
           h("strong", {}, "para todos os usuários"),
-          ", não só para você.",
-        ),
-        h(
-          "p",
-          {},
-          "Prefira executar ",
+          ", não só para você. Prefira executar ",
           h("strong", {}, "fora do horário comercial"),
           ", em blocos menores, e aumente a pausa entre processos se notar lentidão. Na dúvida, alinhe antes com a área de TI do seu órgão.",
         ),
@@ -229,6 +233,7 @@ export class TelaConfiguracao {
       if (this.destruida) return;
       this.tipos = this.d.cache.tipos;
       this.carregando.textContent = "";
+      this.tipo.definirVazio(VAZIO_TIPO.carregado);
       this.tipo.atualizar();
       const atual = this.tipo.valor()[0];
       if (atual) await this.selecionarTipo(atual);
@@ -236,6 +241,7 @@ export class TelaConfiguracao {
     } catch (e) {
       if (this.destruida) return;
       this.carregando.textContent = "";
+      this.tipo.definirVazio(VAZIO_TIPO.falhou);
       this.mostrarErro(`Não foi possível carregar os tipos de processo: ${mensagem(e)}`);
     }
   }

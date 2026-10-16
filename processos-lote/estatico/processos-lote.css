@@ -96,15 +96,14 @@ html[data-minimizado] #app {
   border-left: 4px solid var(--spro-aviso);
   border-radius: var(--spro-raio);
 }
-.pl-cautela-forte strong:first-child {
+/* So o titulo e flex (icone + texto). O negrito do paragrafo fica inline, no meio da frase. */
+.pl-cautela-titulo {
   display: flex;
   align-items: center;
   gap: 6px;
   margin-bottom: 4px;
+  font-weight: 600;
   color: var(--spro-aviso);
-}
-.pl-cautela-forte p + p {
-  margin-top: 6px;
 }
 .pl-campo {
   display: flex;
