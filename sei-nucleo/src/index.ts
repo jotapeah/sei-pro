@@ -50,3 +50,9 @@ export {
   type SeiDoTexto,
   type TextoLocalizado,
 } from "./dominio/textoPadrao";
+export {
+  incluirProcessosEmBlocoInterno,
+  listarBlocosInternosParaProcessos,
+  type BlocoInterno,
+  type ResultadoInclusao,
+} from "./dominio/blocoProcessos";
