@@ -43,7 +43,8 @@ export interface Conector {
   consentido?: boolean;
 }
 
-const CHAVE = "agenteIA_mcp";
+export const CHAVE_CONECTORES = "agenteIA_mcp";
+const CHAVE = CHAVE_CONECTORES;
 
 export const MAX_CONECTORES = 20;
 export const MAX_TOOLS = 200;

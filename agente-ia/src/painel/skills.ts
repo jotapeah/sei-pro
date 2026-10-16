@@ -62,7 +62,8 @@ export interface SkillUsuario {
   colecao?: string;
 }
 
-const CHAVE = "agenteIA_skills";
+export const CHAVE_SKILLS = "agenteIA_skills";
+const CHAVE = CHAVE_SKILLS;
 
 /** De quanto em quanto tempo uma skill sincronizada volta a perguntar ao GitHub. */
 export const INTERVALO_SYNC = 6 * 60 * 60 * 1000;
@@ -262,7 +263,7 @@ export function comSkills(pedido: string, usadas: SkillUsuario[]): string {
 
 // --------------------------------------------------------------- coleções
 
-const CHAVE_COLECOES = "agenteIA_colecoes";
+export const CHAVE_COLECOES = "agenteIA_colecoes";
 
 export async function listarColecoes(): Promise<ColecaoSkills[]> {
   try {

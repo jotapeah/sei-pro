@@ -26,7 +26,8 @@ import { cotacaoDolar, type Cotacao } from "./cambio";
 import { sugestoesPara } from "./sugestoes";
 import { inversaDe, motivoSemDesfazer, type AcaoFeita, type ResultadoDeEscrita } from "./desfazer";
 import { avaliarRegras, guardarRegras, listarRegras, recadoDoBloqueio, REGRAS_SUGERIDAS, type Regra } from "./regras";
-import { cabeMaisUma, gastoDeHoje, somarGastoDoDia, SEM_LIMITE, type Limites } from "./gasto";
+import { CHAVE_CONFIG, configPadrao } from "./config";
+import { cabeMaisUma, gastoDeHoje, somarGastoDoDia, type Limites } from "./gasto";
 import { anotar, blocoDeMemoria, guardarMemoria, listarMemoria, MAX_TEXTO, type Lembranca } from "./memoria";
 import {
   alarmesDe,
@@ -55,7 +56,19 @@ import { montarDiagnostico, type Diagnostico } from "./diagnostico";
 import { cartaoDeErro } from "./erro-ui";
 import { envelopar } from "../seguranca/envelope";
 import { secaoRotinas } from "./rotinas-ui";
-import { aoAvisar, aplicarConfigDoSync, aplicarDoSync, CHAVE_MIGRADO, espelharConfig, ESPELHOS, unirNaPrimeiraVez } from "./espelho";
+import { secaoArquivo, type OpcoesArquivoUi } from "./arquivo-ui";
+import { aplicarModo, mensagemDeErroPdf, type Anexo } from "./anexo";
+import { andamentoDoAnexo, chipDoAnexo, confirmarOcrLongo } from "./anexo-ui";
+import { lerPdfParaAnexo } from "./pdf";
+import { ControleArquivo, escolherArquivoSync, handlesNoIndexedDB, temSeletorDeArquivo } from "@comum/sincronia/arquivo";
+import { areaChrome } from "@comum/armazenamento/area";
+import { adaptadorAgente, type AdaptadorAgente } from "../arquivo/adaptador";
+import type { EnvelopeAgente } from "../arquivo/envelope";
+import { CHAVE_SEGREDOS, CHAVE_STATUS, fontesDoNavegador, type Mudancas } from "../arquivo/retrato";
+import { criarFila, deveAgendar, exportarBackup, fontesQueAvisam, importarBackup, NOME_DO_BACKUP, travarAdaptador } from "../arquivo/gatilho";
+import { espelharListas, lerListasDoLocal, trazerDoSync } from "./sincronia-listas";
+import { mudouParaOMotor, recarregarIntocados, type CampoDaConfig } from "./campos-config";
+import { aoAvisar, aplicarConfigDoSync, CHAVE_MIGRADO, espelharConfig } from "./espelho";
 import {
   baixarColecao,
   baixarSkillSeMudou,
@@ -119,7 +132,6 @@ type Item =
 
 type ItemAgente = { tipo: "agente"; texto: string; ms?: number };
 
-const CHAVE_CONFIG = "agenteIA_config";
 const CHAVE_SESSAO = "agenteIA_conversa";
 
 const PRIVACIDADE_CURTA =
@@ -186,13 +198,17 @@ function ajudaDoServico(svc: Servico): Node[] {
 class App {
   private readonly raiz = document.getElementById("app")!;
   private readonly ponte = new PontePainel();
-  private config: Config = { reais: true, guardar: true, dias: 30, servico: "openrouter", url: "", chave: "", modelo: MODELO_PADRAO, nomes: true, cnpj: false, ajustes: {}, instrucoes: "", limites: SEM_LIMITE, cache: true, memoria: true, modeloAuxiliar: "" };
+  private config: Config = configPadrao();
   private privacidade = new Pseudonimos();
   private motor: Motor | null = null;
   private transcricao: Item[] = [];
   private uso: Uso = { entrada: 0, saida: 0, custo: 0 };
   private tarefas: Tarefa[] = [];
-  private anexo: { nome: string; texto: string } | null = null;
+  private anexo: Anexo | null = null;
+  /** Geração da leitura de anexo em curso: trocar ou remover o anexo invalida a anterior. */
+  private geracaoAnexo = 0;
+  /** Há um PDF sendo lido (o envio espera). */
+  private lendoAnexo = false;
   private idConversa = crypto.randomUUID();
   /** Skills do usuário (configurações), disponíveis por `/slug` e por `skill_ler`. */
   private skills: SkillUsuario[] = [];
@@ -236,6 +252,148 @@ class App {
 
   /** Redesenhos da configuração aberta, para o que vem do sync aparecer na hora. */
   private redesenharConfig: Array<() => void> = [];
+  /** Redesenho da seção "Backup em arquivo", enquanto a configuração está aberta. */
+  private redesenharArquivo: (() => void) | null = null;
+  /** Os campos do diálogo aberto que o usuário não mexeu acompanham a config que mudou fora dele. */
+  private recarregarCamposConfig: (() => void) | null = null;
+  /** A config mudou fora do diálogo com o motor ocupado: refazer antes do próximo pedido. */
+  private motorDesatualizado = false;
+
+  /** Backup em arquivo: o adaptador (Exportar/Importar valem em todo navegador). */
+  private adaptadorArquivo: AdaptadorAgente | null = null;
+  /** O arquivo sincronizado: só onde há seletor de arquivo (Chrome/Edge). */
+  private controleArquivo: ControleArquivo<EnvelopeAgente> | null = null;
+
+  /**
+   * Trava comum da sincronia do `storage.sync` e da mescla do arquivo: as duas
+   * leem as listas e as regravam, e a do sync parte da memória do painel.
+   * Rodando juntas, uma regravaria a lista velha por cima da outra.
+   */
+  private travaLocal = criarFila();
+  /** Uma sincronização do arquivo (ou Exportar/Importar) de cada vez. */
+  private filaArquivo = criarFila();
+  private esperaArquivo: ReturnType<typeof setTimeout> | undefined;
+  /** O foco volta muitas vezes seguidas: no máximo uma leitura a cada 30 s por ele. */
+  private ultimoFoco = 0;
+
+  /**
+   * Liga o backup em arquivo. Depois de a mescla gravar no local (ainda na
+   * trava), o painel relê as listas, espera o espelho no `sync` e espelha a
+   * configuração: quando a sincronia do sync rodar, encontra tudo em dia.
+   */
+  private ligarArquivo(): void {
+    const fontes = fontesQueAvisam(fontesDoNavegador(), (m) => this.depoisDoArquivo(m).catch(() => undefined));
+    this.adaptadorArquivo = travarAdaptador(adaptadorAgente(fontes), this.travaLocal);
+    if (!temSeletorDeArquivo(window)) return;
+    this.controleArquivo = new ControleArquivo<EnvelopeAgente>({
+      area: areaChrome(chrome.storage.local, "local"),
+      dono: { host: "agente", login: "" },
+      chaveStatus: CHAVE_STATUS,
+      // Banco próprio: o `agenteIA` já tem a versão 1 com outras lojas.
+      handles: handlesNoIndexedDB("agenteIA_arquivo"),
+      escolher: (m) => escolherArquivoSync(m, NOME_DO_BACKUP, "Agente do SEI Pro"),
+      adaptador: this.adaptadorArquivo,
+    });
+  }
+
+  /** Na fila do arquivo; o que falhar não derruba o painel (a sincronia já vira `StatusArquivo`). */
+  private naFilaDoArquivo<T>(tarefa: () => Promise<T>): Promise<T> {
+    return this.filaArquivo(tarefa);
+  }
+
+  /** Grava o arquivo daqui a 15 s, juntando as mudanças seguidas (pela fila, como as outras). */
+  private agendarArquivo(): void {
+    if (!this.controleArquivo) return;
+    clearTimeout(this.esperaArquivo);
+    this.esperaArquivo = setTimeout(() => void this.sincronizarArquivo(), 15_000);
+  }
+
+  /** Sincroniza agora (na fila); falha vira `StatusArquivo`, e o que sobrar não derruba o painel. */
+  private sincronizarArquivo(pedir = false): Promise<unknown> {
+    const controle = this.controleArquivo;
+    if (!controle) return Promise.resolve();
+    return this.naFilaDoArquivo(() => controle.sincronizar(pedir)).catch(() => undefined);
+  }
+
+  /** O que a mescla do arquivo gravou no local passa à memória do painel e ao `sync`. */
+  private async depoisDoArquivo(m: Mudancas): Promise<void> {
+    if (m.config) {
+      const salvo = (await chrome.storage.local.get(CHAVE_CONFIG))[CHAVE_CONFIG] as Partial<Config> | undefined;
+      const antes = this.config;
+      this.config = { ...this.config, ...salvo };
+      // A configuração do arquivo não passa por `aplicarConfig`: sem isto o
+      // `sync` (velho) ganharia de volta na próxima sincronia.
+      await espelharConfig(this.config);
+      this.configMudouDeFora(antes);
+    }
+    ({ skills: this.skills, colecoes: this.colecoes, regras: this.regras, memoria: this.memoria, rotinas: this.rotinas, conectores: this.conectores, fluxos: this.fluxos } =
+      await lerListasDoLocal());
+    this.fluxosIgnorados = await listarIgnorados();
+    await espelharListas({ skills: this.skills, colecoes: this.colecoes, regras: this.regras, memoria: this.memoria, rotinas: this.rotinas, conectores: this.conectores, fluxos: this.fluxos });
+    for (const redesenhar of this.redesenharConfig) redesenhar();
+  }
+
+  /**
+   * A config mudou fora do diálogo (o arquivo, outra janela): os campos do
+   * diálogo aberto que o usuário não mexeu passam a mostrar a nova — senão o
+   * "Salvar" gravaria a velha por cima —, e o motor é refeito como em
+   * `aplicarConfig` (mantendo a conversa e os pseudônimos), mas só se mudou
+   * algo que ele lê, e nunca no meio de um pedido.
+   */
+  private configMudouDeFora(antes: Config): void {
+    this.recarregarCamposConfig?.();
+    if (!this.motor || !mudouParaOMotor(antes, this.config)) return;
+    if (this.motor.ocupado || this.rotinaEmCurso) this.motorDesatualizado = true;
+    else this.refazerMotor();
+  }
+
+  /** Backup em arquivo: o que a seção da configuração chama. */
+  private opcoesArquivoUi(): OpcoesArquivoUi | null {
+    const adaptador = this.adaptadorArquivo;
+    if (!adaptador) return null;
+    const controle = this.controleArquivo;
+    return {
+      temSeletor: Boolean(controle),
+      configurado: async () => (controle ? controle.configurado() : false),
+      status: async () => (controle ? controle.status() : null),
+      // Escolher, reconectar e "agora" pedem o seletor ou a permissão, que só
+      // valem logo depois do clique: não esperam na fila atrás de uma
+      // sincronização lenta. A mescla do local continua na `travaLocal`.
+      escolher: async (m) => void (await controle?.escolher(m)),
+      reconectar: async () => void (await controle?.reconectar()),
+      agora: async () => void (await controle?.sincronizar(true)),
+      esquecer: async () => {
+        clearTimeout(this.esperaArquivo);
+        if (controle) await this.naFilaDoArquivo(() => controle.esquecer());
+      },
+      segredos: {
+        ler: async () => (await chrome.storage.local.get(CHAVE_SEGREDOS))[CHAVE_SEGREDOS] === true,
+        gravar: async (v) => {
+          await chrome.storage.local.set({ [CHAVE_SEGREDOS]: v });
+          // A caixa não agenda pelo `onChanged` (é da própria sincronia): grava já.
+          await this.sincronizarArquivo();
+        },
+      },
+      removerSegredos: async () => {
+        if (!controle) return;
+        adaptador.removerSegredosNaProxima();
+        await this.sincronizarArquivo();
+      },
+      exportar: async () => {
+        // O mesmo envelope da sincronia (diário carimbado, caixa dos segredos
+        // daqui), sem consumir o "remover segredos" pendente.
+        const url = URL.createObjectURL(new Blob([await this.naFilaDoArquivo(() => exportarBackup(adaptador))], { type: "application/json" }));
+        const a = h("a", { href: url, download: NOME_DO_BACKUP });
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+      },
+      // A mescla grava no local; as fontes recarregam o painel e o `onChanged` agenda o arquivo.
+      importar: async (arquivo) => {
+        const texto = await arquivo.text();
+        return this.naFilaDoArquivo(() => importarBackup(texto, adaptador));
+      },
+    };
+  }
 
   /** Servidores MCP que o usuário ligou (ver `mcp/conectores.ts`). */
   private conectores: Conector[] = [];
@@ -305,6 +463,7 @@ class App {
     this.fluxos = await listarFluxos();
     this.fluxosIgnorados = await listarIgnorados();
     await this.aplicarSincronizacao();
+    this.ligarArquivo();
     void this.sincronizarSkills();
     void this.sincronizarColecoes();
     void this.retestarConectoresLocais();
@@ -312,6 +471,20 @@ class App {
     // O Estúdio de Fluxo é outra página: quando o usuário salva um fluxo lá, o
     // painel precisa passar a usá-lo sem esperar um recarregamento.
     chrome.storage.onChanged.addListener((mud, area) => {
+      if (area === "local") {
+        // Mudou algo do agente que vai ao arquivo: grava daqui a pouco. As
+        // chaves da própria sincronia (status, diário, caixa) não agendam.
+        if (deveAgendar(Object.keys(mud))) this.agendarArquivo();
+        if (mud[CHAVE_STATUS]) this.redesenharArquivo?.();
+        const cfg = mud[CHAVE_CONFIG]?.newValue as Partial<Config> | undefined;
+        if (cfg && JSON.stringify({ ...this.config, ...cfg }) !== JSON.stringify(this.config)) {
+          // A configuração mudou fora deste painel (o arquivo a trouxe, ou outra janela).
+          const antes = this.config;
+          this.config = { ...this.config, ...cfg };
+          this.configMudouDeFora(antes);
+          for (const redesenhar of this.redesenharConfig) redesenhar();
+        }
+      }
       if (area === "local" && mud[CHAVE_FLUXOS]) {
         this.fluxos = (mud[CHAVE_FLUXOS].newValue as Fluxo[]) ?? [];
         void this.avaliarFluxos();
@@ -324,7 +497,17 @@ class App {
     });
     await this.telaConversa();
     void this.atualizarCambio();
-    void historico.podar(this.config.dias).catch(() => undefined);
+    void historico
+      .podar(this.config.dias)
+      .then(() => this.agendarArquivo())
+      .catch(() => undefined);
+    // O arquivo pode ter mudado em outro computador: lê ao abrir e quando o painel volta ao foco.
+    void this.sincronizarArquivo();
+    window.addEventListener("focus", () => {
+      if (Date.now() - this.ultimoFoco < 30_000) return;
+      this.ultimoFoco = Date.now();
+      void this.sincronizarArquivo();
+    });
     if (!this.config.chave) this.abrirConfig(true);
   }
 
@@ -339,33 +522,52 @@ class App {
     this.elConversa = h("div", { class: "conversa", role: "log", "aria-live": "polite" });
     this.elEntrada = h("textarea", { rows: "2", placeholder: "Pe\u00E7a algo sobre o SEI...", "aria-label": "Mensagem" });
     this.elEnviar = h("button", { class: "enviar" });
-    this.elAnexo = h("div", { class: "anexo", hidden: true });
+    this.elAnexo = h("div", { class: "anexo-area", hidden: true });
     this.elMenu = h("div", { class: "menu", role: "menu", hidden: true });
     this.elPensando = h("div", { class: "pensando", role: "status" }, icone("estrela", 16), h("span", { class: "palavra" }), h("span", { class: "tempo" }));
 
-    const arquivo = h("input", { type: "file", accept: ".csv,.txt,.md,.json,.tsv", class: "sr-only" });
-    const anexar = h("button", { class: "icone", title: "Anexar planilha CSV ou texto", "aria-label": "Anexar arquivo" }, icone("clipe"));
+    const arquivo = h("input", { type: "file", accept: ".pdf,.csv,.txt,.md,.json,.tsv", class: "sr-only" });
+    const anexar = h("button", { class: "icone", title: "Anexar PDF, planilha CSV ou texto", "aria-label": "Anexar arquivo" }, icone("clipe"));
     const sugerir = h("button", { class: "icone", title: "Sugest\u00F5es de pedido", "aria-label": "Sugest\u00F5es de pedido" }, icone("lampada"));
 
     anexar.addEventListener("click", () => arquivo.click());
     arquivo.addEventListener("change", async () => {
       const f = arquivo.files?.[0];
+      arquivo.value = "";
       if (!f) return;
+      const geracao = ++this.geracaoAnexo;
+      this.anexo = null;
       const bytes = new Uint8Array(await f.arrayBuffer());
+      if (/\.pdf$/i.test(f.name) || f.type === "application/pdf") {
+        // O PDF é lido aqui, neste computador: ao serviço de IA vai só o texto.
+        const andamento = andamentoDoAnexo(f.name, () => this.removerAnexo());
+        this.elAnexo.hidden = false;
+        this.elAnexo.replaceChildren(andamento.elemento);
+        this.lendoAnexo = true;
+        try {
+          const lido = await lerPdfParaAnexo(bytes, {
+            aoProgredir: (e) => geracao === this.geracaoAnexo && andamento.atualizar(e),
+            cancelado: () => geracao !== this.geracaoAnexo,
+            confirmarOcr: (p) => confirmarOcrLongo((op) => this.abrirModal(op), p),
+          });
+          if (geracao !== this.geracaoAnexo) return;
+          this.mostrarAnexo({ nome: f.name, texto: lido.texto, paginas: lido.paginas, modo: "inteiro", naoLidas: lido.naoLidas, motivoNaoLidas: lido.motivoNaoLidas });
+        } catch (e) {
+          if (geracao !== this.geracaoAnexo) return;
+          this.removerAnexo();
+          if ((e as { name?: string } | null)?.name !== "OperacaoCancelada") this.adicionar({ tipo: "aviso", texto: mensagemDeErroPdf(e) });
+        } finally {
+          if (geracao === this.geracaoAnexo) this.lendoAnexo = false;
+        }
+        return;
+      }
       let texto: string;
       try {
         texto = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
       } catch {
         texto = new TextDecoder("windows-1252").decode(bytes); // CSV do Excel
       }
-      this.anexo = { nome: f.name, texto: texto.slice(0, 60_000) };
-      this.elAnexo.hidden = false;
-      this.elAnexo.replaceChildren(
-        icone("clipe", 13),
-        h("span", {}, `${f.name} \u2014 ${texto.length.toLocaleString("pt-BR")} caracteres`),
-        h("button", { class: "icone pequeno", title: "Remover anexo", "aria-label": "Remover anexo", onclick: () => ((this.anexo = null), (this.elAnexo.hidden = true)) }, icone("fechar", 14)),
-      );
-      arquivo.value = "";
+      this.mostrarAnexo({ nome: f.name, texto, modo: "inteiro" });
     });
 
     sugerir.addEventListener("click", (ev) => {
@@ -808,6 +1010,7 @@ class App {
                 "aria-label": "Excluir",
                 onclick: async () => {
                   await historico.remover(c.id).catch(() => undefined);
+                  this.agendarArquivo();
                   linha.remove();
                   if (!corpo.querySelector(".linha")) desenhar([]);
                 },
@@ -827,6 +1030,7 @@ class App {
         return;
       }
       await historico.limpar().catch(() => undefined);
+      this.agendarArquivo();
       apagarTudo.replaceChildren(icone("lixeira", 15), "Apagar todas");
       desenhar([]);
     });
@@ -1196,9 +1400,13 @@ class App {
       pedirPermissaoDeAviso: () => this.pedirPermissaoDeAviso(),
     });
     const secaoRotinasEl = rotinasUI.elemento;
+    const opcoesArquivo = this.opcoesArquivoUi();
+    const arquivoUI = opcoesArquivo ? secaoArquivo(opcoesArquivo) : null;
+    this.redesenharArquivo = arquivoUI ? () => arquivoUI.redesenhar() : null;
+    const secaoArquivoEl = arquivoUI?.elemento ?? null;
     // Enquanto a configuração está aberta, o que chega do sync redesenha as
     // listas; ao fechar, os redesenhos saem (o DOM deixou de existir).
-    this.redesenharConfig = [() => rotinasUI.redesenhar(), () => conectoresUI.redesenhar()];
+    this.redesenharConfig = [() => rotinasUI.redesenhar(), () => conectoresUI.redesenhar(), ...(arquivoUI ? [() => arquivoUI.redesenhar()] : [])];
 
     // ------------------------------------------------- memória da unidade
     const usarMemoria = h("input", { type: "checkbox", class: "switch", ...(this.config.memoria ? { checked: true } : {}) });
@@ -1455,6 +1663,53 @@ class App {
     for (const el of [servico, modelo, modeloLivre, nomes, cnpj, usarCache, usarMemoria, guardar, dias, limiteConversa, limiteDia])
       el.addEventListener("change", atualizarResumos);
 
+    // A config que os campos mostram; quando ela muda fora do diálogo (o
+    // Importar logo acima, o arquivo escolhido, outra janela), os campos que o
+    // usuário não mexeu passam a mostrar a nova (ver `campos-config.ts`).
+    let mostrada: Config = structuredClone(this.config);
+    const texto = (e: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, de: (c: Config) => string): CampoDaConfig => ({
+      ler: () => e.value,
+      escrever: (v) => void (e.value = String(v)),
+      de,
+    });
+    const caixa = (e: HTMLInputElement, de: (c: Config) => boolean): CampoDaConfig => ({ ler: () => e.checked, escrever: (v) => void (e.checked = Boolean(v)), de });
+    const fino = (v: number | undefined): string => (v === undefined ? "" : String(v));
+    const camposDaConfig: CampoDaConfig[] = [
+      texto(servico, (c) => c.servico),
+      texto(url, (c) => c.url),
+      texto(chave, (c) => c.chave),
+      // O seletor de modelos é reescrito pelo catálogo: quem guarda a escolha é `modeloAtual`.
+      { ler: () => modeloAtual, escrever: (v) => void (modeloAtual = String(v)), de: (c) => c.modelo },
+      texto(modeloLivre, (c) => c.modelo),
+      texto(modeloAux, (c) => c.modeloAuxiliar),
+      texto(modeloAuxLivre, (c) => c.modeloAuxiliar),
+      caixa(nomes, (c) => c.nomes),
+      caixa(cnpj, (c) => c.cnpj),
+      caixa(guardar, (c) => c.guardar),
+      caixa(emReais, (c) => c.reais),
+      caixa(usarCache, (c) => c.cache),
+      caixa(usarMemoria, (c) => c.memoria),
+      texto(limiteConversa, (c) => (c.limites.conversa ? String(c.limites.conversa) : "")),
+      texto(limiteDia, (c) => (c.limites.dia ? String(c.limites.dia) : "")),
+      texto(dias, (c) => String(c.dias)),
+      texto(instrucoes, (c) => c.instrucoes),
+      texto(temperatura.campo, (c) => fino(c.ajustes.temperatura)),
+      texto(topP.campo, (c) => fino(c.ajustes.topP)),
+      texto(maxTokens.campo, (c) => fino(c.ajustes.maxTokens)),
+      texto(penFrequencia.campo, (c) => fino(c.ajustes.penalidadeFrequencia)),
+      texto(penPresenca.campo, (c) => fino(c.ajustes.penalidadePresenca)),
+    ];
+    this.recarregarCamposConfig = () => {
+      const servicoAntes = servico.value;
+      const trocados = recarregarIntocados(camposDaConfig, mostrada, this.config);
+      mostrada = structuredClone(this.config);
+      if (!trocados) return;
+      if (servico.value !== servicoAntes) ajustarServico();
+      // O seletor de modelos volta a mostrar a escolha (`modeloAtual`).
+      void carregarModelos(false);
+      atualizarResumos();
+    };
+
     const salvar = h("button", { class: "primario" }, obrigatorio ? "Salvar e come\u00E7ar" : "Salvar");
     const dlg = this.abrirModal({
       titulo: "Configura\u00E7\u00E3o",
@@ -1569,7 +1824,7 @@ class App {
               h(
                 "span",
                 {},
-                "A configura\u00E7\u00E3o do agente acompanha a sua conta do navegador: instru\u00E7\u00F5es, regras, rotinas, mem\u00F3ria, conectores e fluxos aparecem nos seus outros computadores. Ficam S\u00D3 aqui a chave do servi\u00E7o de IA, os tokens dos conectores, o texto das skills coladas \u00E0 m\u00E3o (as do GitHub viajam pelo endere\u00E7o) e as conversas.",
+                "A configura\u00E7\u00E3o do agente acompanha a sua conta do navegador: instru\u00E7\u00F5es, regras, rotinas, mem\u00F3ria, conectores e fluxos aparecem nos seus outros computadores. Ficam S\u00D3 aqui a chave do servi\u00E7o de IA, os tokens dos conectores, o texto das skills coladas \u00E0 m\u00E3o (as do GitHub viajam pelo endere\u00E7o) e as conversas. Se o backup em arquivo estiver ligado, tudo isso vai para o arquivo (a chave e os tokens s\u00F3 se voc\u00EA marcar essa op\u00E7\u00E3o).",
               ),
             ),
             h(
@@ -1585,12 +1840,21 @@ class App {
           ),
           secaoRotinasEl,
         ),
+        secaoArquivoEl ? grupo("Backup em arquivo", h("small", {}, "Opcional"), secaoArquivoEl) : null,
         h("div", { class: "nota atencao rodape-modal" }, icone("alerta", 15), h("span", {}, RESPONSABILIDADE)),
       ],
       acoes: [status, obrigatorio ? null : h("button", { onclick: () => dlg.close() }, "Cancelar"), salvar],
     });
 
-    dlg.addEventListener("close", () => void (this.redesenharConfig = []), { once: true });
+    dlg.addEventListener(
+      "close",
+      () => {
+        this.redesenharConfig = [];
+        this.redesenharArquivo = null;
+        this.recarregarCamposConfig = null;
+      },
+      { once: true },
+    );
 
     salvar.addEventListener("click", async () => {
       const erro = (texto: string) => {
@@ -1728,6 +1992,7 @@ class App {
       return true;
     }
 
+    if (this.motorDesatualizado && !this.motor?.ocupado) this.refazerMotor();
     const antes = this.uso.custo;
     const curso = { rotina, escritas: [] as string[] };
     this.rotinaEmCurso = curso;
@@ -2331,38 +2596,21 @@ Voc\u00EA \u00E9 um AUXILIAR: recebeu uma tarefa de leitura de outro agente e n\
       this.adicionar({ tipo: "aviso", texto });
     });
     try {
-      if (primeira) {
-        this.skills = await unirNaPrimeiraVez(ESPELHOS.skills, this.skills);
-        this.colecoes = await unirNaPrimeiraVez(ESPELHOS.colecoes, this.colecoes);
-        this.regras = await unirNaPrimeiraVez(ESPELHOS.regras, this.regras);
-        this.memoria = await unirNaPrimeiraVez(ESPELHOS.memoria, this.memoria);
-        this.rotinas = await unirNaPrimeiraVez(ESPELHOS.rotinas, this.rotinas);
-        this.conectores = await unirNaPrimeiraVez(ESPELHOS.conectores, this.conectores);
-        this.fluxos = await unirNaPrimeiraVez(ESPELHOS.fluxos, this.fluxos);
-        void espelharConfig(this.config);
-        await chrome.storage.local.set({ [CHAVE_MIGRADO]: Date.now() });
-      } else {
-        this.skills = (await aplicarDoSync(ESPELHOS.skills, this.skills)).lista;
-        this.colecoes = (await aplicarDoSync(ESPELHOS.colecoes, this.colecoes)).lista;
-        this.regras = (await aplicarDoSync(ESPELHOS.regras, this.regras)).lista;
-        this.memoria = (await aplicarDoSync(ESPELHOS.memoria, this.memoria)).lista;
-        this.rotinas = (await aplicarDoSync(ESPELHOS.rotinas, this.rotinas)).lista;
-        this.conectores = (await aplicarDoSync(ESPELHOS.conectores, this.conectores)).lista;
-        this.fluxos = (await aplicarDoSync(ESPELHOS.fluxos, this.fluxos)).lista;
-      }
-      const cfg = await aplicarConfigDoSync(this.config);
-      if (cfg.mudou) this.config = cfg.config;
-      // O que veio de fora tem de ficar gravado aqui também: é do `local` que
-      // a conversa lê.
-      await Promise.all([
-        guardarSkills(this.skills),
-        guardarColecoes(this.colecoes),
-        guardarRegras(this.regras),
-        guardarMemoria(this.memoria),
-        guardarRotinas(this.rotinas),
-        guardarConectores(this.conectores),
-        guardarFluxos(this.fluxos),
-      ]);
+      // Na trava comum com o arquivo: parte das listas da memória, e o
+      // arquivo não pode estar no meio de gravar o local (ver `ligarArquivo`).
+      await this.travaLocal(async () => {
+        const l = await trazerDoSync(
+          { skills: this.skills, colecoes: this.colecoes, regras: this.regras, memoria: this.memoria, rotinas: this.rotinas, conectores: this.conectores, fluxos: this.fluxos },
+          primeira,
+        );
+        ({ skills: this.skills, colecoes: this.colecoes, regras: this.regras, memoria: this.memoria, rotinas: this.rotinas, conectores: this.conectores, fluxos: this.fluxos } = l);
+        if (primeira) {
+          void espelharConfig(this.config);
+          await chrome.storage.local.set({ [CHAVE_MIGRADO]: Date.now() });
+        }
+        const cfg = await aplicarConfigDoSync(this.config);
+        if (cfg.mudou) this.config = cfg.config;
+      });
     } catch {
       /* sem sincronização (Firefox sem conta, API ausente): segue só com o local */
     } finally {
@@ -2377,13 +2625,19 @@ Voc\u00EA \u00E9 um AUXILIAR: recebeu uma tarefa de leitura de outro agente e n\
     await chrome.storage.local.set({ [CHAVE_CONFIG]: this.config });
     // A configuração acompanha a conta do navegador; a chave do serviço, não.
     void espelharConfig(this.config);
-    this.motor?.parar();
-    const historico = this.motor?.mensagens() ?? [];
-    this.motor = this.criarMotor(Pseudonimos.importar(this.privacidade.exportar(), { nomes: nova.nomes, cnpj: nova.cnpj }));
-    if (historico.length) this.motor.restaurar([...historico], this.uso);
+    this.refazerMotor();
     void this.atualizarCambio();
     this.redesenhar();
     this.elEntrada.focus();
+  }
+
+  /** Refaz o motor com a config atual, mantendo a conversa e os pseudônimos. */
+  private refazerMotor(): void {
+    this.motorDesatualizado = false;
+    this.motor?.parar();
+    const historico = this.motor?.mensagens() ?? [];
+    this.motor = this.criarMotor(Pseudonimos.importar(this.privacidade.exportar(), { nomes: this.config.nomes, cnpj: this.config.cnpj }));
+    if (historico.length) this.motor.restaurar([...historico], this.uso);
   }
 
   // ------------------------------------------------------------- conversa
@@ -2455,6 +2709,12 @@ Voc\u00EA \u00E9 um AUXILIAR: recebeu uma tarefa de leitura de outro agente e n\
   private async enviar(texto: string): Promise<void> {
     const t = texto.trim();
     if (!t || !this.motor || this.motor.ocupado) return;
+    // Enviar agora iria sem o PDF que ainda está sendo lido — e cancelaria a leitura sem avisar.
+    if (this.lendoAnexo) {
+      this.adicionar({ tipo: "aviso", texto: "Aguarde a leitura do PDF terminar (ou cancele) antes de enviar." });
+      return;
+    }
+    if (this.motorDesatualizado) this.refazerMotor();
     if (!this.config.chave) {
       this.abrirConfig(true);
       return;
@@ -2477,7 +2737,7 @@ Voc\u00EA \u00E9 um AUXILIAR: recebeu uma tarefa de leitura de outro agente e n\
     this.motor ??= this.criarMotor();
     let comAnexo = t;
     if (this.anexo) {
-      const varrido = varrer(this.anexo.texto);
+      const varrido = varrer(aplicarModo(this.anexo).texto);
       if (varrido.achados.length) {
         this.integridadeDaConversa.push({ documento: this.anexo.nome, achados: varrido.achados });
         this.adicionar({ tipo: "aviso", texto: textoDaIntegridade(this.anexo.nome, varrido.achados) });
@@ -2489,8 +2749,7 @@ Voc\u00EA \u00E9 um AUXILIAR: recebeu uma tarefa de leitura de outro agente e n\
     const comContexto = comSkills(comAnexo, usadas);
     this.adicionar({ tipo: "usuario", texto: this.anexo ? `${t}\n\u{1F4CE} ${this.anexo.nome}` : t });
     for (const sk of usadas) this.adicionar({ tipo: "tool", rotulo: `Skill: ${sk.nome}`, estado: "ok" });
-    this.anexo = null;
-    this.elAnexo.hidden = true;
+    this.removerAnexo();
     try {
       const promessa = this.motor.enviar(comContexto);
       this.estadoEnvio();
@@ -2962,6 +3221,27 @@ Voc\u00EA \u00E9 um AUXILIAR: recebeu uma tarefa de leitura de outro agente e n\
     });
   }
 
+  /** Mostra o chip do anexo; "Cortar em 60 mil" troca o modo e redesenha. */
+  private mostrarAnexo(a: Anexo): void {
+    this.anexo = a;
+    this.elAnexo.hidden = false;
+    this.elAnexo.replaceChildren(
+      chipDoAnexo(a, {
+        remover: () => this.removerAnexo(),
+        cortar: () => this.anexo && this.mostrarAnexo({ ...this.anexo, modo: "cortado" }),
+      }),
+    );
+  }
+
+  /** Tira o anexo e cancela a leitura de PDF em curso, se houver. */
+  private removerAnexo(): void {
+    this.geracaoAnexo += 1;
+    this.lendoAnexo = false;
+    this.anexo = null;
+    this.elAnexo.hidden = true;
+    this.elAnexo.replaceChildren();
+  }
+
   // ------------------------------------------------------------- sessão
 
   /**
@@ -2982,6 +3262,7 @@ Voc\u00EA \u00E9 um AUXILIAR: recebeu uma tarefa de leitura de outro agente e n\
         mensagens: this.transcricao.filter((i) => i.tipo === "usuario" || i.tipo === "agente").length,
         itens: this.transcricao,
       })
+      .then(() => this.agendarArquivo())
       .catch(() => undefined);
   }
 

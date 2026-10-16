@@ -9,8 +9,9 @@
  * registro que os dois mudaram, onde vale a última gravação).
  *
  * O que NÃO viaja, e por quê:
- * - a chave do serviço de IA e o token do conector: são segredos, e a política
- *   de privacidade promete que a chave nunca sai deste navegador;
+ * - a chave do serviço de IA e o token do conector: são segredos. Não viajam
+ *   pelo espelho do `storage.sync`; só saem deste navegador se o usuário marcar
+ *   a opção de incluí-los no backup em arquivo (sincronia por arquivo, `src/arquivo/`);
  * - o texto das skills: é o que mais pesa (uma skill real da ANTAQ tem 26 mil
  *   caracteres) e a origem no GitHub basta para o outro computador buscar;
  * - o catálogo de ferramentas do conector: 49 KB num caso real, e se refaz com

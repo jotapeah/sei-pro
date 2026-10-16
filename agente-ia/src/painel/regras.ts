@@ -28,7 +28,8 @@ export interface Regra {
   mensagem: string;
 }
 
-const CHAVE = "agenteIA_regras";
+export const CHAVE_REGRAS = "agenteIA_regras";
+const CHAVE = CHAVE_REGRAS;
 
 export async function listarRegras(): Promise<Regra[]> {
   try {
