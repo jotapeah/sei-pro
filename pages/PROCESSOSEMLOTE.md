@@ -105,8 +105,8 @@ Escolha as ações e clique em **Aplicar**. O resultado de cada ação aparece p
 > - As ações rodam **só nos processos criados com número confirmado**. Processo com situação incerta fica de fora, e o painel informa quantos ficaram de fora e por quê.
 > - **Já estava**: o processo já tinha aquele marcador, aquele acompanhamento ou já estava no bloco. Nada é duplicado.
 > - **Não confirmado: confira o bloco**: a inclusão em bloco pode ter sido gravada, mas o SEI não confirmou. Confira o bloco antes de tentar de novo; o SEI Pro não reenvia esses processos para o mesmo bloco.
-> - **Tentar de novo as falhas**: repete só o que, com certeza, não foi feito.
-> - O **bloco** precisa estar na **primeira página** da lista de blocos, e o **processo** precisa estar na página do **Controle de Processos**. Processo que não aparece ali é informado como fora da página, e a inclusão deve ser feita pelo Controle de Processos.
+> - **Tentar de novo as falhas**: repete só as ações que falharam. Marcador e acompanhamento podem ser repetidos sem duplicar nada. No bloco, só é repetido o que, com certeza, não foi incluído; processo "não confirmado" nunca é repetido.
+> - A **lista de blocos** precisa caber em uma única página, e o **processo** precisa estar na página do **Controle de Processos**. Processo que não aparece ali é informado como fora da página, e a inclusão deve ser feita pelo Controle de Processos.
 
 Quando o lote começou com um modelo escolhido, o botão **Guardar estas ações no modelo** grava no modelo as ações marcadas no painel. Da próxima vez que esse modelo for usado, o painel já abre com essas ações escolhidas, mas **nada é aplicado sem clicar em Aplicar**. Se o marcador, o grupo ou o bloco do modelo não existe mais na unidade, aquela ação vem desligada, com o aviso "não existe mais nesta unidade".
 
