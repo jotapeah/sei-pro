@@ -113,6 +113,25 @@ html[data-minimizado] #app {
 .pl-campo[hidden] {
   display: none;
 }
+.pl-modelo-linha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.pl-modelo-linha > .spro-combo {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.pl-modelo-linha > .spro-botao[hidden] {
+  display: none;
+}
+.pl-modelo-dialogo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: min(380px, 80vw);
+}
 .pl-campos-lado {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

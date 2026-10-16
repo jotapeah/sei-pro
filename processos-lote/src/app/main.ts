@@ -15,6 +15,7 @@ import { acompanharTemaDoPainel, aplicarTemaDoContexto } from "@comum/tema/paine
 import { baixar, criarAbrirModal, criarConfirmar } from "@comum/ui/dialogo";
 import { h } from "@comum/ui/dom";
 import { CANAL_PROCESSOS_LOTE, CHAVE_ENTRADA_LINK } from "../modelo/constantes";
+import { RepositorioModelos } from "../modelos";
 import { RepositorioLote } from "../repositorio";
 import { AppProcessosLote, type ContextoApp } from "./app";
 
@@ -88,10 +89,12 @@ async function iniciarModal(): Promise<void> {
       aoDesligar: async () => aplicarTemaDoContexto(html, await rpcAba.chamar<ContextoApp>("contexto")),
     });
     const area = areaChrome(chrome.storage.local, "local");
+    const escopo = `${ctx.host}|${ctx.login}`;
     app = new AppProcessosLote(raiz, {
       rpc,
       ctx,
-      repo: new RepositorioLote(area, `${ctx.host}|${ctx.login}`),
+      repo: new RepositorioLote(area, escopo),
+      modelos: new RepositorioModelos(area, escopo),
       area,
       abrirModal,
       confirmar: criarConfirmar(abrirModal),

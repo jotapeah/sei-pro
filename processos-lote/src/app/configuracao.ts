@@ -5,14 +5,22 @@
  * Restrito exige hipotese ESCOLHIDA de uma lista CARREGADA: o lote restrito (ou com linha restrita pela coluna de
  * nivel) nao passa para a previa sem isso. A lista vazia e indistinguivel de "falhou ao buscar" (Task 12), entao
  * vazia tambem bloqueia, dizendo que nao carregou.
+ *
+ * Modelos salvos (linha "Modelo", acima do tipo): aplicar um modelo escolhe tipo, nivel, hipotese e pausa, nunca as
+ * linhas. Tipo ou hipotese que nao existe mais na lista carregada NAO e aplicado em silencio: o campo fica como
+ * estava e o aviso aparece no proprio formulario.
  */
 
 import type { Rpc } from "@comum/ponte/rpc";
+import { normalizarTexto } from "@comum/texto";
 import { type Combo, criarCombo } from "@comum/ui/combobox";
+import type { AbrirModal } from "@comum/ui/dialogo";
 import { h, icone } from "@comum/ui/dom";
 import { TETO } from "../modelo/constantes";
 import { limitarPausa } from "../modelo/estimativa";
 import { type LinhaLote, lerLinhas } from "../modelo/linhas";
+import { ErroModelo, LIMITE_NOME_MODELO, type ModeloLote, type RepositorioModelos } from "../modelos";
+import type { Parametros } from "../repositorio";
 import type { HipoteseLegal } from "../sei/hipoteses";
 import type { TipoProcesso } from "../sei/tipos";
 import type { PedidoPrevia } from "./previa";
@@ -25,6 +33,8 @@ export interface ValoresConfig {
   texto: string;
   quantidade: string;
   pausa: string;
+  /** O modelo escolhido no seletor (so para o Voltar mostrar o mesmo; nao e reaplicado). */
+  idModelo?: string;
 }
 
 /** O que o `formTipo` da aba devolve. */
@@ -54,7 +64,11 @@ export const ERROS = {
   semHipotese: "Processos restritos exigem a escolha de uma hipótese legal.",
   hipotesesNaoCarregadas:
     "Não foi possível carregar as hipóteses legais deste tipo de processo, e processos restritos não podem ser criados sem uma. Use nível público, escolha outro tipo ou recarregue a página do SEI e tente de novo.",
+  tipoDoModelo: "O tipo deste modelo não existe mais nesta unidade.",
+  hipoteseDoModelo: "A hipótese legal deste modelo não existe mais nesta unidade.",
 } as const;
+
+export const ROTULO_MODELO = "Modelo do lote";
 
 const mensagem = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
@@ -75,10 +89,19 @@ export function linhasDaEntrada(
   };
 }
 
+export interface DepsModelos {
+  repo: RepositorioModelos;
+  /** O nome do modelo e pedido num dialogo do app (sem Cancelar: o X e o Esc fecham). */
+  abrirModal: AbrirModal;
+  confirmar(texto: string, rotuloOk?: string): Promise<boolean>;
+}
+
 export interface DepsConfiguracao {
   rpc: Pick<Rpc, "chamar">;
   cache: CacheConfig;
   verPrevia(p: PedidoPrevia, valores: ValoresConfig): void;
+  /** Sem isto a linha "Modelo" nao aparece. */
+  modelos?: DepsModelos;
 }
 
 export class TelaConfiguracao {
@@ -94,6 +117,12 @@ export class TelaConfiguracao {
   private readonly carregando: HTMLElement;
   private readonly botaoPrevia: HTMLButtonElement;
   private readonly radios: HTMLInputElement[];
+  private readonly modelo: Combo;
+  private readonly botaoRenomear: HTMLButtonElement;
+  private readonly botaoApagar: HTMLButtonElement;
+  private modelos: ModeloLote[] = [];
+  /** Cada aplicacao de modelo abre uma geracao: a hipotese de um modelo anterior nao chega depois. */
+  private seqModelo = 0;
   private tipos: TipoProcesso[] = [];
   /** O formulario carregado para o tipo escolhido agora (null enquanto carrega ou se falhou). */
   private form: InfoFormTipo | null = null;
@@ -123,6 +152,56 @@ export class TelaConfiguracao {
       larguraLista: 420,
       aoMudar: () => this.limparErro(),
     });
+    this.modelo = criarCombo({
+      rotulo: ROTULO_MODELO,
+      opcoes: () => this.modelos.map((m) => ({ valor: m.id, rotulo: m.nome })),
+      valor: v.idModelo ? [v.idModelo] : [],
+      vazio: "sem modelo",
+      busca: true,
+      larguraLista: 320,
+      aoMudar: (vs) => {
+        this.atualizarBotoesModelo();
+        const m = this.modelos.find((x) => x.id === vs[0]);
+        if (m) void this.aplicarModelo(m);
+      },
+    });
+    this.botaoRenomear = h(
+      "button",
+      { type: "button", class: "spro-botao", hidden: true, onclick: () => this.renomearModelo() },
+      icone("lapis", 15),
+      "Renomear",
+    );
+    this.botaoApagar = h(
+      "button",
+      { type: "button", class: "spro-botao perigo", hidden: true, onclick: () => void this.apagarModelo() },
+      icone("lixeira", 15),
+      "Apagar",
+    );
+    const linhaModelo = d.modelos
+      ? h(
+          "div",
+          { class: "pl-campo pl-modelo" },
+          h("span", { class: "pl-rotulo" }, "Modelo"),
+          h(
+            "div",
+            { class: "pl-modelo-linha" },
+            this.modelo.el,
+            h(
+              "button",
+              {
+                type: "button",
+                class: "spro-botao",
+                title: "Guarda o tipo, o nível, a hipótese e a pausa (não as linhas)",
+                onclick: () => this.salvarModelo(),
+              },
+              icone("camadas", 15),
+              "Salvar como modelo…",
+            ),
+            this.botaoRenomear,
+            this.botaoApagar,
+          ),
+        )
+      : null;
     const radio = (valor: "0" | "1", rotulo: string) => {
       const r = h("input", { type: "radio", name: "pl-nivel", value: valor });
       r.checked = (v.nivelAcesso ?? "0") === valor;
@@ -183,6 +262,7 @@ export class TelaConfiguracao {
           ", em blocos menores, e aumente a pausa entre processos se notar lentidão. Na dúvida, alinhe antes com a área de TI do seu órgão.",
         ),
       ),
+      linhaModelo,
       h("div", { class: "pl-campo" }, h("span", { class: "pl-rotulo" }, "Tipo de processo a ser aberto"), this.tipo.el, this.carregando),
       h(
         "div",
@@ -235,6 +315,9 @@ export class TelaConfiguracao {
       this.carregando.textContent = "";
       this.tipo.definirVazio(VAZIO_TIPO.carregado);
       this.tipo.atualizar();
+      // Os modelos so depois dos tipos: aplicar um confere o tipo na lista carregada.
+      await this.carregarModelos();
+      if (this.destruida) return;
       const atual = this.tipo.valor()[0];
       if (atual) await this.selecionarTipo(atual);
       else this.tipo.el.focus?.({ preventScroll: true });
@@ -250,6 +333,7 @@ export class TelaConfiguracao {
     this.destruida = true;
     this.tipo.fechar();
     this.hipotese.fechar();
+    this.modelo.fechar();
   }
 
   valores(): ValoresConfig {
@@ -260,6 +344,7 @@ export class TelaConfiguracao {
       texto: this.caixa.value,
       quantidade: this.quantidade.value,
       pausa: this.pausa.value,
+      idModelo: this.modelo.valor()[0] ?? "",
     };
   }
 
@@ -374,6 +459,208 @@ export class TelaConfiguracao {
       },
       v,
     );
+  }
+
+  /* ------------------------------------------------------------ modelos */
+
+  private modeloEscolhido(): ModeloLote | undefined {
+    const id = this.modelo.valor()[0];
+    return id ? this.modelos.find((m) => m.id === id) : undefined;
+  }
+
+  private atualizarBotoesModelo(): void {
+    const tem = !!this.modeloEscolhido();
+    this.botaoRenomear.hidden = !tem;
+    this.botaoApagar.hidden = !tem;
+  }
+
+  /** Relista; o escolhido que sumiu (apagado em outra aba) volta a "sem modelo". Falha nao derruba a tela. */
+  private async carregarModelos(): Promise<void> {
+    const repo = this.d.modelos?.repo;
+    if (!repo) return;
+    try {
+      this.modelos = await repo.listar();
+    } catch (e) {
+      console.warn("[SEI Pro] processos em lote: falha ao ler os modelos", e);
+      this.modelos = [];
+    }
+    if (this.destruida) return;
+    if (!this.modeloEscolhido()) this.modelo.definir([]);
+    this.modelo.atualizar();
+    this.atualizarBotoesModelo();
+  }
+
+  /**
+   * Nivel e pausa sempre; tipo so se existe na lista carregada (e entao o formulario dele, pelo mesmo caminho da
+   * escolha manual); hipotese so se existe no formulario desse tipo. O que nao existe fica como estava, com aviso.
+   */
+  private async aplicarModelo(m: ModeloLote): Promise<void> {
+    const vez = ++this.seqModelo;
+    const p = m.parametros;
+    this.limparErro();
+    for (const r of this.radios) r.checked = r.value === p.nivelAcesso;
+    this.pausa.value = String(limitarPausa(p.pausa));
+    if (!this.tipos.some((t) => t.id === p.idTipo)) {
+      this.atualizar();
+      this.mostrarErro(ERROS.tipoDoModelo);
+      return;
+    }
+    this.tipo.definir([p.idTipo]);
+    await this.selecionarTipo(p.idTipo);
+    if (vez !== this.seqModelo || this.destruida) return;
+    // Formulario que falhou (o erro ja esta na tela) ou outro tipo escolhido no meio: a hipotese nao vale.
+    if (!this.form || this.form.idTipo !== p.idTipo || this.tipo.valor()[0] !== p.idTipo) return;
+    if (p.hipoteseLegal) {
+      if (this.form.hipoteses.some((x) => x.id === p.hipoteseLegal)) {
+        this.hipotese.definir([p.hipoteseLegal]);
+        this.hipotese.atualizar();
+      } else {
+        this.mostrarErro(ERROS.hipoteseDoModelo);
+      }
+    }
+    this.atualizar();
+  }
+
+  /** Os parametros como estao no formulario; null sem tipo com formulario carregado. */
+  private parametrosAtuais(): Parametros | null {
+    const idTipo = this.tipo.valor()[0];
+    if (!idTipo || !this.form || this.form.idTipo !== idTipo) return null;
+    const hipotese = this.form.hipoteses.find((x) => x.id === this.hipotese.valor()[0]);
+    return {
+      idTipo,
+      nomeTipo: this.tipos.find((t) => t.id === idTipo)?.nome ?? idTipo,
+      nivelAcesso: this.nivel(),
+      hipoteseLegal: hipotese?.id ?? "",
+      nomeHipotese: hipotese?.nome ?? "",
+      pausa: limitarPausa(this.pausa.value),
+    };
+  }
+
+  private salvarModelo(): void {
+    const dm = this.d.modelos;
+    if (!dm) return;
+    this.limparErro();
+    const parametros = this.parametrosAtuais();
+    if (!parametros) {
+      this.mostrarErro(ERROS.semTipo);
+      return;
+    }
+    this.pedirNome(dm.abrirModal, {
+      titulo: "Salvar como modelo",
+      rotuloBotao: "Salvar modelo",
+      sugestao: this.modeloEscolhido()?.nome ?? "",
+      // Mesmo nome substitui (o repositorio decide): o dialogo avisa antes.
+      aviso: (nome) =>
+        this.modelos.some((m) => normalizarTexto(m.nome) === normalizarTexto(nome))
+          ? "Já existe um modelo com este nome; ele será substituído."
+          : "",
+      gravar: async (nome) => {
+        const m = await dm.repo.salvar(nome, parametros);
+        await this.carregarModelos();
+        if (this.destruida) return;
+        this.modelo.definir([m.id]);
+        this.atualizarBotoesModelo();
+      },
+    });
+  }
+
+  private renomearModelo(): void {
+    const dm = this.d.modelos;
+    const atual = this.modeloEscolhido();
+    if (!dm || !atual) return;
+    this.pedirNome(dm.abrirModal, {
+      titulo: "Renomear modelo",
+      rotuloBotao: "Renomear modelo",
+      sugestao: atual.nome,
+      aviso: () => "",
+      gravar: async (nome) => {
+        const r = await dm.repo.renomear(atual.id, nome);
+        await this.carregarModelos();
+        if (!r) throw new ErroModelo("Este modelo não existe mais (talvez apagado em outra aba).");
+      },
+    });
+  }
+
+  private async apagarModelo(): Promise<void> {
+    const dm = this.d.modelos;
+    const atual = this.modeloEscolhido();
+    if (!dm || !atual) return;
+    const sim = await dm.confirmar(`Apagar o modelo "${atual.nome}"? Os campos do formulário não mudam.`, "Apagar");
+    if (!sim || this.destruida) return;
+    this.limparErro();
+    try {
+      await dm.repo.apagar(atual.id);
+    } catch (e) {
+      this.mostrarErro(`Não foi possível apagar o modelo: ${mensagem(e)}`);
+    }
+    if (this.destruida) return;
+    this.modelo.definir([]);
+    await this.carregarModelos();
+  }
+
+  /** Dialogo do nome: so a acao principal (o X e o Esc fecham); o erro fica no proprio dialogo. */
+  private pedirNome(
+    abrirModal: AbrirModal,
+    c: { titulo: string; rotuloBotao: string; sugestao: string; aviso(nome: string): string; gravar(nome: string): Promise<void> },
+  ): void {
+    const erro = h("p", { class: "pl-erro", role: "alert", hidden: true });
+    const aviso = h("small", { class: "pl-dica", "aria-live": "polite" });
+    const campo = h("input", {
+      type: "text",
+      class: "spro-campo",
+      id: "pl-modelo-nome",
+      maxlength: String(LIMITE_NOME_MODELO),
+      autocomplete: "off",
+      value: c.sugestao,
+    });
+    const mostrarAviso = () => {
+      aviso.textContent = c.aviso(campo.value.trim());
+    };
+    campo.addEventListener("input", mostrarAviso);
+    let modal: { fechar(): void } | null = null;
+    let ocupado = false;
+    const gravar = async () => {
+      if (ocupado) return;
+      erro.hidden = true;
+      const nome = campo.value.trim();
+      if (!nome) {
+        erro.hidden = false;
+        erro.replaceChildren(icone("alerta", 15), "Informe o nome do modelo.");
+        return;
+      }
+      ocupado = true;
+      botao.disabled = true;
+      try {
+        await c.gravar(nome);
+        modal?.fechar();
+      } catch (e) {
+        erro.hidden = false;
+        const texto = e instanceof ErroModelo ? e.message : `Não foi possível gravar o modelo neste navegador: ${mensagem(e)}`;
+        erro.replaceChildren(icone("alerta", 15), texto);
+      } finally {
+        ocupado = false;
+        botao.disabled = false;
+      }
+    };
+    const botao = h("button", { type: "button", class: "spro-botao primario", onclick: () => void gravar() }, c.rotuloBotao);
+    campo.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        void gravar();
+      }
+    });
+    mostrarAviso();
+    modal = abrirModal({
+      titulo: c.titulo,
+      icone: "camadas",
+      conteudo: h(
+        "div",
+        { class: "pl-modelo-dialogo" },
+        h("div", { class: "pl-campo" }, h("label", { class: "pl-rotulo", for: "pl-modelo-nome" }, "Nome do modelo"), campo, aviso),
+        erro,
+        h("div", { class: "spro-dialogo-rodape" }, botao),
+      ),
+    });
   }
 
   private mostrarErro(texto: string): void {

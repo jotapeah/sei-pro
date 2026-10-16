@@ -10,6 +10,7 @@
 import { readFileSync } from "node:fs";
 import { type Area, areaMemoria } from "@comum/armazenamento/area";
 import { ErroRpc } from "@comum/ponte/rpc";
+import { h } from "@comum/ui/dom";
 import { AppProcessosLote, type DepsApp } from "@pl/app/app";
 import { TelaConfiguracao } from "@pl/app/configuracao";
 import { MENSAGEM_ASSUMIDO, MENSAGEM_GRAVAR } from "@pl/app/execucao";
@@ -17,6 +18,7 @@ import { partesEnviadas } from "@pl/app/previa";
 import { CHAVE_ENTRADA_LINK, JANELA_OUTRA_ABA_MS } from "@pl/modelo/constantes";
 import type { LinhaLote } from "@pl/modelo/linhas";
 import { montarPrevia } from "@pl/modelo/previa";
+import { RepositorioModelos } from "@pl/modelos";
 import { NUMERO_INCERTO, type ResultadoCriar } from "@pl/pagina/executor";
 import { type LoteEmAndamento, RepositorioLote } from "@pl/repositorio";
 import { botao, checar, combo, disparar, escolherCombo, instalarDom, secao, tique } from "./util";
@@ -55,6 +57,7 @@ function montar(o: OpcoesMontar = {}) {
   const area = o.area ?? areaMemoria();
   const relogio = o.relogio ?? { t: 1_000_000 };
   const repo = new RepositorioLote(area, ESCOPO, () => relogio.t);
+  const modelos = new RepositorioModelos(area, ESCOPO, () => relogio.t);
   /** Linha do tempo de tudo o que importa a ordem: gravacoes do lote, POSTs, fechar etc. */
   const eventos: string[] = [];
   const gravarOriginal = repo.gravar.bind(repo);
@@ -67,7 +70,16 @@ function montar(o: OpcoesMontar = {}) {
   /** Respostas "ok" que a aba de fato devolveu, por especificacao (o que conta como processo criado). */
   const sucessos = new Map<string, number>();
   const roteiro = o.roteiro ?? okSempre;
-  const t = { fechou: 0, minimizou: [] as boolean[], entradaLink: [] as string[], pausas: [] as number[], avisos: [] as string[] };
+  const t = {
+    fechou: 0,
+    minimizou: [] as boolean[],
+    entradaLink: [] as string[],
+    pausas: [] as number[],
+    avisos: [] as string[],
+    confirmacoes: [] as string[],
+    /** O que o `confirmar` responde. */
+    confirma: true,
+  };
   const baixados: Array<{ nome: string; conteudo: string }> = [];
   const copiados: string[] = [];
 
@@ -98,9 +110,24 @@ function montar(o: OpcoesMontar = {}) {
     },
     ctx: { host: "sei.x.gov.br", login: "ana", temaEscuro: false },
     repo,
+    modelos,
     area,
-    abrirModal: () => ({ fechar: () => {} }),
-    confirmar: async () => true,
+    // Os dialogos do app vao para o body (fora da raiz), como o <dialog> de verdade.
+    abrirModal: ({ titulo, conteudo, aoFechar }) => {
+      const dlg = h("div", { class: "dlg-teste", "aria-label": titulo }, conteudo);
+      doc.body.append(dlg);
+      return {
+        fechar: () => {
+          if (!dlg.isConnected) return;
+          dlg.remove();
+          aoFechar?.();
+        },
+      };
+    },
+    confirmar: async (texto) => {
+      t.confirmacoes.push(texto);
+      return t.confirma;
+    },
     baixar: (nome, conteudo) => void baixados.push({ nome, conteudo }),
     clip: { writeText: async (texto) => void copiados.push(texto) },
     fechar: () => {
@@ -171,6 +198,7 @@ function montar(o: OpcoesMontar = {}) {
     raiz,
     app,
     relogio,
+    modelos,
     sucessos,
     deps,
     area,
@@ -934,4 +962,217 @@ export async function verificarApp(): Promise<void> {
     a.app.destruir();
     b.app.destruir();
   }
+
+  secao("Modelos: aplicar preenche tipo, nível, hipótese e pausa (nunca as linhas)");
+  {
+    const area = areaMemoria();
+    const repoM = new RepositorioModelos(area, ESCOPO);
+    const pregao = await repoM.salvar("Pregões", {
+      idTipo: "20",
+      nomeTipo: "Licitação: Pregão",
+      nivelAcesso: "1",
+      hipoteseLegal: "7",
+      nomeHipotese: "Controle Interno",
+      pausa: 900,
+    });
+    const m = montar({ area });
+    await m.app.iniciar();
+    await ate(() => opcoesCombo(m.raiz, ROTULO_MODELO).length > 0);
+    checar("combo de modelos lista o salvo", opcoesCombo(m.raiz, ROTULO_MODELO).join() === "Pregões", opcoesCombo(m.raiz, ROTULO_MODELO));
+    checar("sem modelo escolhido: placeholder", textoCombo(m.raiz, ROTULO_MODELO).includes("sem modelo"));
+    checar("sem modelo: Renomear e Apagar escondidos", !m.visivel("Renomear") && !m.visivel("Apagar"));
+    checar("Salvar como modelo… visível", m.visivel("Salvar como modelo…"));
+    m.digitar("Alfa\nBeta");
+    escolherCombo(m.raiz, ROTULO_MODELO, pregao.id);
+    await ate(() => !botao(m.raiz, "Ver prévia")?.disabled);
+    checar(
+      "aplicar carrega o formulário do tipo pelo formTipo",
+      m.chamadas.some((c) => c.op === "formTipo" && (c.args as { idTipo: string }).idTipo === "20"),
+    );
+    checar("aplicar escolhe o tipo", textoCombo(m.raiz, "Tipo de processo").includes("Licitação: Pregão"));
+    checar("aplicar marca restrito", m.raiz.querySelector<HTMLInputElement>('input[name="pl-nivel"][value="1"]')?.checked === true);
+    checar("aplicar escolhe a hipótese", textoCombo(m.raiz, "Hipótese legal").includes("Controle Interno"));
+    checar("aplicar define a pausa", m.campo("pl-pausa").value === "900");
+    checar("aplicar não mexe nas linhas", m.caixa().value === "Alfa\nBeta");
+    checar("com modelo: Renomear e Apagar visíveis", m.visivel("Renomear") && m.visivel("Apagar"));
+    m.clicar("Ver prévia");
+    checar("modelo aplicado vai à prévia com a hipótese", !!m.raiz.querySelector(".pl-previa") && m.textoVisivel("Controle Interno"));
+    m.clicar("Voltar");
+    await ate(() => textoCombo(m.raiz, ROTULO_MODELO).includes("Pregões"));
+    checar("Voltar mantém o modelo escolhido", textoCombo(m.raiz, ROTULO_MODELO).includes("Pregões"));
+    m.app.destruir();
+  }
+
+  secao("Modelos: tipo ou hipótese que não existe mais avisa e não muda o campo");
+  {
+    const area = areaMemoria();
+    const repoM = new RepositorioModelos(area, ESCOPO);
+    const sumiu = await repoM.salvar("Tipo extinto", {
+      idTipo: "99",
+      nomeTipo: "Extinto",
+      nivelAcesso: "0",
+      hipoteseLegal: "",
+      nomeHipotese: "",
+      pausa: 1200,
+    });
+    const semHip = await repoM.salvar("Hipótese extinta", {
+      idTipo: "20",
+      nomeTipo: "Licitação: Pregão",
+      nivelAcesso: "1",
+      hipoteseLegal: "55",
+      nomeHipotese: "Revogada",
+      pausa: 600,
+    });
+    const m = montar({ area });
+    await m.app.iniciar();
+    await m.configurar("Alfa");
+    const formsAntes = m.chamadas.filter((c) => c.op === "formTipo").length;
+    escolherCombo(m.raiz, ROTULO_MODELO, sumiu.id);
+    await ate(() => m.textoVisivel(ERRO_TIPO_MODELO));
+    checar("tipo ausente: avisa no formulário", m.textoVisivel(ERRO_TIPO_MODELO));
+    checar("tipo ausente: o tipo atual fica", textoCombo(m.raiz, "Tipo de processo").includes("Contrato: Gestão"));
+    checar("tipo ausente: nenhum formTipo novo", m.chamadas.filter((c) => c.op === "formTipo").length === formsAntes);
+    checar("tipo ausente: Ver prévia segue com o tipo atual", botao(m.raiz, "Ver prévia")?.disabled === false);
+
+    escolherCombo(m.raiz, ROTULO_MODELO, semHip.id);
+    await ate(() => m.textoVisivel(ERRO_HIPOTESE_MODELO));
+    checar("hipótese ausente: avisa no formulário", m.textoVisivel(ERRO_HIPOTESE_MODELO));
+    checar("hipótese ausente: o tipo é aplicado", textoCombo(m.raiz, "Tipo de processo").includes("Licitação: Pregão"));
+    checar(
+      "hipótese ausente: nenhuma hipótese escolhida",
+      !textoCombo(m.raiz, "Hipótese legal").includes("Revogada") && textoCombo(m.raiz, "Hipótese legal").includes("selecione"),
+    );
+    checar("hipótese ausente: tipo de aviso antigo some", !m.textoVisivel(ERRO_TIPO_MODELO));
+    m.app.destruir();
+  }
+
+  secao("Modelos: salvar, renomear e apagar refletem no combo");
+  {
+    const m = montar();
+    await m.app.iniciar();
+    await ate(() => !!combo(m.raiz, ROTULO_MODELO) && m.chamadas.some((c) => c.op === "tipos"));
+    m.clicar("Salvar como modelo…");
+    checar("salvar sem tipo: erro no formulário, sem diálogo", m.textoVisivel("Selecione um tipo de processo") && !dialogo(m.doc));
+    await m.configurar("Linha que não vai para o modelo", { restrito: true, hipotese: true });
+    m.preencher("pl-pausa", "700");
+    m.clicar("Salvar como modelo…");
+    const d1 = dialogo(m.doc);
+    checar("salvar abre o diálogo do nome", !!d1);
+    checar("diálogo sem Cancelar", !!d1 && !botao(d1, "Cancelar"));
+    const nome1 = d1?.querySelector("input") as HTMLInputElement;
+    checar("campo do nome limita a 80", nome1?.getAttribute("maxlength") === "80");
+    nome1.value = "   ";
+    disparar(botao(d1!, "Salvar modelo")!, "click");
+    await tique(5);
+    checar(
+      "nome vazio: erro no diálogo, nada salvo",
+      (d1?.textContent ?? "").includes("Informe o nome") && (await m.modelos.listar()).length === 0,
+    );
+    nome1.value = "Contratos restritos";
+    disparar(nome1, "input");
+    disparar(botao(d1!, "Salvar modelo")!, "click");
+    await ate(() => !dialogo(m.doc));
+    const salvos = await m.modelos.listar();
+    checar("salvou um modelo", salvos.length === 1 && salvos[0]?.nome === "Contratos restritos", salvos);
+    checar(
+      "modelo guarda tipo, nível, hipótese e pausa",
+      JSON.stringify(salvos[0]?.parametros) ===
+        JSON.stringify({
+          idTipo: "10",
+          nomeTipo: "Contrato: Gestão",
+          nivelAcesso: "1",
+          hipoteseLegal: "7",
+          nomeHipotese: HIPOTESES[0]!.nome,
+          pausa: 700,
+        }),
+      salvos[0]?.parametros,
+    );
+    checar("modelo não guarda linhas", !JSON.stringify(salvos[0]).includes("Linha que não vai"));
+    checar(
+      "salvo aparece no combo e fica escolhido",
+      opcoesCombo(m.raiz, ROTULO_MODELO).join() === "Contratos restritos" &&
+        textoCombo(m.raiz, ROTULO_MODELO).includes("Contratos restritos"),
+    );
+    checar("salvo: Renomear e Apagar visíveis", m.visivel("Renomear") && m.visivel("Apagar"));
+
+    // Mesmo nome: avisa que substitui.
+    m.clicar("Salvar como modelo…");
+    const d2 = dialogo(m.doc)!;
+    const nome2 = d2.querySelector<HTMLInputElement>("input")!;
+    checar("salvar de novo sugere o nome do modelo escolhido", nome2.value === "Contratos restritos");
+    disparar(nome2, "input");
+    checar("nome existente: avisa que substitui", (d2.textContent ?? "").includes("será substituído"));
+    nome2.value = "Outro";
+    disparar(nome2, "input");
+    checar("nome novo: sem aviso de substituição", !(d2.textContent ?? "").includes("será substituído"));
+    disparar(botao(d2, "Salvar modelo")!, "click");
+    await ate(() => !dialogo(m.doc));
+    checar(
+      "dois modelos no combo, por nome",
+      opcoesCombo(m.raiz, ROTULO_MODELO).join() === "Contratos restritos,Outro",
+      opcoesCombo(m.raiz, ROTULO_MODELO),
+    );
+
+    // Renomear para o nome de outro modelo: erro no diálogo.
+    m.clicar("Renomear");
+    const d3 = dialogo(m.doc)!;
+    const nome3 = d3.querySelector<HTMLInputElement>("input")!;
+    checar("renomear sugere o nome atual", nome3.value === "Outro");
+    nome3.value = "contratos RESTRITOS";
+    disparar(botao(d3, "Renomear modelo")!, "click");
+    await tique(5);
+    checar("renomear para nome de outro: erro no diálogo", !!dialogo(m.doc) && (d3.textContent ?? "").includes("Já existe outro modelo"));
+    nome3.value = "Pregões 2026";
+    disparar(botao(d3, "Renomear modelo")!, "click");
+    await ate(() => !dialogo(m.doc));
+    checar(
+      "renomeado aparece no combo",
+      opcoesCombo(m.raiz, ROTULO_MODELO).join() === "Contratos restritos,Pregões 2026" &&
+        textoCombo(m.raiz, ROTULO_MODELO).includes("Pregões 2026"),
+    );
+
+    // Apagar pede confirmação; recusar não apaga.
+    m.t.confirma = false;
+    m.clicar("Apagar");
+    await tique(5);
+    checar(
+      "apagar pede confirmação com o nome",
+      m.t.confirmacoes.some((c) => c.includes("Pregões 2026")),
+    );
+    checar("confirmação recusada: nada apagado", (await m.modelos.listar()).length === 2);
+    m.t.confirma = true;
+    m.clicar("Apagar");
+    await ate(() => opcoesCombo(m.raiz, ROTULO_MODELO).length === 1);
+    checar("apagado some do combo", opcoesCombo(m.raiz, ROTULO_MODELO).join() === "Contratos restritos");
+    checar("apagado: volta a sem modelo", textoCombo(m.raiz, ROTULO_MODELO).includes("sem modelo"));
+    checar("apagado: Renomear e Apagar escondidos", !m.visivel("Renomear") && !m.visivel("Apagar"));
+    checar(
+      "apagar não mexe no formulário",
+      textoCombo(m.raiz, "Tipo de processo").includes("Contrato: Gestão") && m.campo("pl-pausa").value === "700",
+    );
+    m.app.destruir();
+  }
+}
+
+const ROTULO_MODELO = "Modelo do lote";
+const ERRO_TIPO_MODELO = "O tipo deste modelo não existe mais nesta unidade.";
+const ERRO_HIPOTESE_MODELO = "A hipótese legal deste modelo não existe mais nesta unidade.";
+
+function textoCombo(raiz: ParentNode, rotulo: string): string {
+  return combo(raiz, rotulo)?.textContent ?? "";
+}
+
+/** Os rotulos das opcoes do seletor (abre, le e fecha). */
+function opcoesCombo(raiz: ParentNode, rotulo: string): string[] {
+  const b = combo(raiz, rotulo);
+  if (!b) return [];
+  b.click();
+  const ops = [...b.ownerDocument.querySelectorAll(".spro-combo-pop [role='option']")].map((o) => (o.textContent ?? "").trim());
+  if (b.getAttribute("aria-expanded") === "true") b.click();
+  return ops;
+}
+
+/** O dialogo do app aberto agora (o `abrirModal` das provas poe no body). */
+function dialogo(doc: Document): HTMLElement | null {
+  return doc.querySelector<HTMLElement>(".dlg-teste");
 }

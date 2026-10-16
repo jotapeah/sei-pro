@@ -17,6 +17,7 @@ import { h, icone } from "@comum/ui/dom";
 import { copiarResultado, resultadoComoCsv } from "@comum/ui/tabelaResultado";
 import { JANELA_OUTRA_ABA_MS } from "../modelo/constantes";
 import type { LinhaLote } from "../modelo/linhas";
+import type { RepositorioModelos } from "../modelos";
 import type { ContextoLote } from "../pagina/contexto";
 import type { LoteEmAndamento, RepositorioLote } from "../repositorio";
 import { type CacheConfig, type InfoFormTipo, TelaConfiguracao, type ValoresConfig } from "./configuracao";
@@ -33,6 +34,8 @@ export interface DepsApp {
   ctx: ContextoApp;
   /** O lote em andamento deste `host|login`. */
   repo: RepositorioLote;
+  /** Os modelos salvos deste `host|login` (mesma area). */
+  modelos: RepositorioModelos;
   /** A mesma area do repositorio (chrome.storage.local no navegador). */
   area: Area;
   abrirModal: AbrirModal;
@@ -170,6 +173,7 @@ export class AppProcessosLote {
       {
         rpc: this.d.rpc,
         cache: this.cache,
+        modelos: { repo: this.d.modelos, abrirModal: this.d.abrirModal, confirmar: (t, r) => this.d.confirmar(t, r) },
         verPrevia: (p, v) => {
           this.valores = v;
           this.telaPrevia(p);
