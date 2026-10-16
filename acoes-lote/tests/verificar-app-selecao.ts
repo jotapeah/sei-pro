@@ -2,6 +2,7 @@
  * Provas da tela de selecao das Acoes em Lote: DOM do linkedom, sem RPC (montarSelecao) e com RPC falso (o app).
  */
 
+import { readFileSync } from "node:fs";
 import type { Rpc } from "@comum/ponte/rpc";
 import { AppAcoesLote, type ContextoApp, type EstadoApp } from "../src/app/app";
 import { montarSelecao } from "../src/app/selecao";
@@ -90,6 +91,23 @@ function clicar(c: HTMLElement, shift = false): void {
 }
 
 export async function verificarAppSelecao(): Promise<void> {
+  secao("selecao: layout dos filtros (linha de datas nunca sob os Atalhos)");
+  {
+    // linkedom nao faz layout: a medida no Chrome esta no relatorio t13-sp-fix-report.md. Aqui, a regra que a garante.
+    const css = readFileSync(new URL("../estatico/acoes-lote.css", import.meta.url), "utf8");
+    const regra = (sel: string) => new RegExp(`${sel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? "";
+    checar(
+      "busca solta nos filtros com altura propria (o height:100% do sei-comum esticava a linha)",
+      /height:\s*32px/.test(regra(".al-filtros > .spro-lista-busca")),
+      regra(".al-filtros > .spro-lista-busca"),
+    );
+    checar(
+      "itens da selecao sem esticar (altura definida faz % crescer)",
+      /align-items:\s*start/.test(regra(".al-selecao")),
+      regra(".al-selecao"),
+    );
+  }
+
   secao("selecao: tabela e colunas");
   {
     const { el } = montar(estado());
