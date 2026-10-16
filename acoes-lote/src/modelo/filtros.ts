@@ -52,7 +52,8 @@ export function aplicarAtalho(a: Atalho, linhas: LinhaDoc[], ctx: Pick<ContextoA
     case "nao-assinados-minha-unidade":
       return linhas.filter((l) => !l.assinado && !l.externo && !!unidade && norm(l.unidade) === unidade).map((l) => l.id);
     case "assinados-por-mim":
-      return linhas.filter((l) => !!nome && l.assinaturas.some((s) => norm(s).includes(nome))).map((l) => l.id);
+      // Nome inteiro (texto antes do primeiro " - "), nunca por inclusão: "Ana Silva" não é "Mariana Silva".
+      return linhas.filter((l) => !!nome && l.assinaturas.some((s) => norm(s.split(" - ")[0] ?? s) === nome)).map((l) => l.id);
     case "externos":
       return linhas.filter((l) => l.externo).map((l) => l.id);
   }

@@ -143,7 +143,16 @@ export function verificarDocumentos(): void {
   igual("assinados por mim (sem acento e caixa)", aplicarAtalho("assinados-por-mim", base, ctx), ["a"]);
   igual("externos", aplicarAtalho("externos", base, ctx), ["c"]);
   igual("sem nome não casa ninguém", aplicarAtalho("assinados-por-mim", base, { unidadeSigla: "abc", nomeUsuario: "" }), []);
-  igual("não casa por substring de id", aplicarAtalho("externos", [linha({ id: "1", externo: true }), linha({ id: "11" })], ctx), ["1"]);
+  const homonimos = [
+    linha({ id: "m", assinado: true, assinaturas: ["Mariana Silva - Analista - ABC"] }),
+    linha({ id: "n", assinado: true, assinaturas: ["Ana Silva - Analista - ABC"] }),
+    linha({ id: "o", assinado: true, assinaturas: ["Outra Pessoa - Chefe - ABC", "ANA SILVA"] }),
+  ];
+  igual(
+    "nome contido em outro não casa",
+    aplicarAtalho("assinados-por-mim", homonimos, { unidadeSigla: "abc", nomeUsuario: "Ana Silva" }),
+    ["n", "o"],
+  );
 
   secao("Documentos: contagem por ação");
   const sel = [...base, linha({ id: "e", nivel: "sigiloso" }), linha({ id: "f", cancelado: true, assinado: true })];
