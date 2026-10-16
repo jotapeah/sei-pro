@@ -30,7 +30,14 @@ import { type Combo, criarCombo } from "@comum/ui/combobox";
 import { h, icone } from "@comum/ui/dom";
 import type { PosAcoes } from "../modelos";
 import { NUMERO_INCERTO, NUMERO_NAO_IDENTIFICADO } from "../pagina/executor";
-import type { OpcaoBloco, Opcao as OpcaoSei, OpcoesPosAcao, ResultadoPosAcao, ResultadoPosAcaoBloco } from "../pagina/posAcao";
+import type {
+  ListaPosAcao,
+  OpcaoBloco,
+  Opcao as OpcaoSei,
+  OpcoesPosAcao,
+  ResultadoPosAcao,
+  ResultadoPosAcaoBloco,
+} from "../pagina/posAcao";
 import { type ItemProc, MENSAGEM_SESSAO } from "./execucao";
 
 export const PRAZO_OPCOES_MS = 60_000;
@@ -159,8 +166,12 @@ export class PainelPosAcao {
   private readonly naoConfirmados = new Map<string, { indice: number; idBloco: string; numeroBloco: string }>();
   private destruido = false;
   private aberto = false;
-  /** As acoes do modelo ja foram postas no painel (uma vez, quando as listas chegam). */
-  private modeloAplicado = false;
+  /**
+   * Acoes do modelo ainda nao conferidas contra uma lista carregada: comeca com todas as do modelo; sai a que foi
+   * escolhida ou dada como "nao existe mais". Fica a de lista que nao carregou (reabrir o painel recarrega).
+   */
+  private readonly naoVerificadas = new Set<AcaoPos>();
+  private readonly avisosModelo = new Map<AcaoPos, string>();
   private guardando = false;
 
   private readonly abrir: HTMLButtonElement;
@@ -181,8 +192,8 @@ export class PainelPosAcao {
   private readonly botaoRepetir: HTMLButtonElement;
   private readonly botaoContinuar: HTMLButtonElement;
   private readonly botaoGuardar: HTMLButtonElement | null;
-  /** Um aviso por acao do modelo que nao existe mais nas listas carregadas. */
-  private readonly avisosModelo: HTMLElement;
+  /** Um aviso por acao do modelo que nao existe mais (ou cuja lista nao carregou). */
+  private readonly avisosModeloEl: HTMLElement;
 
   constructor(
     itens: readonly ItemProc[],
@@ -246,7 +257,11 @@ export class PainelPosAcao {
     this.botaoRepetir = botao("Tentar de novo as falhas", "atualizar", () => void this.repetirFalhas());
     this.botaoContinuar = botao("Continuar", "atualizar", () => void this.continuar());
     this.botaoGuardar = d.modelo ? botao("Guardar estas ações no modelo", "camadas", () => void this.guardarNoModelo()) : null;
-    this.avisosModelo = h("div", { class: "pl-pos-avisos-modelo" });
+    this.avisosModeloEl = h("div", { class: "pl-pos-avisos-modelo" });
+    const pos = d.modelo?.posAcoes;
+    if (pos?.bloco) this.naoVerificadas.add("bloco");
+    if (pos?.marcador) this.naoVerificadas.add("marcador");
+    if (pos?.acompanhar) this.naoVerificadas.add("acompanhar");
     this.avisos = h("div", { class: "pl-pos-avisos" });
     this.carregandoEl = h("p", { class: "pl-nota", hidden: true }, "Carregando as listas do SEI...");
     this.motivoEl = h("p", { class: "pl-motivo", role: "alert", hidden: true });
@@ -282,7 +297,7 @@ export class PainelPosAcao {
         : null,
       this.carregandoEl,
       this.avisos,
-      this.avisosModelo,
+      this.avisosModeloEl,
       bloco("bloco", "Incluir em bloco interno", this.comboBloco.el, this.avisoBloco),
       bloco("marcador", "Aplicar marcador", this.comboMarcador.el, this.textoMarcador),
       bloco("acompanhar", "Acompanhar", this.comboGrupo.el, this.observacao),
@@ -359,9 +374,12 @@ export class PainelPosAcao {
     if (this.aberto) void this.carregar();
   }
 
-  /** As listas, uma vez: so de novo se a chamada inteira falhou (a ponte nao respondeu). */
+  /**
+   * As listas, uma vez: so de novo se a chamada inteira falhou (a ponte nao respondeu) ou se uma acao do modelo
+   * ficou sem verificar porque a lista dela nao carregou (nunca durante uma rodada).
+   */
   carregar(): Promise<void> {
-    if (this.opcoes) return Promise.resolve();
+    if (this.opcoes && (!this.naoVerificadas.size || this.rodada)) return Promise.resolve();
     if (this.carregando) return this.carregando;
     const primeiro = this.alvos[0];
     if (!primeiro?.resultado) return Promise.resolve();
@@ -380,6 +398,7 @@ export class PainelPosAcao {
           grupos: lista<OpcaoSei>(r?.grupos),
           blocos: lista<OpcaoBloco>(r?.blocos),
           avisos: lista<string>(r?.avisos).filter((a) => typeof a === "string"),
+          falharam: lista<ListaPosAcao>(r?.falharam).filter((x) => x === "marcadores" || x === "grupos" || x === "blocos"),
         };
         // Sessao expirada: as listas vieram pela metade. Nao guarda; fechar e abrir o painel carrega de novo.
         if (r?.parar) this.motivo = MENSAGEM_SESSAO;
@@ -670,44 +689,94 @@ export class PainelPosAcao {
   /* ------------------------------------------------------------ modelo */
 
   /**
-   * Poe as acoes do modelo no painel, uma vez, com as listas ja carregadas: escolhe e liga cada uma que existe; a
-   * que nao existe mais fica desligada com aviso (nunca aplicada em silencio). Nada e enviado ao SEI aqui.
+   * Poe as acoes do modelo no painel, com as listas ja carregadas: escolhe e liga cada uma que existe; a que nao
+   * existe mais fica desligada com aviso (nunca aplicada em silencio). Nada e enviado ao SEI aqui.
+   *
+   * Lista que NAO carregou (falha, nao unidade sem itens) nao prova que o item sumiu: a acao fica desligada com
+   * outro aviso e continua "nao verificada" (reabrir o painel recarrega as listas e tenta de novo), e o Guardar
+   * conserva no modelo o que estava la para ela.
    */
   private aplicarModelo(): void {
     const pos = this.d.modelo?.posAcoes;
-    if (this.modeloAplicado || !pos || !this.opcoes) return;
-    this.modeloAplicado = true;
-    const avisos: string[] = [];
-    const sumiu = (oQue: string, nome: string) =>
-      avisos.push(`${oQue} "${nome}" do modelo não existe mais nesta unidade; a ação ficou desligada.`);
+    const o = this.opcoes;
+    if (!pos || !o) return;
+    const falhou = new Set(o.falharam);
+    const verificar = (
+      acao: AcaoPos,
+      lista: ListaPosAcao,
+      oQue: string,
+      nome: string,
+      existe: () => boolean,
+      escolher: () => void,
+    ): void => {
+      if (!this.naoVerificadas.has(acao)) return;
+      if (falhou.has(lista)) {
+        this.liga[acao].checked = false;
+        this.avisosModelo.set(acao, `A lista não carregou; a ação do modelo não foi verificada. ${oQue} "${nome}" ficou desligado.`);
+        return;
+      }
+      this.naoVerificadas.delete(acao);
+      if (existe()) {
+        escolher();
+        this.liga[acao].checked = true;
+        this.avisosModelo.delete(acao);
+      } else {
+        this.liga[acao].checked = false;
+        this.avisosModelo.set(acao, `${oQue} "${nome}" do modelo não existe mais nesta unidade; a ação ficou desligada.`);
+      }
+    };
     if (pos.bloco) {
-      const b = this.opcoes.blocos.find((x) => x.id === pos.bloco!.id);
-      if (b) {
-        this.comboBloco.definir([b.id]);
-        this.liga.bloco.checked = true;
-      } else sumiu("O bloco interno", pos.bloco.descricao || pos.bloco.id);
+      const id = pos.bloco.id;
+      verificar(
+        "bloco",
+        "blocos",
+        "O bloco interno",
+        pos.bloco.descricao || id,
+        () => o.blocos.some((x) => x.id === id),
+        () => this.comboBloco.definir([id]),
+      );
     }
     if (pos.marcador) {
-      this.textoMarcador.value = pos.marcador.texto.slice(0, MAX_TEXTO_MARCADOR);
-      const m = this.opcoes.marcadores.find((x) => x.id === pos.marcador!.id);
-      if (m) {
-        this.comboMarcador.definir([m.id]);
-        this.liga.marcador.checked = true;
-      } else sumiu("O marcador", pos.marcador.nome || pos.marcador.id);
+      const { id, texto } = pos.marcador;
+      if (this.naoVerificadas.has("marcador")) this.textoMarcador.value = texto.slice(0, MAX_TEXTO_MARCADOR);
+      verificar(
+        "marcador",
+        "marcadores",
+        "O marcador",
+        pos.marcador.nome || id,
+        () => o.marcadores.some((x) => x.id === id),
+        () => this.comboMarcador.definir([id]),
+      );
     }
     if (pos.acompanhar) {
-      this.observacao.value = pos.acompanhar.observacao.slice(0, MAX_OBSERVACAO);
-      const grupo = pos.acompanhar.grupo;
-      // Sem grupo e uma escolha valida (acompanhar sem grupo): nao ha o que sumir.
-      if (!grupo || this.opcoes.grupos.some((x) => x.id === grupo)) {
-        this.comboGrupo.definir(grupo ? [grupo] : []);
-        this.liga.acompanhar.checked = true;
-      } else sumiu("O grupo de acompanhamento", pos.acompanhar.nomeGrupo || grupo);
+      const { grupo, observacao } = pos.acompanhar;
+      if (this.naoVerificadas.has("acompanhar")) this.observacao.value = observacao.slice(0, MAX_OBSERVACAO);
+      if (!grupo) {
+        // Sem grupo e uma escolha valida (acompanhar sem grupo): nao depende de lista nenhuma.
+        if (this.naoVerificadas.delete("acompanhar")) {
+          this.comboGrupo.definir([]);
+          this.liga.acompanhar.checked = true;
+        }
+      } else {
+        verificar(
+          "acompanhar",
+          "grupos",
+          "O grupo de acompanhamento",
+          pos.acompanhar.nomeGrupo || grupo,
+          () => o.grupos.some((x) => x.id === grupo),
+          () => this.comboGrupo.definir([grupo]),
+        );
+      }
     }
     this.comboBloco.atualizar();
     this.comboMarcador.atualizar();
     this.comboGrupo.atualizar();
-    this.avisosModelo.replaceChildren(...avisos.map((a) => h("p", { class: "pl-motivo pl-pos-aviso-modelo" }, icone("alerta", 16), a)));
+    this.avisosModeloEl.replaceChildren(
+      ...(["bloco", "marcador", "acompanhar"] as const)
+        .map((a) => this.avisosModelo.get(a))
+        .filter((a): a is string => !!a)
+        .map((a) => h("p", { class: "pl-motivo pl-pos-aviso-modelo" }, icone("alerta", 16), a)),
+    );
   }
 
   /** As acoes ligadas como o modelo as guarda; null se alguma ligada esta incompleta (ou as listas nao vieram). */
@@ -732,11 +801,23 @@ export class PainelPosAcao {
     return p;
   }
 
-  /** Grava no modelo as acoes como estao no painel. So grava; nada vai ao SEI. */
+  /**
+   * Grava no modelo as acoes como estao no painel. A acao do modelo que nao pode ser verificada (lista que nao
+   * carregou) e conservada como estava: nao se apaga o que nao se conferiu. So grava; nada vai ao SEI.
+   */
   private async guardarNoModelo(): Promise<void> {
     const modelo = this.d.modelo;
-    const p = this.lerPosAcoes();
-    if (!modelo || !p || this.guardando) return;
+    const lidas = this.lerPosAcoes();
+    if (!modelo || !lidas || this.guardando) return;
+    const guardadas = modelo.posAcoes ?? {};
+    const conserva = (a: AcaoPos) => this.naoVerificadas.has(a) && !this.liga[a].checked;
+    const marcador = conserva("marcador") ? guardadas.marcador : lidas.marcador;
+    const acompanhar = conserva("acompanhar") ? guardadas.acompanhar : lidas.acompanhar;
+    const bloco = conserva("bloco") ? guardadas.bloco : lidas.bloco;
+    const p: PosAcoes = {};
+    if (marcador) p.marcador = marcador;
+    if (acompanhar) p.acompanhar = acompanhar;
+    if (bloco) p.bloco = bloco;
     this.guardando = true;
     this.desenhar();
     let nota: string;

@@ -310,6 +310,7 @@ export async function verificarPosAcao(): Promise<void> {
       grupos: [{ id: "2", nome: "Grupo A" }],
       blocos: [{ id: "9", numero: "12", descricao: "Bloco de teste" }],
       avisos: [],
+      falharam: [],
     });
     igual(
       "listas pedidas pelo protocolo",
@@ -341,6 +342,7 @@ export async function verificarPosAcao(): Promise<void> {
       r.avisos,
     );
     checar("sem parar", !("parar" in r), r);
+    igual("falharam nomeia a lista", r.falharam, ["grupos"]);
   }
   {
     const { t } = montar({
@@ -391,5 +393,6 @@ export async function verificarPosAcao(): Promise<void> {
       chamadas.map((c) => c.nome),
       ["listarBlocosInternosParaProcessos"],
     );
+    igual("sem protocolo: marcadores e grupos em falharam", r.falharam, ["marcadores", "grupos"]);
   }
 }

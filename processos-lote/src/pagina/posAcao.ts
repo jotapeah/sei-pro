@@ -38,12 +38,19 @@ export interface OpcaoBloco {
   descricao: string;
 }
 
+export type ListaPosAcao = "marcadores" | "grupos" | "blocos";
+
 export interface OpcoesPosAcao {
   marcadores: Opcao[];
   grupos: Opcao[];
   blocos: OpcaoBloco[];
   /** Uma frase por lista que nao veio (a lista fica vazia; as outras seguem). */
   avisos: string[];
+  /**
+   * As listas que NAO carregaram (vazias por falha, nao por a unidade nao ter nada): o app nao conclui delas que
+   * um marcador/grupo/bloco "nao existe mais".
+   */
+  falharam: ListaPosAcao[];
   parar?: boolean;
 }
 
@@ -107,11 +114,12 @@ export function tratadoresPosAcao(sei: Sei, injetadas: Partial<ChamadasPosAcao> 
    */
   const posAcaoOpcoes = async (args: unknown): Promise<OpcoesPosAcao> => {
     const protocolo = texto((args as { protocolo?: unknown } | undefined)?.protocolo);
-    const r: OpcoesPosAcao = { marcadores: [], grupos: [], blocos: [], avisos: [] };
-    const etapas: Array<[string, () => Promise<void>]> = [];
+    const r: OpcoesPosAcao = { marcadores: [], grupos: [], blocos: [], avisos: [], falharam: [] };
+    const etapas: Array<[string, ListaPosAcao, () => Promise<void>]> = [];
     if (protocolo) {
       etapas.push(
         [
+          "marcadores",
           "marcadores",
           async () => {
             r.marcadores = (await c.listarOpcoes(sei, "marcadores", protocolo)).map((o) => ({ id: o.id, nome: o.nome }));
@@ -119,6 +127,7 @@ export function tratadoresPosAcao(sei: Sei, injetadas: Partial<ChamadasPosAcao> 
         ],
         [
           "grupos de acompanhamento",
+          "grupos",
           async () => {
             r.grupos = (await c.listarOpcoes(sei, "grupos_acompanhamento", protocolo)).map((o) => ({ id: o.id, nome: o.nome }));
           },
@@ -126,18 +135,23 @@ export function tratadoresPosAcao(sei: Sei, injetadas: Partial<ChamadasPosAcao> 
       );
     } else {
       r.avisos.push("Nenhum processo criado com número confirmado: os marcadores e os grupos de acompanhamento não foram carregados.");
+      r.falharam.push("marcadores", "grupos");
     }
     etapas.push([
       "blocos internos",
+      "blocos",
       async () => {
         r.blocos = (await c.listarBlocosInternosParaProcessos(sei)).map((b) => ({ id: b.id, numero: b.numero, descricao: b.descricao }));
       },
     ]);
-    for (const [nome, carregar] of etapas) {
+    for (const [k, [nome, lista, carregar]] of etapas.entries()) {
       try {
         await carregar();
       } catch (e) {
         r.avisos.push(`Não foi possível listar os ${nome}: ${mensagem(e)}`);
+        r.falharam.push(lista);
+        // Sessao expirada: as seguintes nem sao pedidas, e tambem nao carregaram.
+        if (sessaoExpirada(e)) for (const [, outra] of etapas.slice(k + 1)) r.falharam.push(outra);
         if (sessaoExpirada(e)) {
           r.parar = true;
           break;

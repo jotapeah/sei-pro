@@ -36,6 +36,7 @@ const OPCOES: OpcoesPosAcao = {
     { id: "b8", numero: "13", descricao: "Pregões" },
   ],
   avisos: [],
+  falharam: [],
 };
 
 const numero = (n: number) => `00001.00000${n}/2026-1${n}`;
@@ -805,6 +806,64 @@ export async function verificarPosAcaoApp(): Promise<void> {
       "acompanhar sem grupo: ligado, sem aviso",
       m.raiz.querySelector<HTMLInputElement>('input[data-acao="acompanhar"]')?.checked === true && !m.texto().includes("não existe mais"),
     );
+  }
+
+  secao("Fix round 1: lista que não carregou não vira 'não existe mais' e não apaga a ação do modelo");
+  {
+    const guardadas: PosAcoes[] = [];
+    const m = montarPainel([itemOk(0)], {
+      opcoes: (_a, vez) =>
+        vez === 1
+          ? {
+              ...OPCOES,
+              marcadores: [],
+              blocos: [],
+              avisos: ["Não foi possível listar os marcadores: falhou", "Não foi possível listar os blocos internos: falhou"],
+              falharam: ["marcadores", "blocos"],
+            }
+          : OPCOES,
+      modelo: {
+        nome: "Contratos",
+        posAcoes: { marcador: { id: "m1", nome: "Urgente", texto: "t" }, bloco: { id: "b7", descricao: "Contratos de 2026" } },
+        guardar: async (p) => {
+          guardadas.push(p);
+          return true;
+        },
+      },
+    });
+    await ate(() => m.rpc.de("posAcaoOpcoes").length > 0);
+    await tique(10);
+    const caixa = (a: string) => m.raiz.querySelector<HTMLInputElement>(`input[data-acao="${a}"]`)!;
+    checar("marcador e bloco desligados", !caixa("marcador").checked && !caixa("bloco").checked);
+    const avisos = [...m.raiz.querySelectorAll(".pl-pos-aviso-modelo")].map((x) => x.textContent ?? "");
+    checar(
+      "aviso próprio de lista que não carregou (não o de 'não existe mais')",
+      avisos.length === 2 &&
+        avisos.every((a) => a.includes("A lista não carregou; a ação do modelo não foi verificada.") && !a.includes("não existe mais")),
+      avisos,
+    );
+    m.ligar("acompanhar");
+    disparar(botao(m.raiz, "Guardar estas ações no modelo")!, "click");
+    await ate(() => guardadas.length > 0);
+    await tique(5);
+    igual("Guardar preserva o marcador e o bloco não verificados", guardadas[0], {
+      marcador: { id: "m1", nome: "Urgente", texto: "t" },
+      acompanhar: { grupo: "", nomeGrupo: "", observacao: "" },
+      bloco: { id: "b7", descricao: "Contratos de 2026" },
+    });
+    disparar(m.raiz.querySelector(".pl-pos-abrir")!, "click");
+    disparar(m.raiz.querySelector(".pl-pos-abrir")!, "click");
+    await ate(() => m.rpc.de("posAcaoOpcoes").length === 2);
+    await tique(10);
+    checar("reabrir recarrega as listas", m.rpc.de("posAcaoOpcoes").length === 2);
+    checar("depois de carregar: marcador e bloco do modelo ligados", caixa("marcador").checked && caixa("bloco").checked);
+    checar("marcador escolhido", (combo(m.raiz, "Marcador")?.textContent ?? "").includes("Urgente"));
+    checar("avisos do modelo somem", m.raiz.querySelectorAll(".pl-pos-aviso-modelo").length === 0);
+    checar("acompanhar continua como o usuário deixou", caixa("acompanhar").checked);
+    disparar(m.raiz.querySelector(".pl-pos-abrir")!, "click");
+    disparar(m.raiz.querySelector(".pl-pos-abrir")!, "click");
+    await tique(20);
+    checar("verificado tudo: reabrir não recarrega mais", m.rpc.de("posAcaoOpcoes").length === 2);
   }
 
   secao("Task 21: modelo sem ações deixa o painel como antes");
