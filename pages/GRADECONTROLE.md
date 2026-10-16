@@ -12,6 +12,8 @@ Uma **grade moderna no lugar da lista do SEI**: você busca com operadores, filt
 
 A opção já vem **ligada**, e o Controle de Processos continua abrindo na lista do SEI. Para usar o Novo Controle de Processos, clique no botão (sem rótulo) **ao lado do título**; o navegador lembra a sua escolha nas próximas aberturas. Para tirar o botão (ou trazê-lo de volta), abra as [Configurações do SEI Pro](../pages/DESATIVARFUNCOES.md), aba **Geral**, e use a opção **Novo Controle de Processos**, logo antes de *Controlar Prazos*.
 
+Se você usa o [Estilo Avançado](../pages/ESTILOAVANCADO.md) do SEI Pro Lab, **ao ligá-lo o Novo Controle de Processos também é ligado** (e, se você já está no Controle de Processos, a grade abre na hora).
+
 Esse botão, **ao lado da seta de recolher** no título, alterna entre o Novo Controle de Processos e a lista do SEI (passe o mouse para ver o que ele faz). A seta de **recolher e expandir** o painel também funciona com o Novo Controle de Processos.
 
 ### Buscar e filtrar
