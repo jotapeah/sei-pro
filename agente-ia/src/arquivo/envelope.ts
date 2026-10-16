@@ -25,7 +25,7 @@
  * computador guarda por mais tempo.
  */
 
-import type { Conector } from "../mcp/conectores";
+import type { Conector, Permissao } from "../mcp/conectores";
 import type { ColecaoFluxos } from "../fluxos/colecao";
 import type { Fluxo, Ignorados } from "../fluxos/modelo";
 import { configDoSync, configParaSync } from "../painel/espelho";
@@ -160,6 +160,15 @@ function origem(url: unknown): string | null {
   }
 }
 
+const RIGOR: Record<Permissao, number> = { sempre: 0, aprovar: 1, bloqueado: 2 };
+
+/** A mais restritiva das duas (bloqueado > aprovar > sempre); valor desconhecido conta como "aprovar". */
+function maisRestrita(a: Permissao, b: Permissao): Permissao {
+  const pa: Permissao = a in RIGOR ? a : "aprovar";
+  const pb: Permissao = b in RIGOR ? b : "aprovar";
+  return RIGOR[pa] >= RIGOR[pb] ? pa : pb;
+}
+
 /** Os dois endereços são do mesmo servidor (URL inválida nunca é). */
 function mesmaOrigem(a: unknown, b: unknown): boolean {
   const oa = origem(a);
@@ -174,6 +183,13 @@ function mesmaOrigem(a: unknown, b: unknown): boolean {
  * daqui para outro servidor na próxima chamada. Então o segredo daqui só é
  * reaproveitado quando a ORIGEM do endereço não mudou; se mudou, o conector
  * chega sem segredo e o usuário digita de novo.
+ *
+ * O mesmo vale para o que o conector PODE FAZER: ligá-lo, consentir que dados
+ * saiam para ele e liberar ferramentas sem pedir aprovação são decisões da
+ * pessoa, neste computador. Conector novo aqui, ou de outro servidor, entra
+ * DESLIGADO, sem consentimento e só com restrições (ferramenta bloqueada
+ * continua bloqueada). Conector conhecido só pode ser desligado ou restringido
+ * pelo arquivo, nunca ligado nem liberado (desligar propaga; ligar, não).
  */
 function conectorDoArquivo(vindo: Conector, localQualquer: Conector | undefined): Conector {
   const local = localQualquer && mesmaOrigem(vindo.url, localQualquer.url) ? localQualquer : undefined;
@@ -191,7 +207,31 @@ function conectorDoArquivo(vindo: Conector, localQualquer: Conector | undefined)
           ? limpo({ ...vindo.auth, token: local.auth.token, refresh: local.auth.refresh, expiraEm: local.auth.expiraEm })
           : limpo({ ...vindo.auth, token: undefined, refresh: undefined, expiraEm: undefined })
         : { tipo: "nenhuma" };
-  return { ...vindo, auth };
+  const permissoesDeLa = vindo.permissoes ?? {};
+  if (!local) {
+    const bloqueadas = Object.entries(permissoesDeLa).filter(([, p]) => p === "bloqueado");
+    return limpo({
+      ...vindo,
+      auth,
+      ativo: false,
+      consentido: false,
+      padrao: vindo.padrao === "bloqueado" ? "bloqueado" : "aprovar",
+      permissoes: Object.fromEntries(bloqueadas),
+    });
+  }
+  const permissoesDaqui = local.permissoes ?? {};
+  const permissoes: Record<string, Permissao> = {};
+  for (const k of new Set([...Object.keys(permissoesDeLa), ...Object.keys(permissoesDaqui)])) {
+    permissoes[k] = maisRestrita(permissoesDeLa[k] ?? vindo.padrao, permissoesDaqui[k] ?? local.padrao);
+  }
+  return limpo({
+    ...vindo,
+    auth,
+    ativo: Boolean(local.ativo && vindo.ativo),
+    consentido: local.consentido,
+    padrao: maisRestrita(vindo.padrao, local.padrao),
+    permissoes,
+  });
 }
 
 /**

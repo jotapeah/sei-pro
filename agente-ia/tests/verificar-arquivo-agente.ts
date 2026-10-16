@@ -640,6 +640,58 @@ export async function verificarAdaptadorAgente(): Promise<void> {
     checar("leitura que vira autonoma: chega desligada", rC.retrato.listas.rotinas[0]?.alcance === "autonoma" && rC.retrato.listas.rotinas[0]?.ativa === false, rC.retrato.listas.rotinas);
   }
 
+  // conector que vem do arquivo: nunca chega ligado, consentido nem liberado (como a rotina autônoma)
+  {
+    const comConector = (c: ReturnType<typeof computador>, k: Conector) => {
+      c.r = { ...c.r, listas: { ...c.r.listas, conectores: [k] } };
+    };
+    const arq = arquivoMemoria();
+    const A = computador(retrato({ conectores: [conector({ consentido: true, permissoes: { buscar: "sempre", apagar: "bloqueado" } })] }));
+    const B = computador(retrato());
+    await sincronia(A, arq, relogio).sincronizar();
+    await sincronia(B, arq, relogio).sincronizar();
+    const novo = B.r.listas.conectores[0];
+    checar("conector novo do arquivo chega desligado", novo?.ativo === false, novo);
+    checar("conector novo do arquivo chega sem consentimento", novo?.consentido === false, novo);
+    checar("conector novo: 'sempre' vira pergunta, 'bloqueado' continua", novo?.permissoes.buscar !== "sempre" && novo?.permissoes.apagar === "bloqueado" && novo?.padrao === "aprovar", novo);
+    let n = arq.gravacoes;
+    for (const c of [A, B, A, B]) await sincronia(c, arq, relogio).sincronizar();
+    checar("conector desligado aqui: sem regravacao em laco", arq.gravacoes === n, arq.gravacoes - n);
+    checar("conector: o outro computador segue ligado e consentido", A.r.listas.conectores[0]?.ativo === true && A.r.listas.conectores[0]?.consentido === true);
+
+    // B liga e consente aqui; A muda só o nome: B continua ligado e consentido
+    comConector(B, { ...B.r.listas.conectores[0], ativo: true, consentido: true });
+    await sincronia(B, arq, relogio).sincronizar();
+    comConector(A, { ...A.r.listas.conectores[0], nome: "Compras 2" });
+    await sincronia(A, arq, relogio).sincronizar();
+    await sincronia(B, arq, relogio).sincronizar();
+    const mantido = B.r.listas.conectores[0];
+    checar("conector conhecido, so renomeado: mantem ligado e consentido", mantido?.nome === "Compras 2" && mantido?.ativo === true && mantido?.consentido === true, mantido);
+
+    // A libera uma ferramenta bloqueada e baixa o padrão: B não acompanha o que amplia
+    comConector(A, { ...A.r.listas.conectores[0], padrao: "sempre", permissoes: { buscar: "sempre", apagar: "sempre" } });
+    await sincronia(A, arq, relogio).sincronizar();
+    await sincronia(B, arq, relogio).sincronizar();
+    const preso = B.r.listas.conectores[0];
+    checar("permissao ampliada no arquivo nao chega", preso?.padrao === "aprovar" && preso?.permissoes.apagar === "bloqueado" && preso?.permissoes.buscar !== "sempre", preso);
+    n = arq.gravacoes;
+    for (const c of [A, B, A, B]) await sincronia(c, arq, relogio).sincronizar();
+    checar("permissao restringida aqui: sem laco", arq.gravacoes === n, arq.gravacoes - n);
+
+    // A desliga o conector: em B desliga também (desligar propaga)
+    comConector(A, { ...A.r.listas.conectores[0], ativo: false });
+    await sincronia(A, arq, relogio).sincronizar();
+    await sincronia(B, arq, relogio).sincronizar();
+    checar("desligar no arquivo propaga", B.r.listas.conectores[0]?.ativo === false && B.r.listas.conectores[0]?.consentido === true, B.r.listas.conectores[0]);
+
+    // arquivo adulterado: conector conhecido que troca de servidor entra desligado e sem consentimento
+    const C = computador(retrato({ conectores: [conector({ consentido: true })] }));
+    const adulterado = lerEnvelope({ formato: FORMATO, versao: VERSAO, geradoEm: 1, registros: { conectores: [{ id: "c1", em: 50, dado: conector({ url: "https://outro.exemplo/mcp", consentido: true, padrao: "sempre", permissoes: { x: "sempre" }, auth: { tipo: "token", cabecalho: "Authorization", valor: "" } }) }] } });
+    const rC = mesclar(C.r, carimbar(C.r, {}, 10), adulterado, { agora: 100, segredos: false, validar: validarItem });
+    const k = rC.retrato.listas.conectores[0];
+    checar("outro servidor: entra desligado, sem consentimento e sem liberar nada", k?.url === "https://outro.exemplo/mcp" && k?.ativo === false && k?.consentido === false && k?.padrao === "aprovar" && Object.keys(k?.permissoes ?? {}).length === 0, k);
+  }
+
   // registro com id diferente do id do dado: não entra, não apaga
   {
     const C = computador(retrato({ regras: [regra({ id: "r1" })] }));
