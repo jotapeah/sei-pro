@@ -1,4 +1,5 @@
 import {
+  ATRIBUTO_COMPACTO,
   ATRIBUTO_LARGO,
   ATRIBUTO_ROTULO,
   aplicarLargura,
@@ -54,6 +55,16 @@ export function verificarLargura(): void {
   checar("clicar grava a escolha e troca o rotulo", arm2.getItem(CHAVE_LARGURA) === "1" && botao.textContent === "Largura de página");
   botao.click();
   checar("clicar de novo volta ao estreito", arm2.getItem(CHAVE_LARGURA) === null && botao.textContent === "Largura total");
+  // Rolagem da propria tela: so com ela passada do limite os botoes ficam so com o icone.
+  const rolar = (n: number) => {
+    Object.defineProperty(tela.documentElement, "scrollTop", { value: n, configurable: true });
+    Object.defineProperty(tela, "scrollingElement", { value: tela.documentElement, configurable: true });
+    tela.dispatchEvent(new (tela.defaultView as unknown as { Event: typeof Event }).Event("scroll"));
+  };
+  rolar(50);
+  checar("rolou: o grupo marca compacto (so icones)", grupo?.hasAttribute(ATRIBUTO_COMPACTO) === true);
+  rolar(2);
+  checar("voltou ao topo: rotulos de volta", grupo?.hasAttribute(ATRIBUTO_COMPACTO) === false);
   pararBotao();
   checar(
     "desligar devolve as ancoras ao lugar e some com o grupo",

@@ -56,6 +56,9 @@ export function iniciarLarguraDoPapel(doc: Document, armazem: Armazem): () => vo
 export const CLASSE_ACAO = "spro-doc-acao";
 export const CLASSE_GRUPO = "spro-doc-acoes";
 export const ATRIBUTO_ROTULO = "data-spro-rotulo";
+/** No grupo: marca a rolagem do documento; o CSS some com os rótulos e deixa só os ícones. */
+export const ATRIBUTO_COMPACTO = "data-spro-compacto";
+const LIMITE_ROLAGEM = 16;
 
 /** Rótulo curto de um botão só de ícone, a partir do tooltip do SEI Pro ("Baixar documento (DOCX)" -> "Baixar DOCX"). */
 export function rotuloDoBotao(tooltip: string): string {
@@ -101,6 +104,36 @@ export function iniciarBotaoLargura(doc: Document, armazem: Armazem): () => void
     return b;
   };
 
+  /** Rolagem do documento (no iframe) ou da própria tela: rolou, os botões ficam só com o ícone. */
+  const ligados = new WeakSet<object>();
+  const compactar = (rolou: boolean) => {
+    if (!grupo) return;
+    if (rolou) grupo.setAttribute(ATRIBUTO_COMPACTO, "");
+    else grupo.removeAttribute(ATRIBUTO_COMPACTO);
+  };
+  const topoDe = (alvo: EventTarget | null): number => {
+    const el = alvo as { scrollingElement?: Element | null; scrollTop?: number; documentElement?: Element } | null;
+    return el?.scrollingElement?.scrollTop ?? el?.documentElement?.scrollTop ?? el?.scrollTop ?? 0;
+  };
+  const vigiarRolagem = () => {
+    if (!ligados.has(doc)) {
+      ligados.add(doc);
+      doc.addEventListener("scroll", (ev) => compactar(topoDe(ev.target) > LIMITE_ROLAGEM), true);
+    }
+    for (const f of doc.querySelectorAll("iframe")) {
+      let dentro: Document | null = null;
+      try {
+        dentro = f.contentDocument;
+      } catch {
+        /* outra origem */
+      }
+      if (!dentro || ligados.has(dentro)) continue;
+      ligados.add(dentro);
+      compactar(topoDe(dentro) > LIMITE_ROLAGEM);
+      dentro.addEventListener("scroll", () => compactar(topoDe(dentro) > LIMITE_ROLAGEM), true);
+    }
+  };
+
   const garantir = () => {
     const ancoras = [...doc.querySelectorAll<HTMLElement>(ALVO)];
     const primeira = ancoras[0];
@@ -126,12 +159,20 @@ export function iniciarBotaoLargura(doc: Document, armazem: Armazem): () => void
   };
 
   garantir();
+  vigiarRolagem();
+  // O iframe troca de documento (e de Document): religa a vigia quando ele termina de carregar.
+  const aoCarregar = () => {
+    compactar(false);
+    vigiarRolagem();
+  };
+  doc.addEventListener("load", aoCarregar, true);
   const Obs = doc.defaultView?.MutationObserver ?? (typeof MutationObserver === "function" ? MutationObserver : null);
   const obs = Obs && doc.body ? new Obs(garantir) : null;
   obs?.observe(doc.body, { childList: true, subtree: true });
 
   return () => {
     obs?.disconnect();
+    doc.removeEventListener("load", aoCarregar, true);
     for (const a of doc.querySelectorAll<HTMLElement>(`.${CLASSE_ACAO}`)) {
       a.classList.remove(CLASSE_ACAO);
       a.removeAttribute(ATRIBUTO_ROTULO);

@@ -366,3 +366,36 @@
   outline: none;
   box-shadow: var(--spro-anel);
 }
+
+/* Documento rolado: os botões do canto ficam só com o ícone, encostados à direita (os rótulos continuam nos tooltips) */
+:root[data-spro-tema-ativo] div.spro-doc-acoes {
+  transition: gap var(--spro-dur) var(--spro-curva);
+}
+:root[data-spro-tema-ativo] .spro-doc-acao {
+  transition:
+    background-color var(--spro-dur) var(--spro-curva),
+    color var(--spro-dur) var(--spro-curva),
+    font-size var(--spro-dur) var(--spro-curva),
+    padding var(--spro-dur) var(--spro-curva),
+    gap var(--spro-dur) var(--spro-curva);
+}
+:root[data-spro-tema-ativo] div.spro-doc-acoes[data-spro-compacto] {
+  justify-content: flex-end;
+  gap: 4px;
+}
+:root[data-spro-tema-ativo] div.spro-doc-acoes[data-spro-compacto] > .spro-doc-acao {
+  gap: 0;
+  width: 32px;
+  justify-content: center;
+  font-size: 0;
+}
+:root[data-spro-tema-ativo] div.spro-doc-acoes[data-spro-compacto] > .spro-doc-acao[data-spro-rotulo]::after {
+  content: none;
+}
+:root[data-spro-tema-ativo] div.spro-doc-acoes[data-spro-compacto] > button.spro-largura::before {
+  font-size: 15px;
+}
+/* O texto some com font-size 0, mas o ícone (fonte de ícones ou imagem) mantém o tamanho dele */
+:root[data-spro-tema-ativo] div.spro-doc-acoes[data-spro-compacto] > a.spro-doc-acao > * {
+  font-size: 14px;
+}

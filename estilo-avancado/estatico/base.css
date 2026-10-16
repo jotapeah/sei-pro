@@ -719,3 +719,6 @@
   clear: both;
   white-space: nowrap;
 }
+:root[data-spro-tema-ativo] div.spro-doc-acoes[data-spro-compacto] > a.openNewTab.spro-doc-acao {
+  padding: 0 !important;
+}
