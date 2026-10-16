@@ -57,6 +57,12 @@ import { cartaoDeErro } from "./erro-ui";
 import { envelopar } from "../seguranca/envelope";
 import { secaoRotinas } from "./rotinas-ui";
 import { secaoArquivo, type OpcoesArquivoUi } from "./arquivo-ui";
+import { ControleArquivo, escolherArquivoSync, handlesNoIndexedDB, temSeletorDeArquivo } from "@comum/sincronia/arquivo";
+import { areaChrome } from "@comum/armazenamento/area";
+import { adaptadorAgente, type AdaptadorAgente } from "../arquivo/adaptador";
+import type { EnvelopeAgente } from "../arquivo/envelope";
+import { CHAVE_SEGREDOS, CHAVE_STATUS, fontesDoNavegador } from "../arquivo/retrato";
+import { deveAgendar, exportarBackup, importarBackup, NOME_DO_BACKUP } from "../arquivo/gatilho";
 import { aoAvisar, aplicarConfigDoSync, aplicarDoSync, CHAVE_MIGRADO, espelharConfig, ESPELHOS, unirNaPrimeiraVez } from "./espelho";
 import {
   baixarColecao,
@@ -237,9 +243,107 @@ class App {
 
   /** Redesenhos da configuração aberta, para o que vem do sync aparecer na hora. */
   private redesenharConfig: Array<() => void> = [];
-  /** Backup em arquivo: a Tarefa 4 liga ao controle real; `null` esconde a seção. */
+  /** Redesenho da seção "Backup em arquivo", enquanto a configuração está aberta. */
+  private redesenharArquivo: (() => void) | null = null;
+
+  /** Backup em arquivo: o adaptador (Exportar/Importar valem em todo navegador). */
+  private adaptadorArquivo: AdaptadorAgente | null = null;
+  /** O arquivo sincronizado: só onde há seletor de arquivo (Chrome/Edge). */
+  private controleArquivo: ControleArquivo<EnvelopeAgente> | null = null;
+
+  /**
+   * Liga o backup em arquivo. As fontes avisam o painel quando a mescla
+   * gravou no local (veio coisa do arquivo), para as listas na memória
+   * acompanharem.
+   */
+  private ligarArquivo(): void {
+    const fontes = fontesDoNavegador();
+    const aplicar = fontes.aplicar.bind(fontes);
+    fontes.aplicar = async (antes, depois) => {
+      await aplicar(antes, depois);
+      await this.recarregarDoLocal().catch(() => undefined);
+    };
+    this.adaptadorArquivo = adaptadorAgente(fontes);
+    if (!temSeletorDeArquivo(window)) return;
+    this.controleArquivo = new ControleArquivo<EnvelopeAgente>({
+      area: areaChrome(chrome.storage.local, "local"),
+      dono: { host: "agente", login: "" },
+      chaveStatus: CHAVE_STATUS,
+      // Banco próprio: o `agenteIA` já tem a versão 1 com outras lojas.
+      handles: handlesNoIndexedDB("agenteIA_arquivo"),
+      escolher: (m) => escolherArquivoSync(m, NOME_DO_BACKUP, "Agente do SEI Pro"),
+      adaptador: this.adaptadorArquivo,
+    });
+  }
+
+  /** Grava o arquivo daqui a pouco (o controle junta as mudanças seguidas). */
+  private agendarArquivo(): void {
+    this.controleArquivo?.agendar();
+  }
+
+  /** Sincroniza agora; falha vira `StatusArquivo`, e o que sobrar não derruba o painel. */
+  private sincronizarArquivo(pedir = false): Promise<unknown> {
+    return this.controleArquivo?.sincronizar(pedir).catch(() => undefined) ?? Promise.resolve();
+  }
+
+  /**
+   * Relê do `local` o que a mescla do arquivo pode ter mudado: a configuração
+   * (e a espelha no sync, que não passa por `aplicarConfig`) e as listas.
+   */
+  private async recarregarDoLocal(): Promise<void> {
+    const salvo = ((await chrome.storage.local.get(CHAVE_CONFIG).catch(() => ({}) as Record<string, unknown>))[CHAVE_CONFIG] ?? undefined) as Partial<Config> | undefined;
+    if (salvo && JSON.stringify({ ...this.config, ...salvo }) !== JSON.stringify(this.config)) {
+      this.config = { ...this.config, ...salvo };
+      void espelharConfig(this.config);
+    }
+    this.skills = await listarSkills();
+    this.colecoes = await listarColecoes();
+    this.regras = await listarRegras();
+    this.memoria = await listarMemoria();
+    this.rotinas = await listarRotinas();
+    this.conectores = await listarConectores();
+    this.fluxos = await listarFluxos();
+    this.fluxosIgnorados = await listarIgnorados();
+    for (const redesenhar of this.redesenharConfig) redesenhar();
+  }
+
+  /** Backup em arquivo: o que a seção da configuração chama. */
   private opcoesArquivoUi(): OpcoesArquivoUi | null {
-    return null;
+    const adaptador = this.adaptadorArquivo;
+    if (!adaptador) return null;
+    const controle = this.controleArquivo;
+    return {
+      temSeletor: Boolean(controle),
+      configurado: async () => (controle ? controle.configurado() : false),
+      status: async () => (controle ? controle.status() : null),
+      escolher: async (m) => void (await controle?.escolher(m)),
+      reconectar: async () => void (await controle?.reconectar()),
+      agora: async () => void (await this.sincronizarArquivo(true)),
+      esquecer: async () => void (await controle?.esquecer()),
+      segredos: {
+        ler: async () => (await chrome.storage.local.get(CHAVE_SEGREDOS))[CHAVE_SEGREDOS] === true,
+        gravar: async (v) => {
+          await chrome.storage.local.set({ [CHAVE_SEGREDOS]: v });
+          // A caixa não agenda pelo `onChanged` (é da própria sincronia): grava já.
+          await this.sincronizarArquivo();
+        },
+      },
+      removerSegredos: async () => {
+        if (!controle) return;
+        adaptador.removerSegredosNaProxima();
+        await this.sincronizarArquivo();
+      },
+      exportar: async () => {
+        // O mesmo envelope da sincronia (diário carimbado, caixa dos segredos
+        // daqui), sem consumir o "remover segredos" pendente.
+        const url = URL.createObjectURL(new Blob([await exportarBackup(adaptador)], { type: "application/json" }));
+        const a = h("a", { href: url, download: NOME_DO_BACKUP });
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+      },
+      // A mescla grava no local; as fontes recarregam o painel e o `onChanged` agenda o arquivo.
+      importar: async (arquivo) => importarBackup(await arquivo.text(), adaptador),
+    };
   }
 
   /** Servidores MCP que o usuário ligou (ver `mcp/conectores.ts`). */
@@ -310,6 +414,7 @@ class App {
     this.fluxos = await listarFluxos();
     this.fluxosIgnorados = await listarIgnorados();
     await this.aplicarSincronizacao();
+    this.ligarArquivo();
     void this.sincronizarSkills();
     void this.sincronizarColecoes();
     void this.retestarConectoresLocais();
@@ -317,6 +422,18 @@ class App {
     // O Estúdio de Fluxo é outra página: quando o usuário salva um fluxo lá, o
     // painel precisa passar a usá-lo sem esperar um recarregamento.
     chrome.storage.onChanged.addListener((mud, area) => {
+      if (area === "local") {
+        // Mudou algo do agente que vai ao arquivo: grava daqui a pouco. As
+        // chaves da própria sincronia (status, diário, caixa) não agendam.
+        if (deveAgendar(Object.keys(mud))) this.agendarArquivo();
+        if (mud[CHAVE_STATUS]) this.redesenharArquivo?.();
+        const cfg = mud[CHAVE_CONFIG]?.newValue as Partial<Config> | undefined;
+        if (cfg && JSON.stringify({ ...this.config, ...cfg }) !== JSON.stringify(this.config)) {
+          // A configuração mudou fora deste painel (o arquivo a trouxe, ou outra janela).
+          this.config = { ...this.config, ...cfg };
+          for (const redesenhar of this.redesenharConfig) redesenhar();
+        }
+      }
       if (area === "local" && mud[CHAVE_FLUXOS]) {
         this.fluxos = (mud[CHAVE_FLUXOS].newValue as Fluxo[]) ?? [];
         void this.avaliarFluxos();
@@ -329,7 +446,13 @@ class App {
     });
     await this.telaConversa();
     void this.atualizarCambio();
-    void historico.podar(this.config.dias).catch(() => undefined);
+    void historico
+      .podar(this.config.dias)
+      .then(() => this.agendarArquivo())
+      .catch(() => undefined);
+    // O arquivo pode ter mudado em outro computador: lê ao abrir e quando o painel volta ao foco.
+    void this.sincronizarArquivo();
+    window.addEventListener("focus", () => void this.sincronizarArquivo());
     if (!this.config.chave) this.abrirConfig(true);
   }
 
@@ -813,6 +936,7 @@ class App {
                 "aria-label": "Excluir",
                 onclick: async () => {
                   await historico.remover(c.id).catch(() => undefined);
+                  this.agendarArquivo();
                   linha.remove();
                   if (!corpo.querySelector(".linha")) desenhar([]);
                 },
@@ -832,6 +956,7 @@ class App {
         return;
       }
       await historico.limpar().catch(() => undefined);
+      this.agendarArquivo();
       apagarTudo.replaceChildren(icone("lixeira", 15), "Apagar todas");
       desenhar([]);
     });
@@ -1201,7 +1326,9 @@ class App {
       pedirPermissaoDeAviso: () => this.pedirPermissaoDeAviso(),
     });
     const secaoRotinasEl = rotinasUI.elemento;
-    const arquivoUI = this.opcoesArquivoUi() ? secaoArquivo(this.opcoesArquivoUi()!) : null;
+    const opcoesArquivo = this.opcoesArquivoUi();
+    const arquivoUI = opcoesArquivo ? secaoArquivo(opcoesArquivo) : null;
+    this.redesenharArquivo = arquivoUI ? () => arquivoUI.redesenhar() : null;
     const secaoArquivoEl = arquivoUI?.elemento ?? null;
     // Enquanto a configuração está aberta, o que chega do sync redesenha as
     // listas; ao fechar, os redesenhos saem (o DOM deixou de existir).
@@ -1598,7 +1725,14 @@ class App {
       acoes: [status, obrigatorio ? null : h("button", { onclick: () => dlg.close() }, "Cancelar"), salvar],
     });
 
-    dlg.addEventListener("close", () => void (this.redesenharConfig = []), { once: true });
+    dlg.addEventListener(
+      "close",
+      () => {
+        this.redesenharConfig = [];
+        this.redesenharArquivo = null;
+      },
+      { once: true },
+    );
 
     salvar.addEventListener("click", async () => {
       const erro = (texto: string) => {
@@ -2990,6 +3124,7 @@ Voc\u00EA \u00E9 um AUXILIAR: recebeu uma tarefa de leitura de outro agente e n\
         mensagens: this.transcricao.filter((i) => i.tipo === "usuario" || i.tipo === "agente").length,
         itens: this.transcricao,
       })
+      .then(() => this.agendarArquivo())
       .catch(() => undefined);
   }
 

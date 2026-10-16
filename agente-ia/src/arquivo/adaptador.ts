@@ -15,6 +15,12 @@ import { validarItem } from "./validar";
 export type AdaptadorAgente = AdaptadorArquivo<EnvelopeAgente> & {
   /** O botão "Remover segredos do arquivo": vale para a próxima gravação só. */
   removerSegredosNaProxima(): void;
+  /**
+   * O botão "Exportar": a mesma mescla da sincronia, sem arquivo lido (o
+   * diário fica carimbado igual), com a caixa daqui e SEM consumir o
+   * "remover segredos" pendente, que é do arquivo sincronizado.
+   */
+  exportarSemArquivo(): Promise<EnvelopeAgente>;
 };
 
 export function adaptadorAgente(f: FontesRetrato, agora: () => number = Date.now): AdaptadorAgente {
@@ -54,6 +60,9 @@ export function adaptadorAgente(f: FontesRetrato, agora: () => number = Date.now
     },
     removerSegredosNaProxima() {
       removerSegredos = true;
+    },
+    async exportarSemArquivo() {
+      return (await rodar(null, false)).envelope;
     },
   };
 }

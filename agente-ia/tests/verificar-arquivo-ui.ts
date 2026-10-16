@@ -12,19 +12,28 @@ const botao = (raiz: ParentNode, texto: string) => [...raiz.querySelectorAll("bu
 const esperar = () => new Promise((r) => setTimeout(r, 10));
 const evento = (nome: string) => new (doc.defaultView as unknown as { Event: typeof Event }).Event(nome);
 
-function montar(o: { temSeletor?: boolean; configurado?: boolean; status?: StatusArquivo | null; segredos?: boolean } = {}) {
+function montar(o: { temSeletor?: boolean; configurado?: boolean; status?: StatusArquivo | null; segredos?: boolean; falha?: "configurado" | "status" | "segredos" } = {}) {
   const chamadas: string[] = [];
   let segredos = o.segredos ?? false;
   const opcoes: OpcoesArquivoUi = {
     temSeletor: o.temSeletor ?? true,
-    configurado: async () => o.configurado ?? false,
-    status: async () => o.status ?? null,
+    configurado: async () => {
+      if (o.falha === "configurado") throw new Error("IndexedDB fora do ar.");
+      return o.configurado ?? false;
+    },
+    status: async () => {
+      if (o.falha === "status") throw new Error("Storage fora do ar.");
+      return o.status ?? null;
+    },
     escolher: async (m) => void chamadas.push(`escolher:${m}`),
     reconectar: async () => void chamadas.push("reconectar"),
     agora: async () => void chamadas.push("agora"),
     esquecer: async () => void chamadas.push("esquecer"),
     segredos: {
-      ler: async () => segredos,
+      ler: async () => {
+        if (o.falha === "segredos") throw new Error("Caixa ilegível.");
+        return segredos;
+      },
       gravar: async (v) => {
         segredos = v;
         chamadas.push(`segredos:${v}`);
@@ -116,5 +125,26 @@ export async function verificarArquivoUi(): Promise<void> {
     input.dispatchEvent(evento("change"));
     await esperar();
     checar("mostra a mensagem devolvida", /Importado: 3 conversas\./.test(ui.elemento.textContent ?? ""), ui.elemento.textContent);
+  }
+
+  secao("arquivo/ui: falha ao ler o estado");
+  for (const [falha, texto] of [
+    ["configurado", "IndexedDB fora do ar."],
+    ["status", "Storage fora do ar."],
+    ["segredos", "Caixa ilegível."],
+  ] as const) {
+    const { ui } = montar({ configurado: true, status: { estado: "ok", quando: 1, nome: "a.json" }, falha });
+    await esperar();
+    const conteudo = ui.elemento.textContent ?? "";
+    checar(`falha em ${falha}: Exportar e Importar ficam`, Boolean(botao(ui.elemento, "Exportar (.json)")) && Boolean(botao(ui.elemento, "Importar arquivo")), conteudo);
+    checar(`falha em ${falha}: layout sem arquivo`, Boolean(botao(ui.elemento, "Criar arquivo")) && !botao(ui.elemento, "Sincronizar agora"), conteudo);
+    checar(`falha em ${falha}: mostra o erro`, conteudo.includes(texto), conteudo);
+  }
+
+  secao("arquivo/ui: sem titulo repetido");
+  {
+    const { ui } = montar();
+    await esperar();
+    checar("a secao nao repete o titulo do grupo", !(ui.elemento.textContent ?? "").includes("Backup em arquivo"), ui.elemento.textContent);
   }
 }

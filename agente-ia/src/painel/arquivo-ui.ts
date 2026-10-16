@@ -74,10 +74,24 @@ export function secaoArquivo(o: OpcoesArquivoUi): { elemento: HTMLElement; redes
   let geracao = 0;
   async function desenhar(): Promise<void> {
     const minha = ++geracao;
-    const configurado = o.temSeletor ? await o.configurado() : false;
-    const status = configurado ? await o.status() : null;
-    const segredos = configurado ? await o.segredos.ler() : false;
+    let configurado = false;
+    let status: StatusArquivo | null = null;
+    let segredos = false;
+    let falha = "";
+    try {
+      configurado = o.temSeletor ? await o.configurado() : false;
+      status = configurado ? await o.status() : null;
+      segredos = configurado ? await o.segredos.ler() : false;
+    } catch (e) {
+      // Sem conseguir ler o estado, fica o desenho "sem arquivo": Exportar e
+      // Importar continuam à mão, e o erro aparece na seção.
+      configurado = false;
+      status = null;
+      segredos = false;
+      falha = e instanceof Error ? e.message : String(e);
+    }
     if (minha !== geracao) return; // um redesenho mais novo já está a caminho
+    if (falha) aviso.textContent = falha;
 
     const filhos: Array<Node | null> = [];
 
@@ -132,7 +146,6 @@ export function secaoArquivo(o: OpcoesArquivoUi): { elemento: HTMLElement; redes
   const elemento = h(
     "div",
     { class: "campo" },
-    h("label", {}, "Backup em arquivo"),
     h(
       "div",
       { class: "ajuda" },

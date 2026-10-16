@@ -19,6 +19,7 @@ import {
   type Retrato,
 } from "../src/arquivo/envelope";
 import { adaptadorAgente } from "../src/arquivo/adaptador";
+import { CHAVES_DO_AGENTE, deveAgendar, exportarBackup, importarBackup, MSG_IMPORTADO, MSG_NAO_E_BACKUP } from "../src/arquivo/gatilho";
 import { fontesDoNavegador, lerListas, mudancas, type FontesRetrato } from "../src/arquivo/retrato";
 import { MAX_LEMBRANCAS } from "../src/painel/memoria";
 import { validarItem } from "../src/arquivo/validar";
@@ -687,9 +688,74 @@ export async function verificarAdaptadorAgente(): Promise<void> {
   }
 }
 
+export async function verificarGatilhoAgente(): Promise<void> {
+  secao("arquivo do agente: gatilho, Exportar e Importar");
+  checar("gatilho: status nao agenda", deveAgendar(["agenteIA_arquivoStatus"]) === false);
+  checar("gatilho: diario nao agenda", deveAgendar(["agenteIA_arquivoDiario"]) === false);
+  checar("gatilho: caixa de segredos nao agenda", deveAgendar(["agenteIA_arquivoSegredos"]) === false);
+  checar("gatilho: memoria agenda", deveAgendar(["agenteIA_memoria"]) === true);
+  checar("gatilho: cambio nao agenda", deveAgendar(["agenteIA_cambio"]) === false);
+  checar(
+    "gatilho: chaves alheias nao agendam",
+    ["agenteIA_gastoDiario", "agenteIA_baixados", "agenteIA_aberto", "agenteIA_cargo", "agenteIA_conversa", "spro_ia"].every((k) => !deveAgendar([k])),
+  );
+  checar("gatilho: status junto com config agenda", deveAgendar(["agenteIA_arquivoStatus", "agenteIA_config"]) === true);
+  checar("gatilho: nenhuma chave nao agenda", deveAgendar([]) === false);
+  checar(
+    "gatilho: as dez chaves do agente",
+    CHAVES_DO_AGENTE.length === 10 && CHAVES_DO_AGENTE.every((k) => deveAgendar([k])) && CHAVES_DO_AGENTE.includes("agenteIA_fluxosColecoes"),
+    CHAVES_DO_AGENTE,
+  );
+
+  let t = 50_000;
+  const relogio = () => (t += 1_000);
+
+  // Exportar: o mesmo caminho da sincronia, com a caixa daqui e sem consumir o "remover segredos"
+  {
+    const a = computador(retrato({ conectores: [conector()], regras: [regra()] }), true);
+    const ad = adaptadorAgente(a, relogio);
+    ad.removerSegredosNaProxima();
+    const texto = await exportarBackup(ad);
+    const env = lerEnvelope(JSON.parse(texto));
+    checar("exportar: envelope do agente com a regra", env?.registros.regras[0]?.id === "r1", texto.slice(0, 200));
+    checar("exportar: caixa marcada leva os segredos", env?.segredos?.chave === "sk-aqui");
+    checar("exportar: diario carimbado", a.d.regras?.r1 !== undefined, a.d);
+    checar("exportar: local nao reaplicado", a.aplicacoes === 0);
+    const arq = arquivoMemoria();
+    await new SincroniaArquivo({ area: areaMemoria(), chaveStatus: "st", arquivo: arq, adaptador: ad }).sincronizar();
+    checar("exportar: o remover pendente ainda vale na sincronia", !arq.texto.includes("sk-aqui"));
+  }
+  {
+    const a = computador(retrato({ conectores: [conector()] }), false);
+    const texto = await exportarBackup(adaptadorAgente(a, relogio));
+    checar("exportar: caixa desmarcada nao leva segredo", !texto.includes("sk-aqui") && !texto.includes("Bearer segredo"));
+  }
+
+  // Importar: mescla o que é mais novo; o que não é backup não toca em nada
+  {
+    const A = computador(retrato({ regras: [regra()] }));
+    const texto = await exportarBackup(adaptadorAgente(A, relogio));
+    const B = computador(retrato({ skills: [skill()] }));
+    const adB = adaptadorAgente(B, relogio);
+    const msg = await importarBackup("\uFEFF" + texto, adB);
+    checar("importar: mensagem de sucesso", msg === MSG_IMPORTADO, msg);
+    checar("importar: regra entrou e a skill ficou", B.r.listas.regras[0]?.id === "r1" && B.r.listas.skills[0]?.id === "s1", B.r.listas);
+
+    const C = computador(retrato({ skills: [skill()] }));
+    const adC = adaptadorAgente(C, relogio);
+    const naoE = await importarBackup(JSON.stringify({ formato: "seipro-favoritos", versao: 1, donos: {} }), adC);
+    checar("importar: outro formato recusado", naoE === MSG_NAO_E_BACKUP && C.aplicacoes === 0, naoE);
+    const quebrado = await importarBackup("{ isto nao e json", adC);
+    checar("importar: json quebrado recusado", quebrado === MSG_NAO_E_BACKUP && C.aplicacoes === 0, quebrado);
+    const novo = await importarBackup(JSON.stringify({ formato: FORMATO, versao: VERSAO + 1, geradoEm: 1, registros: { regras: [] } }), adC);
+    checar("importar: versao mais nova recusada", novo === MENSAGENS_ARQUIVO.maisNovo && C.aplicacoes === 0, novo);
+  }
+}
+
 // Execução avulsa: `npx tsx tests/verificar-arquivo-agente.ts`.
 if (process.argv[1]?.endsWith("verificar-arquivo-agente.ts")) {
   verificarArquivoAgente();
   await verificarAdaptadorAgente();
+  await verificarGatilhoAgente();
   resumo();
 }
