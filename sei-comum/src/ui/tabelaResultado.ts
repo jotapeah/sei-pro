@@ -12,6 +12,8 @@ export interface LinhaResultado {
   situacao: Situacao;
   campos: Record<string, string>;
   link?: string;
+  /** Texto da Situação no lugar do padrão (ex.: "Criado" no Processos em Lote, onde "Encontrado" não faz sentido). */
+  rotulo?: string;
 }
 export interface ColunaResultado {
   chave: string;
@@ -32,6 +34,8 @@ export function rotuloSituacao(s: Situacao): string {
   return ROTULOS[s];
 }
 
+const rotuloDaLinha = (l: LinhaResultado): string => l.rotulo ?? rotuloSituacao(l.situacao);
+
 const TITULO_SITUACAO = "Situação";
 
 function cabecalho(colunas: ColunaResultado[]): string[] {
@@ -39,7 +43,7 @@ function cabecalho(colunas: ColunaResultado[]): string[] {
 }
 
 function celulas(l: LinhaResultado, colunas: ColunaResultado[]): string[] {
-  return [rotuloSituacao(l.situacao), ...colunas.map((c) => l.campos[c.chave] ?? "")];
+  return [rotuloDaLinha(l), ...colunas.map((c) => l.campos[c.chave] ?? "")];
 }
 
 export function montarTabelaResultado(doc: Document, linhas: LinhaResultado[], colunas: ColunaResultado[]): HTMLTableElement {
@@ -49,7 +53,7 @@ export function montarTabelaResultado(doc: Document, linhas: LinhaResultado[], c
   tabela.append(h("thead", {}, cab));
   const corpo = h("tbody", {});
   for (const l of linhas) {
-    const tr = h("tr", { class: `spro-situacao-${l.situacao}` }, h("td", {}, rotuloSituacao(l.situacao)));
+    const tr = h("tr", { class: `spro-situacao-${l.situacao}` }, h("td", {}, rotuloDaLinha(l)));
     for (const c of colunas) {
       const texto = l.campos[c.chave] ?? "";
       const conteudo = c.comoLink && l.link ? h("a", { href: l.link, target: "_blank", rel: "noopener" }, texto) : texto;
@@ -81,7 +85,7 @@ export function resultadoComoHtml(linhas: LinhaResultado[], colunas: ColunaResul
       const texto = esc(l.campos[c.chave] ?? "");
       return `<td>${c.comoLink && l.link ? `<a href="${esc(l.link)}">${texto}</a>` : texto}</td>`;
     });
-    return `<tr><td>${esc(rotuloSituacao(l.situacao))}</td>${tds.join("")}</tr>`;
+    return `<tr><td>${esc(rotuloDaLinha(l))}</td>${tds.join("")}</tr>`;
   });
   return `<table><thead>${cab}</thead><tbody>${corpo.join("")}</tbody></table>`;
 }

@@ -30,6 +30,18 @@ export async function verificarTabelaResultado(): Promise<void> {
   checar("situacao aparece como texto", (tab.querySelectorAll("tbody tr")[1]?.textContent ?? "").includes("Não encontrado"));
   checar("texto com marcacao nao vira elemento", tab.querySelector("b") === null);
 
+  {
+    const proprio: LinhaResultado[] = [{ situacao: "ok", campos: { numero: "1", nota: "" }, rotulo: "Criado" }];
+    const t2 = montarTabelaResultado(doc, proprio, colunas);
+    checar("rotulo proprio da linha na tabela", (t2.querySelector("tbody td")?.textContent ?? "") === "Criado");
+    checar("rotulo proprio no TSV", resultadoComoTexto(proprio, colunas).split("\n")[1]?.startsWith("Criado\t") === true);
+    checar(
+      "rotulo proprio no CSV e no HTML",
+      resultadoComoCsv(proprio, colunas).includes("Criado;") && resultadoComoHtml(proprio, colunas).includes("<td>Criado</td>"),
+    );
+    checar("rotulo proprio nao muda a classe", t2.querySelector("tbody tr")?.getAttribute("class") === "spro-situacao-ok");
+  }
+
   secao("tabela de resultado: texto, html e csv");
   const tsv = resultadoComoTexto(linhas, colunas).split("\n");
   checar("TSV tem cabecalho com situacao", tsv[0] === "Situação\tNumero\tNota", tsv[0]);
