@@ -4,9 +4,33 @@ export interface LinhaLote {
   observacao?: string;
   /** "0" = publico, "1" = restrito (valores do campo do SEI). */
   nivelAcesso?: "0" | "1";
+  /**
+   * O que veio na coluna nivel quando nao e um nivel reconhecido ("Sigiloso", "R"...). A linha NAO pode ser criada
+   * assim: cair no nivel do lote (publico por padrao) exporia um processo que a planilha queria restrito. A previa
+   * mostra o erro e trava o Iniciar ate o usuario corrigir ou tirar a linha.
+   */
+  nivelInvalido?: string;
 }
 
 const NOMES_SEM_CABECALHO = ["especificacao", "interessado", "observacao", "nivel"];
+
+/**
+ * Textos (normalizados) que fazem da 1a linha um cabecalho: basta UMA celula ser exatamente um deles. Comparacao
+ * exata de proposito: "Descricao de servico" na 1a celula e dado, nao cabecalho.
+ */
+const PALAVRAS_CABECALHO = new Set([
+  "especificacao",
+  "especificacoes",
+  "descricao",
+  "descricoes",
+  "assunto",
+  "interessado",
+  "interessados",
+  "observacao",
+  "observacoes",
+  "nivel",
+  "nivel de acesso",
+]);
 
 /** Minuscula e sem acento, para reconhecer cabecalhos e niveis escritos de qualquer jeito. */
 function normalizar(s: string): string {
@@ -17,13 +41,36 @@ function normalizar(s: string): string {
     .trim();
 }
 
-/** Nome canonico da coluna a partir do texto do cabecalho (ou o proprio texto normalizado). */
+/** Nome canonico de uma coluna que nao e a da especificacao (ou o proprio texto normalizado, que e ignorado). */
 function nomeColuna(celula: string): string {
   const n = normalizar(celula);
-  if (n === "descricao") return "especificacao";
+  if (n === "interessados") return "interessado";
   if (n === "observacoes") return "observacao";
   if (n === "nivel de acesso") return "nivel";
   return n;
+}
+
+const COLUNAS_USADAS = new Set(["interessado", "observacao", "nivel"]);
+
+/** Celula de cabecalho que nomeia a coluna da especificacao: especificacao*, descricao* ou assunto. */
+function ehColunaEspecificacao(celula: string): boolean {
+  const n = normalizar(celula);
+  return n.startsWith("especificac") || n.startsWith("descric") || n === "assunto";
+}
+
+/**
+ * Colunas a partir do cabecalho: a da especificacao e a 1a celula especificacao*, descricao* ou assunto (sem
+ * nenhuma, a 1a coluna); as demais pelo nome. Outra celula com cara de especificacao, ou desconhecida, e ignorada.
+ */
+function colunasDoCabecalho(primeira: string[]): string[] {
+  const achada = primeira.findIndex(ehColunaEspecificacao);
+  const k = achada >= 0 ? achada : 0;
+  return primeira.map((c, i) => {
+    if (i === k) return "especificacao";
+    const nome = nomeColuna(c);
+    // Coluna sem uso (outra "especificacao", "Codigo"...): nomeada assim no contador da configuracao.
+    return COLUNAS_USADAS.has(nome) ? nome : `(ignorada) ${c}`;
+  });
 }
 
 /**
@@ -82,10 +129,11 @@ function separarCelulas(texto: string): string[][] {
   return linhas;
 }
 
+/** Nivel da celula; `undefined` = nao reconhecido (quem chama marca a linha como invalida, nunca adivinha). */
 function lerNivel(valor: string): "0" | "1" | undefined {
   const n = normalizar(valor);
-  if (n === "publico" || n === "0") return "0";
-  if (n === "restrito" || n === "1") return "1";
+  if (n === "publico" || n === "publica" || n === "0") return "0";
+  if (n === "restrito" || n === "restrita" || n === "1") return "1";
   return undefined;
 }
 
@@ -108,9 +156,9 @@ export function lerLinhas(texto: string): { linhas: LinhaLote[]; colunas: string
   }
 
   const primeira = bruto[0] as string[];
-  const temCabecalho = primeira.length > 1 && nomeColuna(primeira[0] as string) === "especificacao";
+  const temCabecalho = primeira.some((c) => PALAVRAS_CABECALHO.has(normalizar(c)));
   const largura = Math.min(Math.max(...bruto.map((r) => r.length)), NOMES_SEM_CABECALHO.length);
-  const colunas = temCabecalho ? primeira.map(nomeColuna) : NOMES_SEM_CABECALHO.slice(0, Math.max(largura, 1));
+  const colunas = temCabecalho ? colunasDoCabecalho(primeira) : NOMES_SEM_CABECALHO.slice(0, Math.max(largura, 1));
   const dados = temCabecalho ? bruto.slice(1) : bruto;
 
   const linhas: LinhaLote[] = dados.map((cs) => {
@@ -124,6 +172,7 @@ export function lerLinhas(texto: string): { linhas: LinhaLote[]; colunas: string
       else if (nome === "nivel") {
         const nivel = lerNivel(v);
         if (nivel) linha.nivelAcesso = nivel;
+        else linha.nivelInvalido = v;
       }
     });
     return linha;

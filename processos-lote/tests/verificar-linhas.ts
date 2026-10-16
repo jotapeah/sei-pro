@@ -59,4 +59,46 @@ export function verificarLinhas(): void {
     ["A", "B"],
   );
   igual("texto vazio", lerLinhas("").linhas, []);
+
+  secao("lerLinhas: nivel de acesso");
+  const niv = lerLinhas(
+    "A\t\t\tRestrita\nB\t\t\tPública\nC\t\t\tpublica\nD\t\t\t Público \nE\t\t\tRESTRITO\nF\t\t\tSigiloso\nG\t\t\tR\nH\t\t\t",
+  );
+  igual(
+    "restrita, pública, publica, público, RESTRITO reconhecidos",
+    niv.linhas.slice(0, 5).map((l) => l.nivelAcesso),
+    ["1", "0", "0", "0", "1"],
+  );
+  igual("reconhecido nao marca invalido", niv.linhas[0]?.nivelInvalido, undefined);
+  igual("Sigiloso: nao reconhecido, sem nivel", [niv.linhas[5]?.nivelAcesso, niv.linhas[5]?.nivelInvalido], [undefined, "Sigiloso"]);
+  igual("R: nao reconhecido", niv.linhas[6]?.nivelInvalido, "R");
+  igual("celula vazia: nem nivel nem invalido", [niv.linhas[7]?.nivelAcesso, niv.linhas[7]?.nivelInvalido], [undefined, undefined]);
+  const invisivel = lerLinhas("A\t\t\tRestrito​");
+  igual("caractere invisivel nao passa como reconhecido", invisivel.linhas[0]?.nivelInvalido, "Restrito​");
+
+  secao("lerLinhas: cabecalho");
+  const plural = lerLinhas("Especificações\tInteressados\tObservações\tNível\nA\tX\to\t1");
+  igual("plural e cabecalho", plural.linhas, [{ especificacao: "A", interessado: "X", observacao: "o", nivelAcesso: "1" }]);
+  const assunto = lerLinhas("Assunto\tNível de acesso\nA\tRestrito");
+  igual("assunto e cabecalho (e a especificacao)", assunto.linhas, [{ especificacao: "A", nivelAcesso: "1" }]);
+  const meio = lerLinhas("Texto\tNível\nA\tPúblico");
+  igual("qualquer celula de cabecalho basta; 1a coluna e a especificacao", meio.linhas, [{ especificacao: "A", nivelAcesso: "0" }]);
+  igual("qualquer celula: a linha de cabecalho nao vira processo", meio.linhas.length, 1);
+  const outra = lerLinhas("Código\tDescrição do processo\tInteressado\n12\tContrato X\tFulano");
+  igual("coluna da especificacao pelo nome (descricao*)", outra.linhas, [{ especificacao: "Contrato X", interessado: "Fulano" }]);
+  igual("coluna desconhecida aparece como ignorada", outra.colunas, ["(ignorada) Código", "especificacao", "interessado"]);
+  const espPref = lerLinhas("Nível\tEspecificação do processo\n1\tContrato Y");
+  igual("especificacao* define a coluna", espPref.linhas, [{ especificacao: "Contrato Y", nivelAcesso: "1" }]);
+  const interFirst = lerLinhas("Interessado\tObservação\nContrato Z\tobs");
+  igual("sem coluna de especificacao: a 1a coluna e a especificacao", interFirst.linhas, [
+    { especificacao: "Contrato Z", observacao: "obs" },
+  ]);
+  const dado = lerLinhas("Descrição de serviço\tFulano\nB\tBeltrano");
+  igual(
+    "linha que parece dado nunca e cabecalho",
+    dado.linhas.map((l) => l.especificacao),
+    ["Descrição de serviço", "B"],
+  );
+  const dado2 = lerLinhas("Contrato 1\tPúblico\nContrato 2\tRestrito");
+  igual("dados sem cabecalho seguem a ordem padrao", dado2.linhas.length, 2);
 }

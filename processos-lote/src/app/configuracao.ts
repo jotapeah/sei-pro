@@ -256,7 +256,7 @@ export class TelaConfiguracao {
       rows: "7",
       spellcheck: "false",
       placeholder:
-        "Uma especificação por linha (cole direto de uma coluna da planilha). Com colunas separadas por tabulação: especificação, interessado, observação e nível. Deixe em branco para abrir processos sem especificação e informar apenas a quantidade abaixo.",
+        "Uma especificação por linha (cole direto de uma coluna da planilha). Com colunas separadas por tabulação: especificação, interessado, observação e nível (a coluna interessado é lida, mas ainda não é aplicada ao processo). Deixe em branco para abrir processos sem especificação e informar apenas a quantidade abaixo.",
       "aria-keyshortcuts": "Control+Enter",
       "aria-describedby": "pl-contador",
     });

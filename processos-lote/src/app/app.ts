@@ -15,7 +15,7 @@ import { avisar } from "@comum/ui/aviso";
 import type { AbrirModal } from "@comum/ui/dialogo";
 import { h, icone } from "@comum/ui/dom";
 import { copiarResultado, resultadoComoCsv } from "@comum/ui/tabelaResultado";
-import { JANELA_OUTRA_ABA_MS } from "../modelo/constantes";
+import { AVISO_INTERESSADO, JANELA_OUTRA_ABA_MS } from "../modelo/constantes";
 import type { LinhaLote } from "../modelo/linhas";
 import type { ModeloLote, RepositorioModelos } from "../modelos";
 import type { ContextoLote } from "../pagina/contexto";
@@ -60,9 +60,23 @@ export interface DepsApp {
 
 type Tela = "carregando" | "retomar" | "configuracao" | "previa" | "execucao" | "resultado";
 
-/** Linhas criadas que o usuario precisa conferir: incertas ou com aviso (ex.: numero nao identificado). */
-const aConferir = (ex: ExecucaoLote): number =>
-  ex.itens.filter((i) => i.situacao === "ok" && (i.resultado?.incerto || i.resultado?.aviso)).length;
+/**
+ * Criado que o usuario precisa conferir: incerto ou com aviso de verdade (numero nao identificado...). O
+ * "interessado ignorado" sozinho NAO conta: a previa ja avisou que a coluna nao e aplicada, o processo existe e tem
+ * numero, e segurar o registro faria a proxima abertura mostrar este resultado de novo.
+ */
+export function precisaConferir(r: { aviso?: string; incerto?: boolean } | undefined): boolean {
+  if (!r) return false;
+  if (r.incerto) return true;
+  const outros = (r.aviso ?? "")
+    .split(";")
+    .map((a) => a.trim())
+    .filter((a) => a !== "" && a !== AVISO_INTERESSADO);
+  return outros.length > 0;
+}
+
+/** Linhas criadas que o usuario precisa conferir (ver `precisaConferir`). */
+const aConferir = (ex: ExecucaoLote): number => ex.itens.filter((i) => i.situacao === "ok" && precisaConferir(i.resultado)).length;
 
 const mensagem = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 const novoId = (): string => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -149,8 +163,8 @@ export class AppProcessosLote {
       this.telaRetomar(lote);
       return;
     }
-    // Nada pendente, mas linha incerta (ou criada com aviso): e justamente o que o usuario precisa conferir.
-    if (lote && meu && lote.itens.some((i) => i.situacao === "ok" && (i.incerto || i.aviso))) {
+    // Nada pendente, mas linha incerta (ou criada com aviso de verdade): e justamente o que o usuario precisa conferir.
+    if (lote && meu && lote.itens.some((i) => i.situacao === "ok" && precisaConferir(i))) {
       void this.finalizar(this.novaExecucao(lote));
       return;
     }
@@ -436,7 +450,7 @@ export class AppProcessosLote {
   }
 
   /**
-   * Fim (concluido ou cancelado): sem nada pendente, com erro ou a conferir (incerto, aviso), o registro some;
+   * Fim (concluido ou cancelado): sem nada pendente, com erro ou a conferir (`precisaConferir`), o registro some;
    * senao fica, retomavel ou para conferir ao reabrir.
    *
    * Parada por "assumido/descartado" nunca descarta: o registro ja e de outra aba (ou nao existe). E todo descarte

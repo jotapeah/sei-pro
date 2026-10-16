@@ -11,6 +11,7 @@ import { type ItemProc, MENSAGEM_SESSAO } from "@pl/app/execucao";
 import {
   MAX_OBSERVACAO,
   MAX_TEXTO_MARCADOR,
+  MENSAGEM_RECARREGAR,
   PAUSA_POS_ACAO_MS,
   PainelPosAcao,
   PRAZO_POS_ACAO_BLOCO_MS,
@@ -381,6 +382,38 @@ export async function verificarPosAcaoApp(): Promise<void> {
     checar("sem erro, sem Tentar de novo", !m.visivel("Tentar de novo as falhas"));
     await m.p.repetirFalhas();
     checar("retry não reposta o bloco", m.rpc.de("posAcaoBloco").length === 1);
+  }
+
+  secao("Revisão final: aba com o SEI Pro antigo (operação desconhecida) => recarregar, e o bloco é erro certo");
+  {
+    const velha = (op: string) => new ErroRpc("OP_DESCONHECIDA", `Operação desconhecida: ${op}`);
+    const m = montarPainel([itemOk(0), itemOk(1)], {
+      bloco: (_a, vez) => (vez === 1 ? velha("posAcaoBloco") : blocoTodos(_a, vez)),
+      posAcao: (a, vez) => (vez === 1 ? velha("posAcao") : posOk(a, vez)),
+    });
+    await m.abrir();
+    escolherCombo(m.doc, "Bloco interno", "b7");
+    escolherCombo(m.doc, "Marcador", "m1");
+    await m.aplicar();
+    checar(
+      "bloco: erro (nada foi enviado), não 'não confirmado'",
+      m.p.estado(0, "bloco")?.situacao === "erro" && m.p.estado(1, "bloco")?.situacao === "erro",
+      m.p.estado(0, "bloco"),
+    );
+    checar("bloco: mensagem de recarregar", m.p.estado(0, "bloco")?.mensagem === MENSAGEM_RECARREGAR, m.p.estado(0, "bloco"));
+    checar(
+      "marcador: mensagem de recarregar",
+      m.p.estado(0, "marcador")?.situacao === "erro" && m.p.estado(0, "marcador")?.mensagem === MENSAGEM_RECARREGAR,
+      m.p.estado(0, "marcador"),
+    );
+    await m.repetir();
+    checar("depois de recarregar, o bloco pode ser repetido", m.rpc.de("posAcaoBloco").length === 2);
+    checar("bloco incluído na repetição", m.p.estado(0, "bloco")?.situacao === "ok" && m.p.estado(1, "bloco")?.situacao === "ok");
+
+    const o = montarPainel([itemOk(0)], { opcoes: () => velha("posAcaoOpcoes") });
+    await o.abrir();
+    checar("listas: mensagem de recarregar", o.texto().includes(MENSAGEM_RECARREGAR), o.texto());
+    igual("texto da mensagem", MENSAGEM_RECARREGAR, "O SEI Pro foi atualizado: recarregue a página do SEI (F5) e tente de novo.");
   }
 
   secao("Depois de criar: rpc do marcador cai => erro (idempotente: repetir é seguro)");

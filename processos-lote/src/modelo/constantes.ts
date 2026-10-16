@@ -29,3 +29,9 @@ export const PRAZO_CRIAR_MS = 60_000;
  * execucao viva e um `criar` no prazo maximo mais a pausa maxima.
  */
 export const JANELA_OUTRA_ABA_MS = PRAZO_CRIAR_MS + PAUSA_MAXIMA;
+
+/**
+ * Aviso de um processo criado sem o interessado da linha (a coluna e lida mas ainda nao e aplicada). Fica aqui, e
+ * nao so em sei/criar.ts, porque o app decide com ele se o registro do lote precisa ser guardado para conferir.
+ */
+export const AVISO_INTERESSADO = "interessado ignorado";

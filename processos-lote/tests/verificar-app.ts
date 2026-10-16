@@ -1314,6 +1314,89 @@ export async function verificarApp(): Promise<void> {
     checar("sem modelo: sem o botão de guardar", !botao(m.raiz, "Guardar estas ações no modelo"));
     m.app.destruir();
   }
+
+  secao("Revisão final: nível não reconhecido na planilha trava o Iniciar");
+  {
+    const m = montar();
+    await m.app.iniciar();
+    await m.configurar("Alfa\t\t\tSigiloso\nBeta\t\t\tPública\nGama");
+    m.clicar("Ver prévia");
+    await ate(() => !!m.raiz.querySelector(".pl-previa"));
+    checar("Iniciar desabilitado com nível não reconhecido", botao(m.raiz, "Iniciar")?.disabled === true);
+    checar("erro por linha visível", m.textoVisivel("nível não reconhecido: use Público ou Restrito (ou 0/1)"));
+    const celulas = [...m.raiz.querySelectorAll(".pl-previa .pl-tabela tbody tr")].map((tr) =>
+      [...tr.querySelectorAll("td")].map((td) => (td.textContent ?? "").trim()),
+    );
+    checar("célula do nível mostra o valor recusado", celulas[0]?.includes("Sigiloso") === true, celulas);
+    checar("nível reconhecido aparece (não em branco)", celulas[1]?.includes("Público") === true, celulas);
+    checar("linha sem nível mostra o nível do lote", celulas[2]?.includes("Público (do lote)") === true, celulas);
+    m.clicar("Iniciar");
+    await tique(10);
+    checar("clicar em Iniciar travado não cria nada", !m.chamadas.some((c) => c.op === "criar"));
+    m.clicar("Remover linhas com erro (1)");
+    checar("removida a linha com erro: Iniciar liberado", botao(m.raiz, "Iniciar")?.disabled === false);
+    checar("sobram 2 linhas", m.raiz.querySelectorAll(".pl-previa .pl-tabela tbody tr").length === 2);
+    m.clicar("Iniciar");
+    await ate(() => !!m.raiz.querySelector(".pl-resultado"));
+    checar("só as linhas válidas foram criadas", m.quantas("Alfa") === 0 && m.quantas("Beta") === 1 && m.quantas("Gama") === 1);
+    m.app.destruir();
+  }
+
+  secao("Revisão final: interessado avisado na prévia e sem segurar o registro");
+  {
+    const m = montar({
+      roteiro: (esp) => ({ ...criado(esp, ++numeroSeq), aviso: "interessado ignorado" }),
+    });
+    await m.app.iniciar();
+    await m.configurar("Alfa\tFulano");
+    checar(
+      "ajuda da caixa diz que o interessado ainda não é aplicado",
+      (m.caixa().getAttribute("placeholder") ?? "").includes("a coluna interessado é lida, mas ainda não é aplicada"),
+    );
+    m.clicar("Ver prévia");
+    await ate(() => !!m.raiz.querySelector(".pl-previa"));
+    checar("prévia avisa que o interessado não é aplicado", m.textoVisivel("interessado: não é aplicado nesta versão"));
+    checar("aviso de interessado não trava o Iniciar", botao(m.raiz, "Iniciar")?.disabled === false);
+    m.clicar("Iniciar");
+    await ate(() => !!m.raiz.querySelector(".pl-resultado"));
+    await tique(10);
+    checar("só 'interessado ignorado': registro descartado no fim", (await m.lote()) === undefined);
+    checar("sem 'Descartar e começar outro'", !m.visivel("Descartar e começar outro"));
+    m.app.destruir();
+
+    const gravarCom = async (area: Area, aviso: string, incerto?: boolean) =>
+      new RepositorioLote(area, ESCOPO, () => 1).gravar({
+        id: "w",
+        host: "sei.x.gov.br",
+        login: "ana",
+        iniciadoEm: 1,
+        parametros: { idTipo: "10", nomeTipo: "Contrato", nivelAcesso: "0", hipoteseLegal: "", nomeHipotese: "", pausa: 500 },
+        linhas: [{ especificacao: "A", interessado: "Fulano" }],
+        itens: [
+          {
+            situacao: "ok",
+            criado: { numero: "00001.000001/2026-11", idProcedimento: "1", url: "u" },
+            aviso,
+            ...(incerto ? { incerto } : {}),
+          },
+        ],
+      });
+    const a1 = areaMemoria();
+    await gravarCom(a1, "interessado ignorado");
+    const r1 = montar({ area: a1 });
+    await r1.app.iniciar();
+    await ate(() => !!combo(r1.raiz, "Tipo de processo"));
+    checar("reabrir com só 'interessado ignorado': vai à configuração e descarta", (await r1.lote()) === undefined);
+    r1.app.destruir();
+
+    const a2 = areaMemoria();
+    await gravarCom(a2, "interessado ignorado; numero nao identificado");
+    const r2 = montar({ area: a2 });
+    await r2.app.iniciar();
+    await ate(() => !!r2.raiz.querySelector(".pl-resultado"));
+    checar("reabrir com número não identificado: resultado e registro mantidos", (await r2.lote()) !== undefined);
+    r2.app.destruir();
+  }
 }
 
 export async function verificarConfirmarSemCancelar(): Promise<void> {

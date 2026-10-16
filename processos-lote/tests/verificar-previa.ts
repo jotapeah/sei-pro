@@ -1,5 +1,6 @@
-import { estimarDuracao, limitarPausa, montarPrevia } from "../src/modelo/previa";
-import { igual, secao } from "./util";
+import { TEXTO_AVISO } from "../src/app/previa";
+import { bloqueia, estimarDuracao, limitarPausa, montarPrevia } from "../src/modelo/previa";
+import { checar, igual, secao } from "./util";
 
 export function verificarPrevia(): void {
   secao("montarPrevia");
@@ -29,6 +30,20 @@ export function verificarPrevia(): void {
   const d = montarPrevia([{ especificacao: "a" }, { especificacao: "A" }, { especificacao: "a " }]);
   igual("duplicada compara o que sera enviado (sem espacos nas pontas)", d[2]?.avisos, ["duplicada"]);
   igual("caixa diferente nao e duplicada", d[1]?.avisos, []);
+
+  secao("montarPrevia: nivel nao reconhecido e interessado");
+  const n = montarPrevia([
+    { especificacao: "A", nivelInvalido: "Sigiloso" },
+    { especificacao: "B", nivelAcesso: "1" },
+    { especificacao: "C", interessado: "Fulano" },
+  ]);
+  igual("nivel nao reconhecido e aviso da linha", n[0]?.avisos, ["nivel-invalido"]);
+  checar("nivel nao reconhecido bloqueia", bloqueia(n[0]?.avisos ?? []));
+  igual("nivel reconhecido sem aviso", n[1]?.avisos, []);
+  igual("interessado: aviso visivel", n[2]?.avisos, ["interessado"]);
+  checar("interessado nao bloqueia", !bloqueia(n[2]?.avisos ?? []));
+  igual("texto do erro de nivel", TEXTO_AVISO["nivel-invalido"], "nível não reconhecido: use Público ou Restrito (ou 0/1)");
+  igual("texto do aviso de interessado", TEXTO_AVISO.interessado, "interessado: não é aplicado nesta versão");
 
   secao("estimarDuracao e pausa");
   igual("14 minutos", estimarDuracao(600, 500), "cerca de 14 minutos");

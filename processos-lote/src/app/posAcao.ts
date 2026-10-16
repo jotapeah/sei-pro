@@ -25,7 +25,7 @@
  */
 
 import { ExecutorLote, type ItemLote, type SaidaItem } from "@comum/lote/executor";
-import type { Rpc } from "@comum/ponte/rpc";
+import { ErroRpc, type Rpc } from "@comum/ponte/rpc";
 import { type Combo, criarCombo } from "@comum/ui/combobox";
 import { h, icone } from "@comum/ui/dom";
 import type { PosAcoes } from "../modelos";
@@ -63,6 +63,18 @@ export const TEXTO_FORA_DA_PAGINA = "fora da página do Controle: faça pelo Con
 const NAO_ENVIADO_SESSAO = "Não enviado: a sessão do SEI expirou.";
 
 const mensagem = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+/**
+ * A aba ainda roda o content script de antes de uma atualizacao do SEI Pro e nao conhece a operacao pedida. Nada
+ * foi enviado ao SEI (a ponte recusa antes de chamar qualquer tratador): e falha CERTA, que o usuario resolve
+ * recarregando a pagina do SEI.
+ */
+export const MENSAGEM_RECARREGAR = "O SEI Pro foi atualizado: recarregue a página do SEI (F5) e tente de novo.";
+
+function operacaoDesconhecida(e: unknown): boolean {
+  if (e instanceof ErroRpc && e.codigo === "OP_DESCONHECIDA") return true;
+  return e instanceof Error && e.message.startsWith("Operação desconhecida");
+}
 
 /** Processo em que as acoes podem rodar: criado, com numero confirmado e id do procedimento. */
 export function elegivel(i: ItemProc): boolean {
@@ -414,7 +426,9 @@ export class PainelPosAcao {
             "p",
             { class: "pl-erro" },
             icone("alerta", 16),
-            `Não foi possível carregar as listas do SEI: ${mensagem(e)}. Feche e abra este painel para tentar de novo.`,
+            operacaoDesconhecida(e)
+              ? MENSAGEM_RECARREGAR
+              : `Não foi possível carregar as listas do SEI: ${mensagem(e)}. Feche e abra este painel para tentar de novo.`,
           ),
         );
       } finally {
@@ -606,6 +620,11 @@ export class PainelPosAcao {
         PRAZO_POS_ACAO_BLOCO_MS,
       );
     } catch (e) {
+      // Aba com o content script antigo: recusou antes de qualquer POST. Erro certo, repetivel depois do F5.
+      if (operacaoDesconhecida(e)) {
+        for (const i of itens) this.definir(i, "bloco", { situacao: "erro", mensagem: MENSAGEM_RECARREGAR, ...base });
+        return false;
+      }
       // A ponte nao respondeu: o POST pode ter saido. Nao confirmado, nunca erro (que seria repetivel).
       for (const i of itens) this.definir(i, "bloco", { situacao: "nao-confirmado", mensagem: mensagem(e), ...base });
       return false;
@@ -673,7 +692,7 @@ export class PainelPosAcao {
       return saida;
     } catch (e) {
       // Idempotente no nucleo: a ponte que caiu vira erro, e repetir nao duplica.
-      return { situacao: "erro", mensagem: mensagem(e) };
+      return { situacao: "erro", mensagem: operacaoDesconhecida(e) ? MENSAGEM_RECARREGAR : mensagem(e) };
     }
   }
 

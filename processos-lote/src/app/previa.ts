@@ -8,7 +8,7 @@ import { h, icone } from "@comum/ui/dom";
 import { MAX_ESPECIFICACAO } from "../modelo/constantes";
 import { paraLatin1 } from "../modelo/latin1";
 import type { LinhaLote } from "../modelo/linhas";
-import { type AvisoLinha, estimarDuracao, type LinhaPrevia, montarPrevia } from "../modelo/previa";
+import { type AvisoLinha, bloqueia, estimarDuracao, type LinhaPrevia, montarPrevia } from "../modelo/previa";
 import type { Parametros } from "../repositorio";
 
 /** O que a configuracao entrega a previa. */
@@ -25,6 +25,8 @@ export const TEXTO_AVISO: Record<AvisoLinha, string> = {
   vazia: "vazia: sem especificação",
   truncada: "cortada em 100 caracteres",
   convertida: "caracteres trocados",
+  "nivel-invalido": "nível não reconhecido: use Público ou Restrito (ou 0/1)",
+  interessado: "interessado: não é aplicado nesta versão",
 };
 
 export interface Parte {
@@ -127,9 +129,18 @@ export class TelaPrevia {
     this.desenhar();
   }
 
+  /** Linha com erro (nivel nao reconhecido): enquanto houver, nada comeca. */
+  private comErro(): number {
+    return montarPrevia(this.linhas).filter((l) => bloqueia(l.avisos)).length;
+  }
+
+  private travado(): boolean {
+    return this.linhas.length === 0 || this.comErro() > 0;
+  }
+
   /** Iniciar uma vez so: dois cliques nao podem abrir dois lotes. */
   iniciar(): void {
-    if (this.ocupado || this.linhas.length === 0) return;
+    if (this.ocupado || this.travado()) return;
     this.ocupado = true;
     this.iniciarBotao.disabled = true;
     this.a.iniciar([...this.linhas]);
@@ -138,9 +149,15 @@ export class TelaPrevia {
   /** O app devolve o controle (falha ao gravar o lote, por exemplo). */
   liberar(erro?: string): void {
     this.ocupado = false;
-    this.iniciarBotao.disabled = this.linhas.length === 0;
+    this.iniciarBotao.disabled = this.travado();
     this.erro.hidden = !erro;
     this.erro.textContent = erro ?? "";
+  }
+
+  private removerComErro(): void {
+    const previa = montarPrevia(this.linhas);
+    this.linhas = this.linhas.filter((_, k) => !bloqueia(previa[k]?.avisos ?? []));
+    this.desenhar();
   }
 
   private removerRepetidas(): void {
@@ -185,6 +202,27 @@ export class TelaPrevia {
         ),
       );
     } else {
+      const comErro = previa.filter((l) => bloqueia(l.avisos)).length;
+      if (comErro) {
+        // Nivel nao reconhecido: cair no nivel do lote poderia criar publico o que a planilha queria restrito.
+        partes.push(
+          h(
+            "div",
+            { class: "pl-acoes pl-erro", role: "alert" },
+            h(
+              "span",
+              {},
+              `${comErro} ${comErro === 1 ? "linha com nível de acesso não reconhecido" : "linhas com nível de acesso não reconhecido"}: corrija na configuração (Voltar) ou tire a linha para iniciar.`,
+            ),
+            h(
+              "button",
+              { type: "button", class: "spro-botao pequeno", onclick: () => this.removerComErro() },
+              icone("lixeira", 14),
+              `Remover linhas com erro (${comErro})`,
+            ),
+          ),
+        );
+      }
       if (repetidas) {
         partes.push(
           h(
@@ -203,12 +241,12 @@ export class TelaPrevia {
       partes.push(this.tabela(previa));
     }
     this.corpo.replaceChildren(...partes);
-    if (!this.ocupado) this.iniciarBotao.disabled = total === 0;
+    if (!this.ocupado) this.iniciarBotao.disabled = this.travado();
   }
 
   private tabela(previa: LinhaPrevia[]): HTMLElement {
     const extras = (["interessado", "observacao", "nivel"] as const).filter((c) =>
-      this.linhas.some((l) => (c === "nivel" ? l.nivelAcesso !== undefined : (l[c] ?? "") !== "")),
+      this.linhas.some((l) => (c === "nivel" ? l.nivelAcesso !== undefined || l.nivelInvalido !== undefined : (l[c] ?? "") !== "")),
     );
     const titulos: Record<(typeof extras)[number], string> = { interessado: "Interessado", observacao: "Observação", nivel: "Nível" };
     const cab = h(
@@ -220,6 +258,10 @@ export class TelaPrevia {
       ...extras.map((c) => h("th", {}, titulos[c])),
       h("th", {}, "Avisos"),
     );
+    // Nivel da linha: o da planilha, o valor recusado (com o erro ao lado) ou o do lote, nunca em branco.
+    const nivelDoLote = `${NOMES_NIVEL[this.pedido.parametros.nivelAcesso] ?? "Público"} (do lote)`;
+    const nivelDa = (l: LinhaLote): string =>
+      l.nivelInvalido !== undefined ? l.nivelInvalido : l.nivelAcesso ? (NOMES_NIVEL[l.nivelAcesso] ?? "") : nivelDoLote;
     const corpo = h("tbody", {});
     previa.forEach((p, k) => {
       const l = this.linhas[k] as LinhaLote;
@@ -233,11 +275,11 @@ export class TelaPrevia {
       corpo.append(
         h(
           "tr",
-          { class: p.avisos.includes("duplicada") ? "pl-repetida" : "" },
+          { class: bloqueia(p.avisos) ? "pl-linha-erro" : p.avisos.includes("duplicada") ? "pl-repetida" : "" },
           h("td", {}, String(p.indice)),
           h("td", { class: "pl-original" }, p.original),
           enviada,
-          ...extras.map((c) => h("td", {}, c === "nivel" ? (l.nivelAcesso ? (NOMES_NIVEL[l.nivelAcesso] ?? "") : "") : (l[c] ?? ""))),
+          ...extras.map((c) => h("td", {}, c === "nivel" ? nivelDa(l) : (l[c] ?? ""))),
           avisos,
         ),
       );

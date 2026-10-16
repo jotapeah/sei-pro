@@ -4,7 +4,18 @@ import type { LinhaLote } from "./linhas";
 
 export { estimarDuracao, limitarPausa } from "./estimativa";
 
-export type AvisoLinha = "duplicada" | "vazia" | "truncada" | "convertida";
+/**
+ * `nivel-invalido` e ERRO (trava o Iniciar: a linha cairia no nivel do lote, publico por padrao); `interessado` so
+ * avisa que a coluna foi lida mas nao e aplicada nesta versao (o usuario sabe antes de criar, nao depois).
+ */
+export type AvisoLinha = "duplicada" | "vazia" | "truncada" | "convertida" | "nivel-invalido" | "interessado";
+
+const BLOQUEANTES: readonly AvisoLinha[] = ["nivel-invalido"];
+
+/** A linha nao pode ser criada como esta: o usuario corrige na configuracao ou tira a linha. */
+export function bloqueia(avisos: readonly AvisoLinha[]): boolean {
+  return avisos.some((a) => BLOQUEANTES.includes(a));
+}
 
 export interface LinhaPrevia {
   /** Posicao da linha na lista, comecando em 1. */
@@ -31,6 +42,8 @@ export function montarPrevia(linhas: LinhaLote[]): LinhaPrevia[] {
       if (vistas.has(enviada)) avisos.push("duplicada");
       vistas.add(enviada);
     }
+    if (l.nivelInvalido !== undefined) avisos.push("nivel-invalido");
+    if ((l.interessado ?? "") !== "") avisos.push("interessado");
     return { indice: i + 1, original, enviada, avisos };
   });
 }

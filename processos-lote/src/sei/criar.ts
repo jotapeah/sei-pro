@@ -14,6 +14,7 @@ import type { Sei } from "@nucleo/sei";
 import { decodificarEntidades, textoDe } from "@nucleo/sessao/dom";
 import { ErroSei } from "@nucleo/sessao/erros";
 import type { Pagina } from "@nucleo/sessao/http";
+import { AVISO_INTERESSADO } from "../modelo/constantes";
 import { paraLatin1 } from "../modelo/latin1";
 import type { Criado } from "../repositorio";
 import { comCampos, type Pares } from "./campos";
@@ -30,7 +31,7 @@ export interface DadosProcesso {
 /** Prova de sucesso: o SEI so redireciona para a tela do processo quando o criou. */
 export const PROVA_CRIACAO = "controlador.php?acao=procedimento_trabalhar&acao_origem=procedimento_gerar";
 
-export const AVISO_INTERESSADO = "interessado ignorado";
+export { AVISO_INTERESSADO };
 
 /**
  * O interessado da linha so vale se for um nome EXATO que ja esta na lupa do formulario (e entao ja vai no
