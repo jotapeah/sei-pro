@@ -273,7 +273,7 @@ export async function incluirProcessosEmBlocoInterno(
   const resultado = new Map<string, ResultadoInclusao>();
   for (const id of pedidos) {
     if (!mapa.has(id)) resultado.set(id, { idProcedimento: id, situacao: "fora-da-pagina" });
-    else if (sigilosos.has(id)) resultado.set(id, { idProcedimento: id, situacao: "erro", erro: "Processo sigiloso: o agente n\u00E3o atua nele." });
+    else if (sigilosos.has(id)) resultado.set(id, { idProcedimento: id, situacao: "erro", erro: "Processo sigiloso: n\u00E3o \u00E9 inclu\u00EDdo em bloco por aqui." });
   }
 
   let pendentes = pedidos.filter((id) => !resultado.has(id));

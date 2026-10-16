@@ -248,6 +248,7 @@ export async function verificarBlocoProcessos(): Promise<void> {
   const s6 = servidor();
   const r6 = await incluirProcessosEmBlocoInterno(s6.sei, "41", ["700002", "700003"]);
   checar("sigiloso => erro sem POST para ele", r6[0]?.situacao === "erro" && /sigiloso/i.test(r6[0]?.erro ?? "") && r6[1]?.situacao === "incluido", r6);
+  checar("sigiloso: mensagem neutra (serve ao agente e ao Processos em Lote)", r6[0]?.erro === "Processo sigiloso: n\u00E3o \u00E9 inclu\u00EDdo em bloco por aqui.", r6[0]);
   const p6 = s6.estado.posts[0]?.pares ?? [];
   checar(
     "o sigiloso nao vai no POST",
