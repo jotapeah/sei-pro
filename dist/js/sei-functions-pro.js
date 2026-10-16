@@ -8856,7 +8856,8 @@ function ajaxDadosProcessoPro(href, mode, arrayAcompEsp) {
         processo.selAssuntos = $html.find("#selAssuntos option").map(function () { return $(this).text(); }).get();
         processo.rdoNivelAcesso = $html.find('input[name=rdoNivelAcesso]:checked').val();
         processo.urlHipoteseLegal = getUrlHipoteseLegal(html);
-        
+        registrarHipotesesParaOpcoesPro(processo.urlHipoteseLegal);
+
         /*
         var arrayObs = [{unidade: unidade, observacao: $html.find('#txaObservacoes').val()}];
         if ($html.find('#divObservacoesOutras').length > 0) { 
@@ -8961,6 +8962,43 @@ function getHipoteseLegal(urlHipoteseLegal = dadosProcessoPro.propProcesso.urlHi
                 callback(html_result);
             }
         }
+    });
+}
+// A pagina de opcoes roda isolada do SEI e nao tem como pedir a lista de hipoteses legais do orgao. Ao abrir um processo, a lista
+// e lida aqui (mesmo endpoint do combo do SEI) e entregue ao init_db.js, que a guarda em chrome.storage.local para as opcoes.
+// Nivel 1 = Restrito, 2 = Sigiloso. No maximo uma leitura a cada 12h por endereco do SEI (localStorage e por origem).
+function registrarHipotesesParaOpcoesPro(urlHipoteseLegal) {
+    if (!urlHipoteseLegal) return;
+    var chave = 'hipotesesOpcoesPro_ts';
+    try {
+        var ultima = parseInt(localStorage.getItem(chave), 10);
+        if (ultima && Date.now() - ultima < 12 * 60 * 60 * 1000) return;
+        localStorage.setItem(chave, String(Date.now()));
+    } catch (e) { return; }
+    var lista = [];
+    var pendentes = [1, 2];
+    var concluir = function () {
+        pendentes.shift();
+        if (pendentes.length) return;
+        if (!lista.length) { try { localStorage.removeItem(chave); } catch (e) {} return; }
+        window.postMessage({ seiProListas: { hipoteses: lista } }, window.location.origin);
+    };
+    $.each([1, 2], function (i, nivel) {
+        $.ajax({
+            type: "POST",
+            url: urlHipoteseLegal,
+            dataType: 'text',
+            data: { primeiroItemValor: null, primeiroItemDescricao: '', valorItemSelecionado: '', staNivelAcesso: nivel }
+        }).done(function (result) {
+            try {
+                var opcoes = $('<select>').html($(result.replace('<?xml version="1.0" encoding="iso-8859-1"?>', '')).html());
+                opcoes.find('option').each(function () {
+                    var id = String($(this).val() || '').trim();
+                    var nome = $(this).text().trim();
+                    if (id !== '' && nome !== '') lista.push({ id: id, nome: nome, nivel: nivel });
+                });
+            } catch (e) {}
+        }).always(concluir);
     });
 }
 function checkDadosIframeDocumentosPro(mode) {
@@ -10563,6 +10601,7 @@ function getDocCertidao(this_) {
                                             });
                                             preencherHiddenLupasFormPro(form, param);
                                             param.rdoNivelAcesso = '0';
+                                            param.selHipoteseLegal = ''; // hipotese pre-selecionada do tipo conflita com o nivel Publico forcado
                                             param.hdnFlagDocumentoCadastro = '2';
                                             param.txaObservacoes = '';
                                             param.txtDescricao = 'de Documento Oficial com Sigilo';
@@ -13525,8 +13564,6 @@ function insertActionHipoteseLegal() {
                 }, 500);
             }
         });
-        target.find('#newdocsigilo').remove();
-        target.find('#lblHipoteseLegal').append('<span id="newdocsigilo" style="float: right;font-size: 0.8em;"><a onclick="parent.getJanelaProcessoPro().setNewDocSigilo(this)">Definir como padr\u00E3o para novos documentos</a></span>');
         target.find('#fldNivelAcesso').css('height','110%');
         target.find('#divInfraBarraComandosInferior').css('margin-top','20px');
 }
@@ -13539,27 +13576,6 @@ function enableConsultasExtras() {
                 window.location.reload();
             });
             $('#frmCheckerProcessoPro').remove();
-        }, 500);
-    });
-}
-function setNewDocSigilo(this_) {
-    var _this = $(this_);
-    var _parent = _this.closest('form');
-    var selectHipoteseLegal = _parent.find('#selHipoteseLegal');
-    var valueNivelAcesso = _parent.find('input[name="rdoNivelAcesso"]:checked');
-    var valueNewDocSigilo = (selectHipoteseLegal.length) ? selectHipoteseLegal.val()+'|'+valueNivelAcesso.val()+'|'+selectHipoteseLegal.find('option:selected').text() : '';
-
-    var urlConfigSigilo = url_host.replace('controlador.php','')+'?#&acao_pro=set_option&option_key=newdocsigilo&option_value='+encodeURIComponent(valueNewDocSigilo);
-    var urlConfigPublico = url_host.replace('controlador.php','')+'?#&acao_pro=set_option&option_key=newdocnivel&option_value=false';
-    if ( $('#frmCheckerProcessoPro').length == 0 ) { getCheckerProcessoPro(); }
-    $('#frmCheckerProcessoPro').attr('src', urlConfigSigilo).unbind().on('load', function(){
-        setTimeout(function(){ 
-            $('#frmCheckerProcessoPro').remove();
-            if ( $('#frmCheckerProcessoPro').length == 0 ) { getCheckerProcessoPro(); }
-            $('#frmCheckerProcessoPro').attr('src', urlConfigPublico).unbind().on('load', function(){
-                alertaBoxPro('Sucess', 'check-circle', 'Padr\u00E3o de sigilo definido com sucesso!');
-                $('#frmCheckerProcessoPro').remove();
-            });
         }, 500);
     });
 }
@@ -14154,6 +14170,7 @@ function setNewDoc(id_procedimento, id_tipo_documento, insertHtml = false, openP
                                         });
                                         preencherHiddenLupasFormPro(form, param);
                                         param.rdoNivelAcesso = '0';
+                                        param.selHipoteseLegal = ''; // hipotese pre-selecionada do tipo conflita com o nivel Publico forcado
                                         param.hdnFlagDocumentoCadastro = '2';
                                         param.txaObservacoes = '';
                                         param.txtDescricao = '';
@@ -14280,6 +14297,7 @@ function setNewProc(id_tipo_procedimento, id_tipo_documento) {
                                     }
                                 });
                                 param.rdoNivelAcesso = '0';
+                                param.selHipoteseLegal = ''; // hipotese pre-selecionada do tipo conflita com o nivel Publico forcado
                                 param.hdnFlagProcedimentoCadastro = '2';
                                 param.rdoProtocolo = 'M';
                                 param.txaObservacoes = '';

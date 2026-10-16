@@ -13,8 +13,16 @@ import {
   serializar,
 } from "./armazenamento";
 import { filtrar } from "./busca";
-import { aplicarConfigGeral, atualizarContagens, atualizarCores, atualizarDependencias, coletarConfigGeral } from "./config";
+import {
+  aplicarConfigGeral,
+  atualizarContagens,
+  atualizarCores,
+  atualizarDependencias,
+  coletarConfigGeral,
+  definirEscolhasDinamicas,
+} from "./config";
 import { avisar } from "./dialogo";
+import { type ApiLocal, AVISO_SEM_HIPOTESES, lerHipoteses } from "./listas";
 import { adicionarPerfil, coletarPerfis, ligarLista, restaurarPerfis } from "./perfis";
 import { contextoDoManifesto, montarComplementos, montarGeral } from "./render";
 
@@ -112,6 +120,8 @@ async function iniciar(): Promise<void> {
 
   const armazem = armazemSync(api as unknown as ApiSync);
   const dados = interpretar(await armazem.obter());
+  // Hipoteses legais lidas do SEI quando o usuario abriu um processo; antes de aplicar o gravado, para ele achar a opcao na lista.
+  definirEscolhasDinamicas(painel, "newdocsigilo", await lerHipoteses(api as unknown as ApiLocal), AVISO_SEM_HIPOTESES);
   // Dado gravado fora do formato nao pode deixar a pagina sem botoes: sem Salvar/Carregar o usuario nao teria como se recuperar.
   try {
     restaurarPerfis(lista, dados.perfis);

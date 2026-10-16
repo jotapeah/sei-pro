@@ -596,6 +596,9 @@ var docsLote_formNewDoc = async (urlFormNewDoc, data, dataDialog) => {
     // Mesma regra do setNewDoc (preencherHiddenLupasFormPro, sei-functions-pro.js); o valor sai escapado no POST.
     if (typeof preencherHiddenLupasFormPro === 'function') preencherHiddenLupasFormPro(form, params);
     params.rdoNivelAcesso = '0';
+    // O loop dos selects acima copia o selHipoteseLegal que o tipo de documento do orgao traz pre-selecionado. Com o nivel
+    // forcado em Publico, o SEI recusa o POST ("Hipotese Legal nao aplicavel ao protocolo") e a linha 1 do lote para.
+    params.selHipoteseLegal = '';
     params.hdnFlagDocumentoCadastro = '2';
     params.txaObservacoes = '';
     // Descricao do documento (ideia do PluriDocs, 12/2025): texto com ##coluna## preenchido pela linha do CSV. Vai em latin-1 e
@@ -1357,6 +1360,7 @@ const extractFormParams = (form) => {
 const prepareFormData = (param, htmlFormProc, txtEspecificacaoProcesso) => {
     // Configurações padrão
     param.rdoNivelAcesso = '0';
+    param.selHipoteseLegal = ''; // hipotese pre-selecionada do tipo conflita com o nivel Publico forcado
     param.hdnFlagProcedimentoCadastro = '2';
     param.rdoProtocolo = 'M';
     param.txaObservacoes = '';

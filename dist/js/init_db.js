@@ -311,8 +311,33 @@ function loadRepairPwdNewSei() {
         console.log('loadRepairPwdNewSei');
     }
 }
+// Listas que so o SEI conhece (hipoteses legais), lidas pelo sei-functions-pro.js (mundo da pagina, sem chrome.*) e entregues por
+// postMessage. Ficam em chrome.storage.local, por endereco do SEI, para a pagina de opcoes montar o combo. O endereco vem do proprio
+// frame (nunca da mensagem) e o conteudo e reduzido a texto.
+function ouvirListasSeiPro() {
+    window.addEventListener('message', function (ev) {
+        if (ev.source !== window || !ev.data || typeof ev.data.seiProListas !== 'object' || ev.data.seiProListas === null) return;
+        var bruta = ev.data.seiProListas.hipoteses;
+        if (!Array.isArray(bruta)) return;
+        var hipoteses = [];
+        for (var i = 0; i < bruta.length && hipoteses.length < 300; i++) {
+            var h = bruta[i];
+            if (!h || typeof h.id !== 'string' || typeof h.nome !== 'string') continue;
+            var nivel = (h.nivel === 2) ? 2 : 1;
+            hipoteses.push({ id: h.id.slice(0, 20), nome: h.nome.slice(0, 300), nivel: nivel });
+        }
+        if (!hipoteses.length) return;
+        var host = window.location.host;
+        chrome.storage.local.get({ listasSei: {} }, function (items) {
+            var listas = (items.listasSei && typeof items.listasSei === 'object') ? items.listasSei : {};
+            listas[host] = { hipoteses: hipoteses, atualizadoEm: Date.now() };
+            chrome.storage.local.set({ listasSei: listas });
+        });
+    });
+}
 function loadScriptProDB() {
     observeAcaoPro();
+    ouvirListasSeiPro();
     changeBasePro();
     // getConfigHost(appendIconEntidadeLogin);
     getPathExtensionPro();

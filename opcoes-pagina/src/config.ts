@@ -23,11 +23,52 @@ const tipoDe = (c: Element): string => c.getAttribute("data-tipo") ?? "";
 const nomeDe = (c: Element): string => c.getAttribute("data-name") ?? "";
 const controlesDa = (raiz: ParentNode, aba: string): Controle[] => [...raiz.querySelectorAll<Controle>(`[data-aba="${aba}"] [data-name]`)];
 
+/**
+ * Opcoes de um combo que dependem de dados do SEI do orgao (hoje so a hipotese legal). Quem le o chrome.storage.local entrega a
+ * lista pronta; aqui ela fica guardada para o combo poder ser reconstruido depois de esvaziado por uma dependencia.
+ */
+export interface EscolhaDinamica {
+  valor: string;
+  rotulo: string;
+  /** Rotulo do <optgroup>; so aparece quando ha mais de um grupo (varios enderecos de SEI). */
+  grupo?: string;
+}
+const dinamicas = new Map<string, { escolhas: EscolhaDinamica[]; aviso: string }>();
+
+function montarEscolhas(sel: HTMLSelectElement, nome: string, salvo = ""): void {
+  const d = dinamicas.get(nome);
+  const filhos: Node[] = [h("option", { value: "" }, d && d.escolhas.length === 0 && salvo === "" ? d.aviso : "")];
+  const escolhas = d?.escolhas ?? [];
+  const grupos = [...new Set(escolhas.map((e) => e.grupo ?? ""))];
+  for (const g of grupos) {
+    const opcoes = escolhas.filter((e) => (e.grupo ?? "") === g).map((e) => h("option", { value: e.valor }, e.rotulo));
+    filhos.push(...(grupos.length > 1 ? [h("optgroup", { label: g }, ...opcoes)] : opcoes));
+  }
+  sel.replaceChildren(...filhos);
+  if (salvo === "") return;
+  const igual = [...sel.querySelectorAll("option")].find((o) => o.value === salvo);
+  if (igual) igual.selected = true;
+  else {
+    // Valor gravado que a lista atual nao traz (outro SEI, lista ainda nao lida): mantem a escolha em vez de perde-la ao salvar de novo.
+    const partes = salvo.split("|");
+    sel.insertBefore(h("option", { value: salvo, selected: true }, partes[2] ?? salvo), sel.firstChild?.nextSibling ?? null);
+  }
+}
+
+/** Define as opcoes dinamicas de um combo e o aviso do item vazio (mostrado so enquanto nao ha lista nem valor gravado). */
+export function definirEscolhasDinamicas(raiz: ParentNode, nome: string, escolhas: EscolhaDinamica[], aviso: string): void {
+  dinamicas.set(nome, { escolhas, aviso });
+  const c = controleDe(raiz, nome);
+  if (c && c.tagName === "SELECT") montarEscolhas(c as HTMLSelectElement, nome);
+}
+
 /** Esvazia um controle como o legado fazia ao esconder uma linha dependente. */
 function limpar(c: Controle): void {
   if (tipoDe(c) === "chave") (c as HTMLInputElement).checked = false;
-  else if (c.tagName === "SELECT") c.replaceChildren(h("option", { value: "" }));
-  else c.value = "";
+  else if (c.tagName === "SELECT") {
+    if (dinamicas.has(nomeDe(c))) montarEscolhas(c as HTMLSelectElement, nomeDe(c));
+    else c.replaceChildren(h("option", { value: "" }));
+  } else c.value = "";
 }
 
 interface Regra {
@@ -106,14 +147,14 @@ export function coletarConfigGeral(raiz: ParentNode): ItemConfig[] {
 /**
  * newdocsigilo guarda "id|nivel|rotulo" (lido pelo sei-functions-pro.js). O legado
  * criava a <option> com so o `id` e, ao salvar de novo, perdia nivel e rotulo; aqui o
- * valor inteiro e o value da <option>, e o rotulo e o texto.
+ * valor inteiro e o value da <option>, e o rotulo e o texto. O gravado e escolhido na
+ * lista lida do SEI; se ela nao o traz, o valor fica como opcao extra.
  */
 function definirSelecao(sel: HTMLSelectElement, nome: string, valor: unknown): void {
   if (typeof valor !== "string") return;
   if (nome === "newdocsigilo") {
-    const partes = valor.split("|");
-    if (partes.length < 3) return;
-    sel.replaceChildren(h("option", { value: valor, selected: true }, partes[2]));
+    if (valor.split("|").length < 3) return;
+    montarEscolhas(sel, nome, valor);
     return;
   }
   for (const o of sel.querySelectorAll("option")) o.selected = o.value === valor;

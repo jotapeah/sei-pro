@@ -64,15 +64,15 @@ O botão **Ferramentas de PDF**, no mesmo grupo, abre as [Ferramentas de PDF](..
 
 ### Opções que dependem do SEI
 
-A página de configurações roda separada do SEI e não enxerga os dados do seu órgão. Por isso, opções que precisam de uma lista do SEI são definidas **de dentro do SEI**.
+A página de configurações roda separada do SEI e não consegue consultá-lo sozinha. Por isso, a lista de **hipóteses legais** do seu órgão é lida **pelo SEI Pro, de dentro do SEI**, e fica guardada no navegador para a página de configurações usar.
 
-É o caso da **hipótese legal padrão** para novos documentos. Se a caixa **Hipótese legal do documento** aparece vazia nas configurações, isso é esperado. Para definir:
+É o caso da **hipótese legal padrão** para novos documentos. Para ela aparecer na caixa **Hipótese legal do documento**:
 
-1. No SEI, abra um documento e clique em **Consultar/Alterar Documento**;
-2. Em **Nível de Acesso**, marque **Restrito**;
-3. Escolha a **hipótese legal** desejada;
-4. Clique em **Definir como padrão para novos documentos**, ao lado do rótulo *Hipótese Legal*;
-5. Aparece a mensagem *Padrão de sigilo definido com sucesso!*.
+1. **Abra qualquer processo** no SEI (basta abrir, não precisa mexer em nada). Em segundo plano, o SEI Pro lê as hipóteses legais do órgão; isso se repete no máximo a cada 12 horas;
+2. Volte às configurações e marque **Selecionar valores padronizados**, desligando **Marcar nível público**;
+3. Escolha a hipótese na caixa **Hipótese legal do documento** e salve.
+
+Se a caixa mostrar *Abra um processo no SEI para carregar a lista*, é porque nenhum processo foi aberto ainda neste navegador. Quem usa mais de um SEI vê as hipóteses separadas por endereço.
 
 A partir daí, os novos documentos já nascem restritos com essa hipótese — veja [Valores padronizados](../pages/VALDEFAULT.md).
 

@@ -2,7 +2,15 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseHTML } from "linkedom";
-import { aplicarConfigGeral, atualizarContagens, coletarConfigGeral, controleDe, type ItemConfig } from "../src/config";
+import {
+  aplicarConfigGeral,
+  atualizarContagens,
+  coletarConfigGeral,
+  controleDe,
+  definirEscolhasDinamicas,
+  type ItemConfig,
+} from "../src/config";
+import { AVISO_SEM_HIPOTESES, hipotesesDoArmazenamento } from "../src/listas";
 import { urlManual } from "../src/manual";
 import { montarComplementos, montarGeral } from "../src/render";
 import { checar, instalarDom, secao } from "./util";
@@ -105,7 +113,7 @@ export function verificarConfig(): void {
     { name: "newdocsigilo", value: "123|1|Informação restrita" },
   ]);
   const sel = controleDe(r2, "newdocsigilo") as HTMLSelectElement;
-  checar("mostra o rotulo", (sel.querySelector("option")?.textContent ?? "") === "Informação restrita");
+  checar("mostra o rotulo", ([...sel.querySelectorAll("option")].find((o) => o.selected)?.textContent ?? "") === "Informação restrita");
   checar("round-trip guarda o valor inteiro", valor(coletarConfigGeral(r2), "newdocsigilo") === "123|1|Informação restrita");
   marcar(r2, "newdocnivel", true);
   checar("nivel publico ligado limpa o sigilo", valor(coletarConfigGeral(r2), "newdocsigilo") === undefined);
@@ -118,6 +126,66 @@ export function verificarConfig(): void {
     "valor sem pipes e ignorado (como no legado): o select continua vazio",
     valor(coletarConfigGeral(r6), "newdocsigilo") === undefined,
   );
+
+  secao("config: hipoteses legais lidas do SEI");
+  const guardado = {
+    "sei.exemplo.gov.br": {
+      hipoteses: [
+        { id: "7", nome: "Informação Pessoal", nivel: 1 },
+        { id: "9", nome: "Sigilo | Fiscal", nivel: 2 },
+        { id: "", nome: "sem id", nivel: 1 },
+        { nome: "sem id nenhum" },
+      ],
+    },
+  };
+  const escolhas = hipotesesDoArmazenamento(guardado);
+  checar(
+    "converte para id|nivel|rotulo, troca o pipe do nome e descarta item sem id",
+    escolhas.length === 2 && escolhas[0].valor === "7|1|Informação Pessoal" && escolhas[1].valor === "9|2|Sigilo / Fiscal",
+  );
+  checar("sigiloso leva o aviso no rotulo", escolhas[1].rotulo === "Sigilo / Fiscal (Sigiloso)");
+  checar(
+    "lixo no armazenamento vira lista vazia",
+    hipotesesDoArmazenamento(null).length === 0 && hipotesesDoArmazenamento("x").length === 0,
+  );
+  const dois = hipotesesDoArmazenamento({ ...guardado, "outro.gov.br": { hipoteses: [{ id: "1", nome: "Outra", nivel: 1 }] } });
+  checar("dois enderecos de SEI viram grupos", dois.length === 3 && dois.every((e) => !!e.grupo));
+
+  const rVazio = montarMinimo({ lab: false, foraAntaq: true });
+  definirEscolhasDinamicas(rVazio, "newdocsigilo", [], AVISO_SEM_HIPOTESES);
+  const selVazio = controleDe(rVazio, "newdocsigilo") as HTMLSelectElement;
+  checar("sem lista, o item vazio explica o que fazer", (selVazio.querySelector("option")?.textContent ?? "") === AVISO_SEM_HIPOTESES);
+  checar("sem lista e sem escolha, nada e coletado", valor(coletarConfigGeral(rVazio), "newdocsigilo") === undefined);
+
+  const rLista = montarMinimo({ lab: false, foraAntaq: true });
+  definirEscolhasDinamicas(rLista, "newdocsigilo", escolhas, AVISO_SEM_HIPOTESES);
+  const selLista = controleDe(rLista, "newdocsigilo") as HTMLSelectElement;
+  checar(
+    "o combo oferece as hipoteses da lista",
+    [...selLista.querySelectorAll("option")].map((o) => o.value).join(",") === ",7|1|Informação Pessoal,9|2|Sigilo / Fiscal",
+  );
+  aplicarConfigGeral(rLista, [
+    { name: "newdocnivel", value: false },
+    { name: "newdocsigilo", value: "7|1|Informação Pessoal" },
+  ]);
+  checar(
+    "o gravado seleciona a opcao da lista, sem duplicar",
+    selLista.value === "7|1|Informação Pessoal" && selLista.querySelectorAll("option").length === 3,
+  );
+  marcar(rLista, "newdocnivel", true);
+  coletarConfigGeral(rLista);
+  marcar(rLista, "newdocnivel", false);
+  coletarConfigGeral(rLista);
+  checar(
+    "esconder e mostrar de novo limpa a escolha, mas a lista continua",
+    selLista.value === "" && selLista.querySelectorAll("option").length === 3,
+  );
+  aplicarConfigGeral(rLista, [{ name: "newdocsigilo", value: "55|1|De outro SEI" }]);
+  checar(
+    "gravado que a lista nao traz fica como opcao extra",
+    selLista.value === "55|1|De outro SEI" && valor(coletarConfigGeral(rLista), "newdocsigilo") === "55|1|De outro SEI",
+  );
+  definirEscolhasDinamicas(rLista, "newdocsigilo", [], "");
 
   secao("config: aplicar");
   const r3 = montarMinimo({ lab: false, foraAntaq: true });
