@@ -154,3 +154,19 @@ Comportamento:
 
 - [ ] **Step 1:** Editar.
 - [ ] **Step 2:** Commit `docs: histórico do anexo de PDF no agente`.
+
+---
+
+## Resultado da prova no navegador (16/10/2026)
+
+Chrome for Testing 1234 com o `dist/` instalado e o pedido ao serviço de IA interceptado (resposta 401 de mentira), PDFs gerados para o teste.
+
+Provado:
+- PDF digital de 80 páginas: chip "80 páginas · N caracteres" com "Cortar em 60 mil", sem aviso; o pedido ao serviço levou o texto ("DIGITAL pagina 3 linha 1…") e nenhum PDF cru (`%PDF`/`JVBERi0`); o chip some depois do envio.
+- PDF escaneado de 25 páginas: aviso "Este PDF tem 25 páginas digitalizadas…", sem botão Cancelar; "Não ler as digitalizadas" não anexa nada.
+- Trocar de arquivo com o OCR em andamento: o escaneado de 25 não reaparece; fica só o arquivo novo, inclusive 20 s depois.
+- PDF misto: o andamento do OCR contou só as 2 páginas digitalizadas ("de 2").
+- PDF com senha: aviso "Este PDF é protegido por senha." e nada anexado.
+- Nenhum erro de página.
+
+NÃO provado — o OCR em si: neste Chrome for Testing o `render` do pdf.js sobre `OffscreenCanvas` nunca termina, e isso acontece também com o OCR original das Ferramentas de PDF (chunk `js/ferramentas-pdf/ocr-*.js`, chamado direto na página `html/ferramentas-pdf.html`), em headless e com janela. É do ambiente de teste ou um defeito anterior a esta branch; precisa ser conferido no Chrome do Pedro: (1) Ferramentas de PDF → OCR num escaneado; (2) anexar um escaneado no chat do Agente. Se (1) travar também, é defeito em produção das Ferramentas de PDF, fora deste escopo.
