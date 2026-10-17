@@ -2,6 +2,22 @@
 
 ## ![SEI Pro Histórico de Versões](../img/icon-historico.png) Histórico de versões
 
+### Versão 3.6
+17/10/2026
+
+**Novo — [Ações em Lote](../pages/ACOESEMLOTE.md) refeitas** (*SEI Pro Lab*, Chrome e Edge). O antigo "Iniciar ações em lote" da árvore do processo agora se chama **Ações em Lote** e ganhou uma janela nova, no mesmo estilo dos painéis do SEI Pro, com tema claro e escuro.
+
+- **Mais ações.** Além de dar ciência, excluir, cancelar assinatura, baixar, alterar o nível de acesso, assinar e duplicar, agora dá para **cancelar documento** (com motivo), **incluir em bloco de assinatura** (existente ou novo, criado uma vez só para o lote), **alterar dados** (descrição, observação, interessados e assuntos, com *Acrescentar*, *Remover* ou *Substituir*), **mover para outro processo** e **baixar tudo num ZIP** ou **num PDF único** gerado pelo próprio SEI.
+- **Várias ações de uma vez.** Monte uma fila — por exemplo, alterar dados, incluir em bloco e assinar — e cada documento passa pelas etapas em ordem. Se uma etapa falha, as seguintes daquele documento ficam de fora.
+- **Seleção inteligente.** Filtros por tipo, unidade, assinatura, nível, origem e período, e os atalhos *Não assinados da minha unidade*, *Assinados por mim* e *Externos*. Cada botão mostra quantos documentos selecionados aceitam a ação.
+- **Prévia antes de executar.** Mostra, documento por documento, o que vai mudar (campo a campo) e quem será pulado e por quê. Excluir, cancelar e mover pedem confirmação.
+- **Pausar, minimizar e retomar.** O lote é salvo a cada etapa: se a janela fechar ou a sessão cair, dá para continuar de onde parou, sem repetir o que já foi feito. Uma etapa que o SEI não confirmou aparece como **Confira** e nunca é repetida sozinha. Senha errada pausa o lote no primeiro documento, para não bloquear sua conta, e a senha nunca é guardada.
+- **Resultado** com situação de cada etapa, **Copiar**, **Baixar CSV** e **Tentar de novo só as falhas**. No fim, a árvore do processo é recarregada.
+- **Mudança:** documentos e processos **sigilosos** ficam de fora das Ações em Lote (aparecem na lista como pulados, com o motivo).
+
+**Também nesta versão**
+- **Ajuste — nome:** o botão da árvore e o menu rápido passam a dizer **Ações em Lote** em todas as versões do SEI Pro. A configuração do menu rápido que você já tinha salvo continua valendo.
+
 ### Versão 3.5
 16/10/2026
 
