@@ -82,7 +82,7 @@ const gerados = [
   join(DIST, "js", "init_agente.js"),
   join(DIST, "js", "sei-pro-agente-editor.js"),
 ].filter((f) => f.endsWith(".js"));
-execFileSync(process.execPath, [resolve(AQUI, "..", "tools", "escape-nonascii.mjs"), ...gerados], { stdio: "inherit" });
+execFileSync(process.execPath, [resolve(AQUI, "escape-nonascii.mjs"), ...gerados], { stdio: "inherit" });
 
 await copyFile(resolve(AQUI, "estatico/agente.html"), join(DIST, "html", "agente.html"));
 await copyFile(resolve(AQUI, "estatico/fluxos.html"), join(DIST, "html", "fluxos.html"));
