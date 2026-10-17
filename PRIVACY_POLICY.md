@@ -1,8 +1,8 @@
 # Política de Privacidade — SEI Pro ![SEI Pro](/img/icon-32.png)
 
-**Versão:** 3.4  
-**Data de Vigência:** 10 de outubro de 2026  
-**Última Atualização:** 10 de outubro de 2026
+**Versão:** 3.5  
+**Data de Vigência:** 17 de outubro de 2026  
+**Última Atualização:** 17 de outubro de 2026
 
 ---
 
@@ -84,7 +84,7 @@ O SEI Pro guarda configurações e dados de trabalho **no dispositivo do usuári
 - **Storage API do navegador (`storage.local`, `storage.sync` e `storage.session`):** configurações da extensão. O `storage.sync` é sincronizado entre os dispositivos do usuário pela conta do navegador (Google, Microsoft ou Mozilla), se a sincronização estiver ativada;
 - **IndexedDB:** dados estruturados, como o histórico de processos visitados, as conversas do Agente de IA e as cópias automáticas diárias (as 14 mais recentes) dos Processos Monitorados, dos Projetos e das Demandas, que o usuário pode restaurar;
 - **Textos Padrão do SEI (opcional, para compartilhar com a unidade):** os Processos Monitorados, os Projetos e as Demandas podem guardar a lista **da unidade** em Textos Padrão do próprio SEI, para que os colegas que usam a extensão vejam os mesmos dados. Esse caso tem regras próprias e está descrito na seção 3.5;
-- **Arquivo escolhido pelo usuário (opcional):** os mesmos módulos podem gravar uma cópia num arquivo do computador, na pasta que o usuário escolher (seção 3.5).
+- **Arquivo escolhido pelo usuário (opcional):** os mesmos módulos podem gravar uma cópia num arquivo do computador, na pasta que o usuário escolher (seção 3.5). O Agente de IA também pode manter um backup completo num arquivo assim (seção 3.6).
 
 #### O que é sincronizado entre dispositivos
 
@@ -101,6 +101,8 @@ Quando a sincronização do navegador está ativada, acompanham a conta do usuá
 - o **texto das skills** criadas diretamente no painel (as que vêm de um repositório viajam apenas como endereço);
 - as conversas guardadas, o gasto diário, o histórico de execuções das rotinas e o catálogo de ferramentas dos conectores.
 
+A exceção é o **backup em arquivo do Agente de IA** (seção 3.6), que o usuário liga se quiser: ele leva ao arquivo também as conversas, o texto das skills e o histórico das rotinas — e a chave e os tokens apenas se o usuário marcar essa opção.
+
 Esses dados trafegam pela infraestrutura do fabricante do navegador, nunca por servidores do SEI Pro. O usuário pode desligar a sincronização nas configurações do próprio navegador; nesse caso, tudo passa a ficar apenas no dispositivo.
 
 ### 3.2. Tipos de dados
@@ -114,11 +116,13 @@ Esses dados trafegam pela infraestrutura do fabricante do navegador, nunca por s
 | Prazos do Controle de Prazos | Acompanhar vencimentos de processos | No próprio SEI: controle de prazo do processo e marcador do processo (seção 3.5) |
 | Histórico de processos visitados | Navegação entre processos recentes | Navegador |
 | Endereço e chave do servidor de Atividades (seção 4.3) | Conectar ao servidor do órgão | Navegador; sincronizados pela conta do navegador, se ativado |
-| Chave de API do serviço de IA | Usar o Agente de IA | Somente neste navegador (não é sincronizada) |
-| Conversas do Agente de IA | Reler conversas anteriores | Navegador, com prazo de guarda escolhido pelo usuário (7, 30 ou 90 dias, ou sem limite); o recurso pode ser desligado |
+| Chave de API do serviço de IA | Usar o Agente de IA | Somente neste navegador (não é sincronizada); vai ao arquivo de backup do agente só se o usuário marcar a opção (seção 3.6) |
+| Conversas do Agente de IA | Reler conversas anteriores | Navegador, com prazo de guarda escolhido pelo usuário (7, 30 ou 90 dias, ou sem limite); o recurso pode ser desligado; arquivo de backup opcional (seção 3.6) |
 | Tabela de pseudônimos do Agente de IA | Restaurar os dados reais nas respostas | Memória temporária; apagada ao fechar o navegador |
 | Conectores (MCP): endereço, situação e permissões | Usar ferramentas externas no Agente de IA | Navegador; sincronizados pela conta do navegador, se ativado |
-| Token de autenticação dos conectores | Acessar o serviço indicado pelo usuário | Somente neste navegador (não é sincronizado) |
+| Token de autenticação dos conectores | Acessar o serviço indicado pelo usuário | Somente neste navegador (não é sincronizado); vai ao arquivo de backup do agente só se o usuário marcar a opção (seção 3.6) |
+| Backup do Agente de IA (configuração, conversas, memória, instruções, skills, regras, rotinas, conectores e fluxos) | Levar o agente a outro computador | Arquivo `.json` escolhido pelo usuário; opcional (seção 3.6) |
+| Lote das Ações em Lote em andamento (números SEI dos documentos, ações escolhidas e situação de cada etapa; nunca a senha de assinatura) | Retomar um lote interrompido | Navegador, só neste computador; apagado quando o lote termina ou é descartado |
 | Rotinas do Agente de IA e seu histórico de execuções | Repetir tarefas que o usuário programou | Navegador; as rotinas são sincronizadas, o histórico não |
 
 ### 3.3. Controle do usuário
@@ -149,6 +153,17 @@ Alguns módulos permitem trabalhar em equipe sem servidor do SEI Pro. Para isso 
 
 Os módulos de Projetos e de Demandas descritos aqui **não** usam o servidor do órgão da seção 4.3.
 
+### 3.6. Backup em arquivo do Agente de IA
+
+O Agente de IA pode guardar uma cópia completa de si mesmo num arquivo `.json` escolhido pelo usuário, normalmente numa pasta sincronizada pela nuvem (OneDrive, Google Drive ou a nuvem corporativa do órgão), para usá-la em outro computador.
+
+- **Quando acontece:** só se o usuário ligar a função em Configuração → Backup em arquivo, escolhendo o arquivo. A partir daí, a extensão grava o arquivo alguns segundos depois de cada mudança e o lê ao abrir o painel. Também há Exportar e Importar manuais.
+- **O que vai:** a configuração do agente, as conversas guardadas (se o recurso de guardar conversas estiver ligado), a memória da unidade, as instruções, as skills (inclusive o texto das coladas à mão), as regras, as rotinas e o histórico de execuções, os conectores e os fluxos.
+- **Segredos:** a chave de API do serviço de IA e os tokens dos conectores **só vão ao arquivo se o usuário marcar essa opção**, que vem desmarcada e vale apenas para o computador em que foi marcada. Quem tiver acesso à pasta do arquivo poderá usar essas credenciais.
+- **Para onde vai:** a extensão apenas lê e grava o arquivo no computador do usuário. **Nada é enviado a servidor do SEI Pro.** Se a pasta for sincronizada por um serviço de nuvem, o conteúdo segue as regras desse serviço e do órgão, e fica sob a guarda de quem escolheu a pasta. As conversas podem conter trechos de documentos do SEI lidos pelo agente.
+- **Proteção contra arquivo alterado:** como a pasta pode ser editada por outras pessoas, ler o arquivo sempre mescla com o que já existe no computador e nunca apaga nada dele; rotinas e conectores que chegam pelo arquivo entram desligados, e o arquivo nunca libera permissões de um conector.
+- **Como parar:** desligar a função em Configuração → Backup em arquivo (opção *Esquecer arquivo*) e, se quiser, apagar o arquivo da pasta.
+
 ---
 
 ## 4. Funções que se comunicam com serviços externos
@@ -170,7 +185,7 @@ Os módulos de Projetos e de Demandas descritos aqui **não** usam o servidor do
   - Anthropic;
   - outro endereço compatível informado pelo usuário, que pode ser um servidor do próprio órgão.
 - **O que é enviado:**
-  - o pedido digitado e os arquivos que o usuário anexar à conversa;
+  - o pedido digitado e os arquivos que o usuário anexar à conversa. Um **PDF anexado é lido no próprio computador** — com reconhecimento de texto (OCR) local nas páginas digitalizadas — e **só o texto extraído** é enviado; o arquivo em si não sai do navegador;
   - o contexto da tela: sigla da unidade; número, tipo e nível de acesso do processo aberto; número e título do documento em visualização;
   - o resultado das consultas que o agente faz no SEI para cumprir o pedido: texto dos documentos lidos, árvore do processo, andamentos, resultados de pesquisa e dados da caixa de processos;
   - as instruções e skills cadastradas pelo usuário e as anotações da memória da unidade.
@@ -381,6 +396,7 @@ As alterações relevantes são comunicadas:
 
 | Versão | Data | Principais alterações |
 |---|---|---|
+| 3.5 | 17/10/2026 | Nova seção 3.6: backup em arquivo do Agente de IA (o que vai, segredos só por opção do usuário, nada enviado a servidor do SEI Pro, proteção contra arquivo alterado); anexo de PDF no Agente lido no computador, com só o texto enviado (seção 4.2); inventário em 3.1 e 3.2 atualizado, inclusive o lote em andamento das Ações em Lote, guardado só no navegador |
 | 3.4 | 10/10/2026 | Nova seção 3.5: dados que o usuário escolhe compartilhar com a unidade (Textos Padrão do SEI dos Processos Monitorados, Projetos e Demandas, arquivo no computador e prazos gravados no SEI); inventário em 3.1 e 3.2 atualizado (cópias diárias, ordem dos painéis, Projetos, Demandas, Prazos); Favoritos passa a se chamar Monitorados; a seção 4.3 esclarece que trata só do servidor do órgão |
 | 3.3 | 04/10/2026 | Busca de normas passa a usar a API de legislação (`legis.seipro.app`); a extensão deixou de contatar `seipro.io`. A API não registra os termos pesquisados e recebe as consultas por meio da Cloudflare; a política passa a descrever os registros técnicos de acesso mantidos pela hospedagem (o que é registrado, por quem e por quanto tempo) |
 | 3.2 | 01/10/2026 | Lista de novidades por e-mail (seção 2.5): inscrição opcional no site com confirmação por e-mail, dados guardados, operador (Resend) e cancelamento |
