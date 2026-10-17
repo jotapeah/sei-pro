@@ -247,9 +247,29 @@ A configuração do agente usa a **sincronização do próprio navegador** — a
 Duas consequências práticas:
 
 * **skill colada à mão não viaja.** O texto de uma skill pode passar de 20 mil caracteres, e o navegador reserva pouco espaço para sincronizar — então viaja o endereço, não o conteúdo. Se você quer que uma skill acompanhe a sua conta, **mantenha o arquivo `.md` num repositório** e cadastre o endereço: o outro computador baixa sozinho;
-* **segredo nunca sai daqui.** A chave do serviço de IA e os tokens dos conectores não são sincronizados, nem exportados: em cada computador você os digita uma vez.
+* **segredo não sincroniza.** A chave do serviço de IA e os tokens dos conectores não vão pela sincronização do navegador: em cada computador você os digita uma vez — a não ser que você os inclua de propósito no [backup em arquivo](#backup-em-arquivo-o-agente-inteiro-em-outro-computador).
 
 Se a configuração passar do espaço que o navegador reserva, o agente avisa na conversa e para de sincronizar o excedente — o que já estava sincronizado continua valendo, e nada se perde neste computador.
+
+### Backup em arquivo: o agente inteiro em outro computador
+
+O que a sincronização do navegador não leva — **as conversas guardadas, o texto das skills coladas à mão, o histórico das rotinas** — pode ir num arquivo `.json` que você guarda numa pasta do **OneDrive** ou do **Google Drive**, como já fazem os Monitorados, os Projetos e as Demandas. Em **Configuração → Backup em arquivo**:
+
+* **Criar arquivo** (ou **Usar arquivo existente**, no segundo computador): a partir daí o agente grava sozinho alguns segundos depois de cada mudança e lê o arquivo ao abrir o painel. Uma conversa feita no trabalho aparece em casa.
+* **Sincronizar agora**, **Exportar (.json)** e **Importar arquivo** para controle manual. No Firefox, que não grava direto num arquivo, só Exportar e Importar existem.
+* Ler o arquivo **sempre mescla** com o que já está aqui; nunca apaga nada deste computador. Conversa apagada num computador não volta na leitura seguinte.
+* **A chave do serviço de IA e os tokens dos conectores só entram no arquivo se você marcar** *Incluir a chave de API e os tokens dos conectores* — desmarcado de fábrica, e a escolha vale só para este computador. Quem tiver acesso à pasta do arquivo poderá usar a chave.
+* O arquivo mora numa pasta que outra pessoa pode editar, então o agente o trata com desconfiança: **rotina autônoma chega desligada**, e **conector novo chega desligado, sem consentimento e com as ferramentas restritas**. O arquivo pode desligar ou restringir um conector, nunca ligar nem liberar.
+* Se a opção de guardar conversas estiver desligada, as conversas também não vão para o arquivo.
+
+### Anexar PDF na conversa
+
+O botão de anexar aceita **PDF**, além de texto, CSV e JSON. O PDF **é lido neste computador** e só o texto vai ao serviço de IA — o arquivo nunca é enviado.
+
+* A leitura é **página por página**: página com texto usa o texto; página digitalizada passa pelo **reconhecimento de texto (OCR)**, também feito aqui. O andamento aparece (*OCR: página 7 de 32*) e dá para cancelar.
+* Antes de começar, o agente conta as páginas digitalizadas e avisa quando o OCR pode deixar o computador lento por alguns minutos.
+* O envio da mensagem espera a leitura terminar. O anexo mostra o nome e o número de páginas, e avisa quais páginas não puderam ser lidas.
+* O texto vindo de OCR é marcado como tal para o modelo, porque pode ter erros de reconhecimento. E, como todo anexo, é tratado como **conteúdo**, nunca como instrução.
 
 ### Memória da unidade
 

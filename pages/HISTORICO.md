@@ -2,6 +2,18 @@
 
 ## ![SEI Pro Histórico de Versões](../img/icon-historico.png) Histórico de versões
 
+### Versão 3.7
+17/10/2026
+
+**Novo — [Agente de IA](../pages/AGENTEIA.md): backup em arquivo e anexo de PDF.**
+
+- **[Backup em arquivo](../pages/AGENTEIA.md#backup-em-arquivo-o-agente-inteiro-em-outro-computador):** o agente inteiro — conversas, memória, instruções, skills, regras, rotinas, conectores e fluxos — num `.json` numa pasta do OneDrive ou do Google Drive, gravado sozinho a cada mudança, com **Exportar** e **Importar**. Ler o arquivo sempre mescla, nunca apaga. A chave do serviço e os tokens dos conectores só entram se você marcar a opção; conector e rotina que chegam pelo arquivo vêm desligados.
+- **[Anexar PDF](../pages/AGENTEIA.md#anexar-pdf-na-conversa):** o PDF é lido no seu computador, página por página, com OCR nas páginas digitalizadas, e só o texto vai ao serviço de IA. Mostra o andamento, dá para cancelar e avisa quando o OCR pode deixar o computador lento.
+- **[Serviço compatível](../pages/CHAVEIA.md) e Ollama:** as listas de **Endereço** e **Modelo** voltam a abrir de novo depois de escolhidas (com a opção *Outro* para digitar), e o **403** de um servidor local passa a explicar como liberar `OLLAMA_ORIGINS`, em vez de dizer que a chave foi recusada. Contribuição de Manoel Fernandes ([#182](https://github.com/SEI-Pro/sei-pro/pull/182)).
+
+**Também nesta versão**
+- **Corrigido — [Estilo Avançado](../pages/ESTILOAVANCADO.md):** os botões do canto (largura total, nova aba, baixar HTML/DOCX) apareciam sobre formulários como *Incluir em Bloco*; agora só aparecem quando a tela mostra um documento.
+
 ### Versão 3.6
 17/10/2026
 
