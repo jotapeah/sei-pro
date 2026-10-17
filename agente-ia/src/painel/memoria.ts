@@ -22,7 +22,8 @@ export interface Lembranca {
   origem: "agente" | "usuario";
 }
 
-const CHAVE = "agenteIA_memoria";
+export const CHAVE_MEMORIA = "agenteIA_memoria";
+const CHAVE = CHAVE_MEMORIA;
 
 /** Poucas e curtas: elas entram em TODO pedido, e prompt longo é caro e distrai. */
 export const MAX_LEMBRANCAS = 30;

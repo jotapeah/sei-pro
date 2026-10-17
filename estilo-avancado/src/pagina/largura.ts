@@ -58,7 +58,27 @@ export const CLASSE_GRUPO = "spro-doc-acoes";
 export const ATRIBUTO_ROTULO = "data-spro-rotulo";
 /** No grupo: marca a rolagem do documento; o CSS some com os rótulos e deixa só os ícones. */
 export const ATRIBUTO_COMPACTO = "data-spro-compacto";
+/** No grupo: o iframe da visualização não mostra um documento (formulário, capa do processo...); o CSS esconde o grupo. */
+export const ATRIBUTO_SEM_DOCUMENTO = "data-spro-sem-documento";
 const LIMITE_ROLAGEM = 16;
+
+/**
+ * O iframe da visualização está mostrando um documento (interno ou externo)? O SEI Pro cria "Abrir em nova aba" e os de
+ * baixar quando o nó selecionado da árvore é um documento, e ele continua selecionado quando o usuário abre um formulário
+ * (Incluir em Bloco, Enviar Processo...) naquele iframe: aí os botões não têm o que abrir nem baixar. Sem iframe, ou com
+ * um que não dá para ler (outra origem), vale "sim": só some quando se sabe que a tela não é de documento.
+ */
+export function iframeMostraDocumento(doc: Document): boolean {
+  const iframe = doc.querySelector<HTMLIFrameElement>("iframe#ifrVisualizacao, iframe[name=ifrVisualizacao]");
+  if (!iframe) return true;
+  try {
+    const dentro = iframe.contentWindow?.location;
+    if (!dentro) return true;
+    return /[?&]acao=documento_visualizar\b/.test(dentro.search);
+  } catch {
+    return true;
+  }
+}
 
 /** Rótulo curto de um botão só de ícone, a partir do tooltip do SEI Pro ("Baixar documento (DOCX)" -> "Baixar DOCX"). */
 export function rotuloDoBotao(tooltip: string): string {
@@ -134,6 +154,12 @@ export function iniciarBotaoLargura(doc: Document, armazem: Armazem): () => void
     }
   };
 
+  const sincronizarVisibilidade = () => {
+    if (!grupo) return;
+    if (iframeMostraDocumento(doc)) grupo.removeAttribute(ATRIBUTO_SEM_DOCUMENTO);
+    else grupo.setAttribute(ATRIBUTO_SEM_DOCUMENTO, "");
+  };
+
   const garantir = () => {
     const ancoras = [...doc.querySelectorAll<HTMLElement>(ALVO)];
     const primeira = ancoras[0];
@@ -156,6 +182,7 @@ export function iniciarBotaoLargura(doc: Document, armazem: Armazem): () => void
         if (rotulo) a.setAttribute(ATRIBUTO_ROTULO, rotulo);
       }
     }
+    sincronizarVisibilidade();
   };
 
   garantir();
@@ -164,6 +191,7 @@ export function iniciarBotaoLargura(doc: Document, armazem: Armazem): () => void
   const aoCarregar = () => {
     compactar(false);
     vigiarRolagem();
+    sincronizarVisibilidade();
   };
   doc.addEventListener("load", aoCarregar, true);
   const Obs = doc.defaultView?.MutationObserver ?? (typeof MutationObserver === "function" ? MutationObserver : null);

@@ -95,6 +95,8 @@ em que o usuário salva o endereço (`optional_host_permissions` no manifest, e 
 pedido cai sobre a origem informada — nunca sobre todos os sites). O manifest v2
 do Firefox precisa do mesmo em `optional_permissions`.
 
+Backup em arquivo: nas configurações, o agente pode gravar tudo (conversas, memória, instruções, skills, regras, rotinas, conectores e fluxos) num .json numa pasta do OneDrive ou do Google Drive; a chave de API e os tokens dos conectores só entram no arquivo se a opção for marcada neste computador.
+
 ## Painel (UI)
 
 Uma tela só — a conversa. A configuração é um `<dialog>` modal por cima dela (na primeira vez,

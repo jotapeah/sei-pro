@@ -95,6 +95,37 @@ export async function obter(id: string): Promise<ConversaSalva | null> {
   });
 }
 
+/**
+ * Todas as conversas, com a transcrição (a sincronia por arquivo leva o
+ * histórico inteiro). Ao contrário do resto do arquivo, falha alto: tratar o
+ * IndexedDB indisponível como "nenhuma conversa" faria o arquivo apagar as
+ * conversas nos outros computadores.
+ */
+export async function todas(): Promise<ConversaSalva[]> {
+  return transacao([RESUMOS, ITENS], "readonly", async (t) => {
+    const resumos = (await comoPromessa(t.objectStore(RESUMOS).getAll())) as ResumoConversa[];
+    const corpos = (await comoPromessa(t.objectStore(ITENS).getAll())) as { id: string; itens: unknown[] }[];
+    const itens = new Map(corpos.map((c) => [c.id, c.itens]));
+    return resumos.sort((a, b) => b.quando - a.quando).map((r) => ({ ...r, itens: itens.get(r.id) ?? [] }));
+  });
+}
+
+/** Grava e apaga numa transação só: ou entra tudo o que veio do arquivo, ou nada. */
+export async function gravarVarias(novas: ConversaSalva[], removidas: string[]): Promise<void> {
+  if (!novas.length && !removidas.length) return;
+  await transacao([RESUMOS, ITENS], "readwrite", (t) => {
+    for (const c of novas) {
+      const { itens, ...resumo } = c;
+      t.objectStore(RESUMOS).put(resumo);
+      t.objectStore(ITENS).put({ id: c.id, itens });
+    }
+    for (const id of removidas) {
+      t.objectStore(RESUMOS).delete(id);
+      t.objectStore(ITENS).delete(id);
+    }
+  });
+}
+
 export async function remover(id: string): Promise<void> {
   await transacao([RESUMOS, ITENS], "readwrite", (t) => {
     t.objectStore(RESUMOS).delete(id);
