@@ -4,7 +4,7 @@
  * `fetch` é substituído por um que grava o que recebeu.
  */
 
-import { Acumulador, criarProvedor, enderecoDoServico, lerSSE, limparAssinaturasDeOutro, listarModelos, parametroRecusado, serveParaConversar, SERVICOS, TEMPERATURA_PADRAO, esperaDaTentativa, mensagemDeErro, valeRepetir } from "../src/motor/provedor";
+import { Acumulador, atalhoDeEndereco, criarProvedor, enderecoDoServico, ENDERECO_OUTRO, lerSSE, limparAssinaturasDeOutro, listarModelos, parametroRecusado, serveParaConversar, SERVICOS, TEMPERATURA_PADRAO, campoModeloEhSelect, enderecoLocal, esperaDaTentativa, mensagemDeErro, valeRepetir, valorSelectEndereco } from "../src/motor/provedor";
 import { promptSistema } from "../src/motor/prompt";
 import type { ChamadaTool, PedidoLLM } from "../src/motor/tipos";
 import { checar, secao, lanca } from "./util";
@@ -394,4 +394,76 @@ export async function verificarRaciocinioComFerramentas(): Promise<void> {
     // copiar do cartao de erro leva para o chamado.
     checar("e o texto original fica no diagnostico", /reasoning_effort/.test((e as { corpo?: string })?.corpo ?? ""), (e as { corpo?: string })?.corpo);
   }
+}
+
+/**
+ * Ollama local devolve 403 quando a origem chrome-extension:// não está em
+ * OLLAMA_ORIGINS. Não é a chave: o aviso tem de mandar liberar a origem.
+ */
+export async function verificarErro403Local(): Promise<void> {
+  secao("provedor: 403 de servidor local (OLLAMA_ORIGINS)");
+  checar("localhost e local", enderecoLocal("http://localhost:11434/v1"));
+  checar("127.0.0.1 e local", enderecoLocal("http://127.0.0.1:11434/v1"));
+  checar("[::1] e local", enderecoLocal("http://[::1]:11434/v1"));
+  checar("rede 192.168 e local", enderecoLocal("http://192.168.0.10:11434/v1"));
+  checar("host.docker.internal-like .internal e local", enderecoLocal("http://llm.corp.internal:11434/v1"));
+  checar("169.254 e local", enderecoLocal("http://169.254.1.5/v1"));
+  checar("IPv6 ULA e local", enderecoLocal("http://[fd12:3456::1]:11434/v1"));
+  checar("IPv6 publico nao e local", !enderecoLocal("http://[2001:db8::1]/v1"));
+  checar("NVIDIA nao e local", !enderecoLocal("https://integrate.api.nvidia.com/v1"));
+  checar("endereco invalido nao e local", !enderecoLocal("nada"));
+  {
+    const m = mensagemDeErro(403, "", "compativel", null, "http://localhost:11434/v1");
+    checar("403 local cita OLLAMA_ORIGINS", /OLLAMA_ORIGINS/.test(m), m);
+    checar("403 local nao afirma que a chave foi recusada", !/chave do .* foi recusada/.test(m), m);
+    checar("403 local cobre o Firefox", /moz-extension/.test(m), m);
+    checar("403 local nao presume Ollama: manda conferir a chave se nao for", /Se n\u00E3o for o Ollama/.test(m), m);
+    checar("403 local aponta a documentacao", /CHAVEIA/.test(m), m);
+  }
+  checar("401 local continua falando da chave", /foi recusada/.test(mensagemDeErro(401, "", "compativel", null, "http://localhost:11434/v1")));
+  checar("403 remoto continua falando da chave", /foi recusada/.test(mensagemDeErro(403, "", "compativel", null, "https://api.groq.com/openai/v1")));
+  checar("403 da OpenAI continua falando da chave", /foi recusada/.test(mensagemDeErro(403, "", "openai")));
+  {
+    const { f } = espiao([{ status: 403, corpo: "" }]);
+    const p = criarProvedor({ servico: "compativel", url: "http://localhost:11434/v1", chave: "ollama", modelo: "qwen", fetch: f });
+    let msg = "";
+    try {
+      await p.conversar(PEDIDO, new AbortController().signal, () => {});
+    } catch (e) {
+      msg = (e as Error).message;
+    }
+    checar("conversa com Ollama local: 403 vira aviso de OLLAMA_ORIGINS", /OLLAMA_ORIGINS/.test(msg), msg);
+  }
+  {
+    const { f } = espiao([{ status: 403, corpo: "" }]);
+    let msg = "";
+    try {
+      await listarModelos({ servico: "compativel", url: "http://localhost:11434/v1", chave: "ollama", fetch: f });
+    } catch (e) {
+      msg = (e as Error).message;
+    }
+    checar("Atualizar com 403 local tambem cita OLLAMA_ORIGINS", /OLLAMA_ORIGINS/.test(msg), msg);
+  }
+}
+
+/** Com catálogo no compatível, o painel usa <select> (lista sempre aberta). */
+export async function verificarCampoModeloSelect(): Promise<void> {
+  secao("provedor: campo de modelo (select vs digitacao)");
+  checar("openrouter sempre select", campoModeloEhSelect("openrouter", false));
+  checar("openai sempre select", campoModeloEhSelect("openai", true));
+  checar("compativel sem catalogo: digitacao", !campoModeloEhSelect("compativel", false));
+  checar("compativel com catalogo: select", campoModeloEhSelect("compativel", true));
+  checar("compativel com catalogo e Outro: volta a digitar", !campoModeloEhSelect("compativel", true, true));
+  checar("Outro nao afeta os demais servicos", campoModeloEhSelect("openrouter", true, true));
+}
+
+/** Atalhos de endereço: select em vez de datalist (lista sempre abre completa). */
+export async function verificarSelectEndereco(): Promise<void> {
+  secao("provedor: select de endereco (atalhos vs digitar)");
+  checar("localhost e atalho Ollama", atalhoDeEndereco("http://localhost:11434/v1/")?.nome.includes("Ollama") === true);
+  checar("barra final nao impede o atalho", valorSelectEndereco("http://localhost:11434/v1/") === "http://localhost:11434/v1");
+  checar("NVIDIA e atalho", valorSelectEndereco("https://integrate.api.nvidia.com/v1") === "https://integrate.api.nvidia.com/v1");
+  checar("URL customizada e Outro", valorSelectEndereco("https://llm.orgao.gov.br/v1") === ENDERECO_OUTRO);
+  checar("vazio e Outro", valorSelectEndereco("") === ENDERECO_OUTRO);
+  checar("atalho desconhecido nao existe", atalhoDeEndereco("https://exemplo.invalid/v1") === undefined);
 }

@@ -221,12 +221,45 @@ export const SERVICOS: Record<Servico, ServicoInfo> = {
   },
 };
 
+/**
+ * No serviço "compatível" o campo de modelo era um `<input list=datalist>`. O
+ * datalist do navegador SÓ sugere o que casa com o texto atual: com um modelo
+ * já escolhido, a setinha não reabria a lista. Com o catálogo carregado usamos
+ * um `<select>`, que sempre mostra tudo; a opção "Outro" (`outro`) devolve o
+ * campo livre para um modelo fora da lista. Sem catálogo (servidor sem
+ * /models, ou ainda sem clicar em Atualizar) o campo livre continua.
+ */
+export function campoModeloEhSelect(servico: Servico, catalogoCarregado: boolean, outro = false): boolean {
+  return servico !== "compativel" || (catalogoCarregado && !outro);
+}
+
+/** Valor da opção "Outro" no select de modelos (n\u00E3o \u00E9 id de modelo real). */
+export const MODELO_OUTRO = "__outro__";
+
 /** Atalhos de endereço para o serviço "compatível", para não decorar URL. */
 export const COMPATIVEIS: Array<{ nome: string; url: string; ajuda: string }> = [
   { nome: "NVIDIA", url: "https://integrate.api.nvidia.com/v1", ajuda: "Chave nvapi-... de build.nvidia.com. O plano gratuito \u00E9 de avalia\u00E7\u00E3o: os termos da NVIDIA n\u00E3o cobrem uso em produ\u00E7\u00E3o." },
   { nome: "Groq", url: "https://api.groq.com/openai/v1", ajuda: "Chave gsk_... de console.groq.com." },
-  { nome: "Ollama nesta m\u00E1quina", url: "http://localhost:11434/v1", ajuda: "Modelo rodando no pr\u00F3prio computador: nada sai da m\u00E1quina. A chave pode ser qualquer texto." },
+  { nome: "Ollama nesta m\u00E1quina", url: "http://localhost:11434/v1", ajuda: "Modelo rodando no pr\u00F3prio computador: nada sai da m\u00E1quina. A chave pode ser qualquer texto. Antes, libere a extens\u00E3o no Ollama (OLLAMA_ORIGINS) e reinicie-o; sem isso a conversa falha com 403. Passo a passo na documenta\u00E7\u00E3o." },
 ];
+
+/** Valor do select de atalhos quando o usuário digita a URL à mão. */
+export const ENDERECO_OUTRO = "";
+
+/** Atalho conhecido (NVIDIA, Groq, Ollama…) para esta URL, se houver. */
+export function atalhoDeEndereco(url: string): (typeof COMPATIVEIS)[number] | undefined {
+  const n = normalizarUrl(url);
+  return COMPATIVEIS.find((c) => c.url === n);
+}
+
+/**
+ * Valor do <select> de endereço: URL do atalho, ou `ENDERECO_OUTRO` (= digitar).
+ * O datalist filtrava pelo texto atual e escondia os atalhos com o campo cheio;
+ * o select sempre lista todos, e "Outro" preserva URL livre.
+ */
+export function valorSelectEndereco(url: string): string {
+  return atalhoDeEndereco(url)?.url ?? ENDERECO_OUTRO;
+}
 
 /**
  * Controle fino do modelo (a antiga "configuração avançada" do chat de IA).
@@ -392,7 +425,30 @@ export function valeRepetir(status: number, corpo: string): boolean {
   return !semCredito(corpo);
 }
 
-export function mensagemDeErro(status: number, corpo: string, servico: Servico = "openrouter", retryAfter?: string | null): string {
+/**
+ * O endereço aponta para esta máquina (ou para a rede local)? Num servidor
+ * local, 403 quase nunca é chave: o Ollama, por exemplo, não confere chave e
+ * devolve 403 quando a origem `chrome-extension://...` não está em
+ * OLLAMA_ORIGINS. O Chrome só manda `Origin` no POST (o GET de /models vai
+ * sem), por isso "Atualizar" lista os modelos e a conversa falha.
+ */
+export function enderecoLocal(url: string | undefined): boolean {
+  if (!url) return false;
+  let host: string;
+  try {
+    host = new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  } catch {
+    return false;
+  }
+  return (
+    host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal") ||
+    host === "::1" || host === "0.0.0.0" || /^127\./.test(host) || /^169\.254\./.test(host) ||
+    /^f[cd][0-9a-f]{2}:/.test(host) || /^fe[89ab][0-9a-f]:/.test(host) ||
+    /^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+  );
+}
+
+export function mensagemDeErro(status: number, corpo: string, servico: Servico = "openrouter", retryAfter?: string | null, url?: string): string {
   let msg = corpo;
   try {
     msg = (JSON.parse(corpo) as { error?: { message?: string } }).error?.message ?? corpo;
@@ -400,6 +456,13 @@ export function mensagemDeErro(status: number, corpo: string, servico: Servico =
     /* não é JSON */
   }
   const onde = SERVICOS[servico]?.nome.replace(/ \(.*\)$/, "") ?? "servi\u00E7o de IA";
+  if (status === 403 && servico === "compativel" && enderecoLocal(url)) {
+    return (
+      `O servidor local (${url}) recusou o pedido (403). Se for o Ollama, a causa quase certa n\u00E3o \u00E9 a chave (ele n\u00E3o confere chave): ` +
+      "ele recusa extens\u00F5es do navegador at\u00E9 a origem delas ser liberada. Defina OLLAMA_ORIGINS=chrome-extension://*,moz-extension://* e reinicie o Ollama " +
+      `(passo a passo no Windows, Mac e Linux: ${DOC_CHAVES}#outro-servico-compativel). Se n\u00E3o for o Ollama, confira a chave e as regras de acesso do servidor.`
+    );
+  }
   if (status === 401 || status === 403) return `A chave do ${onde} foi recusada. Confira a chave nas configura\u00E7\u00F5es do agente.`;
   if (status === 402) return `Sem cr\u00E9dito no ${onde} para este modelo. Adicione cr\u00E9ditos ou escolha um modelo mais barato.`;
   // O agente depende de ferramentas: é com elas que ele lê o processo e
@@ -528,7 +591,7 @@ export function criarProvedor(o: OpcoesProvedor): Provedor {
             await esperar(esperaDaTentativa(tentativa, quando), sinal);
             continue;
           }
-          throw new ErroProvedor(mensagemDeErro(r.status, texto, servico, quando), r.status, texto.slice(0, 500));
+          throw new ErroProvedor(mensagemDeErro(r.status, texto, servico, quando, base(o)), r.status, texto.slice(0, 500));
         }
         if (r.status === 400) {
           const texto = await r.text();
@@ -552,11 +615,11 @@ export function criarProvedor(o: OpcoesProvedor): Provedor {
             recusados.add(culpado);
             continue;
           }
-          throw new ErroProvedor(mensagemDeErro(400, texto, servico), 400, texto.slice(0, 500));
+          throw new ErroProvedor(mensagemDeErro(400, texto, servico, null, base(o)), 400, texto.slice(0, 500));
         }
         if (!r.ok || !r.body) {
           const texto = await r.text();
-          throw new ErroProvedor(mensagemDeErro(r.status, texto, servico, r.headers?.get?.("retry-after") ?? null), r.status, texto.slice(0, 500));
+          throw new ErroProvedor(mensagemDeErro(r.status, texto, servico, r.headers?.get?.("retry-after") ?? null, base(o)), r.status, texto.slice(0, 500));
         }
         const acc = new Acumulador();
         try {
@@ -615,7 +678,7 @@ export async function listarModelos(o: { servico?: Servico; url?: string; chave?
   const endereco = `${base({ servico, url: o.url })}/models`;
   if (servico !== "openrouter") {
     const r = await f(endereco, { headers: o.chave ? cabecalhos(servico, o.chave) : {} });
-    if (!r.ok) throw new Error(mensagemDeErro(r.status, await r.text(), servico));
+    if (!r.ok) throw new Error(mensagemDeErro(r.status, await r.text(), servico, null, endereco));
     const j = (await r.json()) as { data?: Array<{ id: string; display_name?: string }> };
     return (j.data ?? [])
       // O Gemini devolve "models/gemini-2.5-flash"; o pedido quer o id sem o prefixo.
