@@ -178,7 +178,7 @@ function montar(o: Opcoes = {}) {
     arvore: async () => {
       if (!criado && estado.posts.some((p) => /acao=documento_cadastrar&/.test(p.url))) {
         criado = true;
-        arvore.documentos.push({ ...arvore.documentos[4], id: "999001", numero: "0109999", acoes: [] });
+        arvore.documentos.push({ ...arvore.documentos[4], id: "999001", numero: "0109999", titulo: "Despacho Fulano de Tal", acoes: [] });
       }
       return arvore as Arvore;
     },
@@ -210,6 +210,7 @@ export async function verificarAcoesLote(): Promise<void> {
     checar("nivel publico copiado", valor(post, "rdoNivelAcesso") === "0" && valor(post, "hdnStaNivelAcessoLocal") === "0");
     checar("flag de cadastro 2", valor(post, "hdnFlagDocumentoCadastro") === "2");
     checar("dados: id e numero do documento novo", r.aplicado && r.dados?.idDocumento === "999001" && r.dados?.numero === "0109999", r);
+    checar("resumo usa o titulo do no novo na arvore", r.resumo.includes("duplicado: Despacho Fulano de Tal (0109999) no processo"), r.resumo);
     checar("arvore do processo invalidada", estado.invalidados.includes("148265"), estado.invalidados);
   }
   {

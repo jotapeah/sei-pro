@@ -5,9 +5,8 @@
  * Tela real do SEI 4.1.5 (`sei41/despacho_alterar.html`, SEI SP Treinamento)
  * servida por um servidor falso por baixo do transporte de verdade.
  *
- * PENDENTE: prova no SEI 5.0.4 com `sei5/documento_alterar.html`, que será
- * capturada no SEI MJ de homologação (Tarefa 13). Nenhuma fixture do 5 foi
- * inventada aqui.
+ * Tela real do SEI 5.0.4 (`sei5/documento_alterar.html`, SEI MJ de homologacao, Latin-1, anonimizada):
+ * `provasSei5`, com os mesmos asserts de campos, listas e autocompletar. O codigo nao precisou mudar.
  */
 
 import { readFileSync } from "node:fs";
@@ -21,12 +20,15 @@ import { Sei } from "../src/sei";
 import { checar, fixture, lanca, secao } from "./util";
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
-const bruto = (n: string) => readFileSync(join(AQUI, "fixtures", n), "utf8");
+// A captura do SEI 5 e Latin-1 (como o servidor entrega); as do 4.1 estao em UTF-8.
+const bruto = (n: string) => readFileSync(join(AQUI, "fixtures", n), n === TELA5 ? "latin1" : "utf8");
 const urlDe = (n: string) => /^<!-- url: (.*?) -->/.exec(bruto(n))?.[1] ?? "";
 const htmlDe = (n: string) => bruto(n).replace(/^<!-- url: .*? -->\n/, "");
 
 const TELA = "sei41/despacho_alterar.html";
+const TELA5 = "sei5/documento_alterar.html";
 const LINK_ALTERAR = urlDe(TELA);
+const LINK_ALTERAR5 = urlDe(TELA5);
 
 interface Post {
   url: string;
@@ -51,7 +53,9 @@ const XML_CONTATOS =
 const XML_ASSUNTOS =
   '<?xml version="1.0" encoding="iso-8859-1"?><itens><item id="300001" descricao="01.01 - Organiza&#231;&#227;o" complemento=""></item></itens>';
 
-function montar(o: { sigiloso?: boolean } = {}) {
+function montar(o: { sigiloso?: boolean; xmlContatos?: string; sei5?: boolean } = {}) {
+  const tela = o.sei5 ? TELA5 : TELA;
+  const link = o.sei5 ? LINK_ALTERAR5 : LINK_ALTERAR;
   const estado = { posts: [] as Post[], gets: [] as string[] };
   const resp = (url: string, html: string) => {
     const bytes = new Uint8Array([...html].map((c) => c.charCodeAt(0) & 0xff));
@@ -60,20 +64,20 @@ function montar(o: { sigiloso?: boolean } = {}) {
   const fetch = (async (u: string, init?: RequestInit) => {
     if (init?.method !== "POST") {
       estado.gets.push(u);
-      if (/acao=documento_alterar/.test(u)) return resp(u, htmlDe(TELA));
+      if (/acao=documento_alterar/.test(u)) return resp(u, htmlDe(tela));
       return resp(u, "<html><body>?</body></html>");
     }
     const corpo = String(init.body ?? "");
     const pares = lerCorpo(corpo);
     const tipo = String((init.headers as Record<string, string> | undefined)?.["Content-Type"] ?? "");
     estado.posts.push({ url: u, pares, corpo, tipo });
-    if (/acao_ajax=contato_auto_completar/.test(u)) return resp(u, XML_CONTATOS);
+    if (/acao_ajax=contato_auto_completar/.test(u)) return resp(u, o.xmlContatos ?? XML_CONTATOS);
     if (/acao_ajax=assunto_auto_completar/.test(u)) return resp(u, XML_ASSUNTOS);
     // Gravação: o SEI volta para a árvore.
     return resp(u.replace(/acao=documento_alterar/, "acao=arvore_visualizar"), "<html><body>ok</body></html>");
   }) as unknown as typeof globalThis.fetch;
 
-  const sei = new Sei(LINK_ALTERAR, null, { fetch });
+  const sei = new Sei(link, null, { fetch });
   const documento: DocumentoArvore = {
     id: "160173",
     numero: "0104100",
@@ -87,7 +91,7 @@ function montar(o: { sigiloso?: boolean } = {}) {
     cancelado: false,
     link: "",
     src: "",
-    acoes: [LINK_ALTERAR],
+    acoes: [link],
     botoes: [],
   };
   const arvore = { idProcedimento: "148265", protocolo: "99906.000001/2026-01", nivel: "publico", documentos: [documento] } as unknown as Arvore;
@@ -115,6 +119,8 @@ export async function verificarDocumentoDados(): Promise<void> {
   checar("campo inexistente: null", linkAutoCompletar(html, "hdnIdNada") === null);
   const lExterno = linkAutoCompletar(fixture("sei41/pdf_alterar.html").html, "hdnIdInteressado");
   checar("documento externo tambem tem o autocompletar", !!lExterno && lExterno.includes("contato_auto_completar"), lExterno);
+
+  await provasSei5();
 
   secao("documento: modos da lista");
   const a = { id: "1", texto: "A" };
@@ -224,6 +230,16 @@ export async function verificarDocumentoDados(): Promise<void> {
     checar("assuntos pelo autocompletar da tela", assuntos.length === 1 && assuntos[0].texto === "01.01 - Organização", assuntos);
     checar("assunto: acao do autocompletar de assunto", !!ajax && ajax.url.includes("acao_ajax=assunto_auto_completar_RI1223") && valorPost(ajax, "palavras_pesquisa") === "organiza", ajax);
   }
+  secao("documento: entidade HTML dupla no descricao do autocompletar (achado do SEI MJ)");
+  {
+    // O SEI 5 manda o atributo ja escapado dentro do XML: `&amp;quot;` vira `&quot;` depois do parser.
+    const xml =
+      '<?xml version="1.0" encoding="iso-8859-1"?><itens><item id="1" descricao="&amp;quot;ORGANIZA&amp;Ccedil;&amp;Atilde;O VIDA &amp;amp; SA&amp;Uacute;DE&amp;quot; - &amp;quot;OVS&amp;quot;" complemento=""></item><item id="2" descricao="&quot;ABC&quot; &amp; D" complemento=""></item></itens>';
+    const { sei } = montar({ xmlContatos: xml });
+    const r = await pesquisarContatos(sei, "0104100", "ong");
+    checar("&amp;quot; vira aspas e acentos voltam", r[0]?.texto === '"ORGANIZA\u00C7\u00C3O VIDA & SA\u00DADE" - "OVS"', r[0]);
+    checar("&quot; simples continua aspas e & unico preservado", r[1]?.texto === '"ABC" & D', r[1]);
+  }
   secao("documento: pesquisa com acento vai como a tela do SEI envia (controlador_ajax decodifica UTF-8)");
   {
     // Assunto: prepararExecucao manda o valor cru; o infraAjaxPost codifica o corpo em UTF-8 (encodeURIComponent).
@@ -251,5 +267,72 @@ export async function verificarDocumentoDados(): Promise<void> {
     const { sei } = montar({ sigiloso: true });
     const e = await lanca(() => pesquisarContatos(sei, "0104100", "x"));
     checar("pesquisa em documento sigiloso recusada", e?.codigo === "SEI_SIGILOSO", e);
+  }
+}
+
+/**
+ * Mesma tela, agora capturada no SEI 5.0.4 (SEI MJ de homologacao, Termo de Compromisso, CK5), anonimizada.
+ * Ela nasce sem interessados nem assuntos, entao as listas sao montadas do zero.
+ */
+async function provasSei5(): Promise<void> {
+  secao("documento: tela real do SEI 5.0.4 (Latin-1, anonimizada)");
+  const html = htmlDe(TELA5);
+  const lContato = linkAutoCompletar(html, "hdnIdInteressado");
+  const lAssunto = linkAutoCompletar(html, "hdnIdAssunto");
+  checar("5: link do autocompletar de contato colhido", !!lContato && lContato.startsWith("controlador_ajax.php?acao_ajax=contato_auto_completar") && lContato.includes("&infra_hash="), lContato);
+  checar("5: link do autocompletar de assunto colhido", !!lAssunto && lAssunto.startsWith("controlador_ajax.php?acao_ajax=assunto_auto_completar") && lAssunto.includes("&infra_hash="), lAssunto);
+  checar("5: acentos da captura Latin-1 lidos certo", html.includes("Termo de Compromisso de Manuten\u00E7\u00E3o de Sigilo") && html.includes("Coordena\u00E7\u00E3o-Geral"));
+
+  {
+    const { sei, estado } = montar({ sei5: true });
+    const novo = { id: "200001", texto: "Fulano de Tal" };
+    const r = await alterarDocumento(sei, "0104100", { interessados: { modo: "acrescentar", itens: [novo] }, assuntos: { modo: "acrescentar", itens: [{ id: "300001", texto: "01.01 - Organiza\u00E7\u00E3o" }] } }, ESCRITA_PREVIA);
+    const mI = r.mudancas.find((x) => x.campo === "Interessados");
+    const mA = r.mudancas.find((x) => x.campo === "Assuntos");
+    checar("5: previa de interessados e assuntos (tela sem nenhum)", mI?.antes === "" && mI.depois === "Fulano de Tal" && mA?.antes === "" && mA.depois === "01.01 - Organiza\u00E7\u00E3o", r.mudancas);
+    checar("5: previa nao envia", estado.posts.length === 0 && !r.aplicado);
+  }
+  {
+    const { sei, estado } = montar({ sei5: true });
+    const r = await alterarDocumento(
+      sei,
+      "0104100",
+      { interessados: { modo: "acrescentar", itens: [{ id: "200001", texto: "Fulano de Tal" }] }, assuntos: { modo: "substituir", itens: [{ id: "300001", texto: "A" }] }, observacao: "Conferido pela unidade", descricao: "Nova descri\u00E7\u00E3o" },
+      { aplicar: true },
+    );
+    const post = estado.posts[0];
+    checar("5: gravacao de interessado no hdnInteressados", r.aplicado && lerLupa(valorPost(post, "hdnInteressados") ?? "").map((i) => i.id).join(",") === "200001", post?.pares.filter(([n]) => n === "hdnInteressados"));
+    checar("5: gravacao de assunto no hdnAssuntos", lerLupa(valorPost(post, "hdnAssuntos") ?? "").map((i) => i.id).join(",") === "300001");
+    checar("5: observacao e descricao com acento", valorPost(post, "txaObservacoes") === "Conferido pela unidade" && valorPost(post, "txtDescricao") === "Nova descri\u00E7\u00E3o", post?.pares);
+    checar("5: flag de cadastro 2 e form enviado a documento_alterar", valorPost(post, "hdnFlagDocumentoCadastro") === "2" && post.url.includes("acao=documento_alterar"), post?.url);
+    checar("5: nivel publico mantido", valorPost(post, "hdnStaNivelAcessoLocal") === "0");
+  }
+  {
+    const { sei, estado } = montar({ sei5: true });
+    const r = await alterarDocumento(sei, "0104100", { descricao: "S\u00F3 a descri\u00E7\u00E3o" }, { aplicar: true });
+    const post = estado.posts[0];
+    checar("5: sem tocar nas listas elas seguem vazias no POST", r.aplicado && (valorPost(post, "hdnInteressados") ?? "") === "" && (valorPost(post, "hdnAssuntos") ?? "") === "");
+    checar("5: tipo do documento (hdnIdSerie) preservado", valorPost(post, "hdnIdSerie") === "1180");
+  }
+  {
+    const { sei, estado } = montar({ sei5: true });
+    const contatos = await pesquisarContatos(sei, "0104100", "fulan");
+    const ajax = estado.posts.find((p) => p.url.includes("controlador_ajax.php"));
+    checar("5: contatos pelo autocompletar da tela", contatos.length === 2 && contatos[0].texto === "Fulano de Tal", contatos);
+    checar("5: link colhido, nao montado", !!ajax && ajax.url.includes("acao_ajax=contato_auto_completar") && ajax.url.includes("infra_hash="), ajax?.url);
+    checar("5: palavras_pesquisa", valorPost(ajax, "palavras_pesquisa") === "fulan", ajax?.pares);
+  }
+  {
+    const { sei, estado } = montar({ sei5: true });
+    const assuntos = await pesquisarAssuntos(sei, "0104100", "organiza");
+    const ajax = estado.posts.find((p) => p.url.includes("acao_ajax=assunto_auto_completar"));
+    checar("5: assuntos pelo autocompletar da tela", assuntos.length === 1 && assuntos[0].texto === "01.01 - Organiza\u00E7\u00E3o", assuntos);
+    checar("5: assunto com acento vai em UTF-8", !!ajax, estado.posts.map((p) => p.url));
+  }
+  {
+    const { sei, estado } = montar({ sei5: true });
+    await pesquisarAssuntos(sei, "0104100", "administra\u00E7\u00E3o");
+    const ajax = estado.posts.find((p) => p.url.includes("acao_ajax=assunto_auto_completar"));
+    checar("5: termo com acento em UTF-8 uma vez", ajax?.corpo === "palavras_pesquisa=administra%C3%A7%C3%A3o", ajax?.corpo);
   }
 }

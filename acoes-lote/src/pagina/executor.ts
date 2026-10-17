@@ -393,6 +393,10 @@ export function tratadoresAcoesLote(d: DepsExecutor): Record<string, Tratador> {
     try {
       return ok(await passo(etapa, numero, senha, aplicar, loteId));
     } catch (e) {
+      // O SEI recusa a ciência repetida ("Usuário já deu ciência neste documento."): o estado desejado já existe.
+      if (etapa.acao === "ciencia" && ehErroSei(e) && plano(`${e.message} ${e.detalhe ?? ""}`).includes("ja deu ciencia")) {
+        return { situacao: "ok", resumo: `Ciência já registrada no documento ${numero}.`, mudancas: [] };
+      }
       // Só a escrita de verdade pode ter gravado; a prévia falha sempre como erro comum.
       return mapearErro(e, { aplicou: aplicar && ACOES.find((a) => a.id === etapa.acao)?.escreve === true, assinatura });
     }

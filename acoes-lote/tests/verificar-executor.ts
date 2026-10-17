@@ -253,6 +253,18 @@ export async function verificarExecutor(): Promise<void> {
       const { t } = falso({ darCiencia: falha(e), excluirDocumento: falha(e), assinarDocumento: falha(e) });
       return aplicar ? exec(t, etapa, "0001234", senha) : prev(t, etapa);
     };
+    {
+      const r = await dep(new ErroSei("SEI_VALIDACAO", "Usu\u00E1rio j\u00E1 deu ci\u00EAncia neste documento."));
+      igual(
+        "ciencia repetida vira ok com resumo proprio",
+        { s: r.situacao, r: r.resumo, i: r.incerto },
+        { s: "ok", r: "Ci\u00EAncia j\u00E1 registrada no documento 0001234.", i: undefined },
+      );
+      const e = await dep(new ErroSei("SEI_VALIDACAO", "x", "USUARIO JA DEU CIENCIA neste documento."));
+      igual("ciencia repetida tambem pelo detalhe, sem acento e em caixa alta", e.situacao, "ok");
+      const o = await dep(new ErroSei("SEI_VALIDACAO", "Usuario ja deu ciencia."), { acao: "excluir" });
+      igual("a mesma mensagem em outra acao continua erro", o.situacao, "erro");
+    }
     igual("sessao expirada para", await dep(new ErroSei("SEI_SESSAO_EXPIRADA", "Sessao acabou.")), {
       situacao: "erro",
       erro: "Sessao acabou.",

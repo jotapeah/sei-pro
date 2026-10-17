@@ -68,6 +68,7 @@ export class TelaExecucao {
       this.motivo,
       this.campoSenha,
       h("p", { class: "al-nota" }, "Minimizar libera a tela do SEI. Fechar a janela pausa o lote, que fica salvo para continuar depois."),
+      h("p", { class: "al-nota" }, "Deixe esta aba do SEI visível enquanto o lote roda: o navegador desacelera abas em segundo plano."),
       h(
         "div",
         { class: "al-rodape" },

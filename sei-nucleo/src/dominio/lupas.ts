@@ -71,5 +71,6 @@ export async function pesquisarNoAutoCompletar(
 ): Promise<ItemLupa[]> {
   const valor = valorCodificado ? encodeURIComponent(paraLatin1Seguro(termo)) : termo;
   const itens = await sei.ajax(link, [["palavras_pesquisa", valor]], { sinal, utf8: true });
-  return semRepetir(itens);
+  // O SEI manda `descricao` ja escapado dentro do XML (dupla codificacao): o parser tira uma camada e sobra `&quot;`.
+  return semRepetir(itens.map((i) => ({ ...i, texto: decodificarEntidades(i.texto) })));
 }

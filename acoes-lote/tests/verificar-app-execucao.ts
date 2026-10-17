@@ -925,6 +925,13 @@ export async function verificarAppExecucao(): Promise<void> {
     const raiz = doc.getElementById("r")!;
     checar("sem Cancelar", !botao(raiz, "Cancelar"));
     checar("tem Parar lote", !!botao(raiz, "Parar lote"));
+    checar(
+      "dica da aba visivel",
+      (raiz.textContent ?? "").includes(
+        "Deixe esta aba do SEI vis\u00EDvel enquanto o lote roda: o navegador desacelera abas em segundo plano.",
+      ),
+      raiz.textContent,
+    );
     botao(raiz, "Minimizar")!.click();
     await tique(5);
     igual(

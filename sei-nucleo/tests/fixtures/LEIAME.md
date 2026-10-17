@@ -4,6 +4,12 @@
 do SEI 5, todas com hashes de sessão zerados. A primeira linha de cada arquivo
 é `<!-- url: ... -->`, a URL de onde a tela veio.
 
+## Captura do SEI MJ (5.0.4)
+
+| Arquivo | Origem | Anonimização |
+|---|---|---|
+| `sei5/documento_alterar.html` | Tela `documento_alterar` de um Termo de Compromisso de Manutenção de Sigilo, capturada no SEI MJ de homologação (hmlsei.mj.gov.br, CK5), em 16/10/2026. Mantida em Latin-1, como o servidor entrega. | Todo hash de sessão de 64 hexadecimais virou 64 zeros; o login do usuário (`usuario.teste`, inclusive no prefixo do cookie `MJ_SEI_usuario_teste`) e o nome de pessoa no conteúdo (`Fulano de Tal`) foram trocados. Ids de unidade e de processo ficaram. |
+
 ## Fixtures sintéticas (não são captura)
 
 | Arquivo | Origem | Substituir |

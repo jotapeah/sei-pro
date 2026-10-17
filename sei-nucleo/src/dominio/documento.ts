@@ -247,7 +247,7 @@ interface Cadastro extends NovoDocumento {
  * achar o número do documento novo. `ref` é a referência com que a árvore
  * foi pedida (protocolo ou nº SEI), para a releitura usar o mesmo cache.
  */
-async function cadastrar(sei: Sei, ref: string, arv: Arvore, escolha: Formulario, tipo: ItemLupa, novo: Cadastro, sinal?: AbortSignal): Promise<{ idDocumento: string; numero: string }> {
+async function cadastrar(sei: Sei, ref: string, arv: Arvore, escolha: Formulario, tipo: ItemLupa, novo: Cadastro, sinal?: AbortSignal): Promise<{ idDocumento: string; numero: string; titulo: string }> {
   const cadastro = await escolha.definir({ hdnIdSerie: tipo.id }).enviar({ sinal });
   const form = Formulario.de(cadastro, "#frmDocumentoCadastro", sei.http);
   form.definir({
@@ -282,7 +282,8 @@ async function cadastrar(sei: Sei, ref: string, arv: Arvore, escolha: Formulario
   const idDocumento = parametros(resposta.url).get("id_documento") ?? /id_documento=(\d+)/.exec(resposta.html)?.[1] ?? "";
   sei.invalidar(arv.idProcedimento);
   const nova = await sei.arvore(ref, { forcar: true, sinal });
-  return { idDocumento, numero: nova.documentos.find((d) => d.id === idDocumento)?.numero ?? "" };
+  const noNovo = nova.documentos.find((d) => d.id === idDocumento);
+  return { idDocumento, numero: noNovo?.numero ?? "", titulo: noNovo?.titulo ?? "" };
 }
 
 /** Cria um documento interno (vazio ou a partir de modelo/texto padrão). Devolve o número e o link do editor. */
@@ -349,7 +350,7 @@ export async function duplicarDocumento(sei: Sei, numero: string, op: OpcoesEscr
   };
   if (!op.aplicar) return { ...base, resumo: `Vai duplicar ${doc.titulo} (${doc.numero}) no processo ${d.arvore.protocolo}.` };
 
-  const { idDocumento, numero: novoNumero } = await cadastrar(
+  const { idDocumento, numero: novoNumero, titulo: tituloNovo } = await cadastrar(
     sei,
     numero,
     d.arvore,
@@ -372,7 +373,7 @@ export async function duplicarDocumento(sei: Sei, numero: string, op: OpcoesEscr
   return {
     ...base,
     aplicado: true,
-    resumo: `Documento ${doc.numero} duplicado: ${tipo.texto} ${novoNumero} no processo ${d.arvore.protocolo}.`,
+    resumo: `Documento ${doc.numero} duplicado: ${tituloNovo || tipo.texto} ${novoNumero ? `(${novoNumero}) ` : ""}no processo ${d.arvore.protocolo}.`,
     dados: { idDocumento, numero: novoNumero },
   };
 }
