@@ -1,5 +1,7 @@
+import { verificarAcoesLote } from "./verificar-acoes-lote";
 import { verificarBase } from "./verificar-base";
 import { verificarBlocoProcessos } from "./verificar-bloco-processos";
+import { verificarDocumentoDados } from "./verificar-documento-dados";
 import { verificarDominio } from "./verificar-dominio";
 import { verificarHistorico } from "./verificar-historico";
 import { verificarPrivacidade } from "./verificar-privacidade";
@@ -14,4 +16,6 @@ await verificarPrivacidade();
 await verificarTextoPadrao();
 await verificarTextoPadraoConferencia();
 await verificarBlocoProcessos();
+await verificarDocumentoDados();
+await verificarAcoesLote();
 resumo();

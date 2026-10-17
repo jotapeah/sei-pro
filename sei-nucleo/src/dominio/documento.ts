@@ -9,7 +9,8 @@
 
 import { acaoNaArvore, type Arvore, type DocumentoArvore } from "./arvore";
 import { hipotesesDoFormulario, mudanca, NIVEIS, NOME_NIVEL, type OpcoesEscrita, type ResultadoEscrita } from "./escrita";
-import { escolherItem, Formulario } from "../formulario/formulario";
+import { escolherItem, Formulario, type ItemLupa } from "../formulario/formulario";
+import { type AlteracaoLista, aplicarModo, linkAutoCompletar, pesquisarNoAutoCompletar, valorCodificadoNoAutoCompletar } from "./lupas";
 import { linkDaAcao, parametros } from "../links/links";
 import { textoDe } from "../sessao/dom";
 import { ErroSei } from "../sessao/erros";
@@ -61,6 +62,12 @@ export interface AlteracaoDocumento {
   descricao?: string;
   nivel?: "publico" | "restrito";
   hipotese?: string;
+  /** Observações desta unidade (`txaObservacoes`). `undefined` mantém; "" esvazia. */
+  observacao?: string;
+  /** Interessados: acrescentar (sem duplicar), remover por id ou substituir a lista. */
+  interessados?: AlteracaoLista;
+  /** Classificação por assuntos, mesma semântica dos interessados. */
+  assuntos?: AlteracaoLista;
 }
 
 /** Aplica nível e hipótese no formulário de cadastro/alteração de documento. */
@@ -84,19 +91,44 @@ async function aplicarNivel(sei: Sei, form: Formulario, alt: AlteracaoDocumento,
   return m;
 }
 
-/** Altera descrição, nível de acesso e hipótese legal de um documento. */
-export async function alterarDocumento(sei: Sei, numero: string, alt: AlteracaoDocumento, op: OpcoesEscrita): Promise<ResultadoEscrita> {
-  const d = await localizarDocumento(sei, numero, { sinal: op.sinal });
+/** Tela "Alterar Documento" (interno ou externo), com a recusa de sigiloso. */
+async function telaAlteracao(sei: Sei, numero: string, sinal?: AbortSignal): Promise<{ d: DocumentoLocalizado; acao: string; form: Formulario }> {
+  const d = await localizarDocumento(sei, numero, { sinal });
   if (d.documento.nivel === "sigiloso") throw new ErroSei("SEI_SIGILOSO", "Documento sigiloso: o agente n\u00E3o atua nele.");
   const acao = d.documento.externo ? "documento_alterar_recebido" : "documento_alterar";
   const link = linkDaAcao(d.documento.acoes, acao) ?? linkDaAcao(d.documento.acoes, /^documento_alterar/);
   if (!link) throw new ErroSei("SEI_ACAO_INDISPONIVEL", `O documento ${d.documento.numero} n\u00E3o pode ser alterado por voc\u00EA (assinado por outra unidade, ou processo fechado).`);
-  const form = await Formulario.abrir(sei.http, link, "#frmDocumentoCadastro", { sinal: op.sinal });
+  const form = await Formulario.abrir(sei.http, link, "#frmDocumentoCadastro", { sinal });
+  return { d, acao, form };
+}
+
+const textos = (itens: ItemLupa[]) => itens.map((i) => i.texto).join("; ");
+
+/** Aplica o modo pedido a uma lupa do formulário; só mexe nela se a lista mudar. */
+function aplicarLista(form: Formulario, select: string, campo: string, alt: AlteracaoLista | undefined): ResultadoEscrita["mudancas"] {
+  if (!alt) return [];
+  const atuais = form.itensLupa(select);
+  const novos = aplicarModo(atuais, alt.modo, alt.itens);
+  if (atuais.map((i) => i.id).join(",") === novos.map((i) => i.id).join(",")) return [];
+  form.definirLupa(select, novos);
+  return [{ campo, antes: textos(atuais), depois: textos(novos) }];
+}
+
+/** Altera descrição, observação, interessados, assuntos, nível de acesso e hipótese legal de um documento. */
+export async function alterarDocumento(sei: Sei, numero: string, alt: AlteracaoDocumento, op: OpcoesEscrita): Promise<ResultadoEscrita> {
+  const { d, acao, form } = await telaAlteracao(sei, numero, op.sinal);
 
   const mudancas: ResultadoEscrita["mudancas"] = [];
   if (alt.descricao !== undefined) {
     mudancas.push(...mudanca("Descri\u00E7\u00E3o", form.valor("txtDescricao"), alt.descricao));
     form.definir({ txtDescricao: alt.descricao.slice(0, 250) });
+  }
+  mudancas.push(...aplicarLista(form, "selInteressados", "Interessados", alt.interessados));
+  mudancas.push(...aplicarLista(form, "selAssuntos", "Assuntos", alt.assuntos));
+  if (alt.observacao !== undefined) {
+    mudancas.push(...mudanca("Observa\u00E7\u00F5es da unidade", form.valor("txaObservacoes"), alt.observacao));
+    // A tela limita a 1000 caracteres (infraLimitarTexto).
+    form.definir({ txaObservacoes: alt.observacao.slice(0, 1000) });
   }
   mudancas.push(...(await aplicarNivel(sei, form, alt, op.sinal)));
 
@@ -112,6 +144,24 @@ export async function alterarDocumento(sei: Sei, numero: string, alt: AlteracaoD
   });
   sei.invalidar(d.arvore.idProcedimento);
   return { ...base, aplicado: true, resumo: `Documento ${d.documento.numero} alterado.` };
+}
+
+/** Autocompletar da tela de alteração do documento: link colhido do JS da tela. */
+async function pesquisarNaTela(sei: Sei, refDocumento: string, hdnId: string, nome: string, termo: string, sinal?: AbortSignal): Promise<ItemLupa[]> {
+  const { form } = await telaAlteracao(sei, refDocumento, sinal);
+  const link = linkAutoCompletar(form.pagina.html, hdnId);
+  if (!link) throw new ErroSei("SEI_VERSAO_NAO_SUPORTADA", `A tela de altera\u00E7\u00E3o do documento n\u00E3o tem a pesquisa de ${nome}.`);
+  return pesquisarNoAutoCompletar(sei, link, termo, sinal, valorCodificadoNoAutoCompletar(form.pagina.html, hdnId));
+}
+
+/** Contatos (para interessados) pelo autocompletar da tela "Alterar Documento" de `refDocumento`. */
+export async function pesquisarContatos(sei: Sei, refDocumento: string, termo: string, sinal?: AbortSignal): Promise<ItemLupa[]> {
+  return pesquisarNaTela(sei, refDocumento, "hdnIdInteressado", "contatos", termo, sinal);
+}
+
+/** Assuntos pelo autocompletar da tela "Alterar Documento" de `refDocumento`. */
+export async function pesquisarAssuntos(sei: Sei, refDocumento: string, termo: string, sinal?: AbortSignal): Promise<ItemLupa[]> {
+  return pesquisarNaTela(sei, refDocumento, "hdnIdAssunto", "assuntos", termo, sinal);
 }
 
 export interface TipoDocumento {
@@ -166,25 +216,39 @@ export interface NovoDocumento {
   textoPadrao?: string;
 }
 
-/** Cria um documento interno (vazio ou a partir de modelo/texto padrão). Devolve o número e o link do editor. */
-export async function criarDocumento(sei: Sei, refProcesso: string, novo: NovoDocumento, op: OpcoesEscrita): Promise<ResultadoEscrita> {
-  const arv = await sei.arvore(refProcesso, { sinal: op.sinal });
+/**
+ * Escolha do tipo para um documento novo: tela de tipos (todos) e o tipo pedido.
+ * `soPorId`: o tipo vem de outro documento (`hdnIdSerie`), então só vale o id
+ * exato. O `escolherItem` aceitaria um nome que CONTÉM o texto ("5" casaria
+ * um tipo com "5" no nome) e criaria um documento de outro tipo, em silêncio.
+ */
+async function prepararCriacao(sei: Sei, arv: Arvore, refTipo: string, sinal?: AbortSignal, soPorId = false): Promise<{ escolha: Formulario; tipo: ItemLupa }> {
   if (arv.nivel === "sigiloso") throw new ErroSei("SEI_SIGILOSO", "Processo sigiloso: o agente n\u00E3o atua nele.");
-  const escolha = await telaEscolherTipo(sei, arv, op.sinal);
-  const tipos = lerTipos(escolha.pagina).filter((t) => t.id !== "-1");
-  const tipo = escolherItem(tipos.map((t) => ({ id: t.id, texto: t.nome })), novo.tipo, "Tipo de documento");
+  const escolha = await telaEscolherTipo(sei, arv, sinal);
+  const tipos = lerTipos(escolha.pagina).filter((t) => t.id !== "-1").map((t) => ({ id: t.id, texto: t.nome }));
+  if (soPorId) {
+    const tipo = tipos.find((t) => t.id === refTipo);
+    if (!tipo) throw new ErroSei("SEI_ACAO_INDISPONIVEL", "O tipo do documento original n\u00E3o est\u00E1 dispon\u00EDvel nesta unidade.");
+    return { escolha, tipo };
+  }
+  return { escolha, tipo: escolherItem(tipos, refTipo, "Tipo de documento") };
+}
 
-  const mudancas: ResultadoEscrita["mudancas"] = [
-    { campo: "Documento", antes: "", depois: `${tipo.texto}${novo.numero ? ` ${novo.numero}` : ""}${novo.nomeArvore ? ` ${novo.nomeArvore}` : ""}` },
-  ];
-  if (novo.descricao) mudancas.push({ campo: "Descri\u00E7\u00E3o", antes: "", depois: novo.descricao });
-  const nivel = novo.nivel ?? "publico";
-  mudancas.push({ campo: "N\u00EDvel de acesso", antes: "", depois: NOME_NIVEL[NIVEIS[nivel]] });
-  if (nivel === "restrito" && !novo.hipotese) throw new ErroSei("ARGUMENTO_INVALIDO", "Documento restrito exige hip\u00F3tese legal.");
-  const base: ResultadoEscrita = { alvo: arv.protocolo, mudancas, aplicado: false, resumo: "" };
-  if (!op.aplicar) return { ...base, resumo: `Vai criar ${tipo.texto} no processo ${arv.protocolo}.` };
+/** O que vai no formulário de cadastro, além do que `NovoDocumento` já descreve. */
+interface Cadastro extends NovoDocumento {
+  interessados?: ItemLupa[];
+  assuntos?: ItemLupa[];
+  observacao?: string;
+}
 
-  const cadastro = await escolha.definir({ hdnIdSerie: tipo.id }).enviar({ sinal: op.sinal });
+/**
+ * Miolo da criação, comum a `criarDocumento` e `duplicarDocumento`: escolhe o
+ * tipo, preenche `#frmDocumentoCadastro`, envia com prova e relê a árvore para
+ * achar o número do documento novo. `ref` é a referência com que a árvore
+ * foi pedida (protocolo ou nº SEI), para a releitura usar o mesmo cache.
+ */
+async function cadastrar(sei: Sei, ref: string, arv: Arvore, escolha: Formulario, tipo: ItemLupa, novo: Cadastro, sinal?: AbortSignal): Promise<{ idDocumento: string; numero: string; titulo: string }> {
+  const cadastro = await escolha.definir({ hdnIdSerie: tipo.id }).enviar({ sinal });
   const form = Formulario.de(cadastro, "#frmDocumentoCadastro", sei.http);
   form.definir({
     txtDescricao: (novo.descricao ?? "").slice(0, 250),
@@ -198,22 +262,118 @@ export async function criarDocumento(sei: Sei, refProcesso: string, novo: NovoDo
     const tp = escolherItem(lista, novo.textoPadrao, "Texto padr\u00E3o");
     form.definir({ rdoTextoInicial: "T", selTextoPadrao: tp.id, hdnIdTextoPadrao: tp.id });
   }
-  await aplicarNivel(sei, form, { nivel, hipotese: novo.hipotese }, op.sinal);
+  // Interessados: lista vazia (não `undefined`) LIMPA o que a tela de cadastro
+  // já trouxe, como o legado, que sempre sobrescrevia com os do original.
+  if (novo.interessados?.length) form.definirLupa("selInteressados", novo.interessados);
+  else if (novo.interessados && form.itensLupa("selInteressados").length) form.definirLupa("selInteressados", []);
+  // Assuntos: só substitui quando há o que copiar. Vazio mantém o que a tela
+  // trouxe (sugestão do tipo), porque o assunto pode ser obrigatório no órgão e
+  // esvaziar faria o SEI recusar o cadastro.
+  if (novo.assuntos?.length) form.definirLupa("selAssuntos", novo.assuntos);
+  if (novo.observacao) form.definir({ txaObservacoes: novo.observacao.slice(0, 1000) });
+  await aplicarNivel(sei, form, { nivel: novo.nivel ?? "publico", hipotese: novo.hipotese }, sinal);
   form.definir({ hdnFlagDocumentoCadastro: "2" });
 
   const resposta = await form.enviar({
-    sinal: op.sinal,
+    sinal,
     operacao: `a cria\u00E7\u00E3o do documento em ${arv.protocolo}`,
     sucesso: (p) => /acao_origem=documento_(?:gerar|cadastrar)/.test(p.url) || /editor_montar/.test(p.html),
   });
   const idDocumento = parametros(resposta.url).get("id_documento") ?? /id_documento=(\d+)/.exec(resposta.html)?.[1] ?? "";
   sei.invalidar(arv.idProcedimento);
-  const nova = await sei.arvore(refProcesso, { forcar: true, sinal: op.sinal });
-  const criado = nova.documentos.find((d) => d.id === idDocumento);
+  const nova = await sei.arvore(ref, { forcar: true, sinal });
+  const noNovo = nova.documentos.find((d) => d.id === idDocumento);
+  return { idDocumento, numero: noNovo?.numero ?? "", titulo: noNovo?.titulo ?? "" };
+}
+
+/** Cria um documento interno (vazio ou a partir de modelo/texto padrão). Devolve o número e o link do editor. */
+export async function criarDocumento(sei: Sei, refProcesso: string, novo: NovoDocumento, op: OpcoesEscrita): Promise<ResultadoEscrita> {
+  const arv = await sei.arvore(refProcesso, { sinal: op.sinal });
+  const { escolha, tipo } = await prepararCriacao(sei, arv, novo.tipo, op.sinal);
+
+  const mudancas: ResultadoEscrita["mudancas"] = [
+    { campo: "Documento", antes: "", depois: `${tipo.texto}${novo.numero ? ` ${novo.numero}` : ""}${novo.nomeArvore ? ` ${novo.nomeArvore}` : ""}` },
+  ];
+  if (novo.descricao) mudancas.push({ campo: "Descri\u00E7\u00E3o", antes: "", depois: novo.descricao });
+  const nivel = novo.nivel ?? "publico";
+  mudancas.push({ campo: "N\u00EDvel de acesso", antes: "", depois: NOME_NIVEL[NIVEIS[nivel]] });
+  if (nivel === "restrito" && !novo.hipotese) throw new ErroSei("ARGUMENTO_INVALIDO", "Documento restrito exige hip\u00F3tese legal.");
+  const base: ResultadoEscrita = { alvo: arv.protocolo, mudancas, aplicado: false, resumo: "" };
+  if (!op.aplicar) return { ...base, resumo: `Vai criar ${tipo.texto} no processo ${arv.protocolo}.` };
+
+  const { idDocumento, numero } = await cadastrar(sei, refProcesso, arv, escolha, tipo, { ...novo, nivel }, op.sinal);
   return {
     ...base,
     aplicado: true,
-    resumo: `${tipo.texto} ${criado?.numero ?? ""} criado no processo ${arv.protocolo}.`,
-    dados: { idDocumento, numero: criado?.numero ?? "" },
+    resumo: `${tipo.texto} ${numero} criado no processo ${arv.protocolo}.`,
+    dados: { idDocumento, numero },
+  };
+}
+
+/** Número que o usuário digitou (ex.: "A-12/2026"). Numérico puro é o SEI quem dá, e copiar repetiria o número. */
+const numeroACopiar = (n: string | undefined) => (n && !/^\d+$/.test(n.trim()) ? n : undefined);
+
+/**
+ * Duplica um documento interno no mesmo processo: novo documento do mesmo tipo,
+ * com o original como texto inicial (`rdoTextoInicial` D) e os dados da tela
+ * "Alterar Documento" dele: descrição, número (se não numérico), nome na
+ * árvore, interessados, assuntos, observação da unidade, nível e hipótese.
+ *
+ * Substitui no legado: `getDadosDoc`, `getDuplicateDoc`, `saveDuplicateArvore`
+ * (`sei-pro-arvore.js`), que escolhiam o tipo pelo começo do nome na árvore.
+ */
+export async function duplicarDocumento(sei: Sei, numero: string, op: OpcoesEscrita): Promise<ResultadoEscrita> {
+  const loc = await localizarDocumento(sei, numero, { sinal: op.sinal });
+  if (loc.documento.nivel === "sigiloso" || loc.arvore.nivel === "sigiloso") throw new ErroSei("SEI_SIGILOSO", "Documento sigiloso: o agente n\u00E3o atua nele.");
+  if (loc.documento.externo) {
+    throw new ErroSei("SEI_ACAO_INDISPONIVEL", `O documento ${loc.documento.numero} \u00E9 externo (anexo): s\u00F3 documento gerado no SEI pode ser duplicado.`);
+  }
+  const { d, form: original } = await telaAlteracao(sei, numero, op.sinal);
+  const doc = d.documento;
+  const nivelAtual = original.pagina.doc.querySelector("input[name=rdoNivelAcesso][checked]")?.getAttribute("value") ?? original.valor("hdnStaNivelAcessoLocal") ?? "0";
+  if (nivelAtual === "2" || d.arvore.nivel === "sigiloso") throw new ErroSei("SEI_SIGILOSO", "Documento sigiloso: o agente n\u00E3o atua nele.");
+  const nivel = nivelAtual === "1" ? "restrito" : "publico";
+  const hipotese =
+    nivel === "restrito"
+      ? (original.valor("hdnIdHipoteseLegal") || original.opcoes("selHipoteseLegal").find((o) => o.selecionada && o.valor !== "null")?.valor) ?? undefined
+      : undefined;
+  const idSerie = original.valor("hdnIdSerie") ?? "";
+  if (!idSerie) throw new ErroSei("SEI_VERSAO_NAO_SUPORTADA", `A tela do documento ${doc.numero} n\u00E3o informa o tipo (hdnIdSerie).`);
+
+  const { escolha, tipo } = await prepararCriacao(sei, d.arvore, idSerie, op.sinal, true);
+
+  const base: ResultadoEscrita = {
+    alvo: doc.numero,
+    mudancas: [{ campo: "Documento", antes: "", depois: `${tipo.texto} (c\u00F3pia de ${doc.numero})` }],
+    aplicado: false,
+    resumo: "",
+  };
+  if (!op.aplicar) return { ...base, resumo: `Vai duplicar ${doc.titulo} (${doc.numero}) no processo ${d.arvore.protocolo}.` };
+
+  const { idDocumento, numero: novoNumero, titulo: tituloNovo } = await cadastrar(
+    sei,
+    numero,
+    d.arvore,
+    escolha,
+    tipo,
+    {
+      tipo: tipo.id,
+      descricao: original.valor("txtDescricao") ?? "",
+      numero: numeroACopiar(original.valor("txtNumero")),
+      nomeArvore: original.valor("txtNomeArvore") || undefined,
+      documentoModelo: doc.numero,
+      interessados: original.itensLupa("selInteressados"),
+      assuntos: original.itensLupa("selAssuntos"),
+      observacao: original.valor("txaObservacoes") ?? "",
+      nivel,
+      hipotese,
+    },
+    op.sinal,
+  );
+  return {
+    ...base,
+    aplicado: true,
+    resumo: `Documento ${doc.numero} duplicado: ${tituloNovo || tipo.texto} ${novoNumero ? `(${novoNumero}) ` : ""}no processo ${d.arvore.protocolo}.`,
+    dados: { idDocumento, numero: novoNumero },
   };
 }
