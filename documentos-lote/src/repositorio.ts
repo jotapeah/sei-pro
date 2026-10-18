@@ -19,6 +19,12 @@ export interface ItemLote {
   idDocumento?: string;
   numero?: string;
   link?: string;
+  /**
+   * Processo de destino que a própria linha criou (destino "novo processo"): fica mesmo se o documento falhar, para
+   * o resultado permitir conferi-lo e para não criar outro processo ao repetir. `linkProcesso` não leva infra_hash.
+   */
+  processo?: string;
+  linkProcesso?: string;
 }
 
 /** O lote guardado nunca contém `linkArvore` (traz o infra_hash da sessão). */
@@ -35,6 +41,8 @@ export interface LoteDocumentos {
   linhas: LinhaDocumento[];
   itens: ItemLote[];
   verificacoes: Record<string, VerificacaoGuardada>;
+  /** Protocolo do processo da tela (o destino "processo da tela"), para o resultado mostrar o destino. */
+  protocoloTela?: string;
 }
 
 const CHAVE = `${PREFIXO_CHAVE}lote`;
@@ -47,6 +55,7 @@ function itemValido(i: unknown): boolean {
   if (!ehObjeto(i)) return false;
   if (i.situacao !== "pendente" && i.situacao !== "criada" && i.situacao !== "erro" && i.situacao !== "fora") return false;
   if (!opcionalTexto(i.erro) || !opcionalTexto(i.idDocumento) || !opcionalTexto(i.numero) || !opcionalTexto(i.link)) return false;
+  if (!opcionalTexto(i.processo) || !opcionalTexto(i.linkProcesso)) return false;
   if (i.incerto !== undefined && typeof i.incerto !== "boolean") return false;
   if (i.criado !== undefined) {
     const c = i.criado;
@@ -81,6 +90,7 @@ function loteValido(v: unknown): v is LoteDocumentos {
   if (v.linhas.length > TETO || v.itens.length !== v.linhas.length) return false;
   if (!v.linhas.every((l) => ehObjeto(l) && typeof l.indice === "number" && ehObjeto(l.dados))) return false;
   if (!ehObjeto(v.verificacoes)) return false;
+  if (!opcionalTexto(v.protocoloTela)) return false;
   return v.itens.every(itemValido);
 }
 
@@ -141,14 +151,18 @@ export class RepositorioLote {
     );
   }
 
-  /** Relê e muda só o item do índice pedido; sem lote, de outro `id` ou com índice fora, não grava. */
-  marcar(id: string, indice: number, item: ItemLote): Promise<void> {
+  /**
+   * Relê e muda só o item do índice pedido; sem lote, de outro `id` ou com índice fora, não grava e devolve false
+   * (o lote foi descartado ou assumido por outra aba: quem executa para).
+   */
+  marcar(id: string, indice: number, item: ItemLote): Promise<boolean> {
     return this.enfileirar(async () => {
       const atual = await this.ler();
-      if (!atual || atual.id !== id || !Number.isInteger(indice) || indice < 0 || indice >= atual.itens.length) return;
+      if (!atual || atual.id !== id || !Number.isInteger(indice) || indice < 0 || indice >= atual.itens.length) return false;
       const itens = atual.itens.slice();
       itens[indice] = item;
       await this.area.gravar({ [CHAVE]: { ...atual, itens, atualizadoEm: this.agora() } });
+      return true;
     });
   }
 

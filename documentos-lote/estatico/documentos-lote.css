@@ -601,3 +601,51 @@ table.spro-resultado td a {
   margin: 4px 0;
   font-size: 13px;
 }
+
+/* ---------- Prévia ---------- */
+.dl-previa-avisos:empty {
+  display: none;
+}
+.dl-previa-avisos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dl-previa-escolha {
+  max-width: 420px;
+}
+.dl-previa-detalhe h3 {
+  margin: 8px 0 4px;
+  font-size: 13px;
+}
+.dl-previa-texto {
+  max-height: 34vh;
+  overflow-y: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--spro-borda);
+  border-radius: var(--spro-raio);
+  background: var(--spro-fundo);
+  color: var(--spro-texto);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+}
+mark.dl-literal {
+  color: inherit;
+  background: color-mix(in srgb, var(--spro-aviso) 30%, transparent);
+  border-radius: 2px;
+  outline: 1px dashed var(--spro-aviso);
+}
+.dl-previa-descricao,
+.dl-previa-destino {
+  word-break: break-word;
+}
+
+/* ---------- Execução: fim ---------- */
+.dl-execucao-fim {
+  font-weight: 600;
+  text-align: center;
+}
+.dl-execucao-fim[hidden] {
+  display: none;
+}

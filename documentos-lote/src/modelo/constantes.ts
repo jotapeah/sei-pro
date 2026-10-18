@@ -36,3 +36,6 @@ export const JANELA_OUTRA_ABA_MS = PRAZO_CRIAR_MS + PAUSA_MAXIMA;
 export const CUSTO_DOCUMENTO_MS = 1500;
 /** Custo a mais de criar um processo novo antes do documento. */
 export const CUSTO_PROCESSO_MS = 900;
+
+/** O texto do modelo guardado para a prévia (só a tela o usa) vai até este tamanho. */
+export const MAX_TEXTO_PREVIA = 20_000;

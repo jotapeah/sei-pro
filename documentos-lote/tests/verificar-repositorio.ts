@@ -23,7 +23,8 @@ function exemplo(login = "ana"): LoteDocumentos {
     login,
     iniciadoEm: 1000,
     atualizadoEm: 1000,
-    config,
+    // Cópia: os casos inválidos mutam a config, e a compartilhada contaminaria os casos seguintes.
+    config: structuredClone(config),
     linhas: [0, 1, 2].map((indice) => ({ indice, dados: { Nome: `N${indice}` } })),
     itens: [{ situacao: "pendente" }, { situacao: "pendente" }, { situacao: "pendente" }],
     verificacoes: { "1/2026": { numero: "1/2026", status: "ok", idProcedimento: "9" } as LoteDocumentos["verificacoes"][string] },
@@ -76,6 +77,22 @@ export async function verificarRepositorio(): Promise<void> {
   await repo.marcar("l1", 0, { situacao: "fora" });
   igual("situação fora é válida", (await repo.carregar(HOST, "ana"))?.itens[0]?.situacao, "fora");
 
+  // marcar diz se gravou (o executor para quando o lote sumiu ou é de outro id).
+  igual("marcar devolve true ao gravar", await repo.marcar("l1", 0, { situacao: "pendente" }), true);
+  igual("marcar de outro id devolve false", await repo.marcar("outro", 0, { situacao: "pendente" }), false);
+  igual("marcar com índice fora devolve false", await repo.marcar("l1", 9, { situacao: "pendente" }), false);
+  // Processo de destino criado pela linha (novo processo): guardado mesmo com o documento falho.
+  const comProcesso = {
+    situacao: "erro" as const,
+    erro: "x",
+    processo: "99.000001/2026-01",
+    linkProcesso: "https://x/?acao=procedimento_trabalhar&id_procedimento=5",
+  };
+  await repo.marcar("l1", 0, comProcesso);
+  igual("item guarda processo e linkProcesso", (await repo.carregar(HOST, "ana"))?.itens[0], comProcesso);
+  await repo.gravar({ ...exemplo(), protocoloTela: "00001.000001/2026-11" });
+  igual("lote guarda o protocolo da tela", (await repo.carregar(HOST, "ana"))?.protocoloTela, "00001.000001/2026-11");
+
   // linkArvore nunca é guardado (ruling 13), mesmo que venha na verificação.
   const comLink = exemplo();
   (comLink.verificacoes["1/2026"] as Mutavel).linkArvore = "https://x/?infra_hash=abc";
@@ -111,6 +128,9 @@ export async function verificarRepositorio(): Promise<void> {
     ["linhas não é lista", (v) => (v.linhas = {})],
     ["erro incerto com tipo errado", (v) => (v.itens[0] = { situacao: "erro", incerto: "sim" })],
     ["id vazio", (v) => (v.id = "")],
+    ["processo com tipo errado", (v) => (v.itens[0] = { situacao: "erro", processo: 5 })],
+    ["linkProcesso com tipo errado", (v) => (v.itens[0] = { situacao: "erro", linkProcesso: {} })],
+    ["protocoloTela com tipo errado", (v) => (v.protocoloTela = 1)],
   ];
   for (const [nome, mutar] of invalidos) {
     const v: Mutavel = exemplo();

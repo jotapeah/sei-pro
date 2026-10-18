@@ -8,15 +8,21 @@
  */
 
 import { extrairCampos } from "@dl/modelo/campos";
+import { MAX_TEXTO_PREVIA } from "@dl/modelo/constantes";
 import { lerConteudo, localizarDocumento, tipoDoDocumento, tiposDocumento } from "@nucleo/dominio/documento";
+import { textoDoHtml } from "@nucleo/dominio/editor";
 import type { Sei } from "@nucleo/sei";
 import { decodificarEntidades, textoDe } from "@nucleo/sessao/dom";
 import { ErroSei } from "@nucleo/sessao/erros";
 import type { OpcoesHttp } from "@nucleo/sessao/http";
 
+/**
+ * `texto` é o corpo do modelo em texto simples (até MAX_TEXTO_PREVIA caracteres), só para a prévia do app: a
+ * criação copia o modelo pelo próprio SEI e não o usa. O app o tira antes de guardar o lote e de pedir `criar`.
+ */
 export type Modelo =
-  | { origem: "documento"; numero: string; titulo: string; tipoId: string; tipoNome: string; campos: string[] }
-  | { origem: "texto-padrao"; id: string; nome: string; tipoId?: string; tipoNome?: string; campos: string[] };
+  | { origem: "documento"; numero: string; titulo: string; tipoId: string; tipoNome: string; campos: string[]; texto?: string }
+  | { origem: "texto-padrao"; id: string; nome: string; tipoId?: string; tipoNome?: string; campos: string[]; texto?: string };
 
 export interface ModelosDisponiveis {
   documentos: Array<{ numero: string; titulo: string }>;
@@ -72,6 +78,9 @@ export async function listarModelos(sei: Sei, ref: string, sinal?: AbortSignal):
  */
 const camposDoHtml = (html: string) => extrairCampos(decodificarEntidades(html));
 
+/** O corpo em texto simples para a prévia (parágrafos em linhas), cortado em MAX_TEXTO_PREVIA. */
+const textoDaPrevia = (html: string) => textoDoHtml(html).slice(0, MAX_TEXTO_PREVIA);
+
 /** Só o corpo da página (o legado também cortava entre `<body>` e `</body>`): `##` no `<title>` não é campo. */
 function corpoDa(html: string): string {
   const ini = html.search(/<body[\s>]/i);
@@ -101,6 +110,8 @@ export async function lerModelo(sei: Sei, escolha: EscolhaModelo, sinal?: AbortS
       tipoId,
       ...(escolha.tipoNome ? { tipoNome: escolha.tipoNome } : {}),
       campos: camposDoHtml(conteudo),
+      // O HTML do texto padrão vem dentro do <textarea>: conforme o parser, ainda com as entidades (&lt;p&gt;).
+      texto: textoDaPrevia(decodificarEntidades(conteudo)),
     };
   }
 
@@ -119,5 +130,6 @@ export async function lerModelo(sei: Sei, escolha: EscolhaModelo, sinal?: AbortS
     tipoId: tipo.id,
     tipoNome: tipo.nome,
     campos: camposDoHtml(corpoDa(html)),
+    texto: textoDaPrevia(corpoDa(html)),
   };
 }

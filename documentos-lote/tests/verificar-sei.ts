@@ -346,7 +346,12 @@ export async function verificarSei(): Promise<void> {
 
   secao("sei: ler modelo");
   await comMontagem({}, async ({ sei, chamadas }) => {
-    const m = await lerModelo(sei, { documento: "0100001" });
+    const { texto, ...m } = await lerModelo(sei, { documento: "0100001" });
+    igual(
+      "documento: texto simples do corpo (previa), sem o title",
+      texto,
+      "Ofício para ##nome##\nPrezado(a) ##nome##, CPF ##cpf##, município ##município##.",
+    );
     igual("documento: tipo da tela de alteracao (id exato) e campos das duas secoes sem duplicar", m, {
       origem: "documento",
       numero: "0100001",
@@ -386,7 +391,8 @@ export async function verificarSei(): Promise<void> {
     });
   });
   await comMontagem({}, async ({ sei, chamadas }) => {
-    const m = await lerModelo(sei, { textoPadrao: "5", tipoId: "12", tipoNome: "Ofício" });
+    const { texto, ...m } = await lerModelo(sei, { textoPadrao: "5", tipoId: "12", tipoNome: "Ofício" });
+    igual("texto padrao: texto simples do conteudo (previa)", texto, "Senhor(a) ##destinatário##, ##cargo## e ##destinatário##.");
     igual("texto padrao: devolve o tipoId fornecido e os campos do conteudo", m, {
       origem: "texto-padrao",
       id: "5",

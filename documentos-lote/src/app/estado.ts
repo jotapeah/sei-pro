@@ -79,7 +79,7 @@ export interface RascunhoCruzamento {
 }
 
 /** Id de cada etapa, na ordem do app. As próximas tarefas acrescentam as suas (cruzamento, verificação, prévia...). */
-export type IdEtapa = "modelo" | "planilha" | "cruzamento" | "verificacao";
+export type IdEtapa = "modelo" | "planilha" | "cruzamento" | "verificacao" | "previa";
 
 /** O que o app entrega a cada tela de etapa. */
 export interface DepsEtapa {
@@ -87,6 +87,11 @@ export interface DepsEtapa {
   estado: EstadoApp;
   /** A tela mudou algo que conta para `completa()`: o app redesenha o rodapé (Avançar). */
   aoMudar(): void;
+  /**
+   * Monta o lote do estado atual, grava-o no repositório e troca o corpo pela tela de execução (a Prévia chama no
+   * Iniciar). Rejeita, sem nada enviado ao SEI, se o lote não pôde ser montado ou gravado.
+   */
+  iniciarExecucao?(): Promise<void>;
 }
 
 /** Uma tela de etapa. O app a cria ao entrar na etapa e a destrói ao sair (Avançar, Voltar ou fechar). */
@@ -96,6 +101,11 @@ export interface TelaEtapa {
   completa(): boolean;
   /** Texto do botão do rodapé (padrão "Avançar"); o app o relê a cada `aoMudar()`. */
   rotuloAvancar?(): string;
+  /**
+   * A etapa cuida do próprio avanço (a Prévia: Iniciar começa a execução, que não é uma etapa). Sem isto, o app vai
+   * à próxima etapa aplicável.
+   */
+  avancar?(): void;
   /** Chamado depois de `el` entrar na página (carregar listas da aba, por exemplo). */
   iniciar?(): Promise<void> | void;
   /** Para o que estiver pendente: resposta que chegar depois não pode mexer no estado. */
