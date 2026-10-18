@@ -95,11 +95,11 @@ function editorCk4(secoes: SecaoFalsa[]): string {
 }
 
 /** editor_montar do CK5: `window.INFRA_EDITOR_CONFIG` com initialData, rootsAttributes e sei.urlSalvar. */
-function editorCk5(secoes: SecaoFalsa[]): string {
+function editorCk5(secoes: SecaoFalsa[], semVersao = false): string {
   const cfg = {
     initialData: Object.fromEntries(secoes.map((s) => [s.nome, s.html])),
     rootsAttributes: Object.fromEntries(secoes.map((s) => [s.nome, { somenteLeitura: Boolean(s.somenteLeitura), label: s.titulo }])),
-    sei: { urlSalvar: URL_SALVAR_CK5, versao: 7, siglaUnidade: "TESTE" },
+    sei: semVersao ? { urlSalvar: URL_SALVAR_CK5, siglaUnidade: "TESTE" } : { urlSalvar: URL_SALVAR_CK5, versao: 7, siglaUnidade: "TESTE" },
   };
   return `<html><head><title>SEI - Editor</title></head><body><script>window.INFRA_EDITOR_CONFIG = ${JSON.stringify(cfg)};</script></body></html>`;
 }
@@ -123,6 +123,10 @@ interface Montagem {
   salvarFalha?: boolean;
   processoSigiloso?: boolean;
   modeloSigiloso?: boolean;
+  /** Depois do POST do cadastro, a releitura da árvore falha por rede ou pelo cancelamento do usuário. */
+  arvorePosCadastro?: "rede" | "aborto";
+  /** CK5 com a configuração sem `versao`. */
+  ck5SemVersao?: boolean;
 }
 
 function docArvore(d: Partial<DocumentoArvore> & Pick<DocumentoArvore, "id" | "numero" | "titulo">): DocumentoArvore {
@@ -150,6 +154,7 @@ function montar(o: Montagem = {}) {
   const invalidados: string[] = [];
   const base = new URL(BASE);
   const absoluta = (url: string) => new URL(url.replace(/&amp;/g, "&"), base).href;
+  const controle = new AbortController();
   const cadastrou = () => chamadas.some((c) => c.metodo === "POST" && c.url.includes("acao=documento_cadastrar"));
 
   const responder = async (metodo: "GET" | "POST", url: string, campos: Pares): Promise<Pagina> => {
@@ -164,7 +169,7 @@ function montar(o: Montagem = {}) {
       if (abs.includes("acao=documento_alterar&") && abs.includes("id_documento=700")) return fixture("documento_alterar.html");
       if (abs.includes("acao=documento_visualizar&id_documento=700")) return fixture("modelo_visualizar.html");
       if (abs.includes("acao=editor_montar") && abs.includes("id_documento=701"))
-        return pagina(abs, tipoEditor === "ck5" ? editorCk5(secoes) : editorCk4(secoes));
+        return pagina(abs, tipoEditor === "ck5" ? editorCk5(secoes, o.ck5SemVersao) : editorCk4(secoes));
     } else {
       if (abs.includes("acao=documento_escolher_tipo&acao_origem=documento_escolher_tipo") && v("hdnIdSerie")) {
         return fixture("cadastro.html", o.cadastro);
@@ -172,6 +177,7 @@ function montar(o: Montagem = {}) {
       if (abs.includes("acao=documento_cadastrar&acao_origem=documento_cadastrar")) {
         if (o.cadastroErro) throw o.cadastroErro;
         if (o.cadastroSemProva) return fixture("cadastro.html");
+        if (o.arvorePosCadastro === "aborto") controle.abort();
         return pagina(
           absoluta(assinado("acao=arvore_visualizar&acao_origem=documento_cadastrar&id_procedimento=500&id_documento=701")),
           "<html><body>ok</body></html>",
@@ -239,7 +245,11 @@ function montar(o: Montagem = {}) {
       const doc = arvore().documentos.find((d) => d.numero === ref);
       return { idProcedimento: "500", idDocumento: doc?.id, linkArvore: "" };
     },
-    arvore: async () => arvore(),
+    arvore: async (_ref: string, op?: OpcoesHttp) => {
+      if (cadastrou() && o.arvorePosCadastro === "rede") throw new ErroSei("SEI_REDE", "Falha ao falar com o SEI: tempo esgotado");
+      if (op?.sinal?.aborted) throw new DOMException("Aborted", "AbortError");
+      return arvore();
+    },
     invalidar: (id?: string) => {
       invalidados.push(id ?? "*");
     },
@@ -260,7 +270,7 @@ function montar(o: Montagem = {}) {
     globalThis.fetch = fetchOriginal;
   };
 
-  return { sei, chamadas, fetches, secoes, invalidados, restaurar };
+  return { sei, chamadas, fetches, secoes, invalidados, restaurar, controle };
 }
 
 const posts = (c: Chamada[], trecho: string) => c.filter((x) => x.metodo === "POST" && x.url.includes(trecho));
@@ -465,6 +475,17 @@ export async function verificarSei(): Promise<void> {
     },
   );
   await comMontagem(
+    { secoes: [{ nome: "txaEditor_1", titulo: "Corpo do Texto", html: "<p>P&amp;D &eacute; &lt;x&gt; &nbsp; ##nome##</p>" }] },
+    async ({ sei, chamadas }) => {
+      await criarDocumentoDaLinha(sei, pedido({ linha: { Nome: "Ana" } }));
+      igual(
+        "entidades fora de campo sobrevivem byte a byte",
+        valor(posts(chamadas, "acao=editor_salvar")[0], "txaEditor_1"),
+        "<p>P&amp;D &eacute; &lt;x&gt; &nbsp; Ana</p>",
+      );
+    },
+  );
+  await comMontagem(
     {
       cadastro: (h) =>
         h.replace(
@@ -527,8 +548,19 @@ export async function verificarSei(): Promise<void> {
     );
     igual("CK5: somente leitura como estava", sec("txaEditor_1"), "<p>Cabeçalho ##nome##</p>");
     igual("CK5: versao do editor", corpo.versao, 7);
+    igual("CK5 com versao: ignorarNovaVersao N (como hoje)", (corpo as { ignorarNovaVersao?: string }).ignorarNovaVersao, "N");
     checar("CK5: nada pelo formulario do CK4", posts(chamadas, "acao=editor_salvar").length === 0);
     igual("CK5: numero devolvido", r.numero, "0100002");
+  });
+
+  await comMontagem({ editor: "ck5", ck5SemVersao: true }, async ({ sei, fetches }) => {
+    await criarDocumentoDaLinha(sei, pedido());
+    const corpo = fetches[0]?.corpo as { versao?: unknown; ignorarNovaVersao?: string };
+    checar(
+      "CK5 sem versao (documento novo): ignorarNovaVersao S e versao null (legado)",
+      corpo?.ignorarNovaVersao === "S" && corpo.versao === null,
+      corpo,
+    );
   });
 
   secao("sei: falhas");
@@ -542,18 +574,69 @@ export async function verificarSei(): Promise<void> {
     checar("falha no cadastro nao e 'documento criado'", !(e instanceof ErroDocumentoCriado));
     checar("falha no cadastro: editor nem aberto", !chamadas.some((c) => c.url.includes("editor_montar")));
   });
-  await comMontagem({ cadastroSemProva: true }, async ({ sei }) => {
+  await comMontagem({ cadastroSemProva: true }, async ({ sei, chamadas }) => {
     const e = await lanca(() => criarDocumentoDaLinha(sei, pedido()));
     checar(
-      "cadastro sem prova de sucesso: SEI_RESPOSTA_INESPERADA",
-      e instanceof ErroSei && e.codigo === "SEI_RESPOSTA_INESPERADA" && !(e instanceof ErroDocumentoCriado),
+      "cadastro sem prova (POST enviado): ErroDocumentoCriado incerto, codigo SEI_RESPOSTA_INESPERADA",
+      e instanceof ErroDocumentoCriado && e.incerto && e.codigo === "SEI_RESPOSTA_INESPERADA",
+      e,
+    );
+    igual("incerto: sem id, numero nem link", e instanceof ErroDocumentoCriado ? e.documentoCriado : null, {
+      idDocumento: "",
+      numero: "",
+      link: "",
+    });
+    checar(
+      "mensagem do incerto nao diz 'O documento  foi criado'",
+      !/documento\s+foi criado/.test(e?.message ?? "") &&
+        /talvez/.test(e?.message ?? "") &&
+        /n\u00E3o foi poss\u00EDvel identificar/.test(e?.message ?? ""),
+      e?.message,
+    );
+    checar("incerto: editor nem aberto", !chamadas.some((c) => c.url.includes("editor_montar")));
+  });
+  await comMontagem({ arvorePosCadastro: "rede" }, async ({ sei, chamadas }) => {
+    const e = await lanca(() => criarDocumentoDaLinha(sei, pedido()));
+    checar(
+      "arvore falha por rede depois do POST: ErroDocumentoCriado nao incerto (id lido do POST)",
+      e instanceof ErroDocumentoCriado && !e.incerto && e.codigo === "SEI_REDE",
+      e,
+    );
+    igual("rede: id e link do POST, numero desconhecido", e instanceof ErroDocumentoCriado ? e.documentoCriado : null, {
+      idDocumento: "701",
+      numero: "",
+      link: `${ORIGEM}?acao=procedimento_trabalhar&id_procedimento=500&id_documento=701`,
+    });
+    checar("rede: mensagem cita o id quando falta o numero", /id 701/.test(e?.message ?? ""), e?.message);
+    igual("rede: um cadastro so", posts(chamadas, "acao=documento_cadastrar").length, 1);
+  });
+  await comMontagem({ arvorePosCadastro: "aborto" }, async ({ sei, controle }) => {
+    const e = await lanca(() => criarDocumentoDaLinha(sei, pedido(), controle.signal));
+    checar(
+      "cancelado depois do POST: ErroDocumentoCriado (CANCELADO) com o id",
+      e instanceof ErroDocumentoCriado && !e.incerto && e.codigo === "CANCELADO" && e.documentoCriado.idDocumento === "701",
       e,
     );
   });
+  await comMontagem(
+    { secoes: [{ nome: "txaEditor_1", titulo: "Corpo do Texto", html: "<p>##x#y## ##nome## e ##z##</p>" }] },
+    async ({ sei }) => {
+      const e = await lanca(() => criarDocumentoDaLinha(sei, pedido({ linha: { Nome: "Ana" }, camposCruzados: { nome: "Nome" } })));
+      checar(
+        "campo mapeado que ficou literal: ErroDocumentoCriado (nao incerto) citando o campo",
+        e instanceof ErroDocumentoCriado && !e.incerto && /##nome##/.test(e.message) && !/##z##/.test(e.message),
+        e,
+      );
+    },
+  );
   await comMontagem({ salvarFalha: true }, async ({ sei, chamadas }) => {
     const e = await lanca(() => criarDocumentoDaLinha(sei, pedido()));
     const criado = e instanceof ErroDocumentoCriado ? e.documentoCriado : null;
-    checar("troca falhou depois de criar: ErroDocumentoCriado (e ErroSei)", e instanceof ErroDocumentoCriado && e instanceof ErroSei, e);
+    checar(
+      "troca falhou depois de criar: ErroDocumentoCriado (e ErroSei), nao incerto",
+      e instanceof ErroDocumentoCriado && e instanceof ErroSei && !e.incerto,
+      e,
+    );
     igual("o erro carrega o documento criado", criado, {
       idDocumento: "701",
       numero: "0100002",

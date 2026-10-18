@@ -305,6 +305,24 @@ export async function verificarAcoesLote(): Promise<void> {
     const r = await criarDocumento(sei, "148265", { tipo: "Despacho" }, PREVIA);
     checar("sem tipoId: casamento por nome como antes", r.resumo.includes("Despacho"), r.resumo);
   }
+  secao("acoes em lote: fases do cadastro (acompanharCadastro)");
+  {
+    const { sei } = montar();
+    const fases: unknown[] = [];
+    await criarDocumento(sei, "148265", { tipo: "Despacho", tipoId: "5", acompanharCadastro: (f) => fases.push(f) }, APLICAR);
+    checar(
+      "fases: enviando antes do POST, enviado com id e processo",
+      JSON.stringify(fases) === JSON.stringify([{ fase: "enviando" }, { fase: "enviado", idDocumento: "999001", idProcedimento: "148265" }]),
+      fases,
+    );
+  }
+  {
+    const { sei } = montar();
+    const fases: unknown[] = [];
+    await criarDocumento(sei, "148265", { tipo: "Despacho", tipoId: "5", acompanharCadastro: (f) => fases.push(f) }, PREVIA);
+    checar("previa: nenhuma fase avisada", fases.length === 0, fases);
+  }
+
   secao("acoes em lote: numero se exigido e texto padrao por id");
   {
     const { sei, estado } = montar();

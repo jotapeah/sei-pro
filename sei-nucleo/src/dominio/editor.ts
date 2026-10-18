@@ -188,13 +188,17 @@ export async function abrirEditor(sei: Sei, d: DocumentoLocalizado, sinal?: Abor
   return lerEditor(await sei.http.obter(link, { sinal }));
 }
 
-async function salvar(sei: Sei, ed: EditorDocumento, novas: Record<string, string>, sinal?: AbortSignal): Promise<void> {
+async function salvar(sei: Sei, ed: EditorDocumento, novas: Record<string, string>, sinal?: AbortSignal, documentoNovo = false): Promise<void> {
   if (ed.tipo === "ck5") {
     const url = sei.http.absoluta(ed.ck5!.urlSalvar);
+    // Documento que acabou de ser criado por quem grava, sem versão na configuração: o SEI compararia null e
+    // recusaria sempre ("Existe uma nova versão"); como o legado do Documentos em Lote, vai "S" com versão null.
+    const versao = ed.ck5!.versao;
+    const semVersao = documentoNovo && (versao === null || versao === undefined || versao === "");
     const corpo = {
       siglaUnidade: ed.ck5!.siglaUnidade || sei.contexto().unidade.sigla,
-      versao: ed.ck5!.versao,
-      ignorarNovaVersao: "N",
+      versao: semVersao ? null : versao,
+      ignorarNovaVersao: semVersao ? "S" : "N",
       secoesConteudo: ed.secoes.map((s) => ({ nome: s.nome, html: novas[s.nome] ?? s.html })),
     };
     const r = await fetch(url, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo), signal: sinal });
@@ -374,6 +378,14 @@ export async function editarSecoes(
   d: DocumentoLocalizado,
   trocar: (secao: SecaoEditor) => string | null,
   op: OpcoesEscrita,
+  extra: {
+    /**
+     * O documento acabou de ser criado por quem grava (nenhuma outra edição
+     * possível): no CK5 sem `versao` na configuração, grava com
+     * `ignorarNovaVersao: "S"`. Só o Documentos em Lote usa.
+     */
+    documentoNovo?: boolean;
+  } = {},
 ): Promise<ResultadoEscrita> {
   const ed = await abrirEditor(sei, d, op.sinal);
   const numero = d.documento.numero;
@@ -400,7 +412,7 @@ export async function editarSecoes(
     resumo: alvos.length ? `Vai regravar ${alvos.length} se\u00E7\u00E3o(\u00F5es) do documento ${numero}.` : `Nada a gravar no documento ${numero}.`,
   };
   if (!op.aplicar || !alvos.length) return base;
-  await salvar(sei, ed, novas, op.sinal);
+  await salvar(sei, ed, novas, op.sinal, extra.documentoNovo === true);
   sei.invalidar(d.arvore.idProcedimento);
   const depois = lerEditor(await sei.http.obter(ed.pagina.url, { sinal: op.sinal }));
   for (const s of alvos) conferirSecao(depois, s, novas[s.nome] as string, numero);

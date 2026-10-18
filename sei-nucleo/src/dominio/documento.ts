@@ -230,6 +230,13 @@ export interface NovoDocumento {
    * `numero` vence.
    */
   numeroSeExigido?: string;
+  /**
+   * Avisa as fases do POST de cadastro, para quem precisa distinguir "nada foi
+   * criado" de "talvez criado": `enviando` logo antes do POST (dali em diante
+   * o documento pode existir) e `enviado` quando a resposta confirmou, com o
+   * id lido dela (antes da releitura da árvore, que ainda pode falhar).
+   */
+  acompanharCadastro?: (fase: { fase: "enviando" } | { fase: "enviado"; idDocumento: string; idProcedimento: string }) => void;
 }
 
 /**
@@ -299,12 +306,14 @@ async function cadastrar(sei: Sei, ref: string, arv: Arvore, escolha: Formulario
   await aplicarNivel(sei, form, { nivel: novo.nivel ?? "publico", hipotese: novo.hipotese }, sinal);
   form.definir({ hdnFlagDocumentoCadastro: "2" });
 
+  novo.acompanharCadastro?.({ fase: "enviando" });
   const resposta = await form.enviar({
     sinal,
     operacao: `a cria\u00E7\u00E3o do documento em ${arv.protocolo}`,
     sucesso: (p) => /acao_origem=documento_(?:gerar|cadastrar)/.test(p.url) || /editor_montar/.test(p.html),
   });
   const idDocumento = parametros(resposta.url).get("id_documento") ?? /id_documento=(\d+)/.exec(resposta.html)?.[1] ?? "";
+  novo.acompanharCadastro?.({ fase: "enviado", idDocumento, idProcedimento: arv.idProcedimento });
   sei.invalidar(arv.idProcedimento);
   const nova = await sei.arvore(ref, { forcar: true, sinal });
   const noNovo = nova.documentos.find((d) => d.id === idDocumento);
