@@ -444,3 +444,84 @@ table.spro-resultado td a {
 .dl-acoes > .spro-botao[hidden] {
   display: none;
 }
+
+/* ---------- Etapas (indicador no topo e rodape Voltar / Avancar) ---------- */
+.dl-etapas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+  padding: 0 0 8px;
+  list-style: none;
+  border-bottom: 1px solid var(--spro-borda);
+  color: var(--spro-suave);
+}
+.dl-etapas li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.dl-etapa-num {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--spro-borda-forte);
+  border-radius: 50%;
+}
+.dl-etapas li.atual {
+  color: var(--spro-texto);
+  font-weight: 600;
+}
+.dl-etapas li.atual .dl-etapa-num {
+  color: var(--spro-destaque-texto);
+  background: var(--spro-destaque);
+  border-color: var(--spro-destaque);
+}
+.dl-etapas li.feita .dl-etapa-num {
+  color: var(--spro-destaque);
+  border-color: var(--spro-destaque);
+}
+.dl-rodape-etapa {
+  padding-top: 10px;
+  border-top: 1px solid var(--spro-borda);
+}
+.dl-carregando[hidden] {
+  display: none;
+}
+
+/* ---------- Modelo e Planilha ---------- */
+.dl-info-modelo:empty,
+.dl-resumo-planilha:empty {
+  display: none;
+}
+.dl-info-modelo,
+.dl-resumo-planilha {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dl-lista-nomes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dl-lista-nomes li {
+  padding: 2px 8px;
+  background: var(--spro-destaque-suave);
+  border: 1px solid var(--spro-borda);
+  border-radius: var(--spro-raio-p);
+}
+.dl-lista-nomes code,
+.dl-nota code {
+  font-family: var(--spro-mono);
+}
+.dl-arquivo {
+  max-width: 100%;
+  color: var(--spro-texto);
+}

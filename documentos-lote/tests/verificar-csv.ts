@@ -35,4 +35,41 @@ export function verificarCsv(): void {
 
   const vazio = lerCsv(new Uint8Array());
   checar("arquivo vazio", vazio.colunas.length === 0 && vazio.registros.length === 0, vazio);
+
+  secao("lerCsv: cabeçalho repetido, UTF-16 e aspas não fechadas");
+  const s1 = lerCsv(utf8("a;a (2);a\n1;2;3\n"));
+  igual("sufixo não colide com cabeçalho real (a;a (2);a)", s1.colunas, ["a", "a (2)", "a (3)"]);
+  igual("valores do sufixo livre", s1.registros[0], { a: "1", "a (2)": "2", "a (3)": "3" });
+  const s2 = lerCsv(utf8("a;a;a (2)\n1;2;3\n"));
+  igual("cabeçalho real adiante fica com o próprio nome (a;a;a (2))", s2.colunas, ["a", "a (3)", "a (2)"]);
+  igual("valores sem perda", s2.registros[0], { a: "1", "a (3)": "2", "a (2)": "3" });
+  igual("real repetido também sufixa (a (2);a (2))", lerCsv(utf8("a (2);a (2)\n1;2\n")).colunas, ["a (2)", "a (2) (2)"]);
+
+  const texto16 = "nome;município\nJosé;Brasília\n";
+  const le = new Uint8Array(2 + texto16.length * 2);
+  const be = new Uint8Array(2 + texto16.length * 2);
+  le.set([0xff, 0xfe]);
+  be.set([0xfe, 0xff]);
+  for (let i = 0; i < texto16.length; i++) {
+    const c = texto16.charCodeAt(i);
+    le[2 + i * 2] = c & 0xff;
+    le[3 + i * 2] = c >> 8;
+    be[2 + i * 2] = c >> 8;
+    be[3 + i * 2] = c & 0xff;
+  }
+  const l16 = lerCsv(le);
+  igual("utf-16le com BOM: codificação", l16.codificacao, "utf-16le");
+  igual("utf-16le com BOM: colunas (sem BOM)", l16.colunas, ["nome", "município"]);
+  igual("utf-16le com BOM: registros", l16.registros, [{ nome: "José", município: "Brasília" }]);
+  const b16 = lerCsv(be);
+  igual("utf-16be com BOM: codificação", b16.codificacao, "utf-16be");
+  igual("utf-16be com BOM: registros", b16.registros, [{ nome: "José", município: "Brasília" }]);
+
+  igual("sem avisos num CSV normal", lerCsv(utf8("a;b\n1;2\n")).avisos, []);
+  igual("arquivo vazio: sem avisos", vazio.avisos, []);
+  const aberto = lerCsv(utf8('a;b\n1;2\n"3;4\n5;6\n'));
+  igual("aspas não fechadas: aviso com a linha onde abriu", aberto.avisos, [
+    "Aspas não fechadas na linha 3: o resto do arquivo foi lido como uma célula só. Confira a planilha.",
+  ]);
+  igual("aspas fechadas em várias linhas não avisam", lerCsv(utf8('a;b\n"x\ny";2\n')).avisos, []);
 }

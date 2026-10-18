@@ -1,4 +1,5 @@
 import { resumo } from "./util";
+import { verificarAppModelo } from "./verificar-app-modelo";
 import { verificarCampos } from "./verificar-campos";
 import { verificarConstantes } from "./verificar-constantes";
 import { verificarCsv } from "./verificar-csv";
@@ -18,4 +19,5 @@ await verificarSei();
 await verificarVerificar();
 await verificarRepositorio();
 await verificarExecutor();
+await verificarAppModelo();
 resumo();
