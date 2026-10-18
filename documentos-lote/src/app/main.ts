@@ -15,7 +15,7 @@ import { type AbrirModal, baixar, criarAbrirModal } from "@comum/ui/dialogo";
 import { h } from "@comum/ui/dom";
 import { CANAL_DOCUMENTOS_LOTE, CHAVE_ENTRADA_LINK } from "../modelo/constantes";
 import { RepositorioLote } from "../repositorio";
-import { AppDocumentosLote, type ContextoApp, tratadoresDoApp } from "./app";
+import { AppDocumentosLote, type ContextoApp, fecharJanela, tratadoresDoApp } from "./app";
 
 const parametros = new URLSearchParams(location.hash.slice(1));
 document.documentElement.dataset.modo = "modal";
@@ -75,15 +75,13 @@ async function iniciarModal(): Promise<void> {
   let rpc: Rpc | null = null;
   let app: AppDocumentosLote | null = null;
   const minimizado = () => document.documentElement.hasAttribute("data-minimizado");
-  // Fechar o diálogo (X, Esc, véu) pede à aba que tire o iframe. O pedido vai PRIMEIRO: sem ele, a tela do SEI
-  // fica presa sob o iframe transparente até o F5.
+  // Fechar o diálogo (X, Esc, véu) pede à aba que tire o iframe. Antes, o app arruma o armazenamento (apaga o lote
+  // concluído sem pendência), com teto de TETO_ANTES_DE_FECHAR_MS: a aba remove o iframe na hora e o que viesse
+  // depois se perderia. O pedido vem logo em seguida: sem ele, a tela do SEI fica presa sob o iframe até o F5.
+  const pedirFechar = () => void rpc?.chamar("fechar", undefined, 3000).catch(() => undefined);
   dlg.addEventListener("close", () => {
-    void rpc?.chamar("fechar", undefined, 3000).catch(() => undefined);
-    try {
-      app?.destruir();
-    } catch (e) {
-      console.warn("[SEI Pro] documentos em lote: falha ao desmontar o app", e);
-    }
+    if (app) void fecharJanela(app, pedirFechar);
+    else pedirFechar();
   });
   // Minimizado, o Esc nativo do <dialog> não fecha a pastilha.
   dlg.addEventListener("cancel", (ev) => {

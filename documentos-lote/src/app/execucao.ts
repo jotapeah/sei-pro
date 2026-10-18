@@ -28,6 +28,7 @@ import type { ItemLote, LoteDocumentos, RepositorioLote } from "../repositorio";
 import { mensagemDe } from "./estado";
 import { modeloSemTexto } from "./lote";
 import { especificacaoDaLinha } from "./previa";
+import { contagemDoLote, resumoDaContagem } from "./resultado";
 
 export const MENSAGEM_NAO_ABERTO = "Processo não está aberto na unidade";
 export const MENSAGEM_SESSAO = "Sessão do SEI expirada: entre de novo no SEI (nesta aba) e clique em Continuar.";
@@ -103,22 +104,15 @@ export class ExecucaoDocumentos {
   }
 
   /**
-   * `feitos`/`total` são da rodada (a barra); `criadas`, `erros` e `fora` são do LOTE INTEIRO, acumulados entre as
-   * rodadas (repetir as falhas, gravar as de fora, retomar), para o resumo e o resultado contarem a mesma coisa. A
-   * linha em voo não conta como erro.
+   * `feitos`/`total` são da rodada (a barra); `criadas`, `erros`, `incertas` e `fora` são do LOTE INTEIRO,
+   * acumulados entre as rodadas, pela mesma `contagemDoLote` do resultado (os erros sem as incertas). A linha em voo
+   * não conta.
    */
-  get progresso(): { feitos: number; total: number; criadas: number; erros: number; fora: number } {
+  get progresso(): { feitos: number; total: number; criadas: number; erros: number; incertas: number; fora: number } {
     let feitos = 0;
     for (const i of this.itensExecutor) if (i.situacao !== "pendente") feitos += 1;
-    let criadas = 0;
-    let erros = 0;
-    let fora = 0;
-    this.lote.itens.forEach((i, k) => {
-      if (i.situacao === "criada") criadas += 1;
-      else if (i.situacao === "erro" && k !== this.emVoo) erros += 1;
-      else if (i.situacao === "fora") fora += 1;
-    });
-    return { feitos, total: this.recorte.length, criadas, erros, fora };
+    const c = contagemDoLote(this.lote, this.emVoo);
+    return { feitos, total: this.recorte.length, criadas: c.criadas, erros: c.erros, incertas: c.incertas, fora: c.fora };
   }
 
   tempoRestante(): string {
@@ -300,7 +294,7 @@ export class ExecucaoDocumentos {
           true,
         );
       }
-      return this.desfechoDoCriar(k, r, processo);
+      return this.desfechoDoCriar(k, r, processo, existente !== null);
     } finally {
       this.emVoo = null;
       this.ritmo.registrar(agora() - inicio);
@@ -342,7 +336,8 @@ export class ExecucaoDocumentos {
     return { saida: await this.concluir(k, item, x.sessao === true) };
   }
 
-  private async desfechoDoCriar(k: number, r: unknown, processo: ProcessoCriado | null): Promise<Saida> {
+  /** `processoAnterior`: o processo já existia antes desta tentativa (repetição): não foi criado agora. */
+  private async desfechoDoCriar(k: number, r: unknown, processo: ProcessoCriado | null, processoAnterior = false): Promise<Saida> {
     const x = ehObjeto(r) ? r : {};
     const criado = ehObjeto(x.criado) ? x.criado : null;
     if (x.situacao === "ok" && criado && texto(criado.numero) && texto(criado.idDocumento)) {
@@ -354,8 +349,10 @@ export class ExecucaoDocumentos {
     }
     if (x.situacao === "erro" && x.incerto !== true) {
       if (x.sessao === true) {
-        // Nada foi criado nesta linha... salvo o processo novo: refazê-la criaria outro processo.
-        if (!processo) return this.devolverPendente(k, MENSAGEM_SESSAO);
+        // Nada foi criado nesta linha... salvo o processo novo: refazê-la criaria outro processo. Na repetição o
+        // processo já existia e está registrado: a linha volta a pendente com ele (a próxima tentativa só cria o
+        // documento), sem empurrar o usuário para "Repetir mesmo assim".
+        if (!processo || processoAnterior) return this.devolverPendente(k, MENSAGEM_SESSAO);
         this.motivo = MENSAGEM_SESSAO;
         const erro = `A sessão do SEI expirou depois de criar o processo ${processo.numero}; o documento não foi criado. Confira antes de repetir.`;
         return this.concluir(k, this.comProcesso({ situacao: "erro", erro, incerto: true }, processo), true);
@@ -384,18 +381,8 @@ export interface AcoesExecucao {
   minimizar(): void;
 }
 
-const plural = (n: number, um: string, varios: string) => (n === 1 ? um : varios.replace("#", String(n)));
-
-/** Resumo do fim: "X criadas, Y com erro, Z ficaram de fora." */
-export function resumoDoLote(p: { criadas: number; erros: number; fora: number }): string {
-  const partes = [
-    p.criadas === 0 ? "nenhuma criada" : plural(p.criadas, "1 criada", "# criadas"),
-    p.erros === 0 ? "nenhuma com erro" : plural(p.erros, "1 com erro", "# com erro"),
-  ];
-  if (p.fora) partes.push(plural(p.fora, "1 ficou de fora", "# ficaram de fora"));
-  const t = partes.join(", ");
-  return `${t.charAt(0).toUpperCase()}${t.slice(1)}.`;
-}
+/** Resumo do fim (e da pastilha): o mesmo texto e os mesmos números do resultado. */
+export const resumoDoLote = resumoDaContagem;
 
 /**
  * A tela de progresso: barra, contagem, tempo restante, o motivo de uma parada e Pausar/Continuar/Minimizar (sem
@@ -468,7 +455,7 @@ export class TelaExecucao {
       this.texto.textContent = `Pausando: aguardando o documento em andamento terminar... (${p.feitos} de ${p.total})`;
     else if (pausado) this.texto.textContent = `Pausado: ${p.feitos} de ${p.total} processadas.`;
     else this.texto.textContent = `Gravando ${Math.min(p.feitos + 1, p.total)} de ${p.total}...`;
-    this.contagem.textContent = `${plural(p.criadas, "1 criada", "# criadas")}, ${plural(p.erros, "1 com erro", "# com erro")}.`;
+    this.contagem.textContent = resumoDaContagem({ ...p, fora: 0 });
     this.restante.textContent = !pausado && !this.concluido ? `Tempo restante: ${this.ex.tempoRestante()}.` : "";
     this.motivo.hidden = !this.ex.motivo;
     this.motivo.replaceChildren(...(this.ex.motivo ? [icone("alerta", 16), h("span", {}, this.ex.motivo)] : []));

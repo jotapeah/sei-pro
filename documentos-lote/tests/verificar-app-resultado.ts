@@ -8,9 +8,9 @@
 import { type Area, areaMemoria } from "@comum/armazenamento/area";
 import { OP_RESTAURADO } from "@comum/ui/modalIframe";
 import { resultadoComoCsv } from "@comum/ui/tabelaResultado";
-import { tratadoresDoApp } from "@dl/app/app";
+import { fecharJanela, tratadoresDoApp } from "@dl/app/app";
 import { ROTULO_COLUNA_NOME } from "@dl/app/cruzamento";
-import { ExecucaoDocumentos, MENSAGEM_EM_VOO } from "@dl/app/execucao";
+import { ExecucaoDocumentos, MENSAGEM_EM_VOO, resumoDoLote, TelaExecucao } from "@dl/app/execucao";
 import { COLUNAS_GERADAS, colunasDoResultado, contagemDoLote, linhasDoResultado, numerosParaLink, ROTULO_INCERTO } from "@dl/app/resultado";
 import { CHAVE_ENTRADA_LINK, JANELA_OUTRA_ABA_MS } from "@dl/modelo/constantes";
 import { prepararLinhas } from "@dl/modelo/destinos";
@@ -593,15 +593,157 @@ export async function verificarAppResultado(): Promise<void> {
     checar("confirmada: apaga", !(CHAVE in (await m2.area.obter())));
     m2.app.destruir();
 
-    const m3 = await abrirCom(lote(config(), registros(1), [criada(1)]));
-    m3.app.destruir();
-    await tique(10);
-    checar("X/Esc no resultado sem pendência: apaga", !(CHAVE in (await m3.area.obter())));
+    // Fechar (X, Esc, véu): a aba tira o iframe assim que recebe o `fechar`; depois disso o app não grava mais nada.
+    // A remoção do lote limpo tem de terminar ANTES do pedido (Area com `remover` lento).
+    for (const caso of ["limpo", "pendente"] as const) {
+      const base = areaMemoria();
+      let morto = false;
+      const lenta: Area = {
+        ...base,
+        obter: async (c) => {
+          await tique(15);
+          return morto ? {} : base.obter(c);
+        },
+        remover: async (c) => {
+          await tique(30);
+          if (!morto) await base.remover(c);
+        },
+      };
+      const itens: ItemLote[] = caso === "limpo" ? [criada(1)] : [criada(1), { situacao: "erro", erro: "Falha" }];
+      const m3 = await abrirCom(lote(config(), registros(itens.length), itens), { area: lenta });
+      await fecharJanela(m3.app, () => {
+        morto = true;
+      });
+      morto = false;
+      if (caso === "limpo") checar("X/Esc no resultado sem pendência: apagado antes do fechar", !(CHAVE in (await base.obter())));
+      else checar("X/Esc no resultado com erro repetível: fica (até 7 dias)", CHAVE in (await base.obter()));
+    }
+    {
+      // O teto não prende o fechamento: armazenamento travado, o fechar sai mesmo assim.
+      const base = areaMemoria();
+      const travada: Area = { ...base, remover: () => new Promise(() => {}) };
+      const m5 = await abrirCom(lote(config(), registros(1), [criada(1)]), { area: travada });
+      let fechou = 0;
+      const t0 = Date.now();
+      await fecharJanela(m5.app, () => void fechou++, 50);
+      checar("armazenamento travado: fecha no teto", fechou === 1 && Date.now() - t0 < 1000);
+    }
+  }
 
-    const m4 = await abrirCom(lote(config(), registros(2), [criada(1), { situacao: "erro", erro: "Falha" }]));
-    m4.app.destruir();
-    await tique(10);
-    checar("X/Esc no resultado com erro repetível: fica (até 7 dias)", !!(await m4.lido()));
+  secao("resultado: depois de assumir, a tela segue com o lote novo (falha ao marcar)");
+  {
+    const m = await abrirCom(lote(config(), registros(2), [criada(1), { situacao: "erro", erro: "Falha" }]));
+    m.deps.repo.marcar = async () => false;
+    m.clicar("Repetir só as que falharam");
+    await ate(() => (m.raiz.querySelector(".dl-resultado .dl-erro:not([hidden])")?.textContent ?? "") !== "");
+    igual("nada enviado", m.daOp("criar").length, 0);
+    const novo = (await m.lido())?.id;
+    checar("o guardado foi assumido (id novo)", !!novo && novo !== "lote-1", novo);
+    m.clicar("Concluir");
+    await ate(() => m.t.fechou === 1);
+    checar("Concluir apaga o lote de id novo", !(CHAVE in (await m.area.obter())));
+    m.app.destruir();
+
+    const cc = config({ destino: { tipo: "coluna", coluna: "proc" } });
+    const regs = [
+      { nome: "Ana", cargo: "", proc: P1 },
+      { nome: "Bia", cargo: "", proc: P2 },
+    ];
+    const m2 = await abrirCom(lote(cc, regs, [criada(1), { situacao: "fora", erro: "Não aberto na unidade" }]));
+    m2.deps.repo.marcar = async () => false;
+    m2.clicar("Gravar as que ficaram de fora");
+    await ate(() => m2.raiz.querySelector<HTMLButtonElement>(".dl-gravar-fora-ok")?.disabled === false);
+    disparar(m2.raiz.querySelector(".dl-gravar-fora-ok")!, "click");
+    await ate(() => (m2.raiz.querySelector(".dl-gravar-fora > .dl-erro:not([hidden])")?.textContent ?? "") !== "");
+    m2.clicar("Voltar ao resultado");
+    m2.clicar("Concluir");
+    await ate(() => m2.t.fechou === 1);
+    checar("gravar as de fora: Concluir apaga o lote de id novo", !(CHAVE in (await m2.area.obter())));
+    m2.app.destruir();
+  }
+
+  secao("resultado: coluna da planilha com o nome de uma gerada não duplica o cabeçalho");
+  {
+    const regs = [{ nome: "Ana", cargo: "", numero_sei_gerado: "velho", processo_destino: "p" }];
+    const l = lote(config(), regs, [criada(1)]);
+    const titulos = colunasDoResultado(l).map((c) => c.titulo);
+    igual("títulos", titulos, [
+      "nome",
+      "cargo",
+      "numero_sei_gerado (planilha)",
+      "processo_destino (planilha)",
+      ...COLUNAS_GERADAS,
+      "observacao",
+    ]);
+    const cab =
+      resultadoComoCsv(linhasDoResultado(l), colunasDoResultado(l))
+        .replace(/^\uFEFF/, "")
+        .split("\r\n")[0] ?? "";
+    igual("sem cabeçalho repetido", new Set(cab.split(";")).size, cab.split(";").length);
+    const linha = linhasDoResultado(l)[0];
+    const col = (t: string) => colunasDoResultado(l).find((c) => c.titulo === t)?.chave ?? "";
+    igual(
+      "valores separados",
+      [linha?.campos[col("numero_sei_gerado (planilha)")], linha?.campos[col("numero_sei_gerado")]],
+      ["velho", "0001"],
+    );
+  }
+
+  secao("contagem: execução, pastilha e resultado contam as incertas do mesmo jeito");
+  {
+    const l = lote(config(), registros(3), [
+      criada(1),
+      { situacao: "erro", erro: MENSAGEM_EM_VOO, incerto: true },
+      { situacao: "erro", erro: "x" },
+    ]);
+    const ex = new ExecucaoDocumentos(l, {
+      rpc: { chamar: (async () => null) as never },
+      repo: new RepositorioLote(areaMemoria()),
+      aoMudar: () => {},
+    });
+    const p = ex.progresso;
+    const c = contagemDoLote(l);
+    igual("mesmos números", [p.criadas, p.erros, p.incertas, p.fora], [c.criadas, c.erros, c.incertas, c.fora]);
+    igual("incerta à parte do erro", [p.erros, p.incertas], [1, 1]);
+    checar("resumo da execução fala da incerta", resumoDoLote(p).includes("1 incerta"), resumoDoLote(p));
+    const tela = new TelaExecucao(ex, { pausar: () => {}, continuar: () => {}, minimizar: () => {} });
+    checar(
+      "contagem da tela",
+      (tela.el.querySelector(".dl-falhas")?.textContent ?? "").includes("1 incerta"),
+      tela.el.querySelector(".dl-falhas")?.textContent,
+    );
+  }
+
+  secao("repetição de novo processo com processo: sessão expirada volta a pendente com o processo");
+  {
+    const cn = config({ destino: { tipo: "novo-processo", idTipoProcesso: "100", especificacao: "x" } });
+    const l = lote(cn, registros(1), [{ situacao: "pendente", processo: "PN5" }]);
+    const area = areaMemoria();
+    const repo = new RepositorioLote(area, () => 5000);
+    await repo.gravar(l);
+    const rpc = {
+      chamar: (async (op: string) => {
+        await tique(1);
+        return op === "criar" ? { situacao: "erro", erro: "Sessão expirada.", sessao: true } : null;
+      }) as never,
+    };
+    const ex = new ExecucaoDocumentos(l, { rpc, repo, aoMudar: () => {}, esperar: () => tique(0) });
+    await ex.rodar();
+    igual("pausado", ex.estado, "pausado");
+    const g = ((await area.obter(CHAVE))[CHAVE] as LoteDocumentos).itens[0];
+    igual("pendente com o processo", [g?.situacao, g?.processo, g?.incerto], ["pendente", "PN5", undefined]);
+  }
+
+  secao("Repetir mesmo assim: a incerteza só do processo novo fala do processo");
+  {
+    const cn = config({ destino: { tipo: "novo-processo", idTipoProcesso: "100", especificacao: "x" } });
+    const m = await abrirCom(lote(cn, registros(1), [{ situacao: "erro", erro: "O processo pode ter sido criado.", incerto: true }]));
+    m.t.responder = false;
+    m.clicar("Repetir mesmo assim");
+    await ate(() => m.t.confirmacoes.length === 1);
+    const t = m.t.confirmacoes[0] ?? "";
+    checar("fala do processo, não do documento", t.includes("processo novo") && !t.includes("o documento pode"), t);
+    m.app.destruir();
   }
 
   secao("resultado: Gerar links permanentes destes documentos");

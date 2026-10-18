@@ -139,8 +139,11 @@ export class AppDocumentosLote {
   private telaExecucao: TelaExecucao | null = null;
   private minimizado = false;
   private corpo: Corpo = "etapa";
+  private arrumacao: Promise<void> | null = null;
   /** O lote do resultado na tela (o que fechar o resultado apaga, se não houver pendência). */
   private loteResultado: LoteDocumentos | null = null;
+  /** A tela de resultado mostrada (a de `loteResultado`). */
+  private resultado: TelaResultado | null = null;
   /** A reverificação do "Gravar as que ficaram de fora". */
   private telaFora: TelaVerificacao | null = null;
 
@@ -208,12 +211,10 @@ export class AppDocumentosLote {
   }
 
   /**
-   * Fechar o modal: a tela atual para o que estiver pendente; a execução pausa (o lote fica, retomável). Com o
-   * resultado na tela e nada a repetir, conferir ou gravar, o lote é apagado (não sobra planilha guardada à toa);
-   * com pendência, ele fica até 7 dias do último uso.
+   * Fechar o modal: a tela atual para o que estiver pendente; a execução pausa (o lote fica, retomável). O apagar
+   * do lote concluído é do `antesDeFechar`, que roda antes do pedido de fechar à aba.
    */
   destruir(): void {
-    const resultado = this.corpo === "resultado" ? this.loteResultado : null;
     this.destruido = true;
     this.execucao?.parar();
     this.tela?.destruir?.();
@@ -221,9 +222,24 @@ export class AppDocumentosLote {
     this.telaFora?.destruir();
     this.telaFora = null;
     for (const p of this.parar.splice(0)) p();
-    if (resultado && !temPendencia(resultado)) {
-      void this.d.repo.apagar(resultado.id).catch((e) => console.warn("[SEI Pro] documentos em lote: falha ao apagar o lote", e));
-    }
+  }
+
+  /**
+   * Antes de a aba tirar o iframe (ver `fecharJanela`): com o resultado na tela e nada a repetir, conferir ou
+   * gravar, o lote é apagado (não sobra planilha guardada à toa); com pendência, ele fica até 7 dias do último uso.
+   * A execução já pausa aqui, para não despachar outra linha durante a arrumação. Chamar de novo não refaz.
+   */
+  antesDeFechar(): Promise<void> {
+    this.arrumacao ??= (async () => {
+      this.execucao?.parar();
+      const resultado = this.corpo === "resultado" ? this.loteResultado : null;
+      if (resultado && !temPendencia(resultado)) await this.apagarLote(resultado);
+    })();
+    return this.arrumacao;
+  }
+
+  private async apagarLote(lote: LoteDocumentos): Promise<void> {
+    await this.d.repo.apagar(lote.id).catch((e) => console.warn("[SEI Pro] documentos em lote: falha ao apagar o lote", e));
   }
 
   /**
@@ -352,6 +368,7 @@ export class AppDocumentosLote {
     this.telaFora?.destruir();
     this.telaFora = null;
     this.loteResultado = null;
+    this.resultado = null;
     this.telaExecucao = null;
   }
 
@@ -526,6 +543,7 @@ export class AppDocumentosLote {
     });
     this.mostrarCorpo("resultado", tela.el);
     this.loteResultado = lote;
+    this.resultado = tela;
   }
 
   /** Nova rodada sobre `indices` (linhas `erro`), que voltam a `pendente` antes; nada sai se a gravação falhar. */
@@ -540,17 +558,20 @@ export class AppDocumentosLote {
     tela.mostrarErro("");
     const l = await this.assumir(lote);
     if (this.destruido) return;
-    const falha =
-      typeof l === "string"
-        ? l
-        : await this.marcarItens(
-            l,
-            indices.map((k) => [k, this.pendenteDe(l.itens[k])]),
-          );
-    if (this.destruido) return;
-    if (falha !== null || typeof l === "string") {
+    if (typeof l === "string") {
       tela.ocupado(false);
-      tela.mostrarErro(falha ?? "");
+      tela.mostrarErro(l);
+      return;
+    }
+    const falha = await this.marcarItens(
+      l,
+      indices.map((k) => [k, this.pendenteDe(l.itens[k])]),
+    );
+    if (this.destruido) return;
+    if (falha !== null) {
+      // O guardado já tem o id novo: a tela segue com ele (Concluir, repetir de novo).
+      this.mostrarResultado(l);
+      this.resultado?.mostrarErro(falha);
       return;
     }
     this.executarLote(l, indices);
@@ -558,8 +579,13 @@ export class AppDocumentosLote {
 
   /** Incerta (Ruling 16): só com a confirmação explícita, e só esta linha. */
   private async repetirIncerta(tela: TelaResultado, lote: LoteDocumentos, k: number): Promise<void> {
+    const item = lote.itens[k];
+    // Novo processo sem o número: a incerteza é do processo (repetir cria outro processo, e o documento nele).
+    const soDoProcesso = lote.config.destino.tipo === "novo-processo" && !item?.processo;
     const sim = await this.d.confirmar(
-      `A linha ${k + 2} ficou incerta: o documento pode já ter sido criado no SEI. Antes de repetir, confira o processo de destino; se o documento existir, repetir cria outro igual. Repetir mesmo assim?`,
+      soDoProcesso
+        ? `A linha ${k + 2} ficou incerta: o processo novo desta linha pode já ter sido criado no SEI. Antes de repetir, confira no Controle de Processos; se ele existir, repetir cria outro processo. Repetir mesmo assim?`
+        : `A linha ${k + 2} ficou incerta: o documento pode já ter sido criado no SEI. Antes de repetir, confira o processo de destino; se o documento existir, repetir cria outro igual. Repetir mesmo assim?`,
       "Repetir mesmo assim",
     );
     if (!sim || this.destruido) return;
@@ -571,8 +597,10 @@ export class AppDocumentosLote {
    * erro na planilha, na mesma tela/regras da Verificação, e grava as que passaram. As com erro na planilha aparecem
    * com o motivo e não podem ser gravadas (precisam de correção no arquivo).
    */
-  private telaGravarFora(lote: LoteDocumentos): void {
-    if (!foraRegravaveis(lote).length) return;
+  private telaGravarFora(inicial: LoteDocumentos): void {
+    if (!foraRegravaveis(inicial).length) return;
+    // Depois de um `assumir` bem-sucedido o lote é outro objeto (id novo): Voltar e tentar de novo usam o novo.
+    let lote = inicial;
     // A verificação lê o estado de uma etapa: um estado só desta reverificação, com as linhas de fora do lote.
     const registros: Record<string, string>[] = [];
     const estado: EstadoApp = {
@@ -604,6 +632,7 @@ export class AppDocumentosLote {
       if (this.destruido || this.telaFora !== tela) return;
       let falha = typeof l === "string" ? l : null;
       if (typeof l !== "string") {
+        lote = l;
         const v = estado.verificacoes ?? {};
         const aprovadas = new Set(prontas);
         const mudancas: Array<[number, ItemLote]> = [];
@@ -674,7 +703,13 @@ export class AppDocumentosLote {
       if (!this.destruido) tela.mostrarErro(`Não foi possível abrir o Pesquisar Link Permanente: ${mensagemDe(e)}`);
       return;
     }
-    if (!this.destruido) this.d.fechar();
+    if (this.destruido) return;
+    // Como o Concluir: o apagar termina antes de a aba tirar o iframe.
+    if (!temPendencia(lote)) await this.apagarLote(lote);
+    if (this.destruido) return;
+    this.sairDoCorpo();
+    this.corpo = "concluido";
+    this.d.fechar();
   }
 
   /** Concluir: apaga o lote (com pendência, só depois de confirmar) e fecha a janela. */
@@ -686,7 +721,7 @@ export class AppDocumentosLote {
       );
       if (!sim || this.destruido) return;
     }
-    await this.d.repo.apagar(lote.id).catch((e) => console.warn("[SEI Pro] documentos em lote: falha ao apagar o lote", e));
+    await this.apagarLote(lote);
     if (this.destruido) return;
     this.sairDoCorpo();
     this.corpo = "concluido";
@@ -777,7 +812,7 @@ export class AppDocumentosLote {
     this.pastilha.hidden = !this.minimizado;
     if (!this.minimizado) return;
     const ex = this.execucao;
-    const p = ex?.progresso ?? { feitos: 0, total: 0, criadas: 0, erros: 0, fora: 0 };
+    const p = ex?.progresso ?? { feitos: 0, total: 0, criadas: 0, erros: 0, incertas: 0, fora: 0 };
     const estado =
       ex?.estado === "concluido" ? "Concluído" : ex?.motivo ? "Parado" : ex?.estado === "pausado" && !ex.rodando ? "Pausado" : "Gravando";
     this.pastilha.replaceChildren(
@@ -789,7 +824,9 @@ export class AppDocumentosLote {
           "span",
           { class: "dl-pastilha-conta", role: "status", title: ex?.estado === "concluido" ? resumoDoLote(p) : (ex?.motivo ?? "") },
           `${p.feitos}/${p.total} · ${estado}`,
-          p.erros ? ` (${p.erros} com erro)` : "",
+          p.erros || p.incertas
+            ? ` (${[p.erros ? `${p.erros} com erro` : "", p.incertas ? `${p.incertas} ${p.incertas === 1 ? "incerta" : "incertas"}` : ""].filter(Boolean).join(", ")})`
+            : "",
         ),
       ),
       h(
@@ -813,5 +850,35 @@ export class AppDocumentosLote {
     this.botaoVoltar.hidden = etapaAnterior(this.estado, this.indice) === null;
     this.botaoAvancar.disabled = !this.tela?.completa();
     this.botaoAvancar.textContent = this.tela?.rotuloAvancar?.() ?? "Avançar";
+  }
+}
+
+/** Teto da arrumação antes do fechar: o armazenamento lento não pode prender a tela do SEI sob o iframe. */
+export const TETO_ANTES_DE_FECHAR_MS = 1500;
+
+/**
+ * A ordem do fechamento (X, Esc, véu, Concluir, Gerar links): primeiro o app arruma o armazenamento (apaga o lote
+ * concluído sem pendência), com teto; só então pede à aba que tire o iframe (`pedirFechar`), porque a aba o remove
+ * na hora e o que o app ainda fosse gravar se perderia; por fim desmonta o app.
+ */
+export async function fecharJanela(app: AppDocumentosLote, pedirFechar: () => void, teto = TETO_ANTES_DE_FECHAR_MS): Promise<void> {
+  let prazo: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      app.antesDeFechar(),
+      new Promise<void>((r) => {
+        prazo = setTimeout(r, teto);
+      }),
+    ]);
+  } catch (e) {
+    console.warn("[SEI Pro] documentos em lote: falha ao arrumar antes de fechar", e);
+  } finally {
+    clearTimeout(prazo);
+  }
+  pedirFechar();
+  try {
+    app.destruir();
+  } catch (e) {
+    console.warn("[SEI Pro] documentos em lote: falha ao desmontar o app", e);
   }
 }

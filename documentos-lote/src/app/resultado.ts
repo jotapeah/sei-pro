@@ -37,9 +37,12 @@ export function colunasDaPlanilha(l: LoteDocumentos): string[] {
 /** Chave de uma coluna da planilha na tabela (prefixo: uma coluna "processo_destino" na planilha não colide). */
 const chavePlanilha = (c: string) => `p:${c}`;
 
+/** Títulos que o resultado já usa: a coluna da planilha com um deles ganha " (planilha)" (CSV reimportado). */
+const RESERVADOS = new Set<string>(["Situação", ...COLUNAS_GERADAS, COLUNA_OBSERVACAO]);
+
 export function colunasDoResultado(l: LoteDocumentos): ColunaResultado[] {
   return [
-    ...colunasDaPlanilha(l).map((c) => ({ chave: chavePlanilha(c), titulo: c })),
+    ...colunasDaPlanilha(l).map((c) => ({ chave: chavePlanilha(c), titulo: RESERVADOS.has(c) ? `${c} (planilha)` : c })),
     { chave: "processo_destino", titulo: "processo_destino" },
     { chave: "nome_documento_gerado", titulo: "nome_documento_gerado" },
     { chave: "numero_sei_gerado", titulo: "numero_sei_gerado" },
@@ -116,9 +119,11 @@ export interface ContagemLote {
   pendentes: number;
 }
 
-export function contagemDoLote(l: LoteDocumentos): ContagemLote {
+/** A contagem do lote; `ignorar` é a linha com pedido em voo (o item dela é o incerto provisório: não conta). */
+export function contagemDoLote(l: LoteDocumentos, ignorar: number | null = null): ContagemLote {
   const c: ContagemLote = { total: l.itens.length, criadas: 0, erros: 0, incertas: 0, fora: 0, pendentes: 0 };
-  for (const i of l.itens) {
+  for (const [k, i] of l.itens.entries()) {
+    if (k === ignorar) continue;
     if (i.situacao === "criada") c.criadas += 1;
     else if (ehIncerto(i)) c.incertas += 1;
     else if (i.situacao === "erro") c.erros += 1;
@@ -162,8 +167,8 @@ export function numerosParaLink(l: LoteDocumentos): string[] {
 
 const plural = (n: number, um: string, varios: string) => (n === 1 ? um : varios.replace("#", String(n)));
 
-/** "X criadas, Y com erro, Z incertas, W ficaram de fora." (os zeros, fora as criadas e os erros, não aparecem). */
-export function resumoDoResultado(c: ContagemLote): string {
+/** As partes do resumo: "x criadas", "y com erro", e só se houver: incertas, de fora, não enviadas. */
+function partesDoResumo(c: Pick<ContagemLote, "criadas" | "erros" | "incertas" | "fora"> & { pendentes?: number }): string[] {
   const partes = [
     c.criadas === 0 ? "nenhuma criada" : plural(c.criadas, "1 criada", "# criadas"),
     c.erros === 0 ? "nenhuma com erro" : plural(c.erros, "1 com erro", "# com erro"),
@@ -171,8 +176,22 @@ export function resumoDoResultado(c: ContagemLote): string {
   if (c.incertas) partes.push(plural(c.incertas, "1 incerta", "# incertas"));
   if (c.fora) partes.push(plural(c.fora, "1 ficou de fora", "# ficaram de fora"));
   if (c.pendentes) partes.push(plural(c.pendentes, "1 não enviada", "# não enviadas"));
-  const t = `${partes.join(", ")} (de ${plural(c.total, "1 linha", "# linhas")})`;
-  return `${t.charAt(0).toUpperCase()}${t.slice(1)}.`;
+  return partes;
+}
+
+const comMaiuscula = (t: string) => `${t.charAt(0).toUpperCase()}${t.slice(1)}`;
+
+/**
+ * Resumo da execução e da pastilha: "X criadas, Y com erro, Z incertas, W ficaram de fora." — os mesmos números e
+ * rótulos do resultado (as incertas à parte dos erros, Ruling 16).
+ */
+export function resumoDaContagem(c: Pick<ContagemLote, "criadas" | "erros" | "incertas" | "fora">): string {
+  return `${comMaiuscula(partesDoResumo(c).join(", "))}.`;
+}
+
+/** O resumo do resultado: o da contagem, com as não enviadas e o total de linhas. */
+export function resumoDoResultado(c: ContagemLote): string {
+  return `${comMaiuscula(`${partesDoResumo(c).join(", ")} (de ${plural(c.total, "1 linha", "# linhas")})`)}.`;
 }
 
 export interface AcoesResultado {
