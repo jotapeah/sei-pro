@@ -216,6 +216,20 @@ export interface NovoDocumento {
   documentoModelo?: string;
   /** Nome (ou id) de um texto padrão da unidade. */
   textoPadrao?: string;
+  /**
+   * Id exato de um texto padrão da unidade (vence `textoPadrao`). Com a lista
+   * `selTextoPadrao` na tela, id fora dela é recusado: o casamento por nome do
+   * `textoPadrao` aceitaria um nome que CONTÉM o texto ("5" casaria "Ofício 5
+   * anos"). Sem a lista (SEI 4.1, autocompletar), o id vai no `hdnIdTextoPadrao`.
+   */
+  textoPadraoId?: string;
+  /**
+   * Valor do Número só quando o tipo o exige (`lblNumero` obrigatório), como o
+   * Documentos em Lote do legado: o nome da linha vira o Número no tipo que
+   * não cria sem ele. Com Número opcional, o campo fica como a tela trouxe.
+   * `numero` vence.
+   */
+  numeroSeExigido?: string;
 }
 
 /**
@@ -252,14 +266,23 @@ interface Cadastro extends NovoDocumento {
 async function cadastrar(sei: Sei, ref: string, arv: Arvore, escolha: Formulario, tipo: ItemLupa, novo: Cadastro, sinal?: AbortSignal): Promise<{ idDocumento: string; numero: string; titulo: string }> {
   const cadastro = await escolha.definir({ hdnIdSerie: tipo.id }).enviar({ sinal });
   const form = Formulario.de(cadastro, "#frmDocumentoCadastro", sei.http);
+  const rotuloNumero = form.pagina.doc.querySelector("#lblNumero");
+  const exigeNumero = rotuloNumero !== null && !/infraLabelOpcional/.test(rotuloNumero.getAttribute("class") ?? "");
   form.definir({
     txtDescricao: (novo.descricao ?? "").slice(0, 250),
-    txtNumero: novo.numero ?? form.valor("txtNumero") ?? "",
+    txtNumero: novo.numero ?? (exigeNumero ? novo.numeroSeExigido : undefined) ?? form.valor("txtNumero") ?? "",
     txtNomeArvore: novo.nomeArvore ?? form.valor("txtNomeArvore") ?? "",
     rdoTextoInicial: "N",
   });
   if (novo.documentoModelo) form.definir({ rdoTextoInicial: "D", txtProtocoloDocumentoTextoBase: novo.documentoModelo });
-  if (novo.textoPadrao) {
+  if (novo.textoPadraoId) {
+    const id = novo.textoPadraoId;
+    if (form.pagina.doc.querySelector("#frmDocumentoCadastro select[name='selTextoPadrao'], #frmDocumentoCadastro select#selTextoPadrao")) {
+      const ok = form.opcoes("selTextoPadrao").some((o) => o.valor === id && o.valor !== "null");
+      if (!ok) throw new ErroSei("SEI_ACAO_INDISPONIVEL", `O texto padr\u00E3o (id ${id}) n\u00E3o est\u00E1 dispon\u00EDvel nesta unidade.`);
+    }
+    form.definir({ rdoTextoInicial: "T", selTextoPadrao: id, hdnIdTextoPadrao: id });
+  } else if (novo.textoPadrao) {
     const lista = form.opcoes("selTextoPadrao").filter((o) => o.valor !== "null").map((o) => ({ id: o.valor, texto: o.texto }));
     const tp = escolherItem(lista, novo.textoPadrao, "Texto padr\u00E3o");
     form.definir({ rdoTextoInicial: "T", selTextoPadrao: tp.id, hdnIdTextoPadrao: tp.id });

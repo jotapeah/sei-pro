@@ -104,6 +104,10 @@ interface Opcoes {
   alterar?: Parameters<typeof telaAlterar>[0];
   /** Tela de cadastro já com interessados e assunto. */
   cadastroPreenchido?: boolean;
+  /** Tela de cadastro com o Número obrigatório (`lblNumero` infraLabelObrigatorio). */
+  numeroObrigatorio?: boolean;
+  /** Tela de cadastro com a lista de textos padrão (`selTextoPadrao`). */
+  textosPadrao?: boolean;
   /** O tipo do original (5) não está na lista da unidade, mas há um tipo com "5" no nome. */
   semTipoOriginal?: boolean;
   processoSigiloso?: boolean;
@@ -143,7 +147,17 @@ function montar(o: Opcoes = {}) {
     if (/acao_ajax=protocolo_RI1023/.test(u)) return resp(u, o.ri1023Erro ? XML_RI1023_ERRO : XML_RI1023);
     if (/acao_ajax=hipotese_legal_select/.test(u)) return resp(u, XML_HIPOTESES);
     if (/acao=documento_escolher_tipo&/.test(u)) {
-      if (v("hdnIdSerie")) return resp(`controlador.php?acao=documento_cadastrar&acao_origem=documento_escolher_tipo&id_serie=${v("hdnIdSerie")}&infra_hash=${H0}`, telaCadastro(o.cadastroPreenchido));
+      if (v("hdnIdSerie")) {
+        let h = telaCadastro(o.cadastroPreenchido);
+        if (o.numeroObrigatorio) h = h.replace(/(id="lblNumero"[^>]*class=")infraLabelOpcional"/, '$1infraLabelObrigatorio"');
+        if (o.textosPadrao) {
+          h = h.replace(
+            /(<form id="frmDocumentoCadastro"[^>]*>)/,
+            '$1<select id="selTextoPadrao" name="selTextoPadrao"><option value="null" selected="selected"> </option><option value="5">OF\u00CDCIO</option><option value="51">Of\u00EDcio 5 anos</option></select>',
+          );
+        }
+        return resp(`controlador.php?acao=documento_cadastrar&acao_origem=documento_escolher_tipo&id_serie=${v("hdnIdSerie")}&infra_hash=${H0}`, h);
+      }
       return resp(u, telaTipos());
     }
     if (/acao=documento_cadastrar&/.test(u)) {
@@ -290,6 +304,41 @@ export async function verificarAcoesLote(): Promise<void> {
     const { sei } = montar();
     const r = await criarDocumento(sei, "148265", { tipo: "Despacho" }, PREVIA);
     checar("sem tipoId: casamento por nome como antes", r.resumo.includes("Despacho"), r.resumo);
+  }
+  secao("acoes em lote: numero se exigido e texto padrao por id");
+  {
+    const { sei, estado } = montar();
+    await criarDocumento(sei, "148265", { tipo: "Despacho", tipoId: "5", nomeArvore: "Fulano", numeroSeExigido: "Fulano" }, APLICAR);
+    const post = estado.posts.find(ehCadastro);
+    checar("Numero opcional: numeroSeExigido nao entra no txtNumero", valor(post, "txtNumero") === "" && valor(post, "txtNomeArvore") === "Fulano", post?.pares);
+  }
+  {
+    const { sei, estado } = montar({ numeroObrigatorio: true });
+    await criarDocumento(sei, "148265", { tipo: "Despacho", tipoId: "5", numeroSeExigido: "Fulano" }, APLICAR);
+    checar("Numero obrigatorio: numeroSeExigido vai no txtNumero", valor(estado.posts.find(ehCadastro), "txtNumero") === "Fulano");
+  }
+  {
+    const { sei, estado } = montar({ numeroObrigatorio: true });
+    await criarDocumento(sei, "148265", { tipo: "Despacho", tipoId: "5", numero: "N-1", numeroSeExigido: "Fulano" }, APLICAR);
+    checar("numero explicito vence numeroSeExigido", valor(estado.posts.find(ehCadastro), "txtNumero") === "N-1");
+  }
+  {
+    const { sei, estado } = montar({ textosPadrao: true });
+    await criarDocumento(sei, "148265", { tipo: "Despacho", tipoId: "5", textoPadraoId: "5" }, APLICAR);
+    const post = estado.posts.find(ehCadastro);
+    checar("textoPadraoId exato: T + id 5", valor(post, "rdoTextoInicial") === "T" && valor(post, "selTextoPadrao") === "5" && valor(post, "hdnIdTextoPadrao") === "5", post?.pares);
+  }
+  {
+    const { sei, estado } = montar({ textosPadrao: true });
+    const e = await lanca(() => criarDocumento(sei, "148265", { tipo: "Despacho", tipoId: "5", textoPadraoId: "6" }, APLICAR));
+    checar("textoPadraoId fora da lista: SEI_ACAO_INDISPONIVEL sem cadastrar", e?.codigo === "SEI_ACAO_INDISPONIVEL" && !estado.posts.some(ehCadastro), e);
+  }
+  {
+    // SEI 4.1: o texto padrao e escolhido por autocompletar (txtTextoPadrao + hdnIdTextoPadrao), sem select para conferir.
+    const { sei, estado } = montar();
+    await criarDocumento(sei, "148265", { tipo: "Despacho", tipoId: "5", textoPadraoId: "5" }, APLICAR);
+    const post = estado.posts.find(ehCadastro);
+    checar("textoPadraoId sem selTextoPadrao (autocompletar do 4.1): id no hdnIdTextoPadrao", valor(post, "rdoTextoInicial") === "T" && valor(post, "hdnIdTextoPadrao") === "5", post?.pares);
   }
   {
     const { sei } = montar();

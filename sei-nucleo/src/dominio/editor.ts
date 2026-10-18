@@ -336,7 +336,11 @@ async function conferirGravacao(
   numero: string,
   sinal?: AbortSignal,
 ): Promise<void> {
-  const depois = lerEditor(await sei.http.obter(ed.pagina.url, { sinal }));
+  conferirSecao(lerEditor(await sei.http.obter(ed.pagina.url, { sinal })), alvo, novo, numero);
+}
+
+/** As duas provas de `conferirGravacao` sobre o editor já relido. */
+function conferirSecao(depois: EditorDocumento, alvo: SecaoEditor, novo: string, numero: string): void {
   const gravada = depois.secoes.find((s) => s.nome === alvo.nome);
   if (!gravada || !temConteudo(gravada.html)) {
     throw new ErroSei(
@@ -350,4 +354,55 @@ async function conferirGravacao(
       `O SEI aceitou a grava\u00E7\u00E3o, mas a se\u00E7\u00E3o "${alvo.titulo}" do documento ${numero} continua como estava: o conte\u00FAdo enviado foi descartado.`,
     );
   }
+}
+
+/**
+ * Reescreve várias seções numa gravação só, abrindo o editor uma vez.
+ *
+ * `trocar` recebe cada seção editável (as somente leitura nem são oferecidas)
+ * e devolve o HTML novo, ou `null` para deixá-la como está. Seção que não muda
+ * não entra na gravação; se nenhuma muda, nada é gravado. Uma gravação gera
+ * UMA versão do documento (seção a seção com `editarConteudo` seriam várias,
+ * e uma falha no meio deixaria o documento meio trocado). A seção é a do
+ * editor (`nome`), não a busca por título do `editarConteudo`.
+ *
+ * Mesmas recusas e provas do `editarConteudo`: documento assinado, sigiloso ou
+ * externo (`abrirEditor`), conteúdo em branco, e a releitura depois de gravar.
+ */
+export async function editarSecoes(
+  sei: Sei,
+  d: DocumentoLocalizado,
+  trocar: (secao: SecaoEditor) => string | null,
+  op: OpcoesEscrita,
+): Promise<ResultadoEscrita> {
+  const ed = await abrirEditor(sei, d, op.sinal);
+  const numero = d.documento.numero;
+  const novas: Record<string, string> = {};
+  const alvos: SecaoEditor[] = [];
+  for (const s of ed.secoes) {
+    if (s.somenteLeitura) continue;
+    const novo = trocar(s);
+    if (novo === null || novo === s.html) continue;
+    if (!temConteudo(novo)) {
+      throw new ErroSei(
+        "ARGUMENTO_INVALIDO",
+        `O conte\u00FAdo novo da se\u00E7\u00E3o "${s.titulo}" do documento ${numero} est\u00E1 em branco: gravar isso APAGARIA a se\u00E7\u00E3o.`,
+      );
+    }
+    novas[s.nome] = novo;
+    alvos.push(s);
+  }
+  const resumir = (h: string) => textoDoHtml(h).slice(0, 400);
+  const base: ResultadoEscrita = {
+    alvo: numero,
+    mudancas: alvos.map((s) => ({ campo: `Conte\u00FAdo (${s.titulo})`, antes: resumir(s.html), depois: resumir(novas[s.nome] as string) })),
+    aplicado: false,
+    resumo: alvos.length ? `Vai regravar ${alvos.length} se\u00E7\u00E3o(\u00F5es) do documento ${numero}.` : `Nada a gravar no documento ${numero}.`,
+  };
+  if (!op.aplicar || !alvos.length) return base;
+  await salvar(sei, ed, novas, op.sinal);
+  sei.invalidar(d.arvore.idProcedimento);
+  const depois = lerEditor(await sei.http.obter(ed.pagina.url, { sinal: op.sinal }));
+  for (const s of alvos) conferirSecao(depois, s, novas[s.nome] as string, numero);
+  return { ...base, aplicado: true, resumo: `Conte\u00FAdo do documento ${numero} gravado (${alvos.length} se\u00E7\u00E3o(\u00F5es)).` };
 }
