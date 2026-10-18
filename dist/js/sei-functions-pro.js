@@ -13235,6 +13235,7 @@ function appendIconBatchDocs(loop = true) {
     if (loop) { reagendarIconeBarraPro('appendIconBatchDocs', appendIconBatchDocs); }
 }
 function initDocLoteModalSelecaoDoc(TimeOut = 9000) {
+    if (document.documentElement.hasAttribute('data-seipro-documentos-lote')) { document.dispatchEvent(new CustomEvent('spro-documentos-lote-abrir')); return; }
     if (TimeOut <= 0) { return; }
     if (typeof $().chosen !== 'undefined' && typeof URL_SPRO !== 'undefined') { 
         docLoteModalSelecaoDoc();
