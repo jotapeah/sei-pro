@@ -1,5 +1,5 @@
 import {
-  BARRA_FIXA,
+  BARRAS_DE_ACOES,
   barraDoLayout,
   larguraSuficiente,
   layoutDaPagina,
@@ -41,14 +41,16 @@ export function iniciar(doc: Document) {
   /** A barra de ações fixa cobre o alto do menu (campo de pesquisa): o conteúdo do menu desce a altura dela. */
   function recuar() {
     const menu = menuDaPagina(doc);
-    const barra = doc.querySelector(BARRA_FIXA);
     const janela = doc.defaultView;
     if (!menu) return;
     let recuo = 0;
-    if (layout === 'novo' && barra && janela) {
-      const caixa = barra.getBoundingClientRect();
-      const fixa = janela.getComputedStyle(barra).position === 'fixed';
-      recuo = recuoSobBarra(fixa, caixa, menu.getBoundingClientRect().top, menu.getBoundingClientRect().width);
+    if (layout === 'novo' && janela) {
+      const alcance = menu.getBoundingClientRect();
+      for (const barra of doc.querySelectorAll(BARRAS_DE_ACOES)) {
+        const posicao = janela.getComputedStyle(barra).position;
+        const caixa = barra.getBoundingClientRect();
+        recuo = Math.max(recuo, recuoSobBarra(posicao === 'fixed' || posicao === 'sticky', caixa, alcance.top, alcance.width));
+      }
     }
     if (recuo) menu.style.setProperty(VARIAVEL_RECUO, `${recuo}px`);
     else menu.style.removeProperty(VARIAVEL_RECUO);

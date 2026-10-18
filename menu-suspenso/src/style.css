@@ -30,7 +30,8 @@
   }
   :root[data-spro-menu-suspenso='novo'] #divInfraAreaTelaE {
     position: absolute;
-    top: 0;
+    /* Ajuste fino medido: o menu e a barra de ações fixa terminam alinhados à borda da barra superior. */
+    top: 4px;
     bottom: 0;
     left: 0;
     z-index: 1030;
@@ -48,6 +49,9 @@
     visibility: visible;
     box-shadow: 4px 0 18px rgba(0, 0, 0, 0.35);
     transition: transform 0.18s ease;
+  }
+  :root[data-spro-menu-suspenso='novo'] div.barraBotoesSEI.fixed {
+    margin-top: -2px !important;
   }
   :root[data-spro-menu-suspenso='novo'] #divInfraAreaTelaD {
     display: block !important;

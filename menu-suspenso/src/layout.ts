@@ -27,8 +27,12 @@ export const seletorDasAlavancas = (layout: Layout) => ALAVANCAS[layout];
 export const LARGURA_MINIMA = 768;
 export const larguraSuficiente = (doc: Document) => (doc.defaultView?.innerWidth ?? LARGURA_MINIMA) >= LARGURA_MINIMA;
 
-/** Barra de ações do Controle de Processos: quando fixa, fica por cima de tudo (z-index 99999), menu inclusive. */
-export const BARRA_FIXA = '#divBotoesControleProcessos';
+/**
+ * Barra de ações do Controle de Processos: quando fixa, fica por cima de tudo (z-index 99999), menu inclusive.
+ * Ao fixar, o legado põe uma CÓPIA dela no fluxo (mesmo id, estática) antes da original: por isso são todas
+ * as barras, e vale a que estiver fixa, nunca a primeira que o seletor achar.
+ */
+export const BARRAS_DE_ACOES = 'div.barraBotoesSEI';
 const FOLGA_DA_BARRA = 8;
 
 interface Caixa {
