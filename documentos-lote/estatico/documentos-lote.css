@@ -1,0 +1,446 @@
+/*
+ * Janela de Documentos em Lote (html/documentos-lote.html). Os tokens e a lista vem de
+ * sei-comum/src/ui/base.css e lista.css; aqui entra so o que e da janela.
+ *
+ * Tema: nada aqui. O app poe html[data-tema] "claro" ou "escuro" (segue o SEI) e
+ * html[data-cor-sei] com --spro-cor-sei; base.css troca os tokens --spro-*.
+ */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  color: var(--spro-texto);
+  font: 13px / 1.45 var(--spro-fonte);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- Modal (iframe transparente sobre a tela do SEI) ---------- */
+html[data-modo="modal"],
+html[data-modo="modal"] body {
+  background: transparent;
+  height: 100%;
+  overflow: hidden;
+}
+dialog.dl-modal[open] {
+  width: min(980px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--spro-pagina);
+}
+dialog.dl-modal:focus-visible {
+  outline: none;
+}
+dialog.dl-modal::backdrop {
+  background: var(--spro-veu);
+}
+
+/* Minimizado: o iframe vira a pastilha do canto (320x64, sei-comum/src/ui/modalIframe.ts) e o dialogo a ocupa inteira. */
+html[data-minimizado] dialog.dl-modal[open] {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--spro-borda);
+  border-radius: var(--spro-raio-g);
+  overflow: hidden;
+}
+html[data-minimizado] dialog.dl-modal::backdrop {
+  background: transparent;
+}
+html[data-minimizado] #app {
+  padding: 0;
+  overflow: hidden;
+}
+
+#app {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 14px 16px 16px;
+  overflow-y: auto;
+}
+#app > * {
+  flex: none;
+}
+@media (max-width: 520px) {
+  #app {
+    padding: 10px;
+  }
+}
+
+.dl-conteudo > section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dl-conteudo h2 {
+  margin: 0;
+  font-size: 15px;
+}
+.dl-conteudo p {
+  margin: 0;
+}
+
+/* ---------- Configuracao ---------- */
+.dl-cautela-forte {
+  padding: 10px 12px;
+  color: var(--spro-texto);
+  background: color-mix(in srgb, var(--spro-aviso) 10%, transparent);
+  border-left: 4px solid var(--spro-aviso);
+  border-radius: var(--spro-raio);
+}
+/* So o titulo e flex (icone + texto). O negrito do paragrafo fica inline, no meio da frase. */
+.dl-cautela-titulo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-weight: 600;
+  color: var(--spro-aviso);
+}
+.dl-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dl-campo[hidden] {
+  display: none;
+}
+.dl-modelo-linha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.dl-modelo-linha > .spro-combo {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.dl-modelo-linha > .spro-botao[hidden] {
+  display: none;
+}
+.dl-modelo-dialogo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: min(380px, 80vw);
+}
+.dl-campos-lado {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.dl-rotulo {
+  font-weight: 600;
+  color: var(--spro-suave);
+}
+.dl-radios {
+  display: flex;
+  gap: 18px;
+}
+.dl-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+textarea.dl-linhas {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 120px;
+  resize: vertical;
+  font-family: var(--spro-mono);
+  font-size: 12.5px;
+}
+.dl-contador,
+.dl-dica,
+.dl-carregando,
+.dl-nota {
+  color: var(--spro-suave);
+}
+.dl-erro,
+.dl-motivo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--spro-raio);
+}
+.dl-erro {
+  color: var(--spro-perigo);
+  background: color-mix(in srgb, var(--spro-perigo) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--spro-perigo) 35%, transparent);
+}
+.dl-motivo {
+  color: var(--spro-aviso);
+  background: color-mix(in srgb, var(--spro-aviso) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--spro-aviso) 35%, transparent);
+}
+.dl-erro[hidden],
+.dl-motivo[hidden] {
+  display: none;
+}
+.dl-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.dl-espaco {
+  flex: 1 1 auto;
+}
+
+/* ---------- Previa ---------- */
+table.dl-resumo {
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+table.dl-resumo th,
+table.dl-resumo td {
+  padding: 3px 12px 3px 0;
+  text-align: left;
+  vertical-align: top;
+}
+table.dl-resumo th {
+  font-weight: 600;
+  color: var(--spro-suave);
+  white-space: nowrap;
+}
+.dl-cautela {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.dl-enviada mark {
+  color: inherit;
+  background: color-mix(in srgb, var(--spro-aviso) 30%, transparent);
+  border-radius: 2px;
+}
+.dl-original,
+.dl-enviada {
+  word-break: break-word;
+}
+.dl-avisos {
+  white-space: nowrap;
+}
+.dl-avisos .spro-pilula {
+  --tom: var(--spro-aviso);
+  margin: 0 4px 2px 0;
+}
+.dl-avisos .dl-aviso-duplicada {
+  --tom: var(--spro-perigo);
+}
+tr.dl-repetida td {
+  opacity: 0.75;
+}
+/* Nivel nao reconhecido: erro que trava o Iniciar; o texto longo pode quebrar. */
+.dl-avisos .dl-aviso-nivel-invalido {
+  --tom: var(--spro-perigo);
+  white-space: normal;
+}
+tr.dl-linha-erro td {
+  background: color-mix(in srgb, var(--spro-perigo) 6%, transparent);
+}
+
+/* ---------- Execucao ---------- */
+.dl-execucao {
+  text-align: center;
+}
+.dl-progresso-texto {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.dl-barra {
+  height: 10px;
+  margin: 0 40px;
+  overflow: hidden;
+  background: var(--spro-fundo-3, var(--spro-borda));
+  border-radius: 6px;
+}
+.dl-barra-cheia {
+  height: 100%;
+  width: 0;
+  background: var(--spro-destaque);
+  transition: width 0.2s;
+}
+.dl-falhas {
+  color: var(--spro-perigo);
+}
+.dl-restante,
+.dl-falhas {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.dl-execucao .dl-acoes {
+  justify-content: center;
+}
+.dl-execucao .dl-nota {
+  font-size: 12px;
+}
+
+/* ---------- Pastilha (minimizado) ---------- */
+.dl-pastilha {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 62px;
+  padding: 8px 12px;
+}
+.dl-pastilha[hidden] {
+  display: none;
+}
+.dl-pastilha-texto {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.dl-pastilha-texto strong {
+  font-size: 12.5px;
+}
+.dl-pastilha-conta {
+  color: var(--spro-suave);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- Resultado ---------- */
+.dl-resultado-titulo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.dl-contagem {
+  text-align: center;
+  color: var(--spro-suave);
+}
+.dl-tabela {
+  max-height: 46vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  background: var(--spro-fundo);
+  border: 1px solid var(--spro-borda);
+  border-radius: var(--spro-raio);
+}
+table.spro-resultado {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+table.spro-resultado th,
+table.spro-resultado td {
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--spro-borda);
+}
+table.spro-resultado th {
+  position: sticky;
+  top: 0;
+  font-weight: 600;
+  color: var(--spro-suave);
+  background: var(--spro-fundo-2);
+}
+table.spro-resultado tbody tr:last-child td {
+  border-bottom: none;
+}
+table.spro-resultado td a {
+  color: var(--spro-destaque);
+  word-break: break-all;
+}
+/* Situacao: a primeira celula de cada linha, sempre com o texto (a cor so reforca). */
+.dl-resultado tr.spro-situacao-ok td:first-child {
+  color: var(--spro-ok);
+  font-weight: 600;
+}
+.dl-resultado tr.spro-situacao-ok.dl-incerto td:first-child {
+  color: var(--spro-aviso);
+}
+.dl-resultado tr.spro-situacao-erro td:first-child {
+  color: var(--spro-perigo);
+  font-weight: 600;
+}
+.dl-resultado tr.spro-situacao-pendente td:first-child {
+  color: var(--spro-fraco);
+}
+
+/* ---------- Depois de criar (acoes sobre os processos criados) ---------- */
+.dl-pos-acao {
+  border: 1px solid var(--spro-borda);
+  border-radius: var(--spro-raio);
+  background: var(--spro-fundo);
+}
+.dl-pos-abrir {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  background: none;
+  color: var(--spro-texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.dl-pos-abrir svg {
+  transform: rotate(-90deg);
+  transition: transform 0.15s;
+}
+.dl-pos-abrir[aria-expanded="true"] svg {
+  transform: none;
+}
+.dl-pos-corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 12px 12px;
+}
+.dl-pos-corpo[hidden] {
+  display: none;
+}
+.dl-pos-avisos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dl-pos-avisos:empty {
+  display: none;
+}
+.dl-pos-bloco {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--spro-borda);
+  border-radius: var(--spro-raio);
+}
+.dl-pos-titulo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.dl-pos-observacao {
+  resize: vertical;
+}
+.dl-pos-status:empty {
+  display: none;
+}
+.dl-acoes > .spro-botao[hidden] {
+  display: none;
+}
