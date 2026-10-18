@@ -78,8 +78,23 @@ export async function listarModelos(sei: Sei, ref: string, sinal?: AbortSignal):
  */
 const camposDoHtml = (html: string) => extrairCampos(decodificarEntidades(html));
 
-/** O corpo em texto simples para a prévia (parágrafos em linhas), cortado em MAX_TEXTO_PREVIA. */
-const textoDaPrevia = (html: string) => textoDoHtml(html).slice(0, MAX_TEXTO_PREVIA);
+/**
+ * O que não é texto lido no documento: comentário, `<head>`/`<title>`, `<style>` (as "configurações de impressão" do
+ * modelo), `<script>`, `<noscript>`, `<template>` e imagem (o `src` em base64). Sem isto o `textContent` mostraria o
+ * CSS na prévia (D3 da validação no SEI real).
+ */
+const NAO_TEXTO = /<!--[\s\S]*?-->|<(head|title|style|script|noscript|template)\b[\s\S]*?<\/\1\s*>|<img\b[^>]*>/gi;
+/** Endereço `data:` que sobre solto no texto (base64 colado como texto, por exemplo). */
+const DADO_EMBUTIDO = /data:[a-z]+\/[\w.+-]+;base64,[A-Za-z0-9+/=]+/gi;
+
+/** O corpo em texto simples para a prévia (parágrafos em linhas, sem linhas em branco), cortado em MAX_TEXTO_PREVIA. */
+export const textoDaPrevia = (html: string) =>
+  textoDoHtml(html.replace(NAO_TEXTO, ""))
+    .replace(DADO_EMBUTIDO, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{2,}/g, "\n")
+    .trim()
+    .slice(0, MAX_TEXTO_PREVIA);
 
 /** Só o corpo da página (o legado também cortava entre `<body>` e `</body>`): `##` no `<title>` não é campo. */
 function corpoDa(html: string): string {

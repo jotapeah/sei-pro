@@ -2145,7 +2145,9 @@ table.spro-resultado td a {
 .dl-erro-abrir {
   color: var(--spro-perigo);
 }
-.dl-acoes-linha {
+/* A celula de acoes continua celula de tabela (flex na td desalinhava as divisorias das linhas, D5): o flex e do
+   conteiner de dentro. */
+.dl-acoes-linha-botoes {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;

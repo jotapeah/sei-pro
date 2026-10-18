@@ -249,6 +249,67 @@ export async function verificarAppExecucao(): Promise<void> {
     checar("coluna sem verificação válida: aviso", v.texto(".dl-erro").includes("Verifique de novo"), v.texto(".dl-erro"));
   }
 
+  secao("prévia: aviso do número do processo do modelo quando o destino é outro processo (D1, Ruling 21)");
+  {
+    const comCabecalho: Modelo = { ...MODELO, texto: `Processo nº ${PROTOCOLO}\nInteressado: CGE-CAUD\nSenhor ##nome##,` };
+    const aviso = (m: { raiz: HTMLElement }) => m.raiz.querySelector<HTMLElement>(".dl-previa-processo-modelo");
+
+    const tela = previa(estadoPrevia({}, config({ modelo: comCabecalho })));
+    checar("destino tela: sem aviso (o documento fica no processo do modelo)", !aviso(tela));
+    checar("sem aviso não sobra texto solto", !(tela.raiz.textContent ?? "").includes("null"));
+
+    const novo = previa(
+      estadoPrevia(
+        { tiposProcesso: [{ id: "100", nome: "Requerimento" }] },
+        config({ modelo: comCabecalho, destino: { tipo: "novo-processo", idTipoProcesso: "100", especificacao: "x" } }),
+      ),
+    );
+    const a = aviso(novo);
+    checar("novo processo: aviso visível", !!a && !a.hidden && !a.closest("[hidden]"));
+    const t = a?.textContent ?? "";
+    checar("aviso cita o número do processo do modelo", t.includes(PROTOCOLO), t);
+    checar("aviso fala do interessado", t.includes("interessado"), t);
+    checar("aviso recomenda campos ##campo## da planilha", t.includes("##campo##") && t.includes("planilha"), t);
+    checar("é aviso, não bloqueio: a prévia continua completa", novo.tl.completa());
+
+    const semCabecalho = previa(
+      estadoPrevia({}, config({ destino: { tipo: "novo-processo", idTipoProcesso: "100", especificacao: "x" } })),
+    );
+    checar("novo processo sem o número no texto: sem aviso", !aviso(semCabecalho));
+
+    const col = estadoColuna();
+    (col.config as ConfigLote).modelo = comCabecalho;
+    const c = previa(col);
+    checar("coluna com linha para outro processo: aviso", !!aviso(c) && (aviso(c)?.textContent ?? "").includes(PROTOCOLO));
+
+    // Coluna em que todas as linhas a gravar vão para o processo do próprio modelo: nada a avisar.
+    const cfgMesmo = config({ modelo: comCabecalho, destino: { tipo: "coluna", coluna: "proc" } });
+    const mesmo = estadoPrevia(
+      {
+        registros: [
+          { nome: "Ana", cargo: "X", proc: PROTOCOLO, nivel: "", hip: "" },
+          { nome: "Bia", cargo: "Y", proc: P2, nivel: "", hip: "" },
+        ],
+      },
+      cfgMesmo,
+    );
+    mesmo.linhas = prepararLinhas(mesmo.registros ?? [], cfgMesmo);
+    mesmo.verificacoes = {
+      [PROTOCOLO]: { numero: PROTOCOLO, status: "ok", idProcedimento: "1" },
+      [P2]: { numero: P2, status: "nao-aberto" },
+    };
+    mesmo.prontas = [0];
+    mesmo.baseVerificacao = { registros: mesmo.registros ?? [], chave: chaveVerificacao(cfgMesmo) };
+    checar("coluna só para o processo do modelo: sem aviso", !aviso(previa(mesmo)));
+
+    // Texto Padrão não tem cabeçalho de processo: o número no texto é do próprio padrão, sem aviso.
+    const tp: Modelo = { origem: "texto-padrao", id: "9", nome: "Padrão", tipoId: "6", campos: ["nome"], texto: `Ref. ${PROTOCOLO}` };
+    const p = previa(
+      estadoPrevia({}, config({ modelo: tp, destino: { tipo: "novo-processo", idTipoProcesso: "100", especificacao: "x" } })),
+    );
+    checar("Texto Padrão: sem aviso", !aviso(p));
+  }
+
   secao("prévia: Iniciar chama o app uma vez; falha volta a habilitar");
   {
     const s = segurar<void>();

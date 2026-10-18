@@ -1,7 +1,7 @@
 /**
  * O que o app dos Documentos em Lote pede à aba do SEI: contexto, modelos, verificação dos processos de destino,
- * tipos de processo, a criação de cada processo (destino novo-processo) e de cada documento, e o "Abrir em nova
- * aba". Roda aqui porque usa a sessão da aba; o laço do lote fica no app.
+ * tipos de processo, a criação de cada processo (destino novo-processo) e de cada documento, o "Abrir em nova
+ * aba" e a recarga da árvore da tela depois do lote. Roda aqui porque usa a sessão da aba; o laço do lote fica no app.
  *
  * Tudo atravessa a ponte como JSON simples: `situacao`, `erro` (só texto), `sessao` (o app pausa o lote),
  * `naoAberto` (a linha fica "não aberto na unidade") e `incerto` (o documento ou o processo pode existir: o app
@@ -30,6 +30,24 @@ export const EVENTO_ABRIR_LINK_PERMANENTE = "spro-link-permanente-abrir";
 export function dispararAbrirLinkPermanente(doc: Document): void {
   const Ev = (doc.defaultView as (Window & typeof globalThis) | null)?.CustomEvent ?? CustomEvent;
   doc.dispatchEvent(new Ev(EVENTO_ABRIR_LINK_PERMANENTE));
+}
+
+/**
+ * Recarrega a árvore do processo na tela (`#ifrArvore` da página de topo) pelo endereço que ela já tem: nunca se monta
+ * URL (molde: `recarregarArvoreVisivel` do acoes-lote; os pacotes não se importam). Se o `reload` for barrado,
+ * regrava o próprio `src`. Lança quando não há árvore na tela.
+ */
+export function recarregarArvoreDe(doc: Document): void {
+  const ifr = doc.querySelector<HTMLIFrameElement>("#ifrArvore");
+  if (!ifr) throw new Error("A árvore do processo não está nesta tela.");
+  try {
+    if (!ifr.contentWindow) throw new Error("árvore sem janela");
+    ifr.contentWindow.location.reload();
+  } catch (e) {
+    const src = ifr.getAttribute("src");
+    if (!src) throw e;
+    ifr.setAttribute("src", src);
+  }
 }
 
 /** As chamadas ao SEI, trocáveis nas provas para forçar cada desfecho sem rede. */
@@ -66,6 +84,10 @@ export interface DepsExecutor {
   abrirJanela?: (url: string) => void;
   /** Abre o Pesquisar Link Permanente nesta aba (o content script dele ouve o evento); sem isto, o RPC devolve false. */
   abrirLinkPermanente?: () => void;
+  /** Recarrega a árvore visível do processo; lança se não conseguir. Trocável nas provas (padrão: `recarregarArvoreDe`). */
+  recarregarArvore?: () => void;
+  /** A página de topo do SEI (onde está o `#ifrArvore`); padrão: o `document` deste content script (o de topo). */
+  documento?: () => Document;
   chamadas?: Partial<Chamadas>;
 }
 
@@ -433,6 +455,19 @@ export function tratadoresDocumentosLote(d: DepsExecutor): Record<string, Tratad
       if (!d.abrirLinkPermanente) return false;
       d.abrirLinkPermanente();
       return true;
+    },
+    /**
+     * Depois do lote (D2): a árvore da tela mostra os documentos novos. Melhor esforço; a falha volta em texto e o
+     * app a ignora (nunca afeta o lote).
+     */
+    recarregarArvore: () => {
+      try {
+        if (d.recarregarArvore) d.recarregarArvore();
+        else recarregarArvoreDe((d.documento ?? (() => document))());
+        return { situacao: "ok" };
+      } catch (e) {
+        return { situacao: "erro", erro: mensagem(e) };
+      }
     },
   };
 }

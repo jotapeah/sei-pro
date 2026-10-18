@@ -141,7 +141,18 @@ export async function verificarAppVerificacao(): Promise<void> {
     checar("não aberto: Abrir em nova aba", !!m.botaoDe(P2, "Abrir em nova aba"));
     checar("não aberto: Verificar de novo", !!m.botaoDe(P2, "Verificar de novo"));
     checar("ok: sem botões", !m.linha(P1)?.querySelector("button"));
-    checar("Verificar todos de novo no topo", !!botao(m.raiz, "Verificar todos de novo"));
+    // D5: a célula de ações continua célula de tabela; os botões ficam num contêiner por dentro (o flex é dele).
+    const tdAcoes = m.linha(P2)?.querySelector("td.dl-acoes-linha");
+    checar(
+      "ações: botões dentro do contêiner, não filhos diretos da célula",
+      !!tdAcoes &&
+        tdAcoes.children.length === 1 &&
+        tdAcoes.firstElementChild?.classList.contains("dl-acoes-linha-botoes") === true &&
+        tdAcoes.firstElementChild.querySelectorAll("button").length === 2,
+      tdAcoes?.outerHTML,
+    );
+    checar("ok: a célula de ações existe vazia (as divisórias seguem as outras)", !!m.linha(P1)?.querySelector("td.dl-acoes-linha"));
+    checar("Verificar de novo os com problema no topo", !!botao(m.raiz, "Verificar de novo os com problema"));
 
     disparar(m.botaoDe(P2, "Abrir em nova aba")!, "click");
     await ate(() => m.chamadas.some((c) => c.op === "abrirAba"));
@@ -180,14 +191,14 @@ export async function verificarAppVerificacao(): Promise<void> {
     m.tl.destruir?.();
   }
 
-  secao("verificação: Verificar todos de novo só refaz os não-ok");
+  secao("verificação: Verificar de novo os com problema só refaz os não-ok");
   {
     const m = tela({ status: { [P2]: "nao-aberto", [P3]: "erro-rede" } });
     await m.tl.iniciar?.();
     await m.pronto();
     m.status[P2] = "ok";
     m.status[P3] = "ok";
-    disparar(botao(m.raiz, "Verificar todos de novo")!, "click");
+    disparar(botao(m.raiz, "Verificar de novo os com problema")!, "click");
     await tique(1);
     await m.pronto();
     const novas = m.verificacoes().slice(3);
@@ -200,7 +211,7 @@ export async function verificarAppVerificacao(): Promise<void> {
       ],
     );
     checar("todas prontas", m.resumo().includes("5 linhas prontas"), m.resumo());
-    checar("sem problemáticos, botão do topo desabilitado", botao(m.raiz, "Verificar todos de novo")?.disabled === true);
+    checar("sem problemáticos, botão do topo desabilitado", botao(m.raiz, "Verificar de novo os com problema")?.disabled === true);
     m.tl.destruir?.();
   }
 
@@ -311,13 +322,13 @@ export async function verificarAppVerificacao(): Promise<void> {
     });
     await m.tl.iniciar?.();
     await m.pronto();
-    disparar(botao(m.raiz, "Verificar todos de novo")!, "click");
+    disparar(botao(m.raiz, "Verificar de novo os com problema")!, "click");
     await ate(() => soltos.length === 1);
     checar(
       "durante a reverificação o botão da linha some ou fica desabilitado",
       !m.botaoDe(P1, "Verificar de novo") || m.botaoDe(P1, "Verificar de novo")?.disabled === true,
     );
-    checar("durante a reverificação o topo fica desabilitado", botao(m.raiz, "Verificar todos de novo")?.disabled === true);
+    checar("durante a reverificação o topo fica desabilitado", botao(m.raiz, "Verificar de novo os com problema")?.disabled === true);
     soltos[0]?.();
     await m.pronto();
     igual("resultado da reverificação", m.estado.verificacoes?.[P1]?.status, "sigiloso");

@@ -48,6 +48,11 @@ export interface LoteDocumentos {
    * processo da tela ATUAL, então retomar ou repetir só vale com a mesma tela aberta.
    */
   idProcedimentoTela?: string;
+  /**
+   * As colunas da planilha na ordem do arquivo (D4): o `chrome.storage` devolve as chaves de `linhas[].dados` em
+   * ordem alfabética, então o resultado e o CSV seguem esta lista. Ausente nos lotes gravados antes dela.
+   */
+  colunas?: string[];
 }
 
 const CHAVE = `${PREFIXO_CHAVE}lote`;
@@ -96,6 +101,7 @@ function loteValido(v: unknown): v is LoteDocumentos {
   if (!v.linhas.every((l) => ehObjeto(l) && typeof l.indice === "number" && ehObjeto(l.dados))) return false;
   if (!ehObjeto(v.verificacoes)) return false;
   if (!opcionalTexto(v.protocoloTela) || !opcionalTexto(v.idProcedimentoTela)) return false;
+  if (v.colunas !== undefined && (!Array.isArray(v.colunas) || !v.colunas.every(ehTexto))) return false;
   return v.itens.every(itemValido);
 }
 

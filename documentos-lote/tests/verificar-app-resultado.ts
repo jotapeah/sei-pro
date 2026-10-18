@@ -11,6 +11,7 @@ import { resultadoComoCsv } from "@comum/ui/tabelaResultado";
 import { fecharJanela, tratadoresDoApp } from "@dl/app/app";
 import { ROTULO_COLUNA_NOME } from "@dl/app/cruzamento";
 import { ExecucaoDocumentos, MENSAGEM_EM_VOO, resumoDoLote, TelaExecucao } from "@dl/app/execucao";
+import { montarLote } from "@dl/app/lote";
 import { COLUNAS_GERADAS, colunasDoResultado, contagemDoLote, linhasDoResultado, numerosParaLink, ROTULO_INCERTO } from "@dl/app/resultado";
 import { CHAVE_ENTRADA_LINK, JANELA_OUTRA_ABA_MS } from "@dl/modelo/constantes";
 import { prepararLinhas } from "@dl/modelo/destinos";
@@ -836,5 +837,154 @@ export async function verificarAppResultado(): Promise<void> {
     soltar(okCriar(1));
     await ate(() => naTela(m, ".dl-resultado"), 3000);
     m.app.destruir();
+  }
+
+  secao("resultado: a ordem das colunas da planilha sobrevive ao armazenamento (D4)");
+  {
+    // O chrome.storage devolve as chaves dos objetos em ordem alfabética: o falso faz o mesmo na leitura.
+    const ordenar = (v: unknown): unknown =>
+      Array.isArray(v)
+        ? v.map(ordenar)
+        : v && typeof v === "object"
+          ? Object.fromEntries(
+              Object.keys(v)
+                .sort()
+                .map((k) => [k, ordenar((v as Record<string, unknown>)[k])]),
+            )
+          : v;
+    const base = areaMemoria();
+    const alfabetica: Area = { ...base, obter: async (c) => ordenar(await base.obter(c)) as Record<string, unknown> };
+    const repo = new RepositorioLote(alfabetica, () => 5000);
+    const regs = [{ nome: "Ana", municipio: "Santos", data: "01/10/2026", processo: P1 }];
+    const e = {
+      config: config({ destino: { tipo: "tela" } }),
+      colunas: ["nome", "municipio", "data", "processo"],
+      registros: regs,
+      protocolo: PROTOCOLO,
+    };
+    const montado = montarLote(e, { host: HOST, login: "ana" }, { id: "ord" });
+    igual("o lote leva a lista de colunas da planilha", montado.colunas, ["nome", "municipio", "data", "processo"]);
+    await repo.gravar({ ...montado, itens: [criada(1)] });
+    const lido = (await repo.carregar(HOST, "ana")) as LoteDocumentos;
+    igual("as chaves da linha voltam em ordem alfabética (como o chrome.storage)", Object.keys(lido.linhas[0]?.dados ?? {}), [
+      "data",
+      "municipio",
+      "nome",
+      "processo",
+    ]);
+    const titulos = colunasDoResultado(lido).map((c) => c.titulo);
+    igual("resultado na ordem da planilha", titulos.slice(0, 4), ["nome", "municipio", "data", "processo"]);
+    const cab =
+      resultadoComoCsv(linhasDoResultado(lido), colunasDoResultado(lido))
+        .replace(/^\uFEFF/, "")
+        .split("\r\n")[0] ?? "";
+    checar("CSV na ordem da planilha", cab.startsWith("Situação;nome;municipio;data;processo;processo_destino"), cab);
+    const linha = linhasDoResultado(lido)[0];
+    const col = (t: string) => colunasDoResultado(lido).find((c) => c.titulo === t)?.chave ?? "";
+    igual("valores na coluna certa", linha?.campos[col("municipio")], "Santos");
+
+    // Lote antigo, sem a lista: a ordem das chaves da primeira linha (o comportamento de antes).
+    const { colunas: _sem, ...antigo } = lido;
+    igual(
+      "lote sem colunas: ordem das chaves",
+      colunasDoResultado(antigo as LoteDocumentos)
+        .map((c) => c.titulo)
+        .slice(0, 4),
+      ["data", "municipio", "nome", "processo"],
+    );
+    // Coluna que só aparece nas linhas (lista mais curta) não some.
+    const curta = { ...lido, colunas: ["nome"] };
+    checar(
+      "coluna fora da lista ainda aparece, depois das da lista",
+      colunasDoResultado(curta)
+        .map((c) => c.titulo)
+        .slice(0, 4)
+        .join(",") === "nome,data,municipio,processo",
+    );
+  }
+
+  secao("árvore: recarregada ao fim da rodada e ao fechar, só se gravou no processo da tela (D2)");
+  {
+    const recargas = (m: { daOp(op: string): unknown[] }) => m.daOp("recarregarArvore").length;
+    // Destino tela: ao terminar a rodada e de novo ao fechar o resultado.
+    const m = await abrirCom(lote(config(), registros(2), [criada(1), { situacao: "pendente" }]));
+    m.clicar("Continuar de onde parou");
+    await ate(() => naTela(m, ".dl-resultado"), 3000);
+    await tique(5);
+    igual("tela: recarregou ao terminar", recargas(m), 1);
+    await fecharJanela(m.app, () => {});
+    igual("tela: recarregou ao fechar o resultado", recargas(m), 2);
+
+    // Falha da recarga (RPC rejeita ou responde erro) não mexe no lote nem na tela.
+    for (const falha of [new Error("aba fechada"), { situacao: "erro", erro: "sem árvore" }]) {
+      const f = await abrirCom(lote(config(), registros(2), [criada(1), { situacao: "pendente" }]), {
+        roteiro: (op, _a, n) => (op === "criar" ? okCriar(n) : op === "recarregarArvore" ? falha : undefined),
+      });
+      f.clicar("Continuar de onde parou");
+      await ate(() => naTela(f, ".dl-resultado"), 3000);
+      await tique(5);
+      checar("falha da recarga: resultado na tela, sem erro", !naTela(f, ".dl-resultado .dl-erro:not([hidden])"));
+      igual(
+        "falha da recarga: lote intacto",
+        (await f.lido())?.itens.map((i) => i.situacao),
+        ["criada", "criada"],
+      );
+      await fecharJanela(f.app, () => {});
+      checar("falha da recarga: fechar segue (lote limpo apagado)", !(await f.lido()));
+    }
+
+    // Novo processo: os documentos vão para outros processos; a árvore da tela não muda.
+    const cn = config({ destino: { tipo: "novo-processo", idTipoProcesso: "100", especificacao: "x" } });
+    const n = await abrirCom(lote(cn, registros(1), [{ situacao: "pendente", processo: "PN1" }]));
+    n.clicar("Continuar de onde parou");
+    await ate(() => naTela(n, ".dl-resultado"), 3000);
+    await fecharJanela(n.app, () => {});
+    igual("novo processo: nenhuma recarga", recargas(n), 0);
+
+    // Coluna: só quando alguma linha foi para o processo da tela.
+    const cc = config({ destino: { tipo: "coluna", coluna: "proc" } });
+    const regsOutro = [
+      { nome: "Ana", cargo: "", proc: P1 },
+      { nome: "Bia", cargo: "", proc: P2 },
+    ];
+    const c1 = await abrirCom(lote(cc, regsOutro, [{ situacao: "pendente" }, { situacao: "pendente" }]));
+    c1.clicar("Continuar de onde parou");
+    await ate(() => naTela(c1, ".dl-resultado"), 3000);
+    await fecharJanela(c1.app, () => {});
+    igual("coluna só com outros processos: nenhuma recarga", recargas(c1), 0);
+    const regsTela = [
+      { nome: "Ana", cargo: "", proc: P1 },
+      { nome: "Bia", cargo: "", proc: PROTOCOLO },
+    ];
+    const c2 = await abrirCom(lote(cc, regsTela, [{ situacao: "pendente" }, { situacao: "pendente" }]));
+    c2.clicar("Continuar de onde parou");
+    await ate(() => naTela(c2, ".dl-resultado"), 3000);
+    await tique(5);
+    igual("coluna com linha no processo da tela: recarregou ao terminar", recargas(c2), 1);
+    c2.app.destruir();
+    // A linha do processo da tela falhou (nada criado lá): sem recarga.
+    const c3 = await abrirCom(lote(cc, regsTela, [{ situacao: "pendente" }, { situacao: "pendente" }]), {
+      roteiro: (op, _a, k) => (op === "criar" ? (k === 2 ? { situacao: "erro", erro: "Falha" } : okCriar(k)) : undefined),
+    });
+    c3.clicar("Continuar de onde parou");
+    await ate(() => naTela(c3, ".dl-resultado"), 3000);
+    await tique(5);
+    igual("coluna: a linha da tela falhou, nenhuma recarga", recargas(c3), 0);
+    c3.app.destruir();
+
+    // Lote guardado reaberto direto no resultado (nada gravado nesta janela): fechar não recarrega.
+    const r = await abrirCom(lote(config(), registros(1), [criada(1)]));
+    await fecharJanela(r.app, () => {});
+    igual("lote reaberto: nenhuma recarga", recargas(r), 0);
+
+    // Concluir também fecha o resultado.
+    const k = await abrirCom(lote(config(), registros(2), [criada(1), { situacao: "pendente" }]));
+    k.clicar("Continuar de onde parou");
+    await ate(() => naTela(k, ".dl-resultado"), 3000);
+    await tique(5);
+    k.clicar("Concluir");
+    await ate(() => k.t.fechou === 1);
+    igual("Concluir: recarregou ao terminar e ao fechar", recargas(k), 2);
+    k.app.destruir();
   }
 }

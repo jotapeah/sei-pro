@@ -92,6 +92,11 @@ export async function verificarRepositorio(): Promise<void> {
   igual("item guarda processo e linkProcesso", (await repo.carregar(HOST, "ana"))?.itens[0], comProcesso);
   await repo.gravar({ ...exemplo(), protocoloTela: "00001.000001/2026-11" });
   igual("lote guarda o protocolo da tela", (await repo.carregar(HOST, "ana"))?.protocoloTela, "00001.000001/2026-11");
+  // A ordem das colunas da planilha (D4): lista, porque o chrome.storage reordena as chaves dos objetos.
+  await repo.gravar({ ...exemplo(), colunas: ["Nome", "Cargo"] });
+  igual("lote guarda a lista de colunas", (await repo.carregar(HOST, "ana"))?.colunas, ["Nome", "Cargo"]);
+  await repo.gravar(exemplo());
+  checar("lote sem colunas (versão anterior) continua válido", (await repo.carregar(HOST, "ana")) !== null);
 
   // linkArvore nunca é guardado (ruling 13), mesmo que venha na verificação.
   const comLink = exemplo();
@@ -139,6 +144,8 @@ export async function verificarRepositorio(): Promise<void> {
     ["processo com tipo errado", (v) => (v.itens[0] = { situacao: "erro", processo: 5 })],
     ["linkProcesso com tipo errado", (v) => (v.itens[0] = { situacao: "erro", linkProcesso: {} })],
     ["protocoloTela com tipo errado", (v) => (v.protocoloTela = 1)],
+    ["colunas que não é lista", (v) => (v.colunas = "nome")],
+    ["colunas com item que não é texto", (v) => (v.colunas = ["Nome", 3])],
   ];
   for (const [nome, mutar] of invalidos) {
     const v: Mutavel = exemplo();

@@ -106,9 +106,10 @@ export class TelaVerificacao implements TelaEtapa {
     this.resumo = h("strong", { class: "dl-resumo-verificacao", "aria-live": "polite" });
     this.todos = h(
       "button",
-      { type: "button", class: "spro-botao", onclick: () => this.verificarTodosDeNovo() },
+      { type: "button", class: "spro-botao", onclick: () => this.verificarProblematicosDeNovo() },
       icone("atualizar", 16),
-      "Verificar todos de novo",
+      // Ruling 22: só os com problema são consultados de novo (os "Ok" a gravação relê antes de cada documento).
+      "Verificar de novo os com problema",
     );
     this.carregando = h("small", { class: "dl-carregando", "aria-live": "polite", hidden: true });
     this.erro = h("p", { class: "dl-erro", role: "alert", hidden: true });
@@ -287,7 +288,7 @@ export class TelaVerificacao implements TelaEtapa {
     this.atualizar();
   }
 
-  private verificarTodosDeNovo(): void {
+  private verificarProblematicosDeNovo(): void {
     if (this.executor) return;
     const v = this.d.estado.verificacoes ?? {};
     const problematicos = [...this.grupos.keys()].filter((n) => !this.emCurso.has(n) && v[n] && v[n].status !== "ok");
@@ -370,10 +371,12 @@ export class TelaVerificacao implements TelaEtapa {
       !consultando && r.mensagem && r.status !== "ok" ? h("small", { class: "dl-dica" }, ` ${r.mensagem}`) : null,
       this.avisoAbrir.has(numero) ? h("small", { class: "dl-erro-abrir" }, ` ${this.avisoAbrir.get(numero)}`) : null,
     );
-    const acoes = h("td", { class: "dl-acoes-linha" });
+    // D5: a célula fica célula de tabela (flex na `td` desalinhava as divisórias); o flex é do contêiner de dentro.
+    const botoes = h("div", { class: "dl-acoes-linha-botoes" });
+    const acoes = h("td", { class: "dl-acoes-linha" }, botoes);
     if (!consultando && r.status !== "ok") {
       if (r.idProcedimento) {
-        acoes.append(
+        botoes.append(
           h(
             "button",
             { type: "button", class: "spro-botao", onclick: () => void this.abrir(numero) },
@@ -382,13 +385,13 @@ export class TelaVerificacao implements TelaEtapa {
           ),
         );
       }
-      acoes.append(
+      botoes.append(
         h(
           "button",
           {
             type: "button",
             class: "spro-botao",
-            // Durante uma rodada (inicial ou "Verificar todos de novo") não sai consulta concorrente à aba.
+            // Durante uma rodada (inicial ou "Verificar de novo os com problema") não sai consulta concorrente à aba.
             disabled: !!this.executor,
             title: this.executor ? "Aguarde terminar a verificação em curso." : undefined,
             onclick: () => this.verificarDeNovo(numero),

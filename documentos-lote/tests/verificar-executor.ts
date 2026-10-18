@@ -495,6 +495,47 @@ export async function verificarExecutor(): Promise<void> {
     igual("minimizar", reg.minimizar, [true, false]);
   }
 
+  secao("Executor: recarregarArvore (D2)");
+  {
+    const { sei } = seiFalso({});
+    let recargas = 0;
+    const comGancho = (recarregarArvore: () => void) =>
+      tratadoresDocumentosLote({ sei: sei as never, ctx: CTX, fechar: () => {}, minimizar: () => {}, recarregarArvore });
+    const ok = await chamar(
+      comGancho(() => {
+        recargas += 1;
+      }),
+      "recarregarArvore",
+    );
+    igual("recarregou: ok", ok, { situacao: "ok" });
+    igual("uma recarga", recargas, 1);
+    const falhou = await chamar(
+      comGancho(() => {
+        throw new Error("sem árvore na tela");
+      }),
+      "recarregarArvore",
+    );
+    igual("falha vira texto (não lança)", falhou, { situacao: "erro", erro: "sem árvore na tela" });
+
+    // Padrão: recarrega o #ifrArvore da página de topo; sem ele, erro em texto.
+    const doc = instalarDom('<html><body><iframe id="ifrArvore"></iframe></body></html>');
+    const ifr = doc.getElementById("ifrArvore") as HTMLIFrameElement;
+    let recarregado = 0;
+    Object.defineProperty(ifr, "contentWindow", {
+      value: { location: { reload: () => void recarregado++ } },
+      configurable: true,
+    });
+    const padrao = tratadoresDocumentosLote({ sei: sei as never, ctx: CTX, fechar: () => {}, minimizar: () => {}, documento: () => doc });
+    igual("padrão: ok", await chamar(padrao, "recarregarArvore"), { situacao: "ok" });
+    igual("padrão: reload do contentWindow da árvore", recarregado, 1);
+    const semArvore = instalarDom("<html><body></body></html>");
+    const r = await chamar(
+      tratadoresDocumentosLote({ sei: sei as never, ctx: CTX, fechar: () => {}, minimizar: () => {}, documento: () => semArvore }),
+      "recarregarArvore",
+    );
+    checar("sem árvore na tela: erro em texto", r.situacao === "erro" && typeof r.erro === "string" && r.erro !== "", r);
+  }
+
   secao("Executor: abrirLinkPermanente dispara o evento do Link Permanente (Tarefa 14b)");
   {
     const { t } = montar();

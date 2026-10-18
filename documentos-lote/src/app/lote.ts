@@ -109,6 +109,8 @@ export function montarLote(
     verificacoes,
   };
   if (estado.protocolo) lote.protocoloTela = estado.protocolo;
+  // A ordem da planilha: o armazenamento não a preserva nas chaves de `dados` (D4).
+  if (estado.colunas?.length) lote.colunas = [...estado.colunas];
   // O alvo "tela" é a tela ATUAL da aba: a retomada e a repetição conferem que é o mesmo processo.
   if (cfg.destino.tipo === "tela" && ctx.idProcedimento) lote.idProcedimentoTela = ctx.idProcedimento;
   return lote;

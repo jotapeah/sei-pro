@@ -27,9 +27,13 @@ export const DICA_INCERTO = "O documento pode ter sido criado: confira no SEI an
 
 const ehIncerto = (i: ItemLote | undefined): boolean => i?.situacao === "erro" && i.incerto === true;
 
-/** As colunas da planilha, na ordem em que aparecem nas linhas (a primeira linha manda; as demais acrescentam). */
+/**
+ * As colunas da planilha na ordem do arquivo: a lista guardada no lote (D4: o `chrome.storage` devolve as chaves de
+ * `dados` em ordem alfabética) e, depois dela, alguma que só apareça nas linhas. Lote antigo, sem a lista: a ordem em
+ * que aparecem nas linhas (a primeira linha manda; as demais acrescentam).
+ */
 export function colunasDaPlanilha(l: LoteDocumentos): string[] {
-  const vistas = new Set<string>();
+  const vistas = new Set<string>(l.colunas ?? []);
   for (const linha of l.linhas) for (const c of Object.keys(linha.dados)) vistas.add(c);
   return [...vistas];
 }
@@ -158,6 +162,25 @@ export function foraRegravaveis(l: LoteDocumentos): number[] {
  */
 export function temPendencia(l: LoteDocumentos): boolean {
   return l.itens.some((i) => i.situacao === "pendente" || i.situacao === "erro") || foraRegravaveis(l).length > 0;
+}
+
+/** Só os dígitos do número do processo: a planilha e a árvore podem escrever o mesmo número com outra pontuação. */
+const digitos = (n: string | undefined) => (n ?? "").replace(/\D/g, "");
+
+/**
+ * O lote gravou (ou pode ter gravado: incerta) documento no processo da tela, `protocoloTela` (o de onde o modelo
+ * foi listado), ou em `protocolo`, quando quem chama sabe qual é a tela atual: destino tela, ou destino coluna com
+ * linha para esse processo. Novo processo nunca grava na tela. Decide a recarga da árvore (D2).
+ */
+export function gravouNoProcessoDaTela(l: LoteDocumentos, protocolo?: string): boolean {
+  const destino = l.config.destino.tipo;
+  if (destino === "novo-processo") return false;
+  const tela = digitos(protocolo ?? l.protocoloTela);
+  return l.itens.some((i, k) => {
+    if (i.situacao !== "criada" && !ehIncerto(i)) return false;
+    if (destino === "tela") return true;
+    return !!tela && digitos(l.linhas[k]?.destino) === tela;
+  });
 }
 
 /** Números SEI que o Link Permanente pode pesquisar: só os documentos criados e confirmados (sem os incertos). */

@@ -12,6 +12,7 @@
  */
 
 import { paraLatin1 } from "@comum/texto/latin1";
+import { extrairProtocolos } from "@comum/texto/protocolos";
 import { type Combo, criarCombo } from "@comum/ui/combobox";
 import { h, icone } from "@comum/ui/dom";
 import { descricaoDoc, extrairCampos, preencherTexto } from "../modelo/campos";
@@ -62,6 +63,17 @@ function comLiteraisMarcados(texto: string): Array<Node | string> {
 }
 
 const marcado = (campo: string) => `##${campo}##`;
+
+/** Só os dígitos: a planilha, a árvore e o texto podem escrever o mesmo número com outra pontuação. */
+const digitos = (n: string | undefined) => (n ?? "").replace(/\D/g, "");
+
+/** O texto cita o processo `protocolo` (o mesmo número, com qualquer pontuação). */
+export function textoCitaProcesso(texto: string, protocolo: string): boolean {
+  const alvo = digitos(protocolo);
+  if (!alvo || !texto) return false;
+  if (texto.includes(protocolo)) return true;
+  return extrairProtocolos(texto).some((p) => p.tipo === "processo" && digitos(p.texto) === alvo);
+}
 
 export class TelaPrevia implements TelaEtapa {
   readonly el: HTMLElement;
@@ -189,6 +201,35 @@ export class TelaPrevia implements TelaEtapa {
     this.desenharLinha();
   }
 
+  /**
+   * D1 (Ruling 21): o SEI copia o texto editável do modelo como está, inclusive o cabeçalho "Processo nº ... /
+   * Interessado: ..." do processo em que o modelo está. Quando algum documento vai para OUTRO processo (novo processo
+   * por linha, ou coluna com linha para outro número) e o texto do modelo cita o número desse processo, a Prévia
+   * avisa. Só avisa: o texto do modelo nunca é mudado em silêncio, e o Iniciar continua liberado. Texto Padrão não
+   * vem de processo nenhum: sem aviso.
+   */
+  private avisoProcessoDoModelo(): HTMLElement | null {
+    const cfg = this.cfg;
+    const protocolo = this.d.estado.protocolo;
+    if (cfg.modelo.origem !== "documento" || !protocolo || !textoCitaProcesso(cfg.modelo.texto ?? "", protocolo)) return null;
+    const outro =
+      cfg.destino.tipo === "novo-processo" ||
+      (cfg.destino.tipo === "coluna" && this.prontas.some((l) => digitos(l.destino) !== digitos(protocolo)));
+    if (!outro) return null;
+    return h(
+      "p",
+      { class: "dl-motivo dl-previa-processo-modelo", role: "note" },
+      icone("alerta", 16),
+      h(
+        "span",
+        {},
+        "O texto do modelo cita o processo ",
+        h("strong", {}, protocolo),
+        ". Os documentos criados em outros processos vão manter esse número (e, provavelmente, o interessado do processo original), porque o SEI copia o texto do modelo como está. Antes de iniciar, tire do modelo os dados fixos do processo e do interessado: use campos ##campo## preenchidos pela planilha.",
+      ),
+    );
+  }
+
   /** O que fica literal em TODAS as linhas: campo do modelo sem coluna; `##x##` da descrição/especificação sem coluna. */
   private avisosGerais(): HTMLElement {
     const cfg = this.cfg;
@@ -202,6 +243,8 @@ export class TelaPrevia implements TelaEtapa {
     const especificacao = cfg.destino.tipo === "novo-processo" ? refsSem(cfg.destino.especificacao) : [];
     const lista = (campos: string[]) => campos.map(marcado).join(", ");
     const caixa = h("div", { class: "dl-previa-avisos" });
+    const processo = this.avisoProcessoDoModelo();
+    if (processo) caixa.append(processo);
     if (semColuna.length) {
       caixa.append(
         h(

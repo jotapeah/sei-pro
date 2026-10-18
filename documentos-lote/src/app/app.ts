@@ -29,6 +29,7 @@ import {
   colunasDoResultado,
   contagemDoLote,
   foraRegravaveis,
+  gravouNoProcessoDaTela,
   linhasDoResultado,
   numerosParaLink,
   repetiveis,
@@ -74,6 +75,9 @@ export function tratadoresDoApp(app: { restaurado(): void }): Record<string, Tra
     },
   };
 }
+
+/** Prazo do pedido de recarga da árvore (a resposta é ignorada; só para a promessa não ficar pendurada). */
+const PRAZO_RECARREGAR_MS = 5000;
 
 /** O nome do modelo do lote, para a tela de retomada. */
 function nomeDoModelo(l: LoteDocumentos): string {
@@ -232,10 +236,29 @@ export class AppDocumentosLote {
   antesDeFechar(): Promise<void> {
     this.arrumacao ??= (async () => {
       this.execucao?.parar();
+      // A árvore da tela, antes do fechar: o pedido sai antes de a aba tirar o iframe (D2).
+      const naTela = this.corpo === "resultado" ? this.loteResultado : this.corpo === "execucao" ? (this.execucao?.lote ?? null) : null;
+      if (naTela) this.recarregarArvoreSeGravou(naTela);
       const resultado = this.corpo === "resultado" ? this.loteResultado : null;
       if (resultado && !temPendencia(resultado)) await this.apagarLote(resultado);
     })();
     return this.arrumacao;
+  }
+
+  /**
+   * D2: a árvore do processo da tela passa a mostrar os documentos novos. Só para um lote executado NESTA janela
+   * (um lote reaberto do armazenamento não gravou nada desde que a tela carregou) e que gravou, ou pode ter gravado,
+   * no processo da tela. Melhor esforço: nem a falha da ponte nem a resposta de erro mexem no lote.
+   */
+  private recarregarArvoreSeGravou(lote: LoteDocumentos): void {
+    if (this.execucao?.lote !== lote || !gravouNoProcessoDaTela(lote, this.estado.protocolo)) return;
+    try {
+      void this.d.rpc
+        .chamar("recarregarArvore", undefined, PRAZO_RECARREGAR_MS)
+        .catch((e) => console.warn("[SEI Pro] documentos em lote: árvore não recarregada", e));
+    } catch (e) {
+      console.warn("[SEI Pro] documentos em lote: árvore não recarregada", e);
+    }
   }
 
   private async apagarLote(lote: LoteDocumentos): Promise<void> {
@@ -704,6 +727,7 @@ export class AppDocumentosLote {
       return;
     }
     if (this.destruido) return;
+    this.recarregarArvoreSeGravou(lote);
     // Como o Concluir: o apagar termina antes de a aba tirar o iframe.
     if (!temPendencia(lote)) await this.apagarLote(lote);
     if (this.destruido) return;
@@ -721,6 +745,7 @@ export class AppDocumentosLote {
       );
       if (!sim || this.destruido) return;
     }
+    this.recarregarArvoreSeGravou(lote);
     await this.apagarLote(lote);
     if (this.destruido) return;
     this.sairDoCorpo();
@@ -766,6 +791,7 @@ export class AppDocumentosLote {
     await rodada;
     if (this.destruido || this.execucao !== ex) return;
     if (ex.estado === "concluido") {
+      this.recarregarArvoreSeGravou(ex.lote);
       this.telaExecucao?.concluida();
       this.aoConcluir(ex.lote);
     }

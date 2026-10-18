@@ -18,7 +18,7 @@ import { ErroSei } from "@nucleo/sessao/erros";
 import type { Http, OpcoesHttp, Pagina } from "@nucleo/sessao/http";
 import { DOMParser } from "linkedom";
 import { criarDocumentoDaLinha, ErroDocumentoCriado, type PedidoCriar } from "../src/sei/criar";
-import { lerModelo, listarModelos, type Modelo } from "../src/sei/modelo";
+import { lerModelo, listarModelos, type Modelo, textoDaPrevia } from "../src/sei/modelo";
 import { checar, igual, lanca, secao } from "./util";
 
 const parser = new DOMParser();
@@ -407,6 +407,31 @@ export async function verificarSei(): Promise<void> {
     const e = await lanca(() => lerModelo(sei, { textoPadrao: "77", tipoId: "12" }));
     checar("texto padrao inexistente: SEI_NAO_ENCONTRADO", e?.codigo === "SEI_NAO_ENCONTRADO", e);
   });
+
+  secao("sei: texto da previa sem CSS, script, comentario nem imagem (D3)");
+  {
+    const B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+    const html = [
+      "<head><title>Titulo ##x##</title><style>p.Texto { font-size: 12pt; }</style></head>",
+      "<body>",
+      "<!-- CONFIGURACOES DE IMPRESSAO -->",
+      '<style type="text/css">@media print { .Tabela_Texto { color: red; } body { background: url(data:image/png;base64,AAAA); } }</style>',
+      '<p class="Texto_Centralizado"><img alt="brasao" src="data:image/png;base64,',
+      B64,
+      '" /></p>',
+      "<p>Senhor ##nome##,</p>",
+      '<script>var x = "nao mostrar";</script>',
+      "<noscript>ative o javascript</noscript>",
+      "<p></p><p>&nbsp;</p>",
+      "<p>Atenciosamente.</p>",
+      "</body>",
+    ].join("\n");
+    const t = textoDaPrevia(html);
+    igual("so o texto dos paragrafos, sem linhas em branco", t, "Senhor ##nome##,\nAtenciosamente.");
+    checar("sem CSS", !t.includes("font-size") && !t.includes("@media"), t);
+    checar("sem base64", !t.includes("base64") && !t.includes(B64.slice(0, 20)), t);
+    checar("sem script/noscript/comentario/title", !/nao mostrar|ative|CONFIGURA|Titulo/.test(t), t);
+  }
 
   secao("sei: criar documento da linha (CK4, modelo = documento)");
   await comMontagem({}, async ({ sei, chamadas, secoes }) => {
