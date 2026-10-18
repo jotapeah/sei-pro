@@ -24,10 +24,17 @@ export interface ConfigLinhas {
   colunaNome: string;
 }
 
-/** Primeiro protocolo do tipo "processo" da célula, sem espaços em volta; null se não houver. */
+/**
+ * Número de processo da célula: o primeiro protocolo do tipo "processo"; na falta dele, a célula aparada se for um
+ * único token de 3 a 60 caracteres com dígito e "/", "." ou "-" (formatos do SEI de SP). Número só de dígitos
+ * (documento SEI), vários tokens sem número reconhecido e célula vazia dão null.
+ */
 export function numeroDeProcesso(celula: string): string | null {
   const achado = extrairProtocolos(celula).find((p) => p.tipo === "processo");
-  return achado ? achado.texto.trim() : null;
+  if (achado) return achado.texto.trim();
+  const t = celula.trim();
+  if (/\s/.test(t) || t.length < 3 || t.length > 60) return null;
+  return /\d/.test(t) && /[/.-]/.test(t) ? t : null;
 }
 
 function lerNivel(valor: string): "publico" | "restrito" | null {
@@ -54,7 +61,7 @@ export function prepararLinhas(registros: Record<string, string>[], cfg: ConfigL
     }
     if (cfg.colunaNivel) {
       const bruto = dados[cfg.colunaNivel] ?? "";
-      const nivel = lerNivel(bruto);
+      const nivel = bruto.trim() === "" ? "publico" : lerNivel(bruto);
       if (!nivel) {
         linha.erroLinha ??= `Nível de acesso inválido: "${bruto.trim()}"`;
       } else {
@@ -70,11 +77,11 @@ export function prepararLinhas(registros: Record<string, string>[], cfg: ConfigL
   });
 }
 
-/** Nº do processo → índices das linhas; ignora as linhas sem destino (inválidas ou fora do destino coluna). */
+/** Nº do processo → índices das linhas; ignora as com erro ou sem destino (não se verifica processo de linha que não será gravada). */
 export function agruparPorProcesso(linhas: LinhaDocumento[]): Map<string, number[]> {
   const grupos = new Map<string, number[]>();
   for (const l of linhas) {
-    if (l.destino === undefined) continue;
+    if (l.destino === undefined || l.erroLinha) continue;
     const lista = grupos.get(l.destino);
     if (lista) lista.push(l.indice);
     else grupos.set(l.destino, [l.indice]);

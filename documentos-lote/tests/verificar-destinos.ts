@@ -7,6 +7,12 @@ export function verificarDestinos(): void {
   igual("numero normalizado", numeroDeProcesso("  50300.018905/2018-67 "), "50300.018905/2018-67");
   igual("sem numero", numeroDeProcesso("sem numero"), null);
   igual("so numero SEI nao e processo", numeroDeProcesso("1234567"), null);
+  igual("formato SP com barras", numeroDeProcesso("SEI-260005/000123/2026"), "SEI-260005/000123/2026");
+  igual("formato SP com ponto", numeroDeProcesso(" 6068.2020/0000001-2 "), "6068.2020/0000001-2");
+  igual("6 digitos e documento SEI", numeroDeProcesso("123456"), null);
+  igual("varios tokens sem numero", numeroDeProcesso("contrato 77 do ano"), null);
+  igual("celula vazia", numeroDeProcesso("   "), null);
+  igual("texto + processo reconhecido", numeroDeProcesso("ver 50300.018905/2018-67 agora"), "50300.018905/2018-67");
 
   const coluna = { tipo: "coluna", coluna: "proc" } as const;
   const regs = [
@@ -42,7 +48,8 @@ export function verificarDestinos(): void {
 
   const nomeVazio = prepararLinhas([{ proc: "50300.018905/2018-67", nome: "  " }], { destino: coluna, colunaNome: "nome" });
   checar("nome vazio tem erro", !!nomeVazio[0]?.erroLinha);
-  igual("nome vazio mantem destino e agrupa", agruparPorProcesso(nomeVazio).size, 1);
+  igual("nome vazio mantem destino", nomeVazio[0]?.destino, "50300.018905/2018-67");
+  igual("linha com erro nao entra no agrupamento", agruparPorProcesso(nomeVazio).size, 0);
 
   const tela = prepararLinhas([{ proc: "lixo", nome: "A" }], { destino: { tipo: "tela" }, colunaNome: "nome" });
   igual("tela ignora coluna de processo", tela[0]?.erroLinha, undefined);
@@ -68,7 +75,11 @@ export function verificarDestinos(): void {
   igual("0 e publico", n[3]?.nivel, "publico");
   igual("1 e restrito", n[4]?.nivel, "restrito");
   checar("nivel invalido erra", !!n[5]?.erroLinha);
-  checar("nivel vazio erra", !!n[6]?.erroLinha);
+  igual("nivel vazio e publico sem erro", [n[6]?.nivel, n[6]?.erroLinha], ["publico", undefined]);
+  const misto = prepararLinhas([{ proc: "x", nome: "A", nivel: "secreto" }], { destino: coluna, colunaNome: "nome", colunaNivel: "nivel" });
+  igual("ordem: erro do processo prevalece", misto[0]?.erroLinha, "Processo inválido ou vazio");
+  const pub = prepararLinhas([{ nome: "A", nivel: "publico", hip: "Informação Pessoal" }], cfg);
+  igual("publico ignora hipotese", [pub[0]?.nivel, pub[0]?.hipotese], ["publico", undefined]);
 
   let lancou = "";
   try {
