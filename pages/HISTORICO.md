@@ -2,6 +2,25 @@
 
 ## ![SEI Pro Histórico de Versões](../img/icon-historico.png) Histórico de versões
 
+### Versão 3.8
+18/10/2026
+
+**Novo — [Documentos em Lote](../pages/DOCUMENTOSEMLOTE.md) refeito** (*SEI Pro Lab*, Chrome e Edge). A "mala direta" do SEI ganhou uma janela nova, no mesmo estilo dos outros painéis do SEI Pro, com tema claro e escuro, e uma novidade grande: cada documento pode ser gravado **no processo indicado em uma coluna da planilha**, e não só no processo aberto na tela.
+
+- **Processo de destino.** Na etapa *Cruzamento* você escolhe onde criar os documentos: no processo da tela (como antes), em um processo novo por linha (como antes) ou **no processo cujo número está em uma coluna do CSV**. Dá para mandar um documento diferente para cada processo de uma só vez.
+- **Verificação antes de gravar.** Nenhum documento é criado antes de o SEI Pro conferir cada processo da planilha, uma vez só: se existe, se está **aberto na sua unidade**, se não é sigiloso e se o tipo do documento pode ser criado ali. A tabela mostra a situação de cada um, com **Abrir em nova aba** (para receber ou reabrir o processo) e **Verificar de novo**.
+- **Grave só as linhas válidas.** O botão diz quantas linhas serão gravadas e quantas ficam de fora. Depois de corrigir os processos com problema, **Gravar as que ficaram de fora** cria o que faltou, no mesmo lote.
+- **Prévia.** Mostra o documento de cada linha já preenchido, com o nome na árvore e a descrição finais, e **marca** os campos `##...##` que ficariam sem valor. Se o texto do modelo cita o número do processo do modelo e o documento vai para outro processo, avisa: o SEI copia o texto como está, inclusive o "Processo nº ... / Interessado: ...".
+- **Uma linha que falha não derruba o lote.** O erro aparece no resultado e a ferramenta segue. Um pedido que o SEI pode ter concluído mesmo sem confirmar aparece como **incerto**: nunca é repetido sozinho, para não criar documento em duplicidade.
+- **Retomar de onde parou.** O andamento é guardado a cada documento. Se a janela fechar ou a sessão cair, **Continuar de onde parou** cria só o que falta; **Repetir só as que falharam** refaz apenas o que, com certeza, não foi criado.
+- **Nível de acesso e hipótese legal por linha**, em colunas opcionais da planilha (sem a coluna, os documentos saem públicos, como antes).
+- **Resultado completo.** Cada linha mostra o processo de destino, o nome, o número SEI e o link do documento. Dá para **copiar** (com links clicáveis), **baixar em CSV** e **gerar links permanentes** dos documentos criados. Quando os documentos foram criados no processo da tela, a árvore é recarregada ao final.
+- **Privacidade.** O andamento do lote fica só neste navegador, por até 7 dias após o último uso, e é apagado ao concluir ou descartar; o texto do modelo não é guardado. Cada lote aceita até 2000 linhas e 2 MB de dados.
+- **Correção embutida:** travessão, aspas curvas e o símbolo € vindos da planilha eram gravados como "?" nos documentos do SEI 5 (editor novo); agora saem certos.
+
+**Também nesta versão**
+- **Novo — [Menu Suspenso](../pages/MENUSUSPENSO.md) refeito** (*SEI Pro Lab*): o menu abre **por cima do conteúdo**, sem empurrar a tela, pelo ícone ☰; fecha ao clicar fora ou com **Esc**; respeita a barra de ações fixa e não pisca aberto ao trocar de tela.
+
 ### Versão 3.7
 17/10/2026
 

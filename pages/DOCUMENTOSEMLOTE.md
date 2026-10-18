@@ -4,6 +4,8 @@
 
 Cria **vários documentos de uma vez** a partir de um **modelo** e de uma **planilha**. É a "mala direta" do SEI: um ofício para cada município, uma notificação para cada empresa, uma portaria para cada servidor — cada um com os dados da sua linha da planilha.
 
+> A **nova Documentos em Lote** está no **SEI Pro Lab** (Chrome e Edge). Nos demais pacotes continua a janela anterior.
+
 > ![Tela Documentos em Lote](../img/tela-documentoslote.gif)
 
 ### Antes de começar: prepare o modelo e a planilha
@@ -55,6 +57,8 @@ Na etapa **Cruzamento** você escolhe onde cada documento será criado:
 ### Verificação antes de gravar
 
 No destino "processo indicado em uma coluna", cada processo é consultado **uma vez** antes de qualquer documento ser criado, para você não descobrir o problema só no meio do lote. A tabela mostra a situação de cada um:
+
+> ![Verificação dos processos antes de gravar](../img/documentoslote-verificacao.gif)
 
 * **OK** — pode gravar;
 * **Não encontrado ou sem acesso** — o número não existe ou a sua unidade não o enxerga;
