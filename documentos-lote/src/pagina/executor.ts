@@ -74,9 +74,14 @@ export type ResultadoCriarDocumento =
       criado?: Partial<DocumentoCriado>;
     });
 
+/**
+ * O destino do documento é o PROTOCOLO do processo: com o número na mão, a linha segue (mesmo sem o id, caso do
+ * `ErroProcessoCriado`, que volta como "ok" com aviso). Sem o número o processo existe ou pode existir, mas não
+ * serve de destino: erro com `incerto` (NÃO repetir a linha, duplicaria o processo).
+ */
 export type ResultadoCriarProcesso =
-  | { situacao: "ok"; criado: { numero: string; idProcedimento: string; url: string }; aviso?: string }
-  | (Falha & { incerto?: true; criado?: { numero: string } });
+  | { situacao: "ok"; criado: { numero: string; idProcedimento?: string; url?: string }; aviso?: string }
+  | (Falha & { incerto?: true; criado?: { idProcedimento: string; url: string } });
 
 /** O resultado da verificação como o app o vê: sem o link assinado da árvore. */
 export interface VerificacaoPublica {
@@ -91,6 +96,10 @@ export const ERRO_SIGILOSO = "Processo sigiloso: o lote não atua nele.";
 export const ERRO_SEM_HIPOTESE = "Processo restrito sem hipótese legal: escolha uma hipótese.";
 export const AVISO_PROCESSO_INCERTO =
   "O processo pode ter sido criado, mas o SEI não confirmou. Confira no Controle de Processos antes de repetir esta linha.";
+export const AVISO_PROCESSO_SEM_ID =
+  "O processo foi criado, mas o SEI não devolveu o identificador dele. O documento segue para o número do processo.";
+export const ERRO_PROCESSO_SEM_NUMERO =
+  "O processo foi criado, mas o número não pôde ser lido. Confira no Controle de Processos antes de repetir esta linha.";
 const ERRO_SEM_TIPO = "Tipo de processo não informado.";
 const ERRO_SEM_TELA = "Abra uma tela do SEI";
 
@@ -189,6 +198,8 @@ export function tratadoresDocumentosLote(d: DepsExecutor): Record<string, Tratad
    * só o número). O link assinado da árvore não é guardado: a nova aba abre a tela pelo Link Permanente.
    */
   const verificados = new Map<string, string>();
+  /** Ids que o "Abrir em nova aba" aceita: só os que `verificar` ou `criarProcesso` devolveram nesta aba. */
+  const idsConhecidos = new Set<string>();
 
   /** Endereço que pode ser aberto em outra aba: http(s) do mesmo host do SEI. */
   const hostSei = (() => {
@@ -268,11 +279,20 @@ export function tratadoresDocumentosLote(d: DepsExecutor): Record<string, Tratad
     }
     const incerto = (e: unknown): ResultadoCriarProcesso => {
       const numero = (e as { numero?: unknown } | null)?.numero;
-      const r: ResultadoCriarProcesso = { situacao: "erro", erro: AVISO_PROCESSO_INCERTO, incerto: true };
-      if (typeof numero === "string" && numero) r.criado = { numero };
-      return r;
+      // ErroProcessoCriado com o protocolo lido do <title>: o processo existe e o número basta de destino.
+      if (typeof numero === "string" && numero) return { situacao: "ok", criado: { numero }, aviso: AVISO_PROCESSO_SEM_ID };
+      return { situacao: "erro", erro: AVISO_PROCESSO_INCERTO, incerto: true };
     };
     const ok = (x: { numero: string; idProcedimento: string; url: string; aviso?: string }): ResultadoCriarProcesso => {
+      if (x.idProcedimento) idsConhecidos.add(x.idProcedimento);
+      // Criado, mas sem o protocolo: não há destino para o documento, e repetir duplicaria o processo.
+      if (!x.numero)
+        return {
+          situacao: "erro",
+          erro: ERRO_PROCESSO_SEM_NUMERO,
+          incerto: true,
+          criado: { idProcedimento: x.idProcedimento, url: x.url },
+        };
       const r: ResultadoCriarProcesso = { situacao: "ok", criado: { numero: x.numero, idProcedimento: x.idProcedimento, url: x.url } };
       if (x.aviso) r.aviso = x.aviso;
       return r;
@@ -355,7 +375,10 @@ export function tratadoresDocumentosLote(d: DepsExecutor): Record<string, Tratad
         d.sei.esquecer(chave);
       }
       const r = await c.verificarProcesso(d.sei, numero, tipoId);
-      if (r.idProcedimento) verificados.set(chave, r.idProcedimento);
+      if (r.idProcedimento) {
+        verificados.set(chave, r.idProcedimento);
+        idsConhecidos.add(r.idProcedimento);
+      }
       const publico: VerificacaoPublica = { numero: r.numero, status: r.status };
       if (r.idProcedimento) publico.idProcedimento = r.idProcedimento;
       if (r.mensagem) publico.mensagem = r.mensagem;
@@ -373,7 +396,8 @@ export function tratadoresDocumentosLote(d: DepsExecutor): Record<string, Tratad
       let alvo: string | null = null;
       if (typeof a.url === "string") alvo = urlPermitida(a.url);
       else {
-        const id = verificados.get(texto(a.numero)) ?? (/^\d+$/.test(texto(a.idProcedimento)) ? texto(a.idProcedimento) : "");
+        const pedido = texto(a.idProcedimento);
+        const id = verificados.get(texto(a.numero)) ?? (idsConhecidos.has(pedido) ? pedido : "");
         // A tela do processo no formato do Link Permanente (sem infra_hash): o link da árvore abriria só o
         // quadro da árvore.
         if (id) alvo = urlPermitida(`${d.ctx.origem}?acao=procedimento_trabalhar&id_procedimento=${encodeURIComponent(id)}`);

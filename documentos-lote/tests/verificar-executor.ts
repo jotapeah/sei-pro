@@ -291,6 +291,11 @@ export async function verificarExecutor(): Promise<void> {
     );
     const sem = await chamar(t, "abrirAba", { numero: "99999.999999/2026-99" });
     checar("numero nunca verificado: nao abre", sem.aberto === false && reg.abertas.length === 1, sem);
+    const idSolto = await chamar(t, "abrirAba", { idProcedimento: "123" });
+    checar("id nunca registrado: nao abre", idSolto.aberto === false && reg.abertas.length === 1, idSolto);
+    const idVerificado = await chamar(t, "abrirAba", { idProcedimento: "901" });
+    checar("id registrado por verificar: abre", idVerificado.aberto === true && reg.abertas.length === 2, idVerificado);
+    reg.abertas.pop();
     for (const u of [
       "javascript:alert(1)",
       "data:text/html,oi",
@@ -403,8 +408,65 @@ export async function verificarExecutor(): Promise<void> {
       },
     });
     const r = await chamar(t, "criarProcesso", { idTipo: "1", especificacao: "x" });
-    checar("processo criado sem id: erro incerto com numero", r.situacao === "erro" && r.incerto === true, r);
-    igual("numero conhecido", r.criado, { numero: "00003.000002/2026-11" });
+    checar(
+      "processo criado sem id, numero conhecido: ok com aviso",
+      r.situacao === "ok" && typeof r.aviso === "string" && r.aviso !== "",
+      r,
+    );
+    igual("numero conhecido segue como destino", r.criado, { numero: "00003.000002/2026-11" });
+  }
+  {
+    const formSimples = async (_sei: unknown, idTipo: string) => ({
+      idTipo,
+      action: "x",
+      params: [],
+      hipoteses: [],
+      assuntos: "",
+      interessados: "",
+    });
+    const { t } = montar({
+      chamadas: {
+        carregarFormTipo: formSimples,
+        criarProcesso: async () => {
+          throw new ErroProcessoCriado("");
+        },
+      },
+    });
+    const r = await chamar(t, "criarProcesso", { idTipo: "1", especificacao: "x" });
+    checar("processo criado sem id nem numero: erro incerto", r.situacao === "erro" && r.incerto === true && !("criado" in r), r);
+    const { t: t2 } = montar({
+      chamadas: {
+        carregarFormTipo: formSimples,
+        criarProcesso: async () => {
+          throw new ErroSei("SEI_REDE", "caiu");
+        },
+      },
+    });
+    const r2 = await chamar(t2, "criarProcesso", { idTipo: "1", especificacao: "x" });
+    checar("rede no POST: erro incerto", r2.situacao === "erro" && r2.incerto === true, r2);
+  }
+  {
+    let posts = 0;
+    const url = `${ORIGEM}?acao=procedimento_trabalhar&id_procedimento=56`;
+    const { t, reg } = montar({
+      chamadas: {
+        carregarFormTipo: async (_sei, idTipo) => ({ idTipo, action: "x", params: [], hipoteses: [], assuntos: "", interessados: "" }),
+        criarProcesso: async () => {
+          posts++;
+          return { numero: "", idProcedimento: "56", url, aviso: "numero nao identificado" };
+        },
+      },
+    });
+    const r = await chamar(t, "criarProcesso", { idTipo: "1", especificacao: "x" });
+    checar("criado sem numero legivel: erro incerto (nao repetir)", r.situacao === "erro" && r.incerto === true && posts === 1, r);
+    checar(
+      "texto manda conferir no Controle de Processos",
+      typeof r.erro === "string" && (r.erro as string).includes("Controle de Processos"),
+      r,
+    );
+    igual("dados conhecidos do processo", r.criado, { idProcedimento: "56", url });
+    const a = await chamar(t, "abrirAba", { idProcedimento: "56" });
+    checar("abrirAba abre id registrado por criarProcesso", a.aberto === true && reg.abertas.length === 1, { a, abertas: reg.abertas });
   }
   {
     const { t } = montar({
