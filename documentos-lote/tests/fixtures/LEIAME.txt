@@ -17,3 +17,7 @@ A primeira linha de cada .html e "<!-- url: ... -->" (URL final da resposta).
 
 O editor (CK4 e CK5) NAO e fixture fixa: o teste o monta a partir do estado das secoes
 (verificar-sei.ts, editorCk4/editorCk5), para a releitura depois de gravar ver o que foi gravado.
+
+A arvore do processo de destino (verificar-verificar.ts) NAO e fixture fixa: o teste a monta no formato que
+lerArvore le (infraArvoreNo/infraArvoreAcao), com ou sem o link "Incluir Documento" e com nivel de acesso
+publico/restrito/sigiloso; a tela de tipos reaproveita escolher_tipo.html e a pesquisa rapida usa menu.html.
