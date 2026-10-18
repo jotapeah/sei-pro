@@ -302,6 +302,18 @@ export async function verificarAcoesLote(): Promise<void> {
     checar("tipoDoDocumento: id fora da lista da unidade nao lanca", t.id === "5" && t.nome.length > 0, t);
   }
   {
+    const { sei, estado } = montar({ processoSigiloso: true });
+    const e = await lanca(() => tipoDoDocumento(sei, "0103947"));
+    checar("tipoDoDocumento: processo sigiloso lanca SEI_SIGILOSO", e?.codigo === "SEI_SIGILOSO", e);
+    checar("tipoDoDocumento sigiloso: nenhuma tela de tipos pedida", !estado.gets.some((u) => /acao=documento_escolher_tipo&/.test(u)) && estado.posts.length === 0, estado.gets);
+  }
+  {
+    const { sei } = montar();
+    const e = await lanca(() => criarDocumento(sei, "148265", { tipo: "Despacho", tipoId: "99999" }, PREVIA));
+    checar("mensagem do tipo ausente e neutra (sem 'original') e traz o id", !/original/.test(e?.message ?? "") && /99999/.test(e?.message ?? ""), e);
+  }
+  {
+    // TODO(T17): apertar para o código exato quando houver captura real de documento externo
     const { sei } = montar();
     const e = await lanca(() => tipoDoDocumento(sei, "0103925"));
     checar("tipoDoDocumento: externo sem hdnIdSerie nao devolve tipo inventado", e?.codigo === "SEI_VERSAO_NAO_SUPORTADA" || e?.codigo === "SEI_ACAO_INDISPONIVEL", e);

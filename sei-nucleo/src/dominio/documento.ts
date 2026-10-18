@@ -230,7 +230,7 @@ async function prepararCriacao(sei: Sei, arv: Arvore, refTipo: string, sinal?: A
   const tipos = lerTipos(escolha.pagina).filter((t) => t.id !== "-1").map((t) => ({ id: t.id, texto: t.nome }));
   if (soPorId) {
     const tipo = tipos.find((t) => t.id === refTipo);
-    if (!tipo) throw new ErroSei("SEI_ACAO_INDISPONIVEL", "O tipo do documento original n\u00E3o est\u00E1 dispon\u00EDvel nesta unidade.");
+    if (!tipo) throw new ErroSei("SEI_ACAO_INDISPONIVEL", `O tipo (id ${refTipo}) n\u00E3o est\u00E1 dispon\u00EDvel nesta unidade.`);
     return { escolha, tipo };
   }
   return { escolha, tipo: escolherItem(tipos, refTipo, "Tipo de documento") };
@@ -321,13 +321,14 @@ export async function criarDocumento(sei: Sei, refProcesso: string, novo: NovoDo
  */
 export async function tipoDoDocumento(sei: Sei, numero: string, sinal?: AbortSignal): Promise<{ id: string; nome: string }> {
   const { d, form } = await telaAlteracao(sei, numero, sinal);
+  if (d.documento.nivel === "sigiloso" || d.arvore.nivel === "sigiloso") throw new ErroSei("SEI_SIGILOSO", "Documento sigiloso: o agente n\u00E3o atua nele.");
   const id = form.valor("hdnIdSerie") ?? "";
   if (!id) throw new ErroSei("SEI_VERSAO_NAO_SUPORTADA", `A tela do documento ${d.documento.numero} n\u00E3o informa o tipo (hdnIdSerie).`);
   let nome = "";
   try {
     nome = lerTipos((await telaEscolherTipo(sei, d.arvore, sinal)).pagina).find((t) => t.id === id)?.nome ?? "";
   } catch (e) {
-    if (sinal?.aborted || (e instanceof ErroSei && e.codigo === "SEI_SIGILOSO")) throw e;
+    if (sinal?.aborted || !(e instanceof ErroSei) || e.codigo === "SEI_SIGILOSO") throw e;
   }
   if (!nome) nome = form.opcoes("selSerie").find((o) => o.valor === id)?.texto?.trim() ?? "";
   return { id, nome: nome || id };
