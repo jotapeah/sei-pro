@@ -12,7 +12,9 @@
 import type { Rpc } from "@comum/ponte/rpc";
 import type { TipoProcesso } from "@pl/sei/tipos";
 import type { CsvLido } from "../modelo/csv";
+import type { LinhaDocumento } from "../modelo/destinos";
 import type { ConfigLote } from "../modelo/lote";
+import type { VerificacaoGuardada } from "../repositorio";
 import type { Modelo, ModelosDisponiveis } from "../sei/modelo";
 
 export interface EstadoApp {
@@ -45,6 +47,19 @@ export interface EstadoApp {
   baseCruzamento?: { modelo: Modelo; colunas: string[] };
   /** Só existe quando a tela está completa; apagada quando incompleta ou quando o modelo/a planilha mudam. */
   config?: ConfigLote;
+
+  /* ---- Etapa 4: Verificação (só no destino "processo da coluna") ---- */
+  /** As linhas preparadas (`prepararLinhas`) da planilha com a config atual; as com `erroLinha` ficam de fora. */
+  linhas?: LinhaDocumento[];
+  /** Número do processo → o que a aba respondeu (sem `linkArvore`). Só os processos já respondidos. */
+  verificacoes?: Record<string, VerificacaoGuardada>;
+  /**
+   * Índices (`LinhaDocumento.indice`) das linhas prontas para gravar: sem `erroLinha` e com o processo "ok". Só
+   * existe com a verificação terminada e ao menos uma linha pronta (é o que habilita o Continuar).
+   */
+  prontas?: number[];
+  /** A planilha (referência) e o que da config decide a verificação: igual ao voltar, não consulta de novo. */
+  baseVerificacao?: { registros: Record<string, string>[]; chave: string };
 }
 
 /** O preenchimento bruto da etapa 3 (a `config` é derivada dele quando completo). */
@@ -64,7 +79,7 @@ export interface RascunhoCruzamento {
 }
 
 /** Id de cada etapa, na ordem do app. As próximas tarefas acrescentam as suas (cruzamento, verificação, prévia...). */
-export type IdEtapa = "modelo" | "planilha" | "cruzamento";
+export type IdEtapa = "modelo" | "planilha" | "cruzamento" | "verificacao";
 
 /** O que o app entrega a cada tela de etapa. */
 export interface DepsEtapa {
@@ -92,6 +107,8 @@ export interface DefinicaoEtapa {
   /** Nome no indicador de etapas. */
   rotulo: string;
   criar(d: DepsEtapa): TelaEtapa;
+  /** A etapa vale para este estado (padrão: sempre). Fora dela, o Avançar e o Voltar a pulam e o indicador a esconde. */
+  aplicavel?(estado: EstadoApp): boolean;
 }
 
 export const mensagemDe = (e: unknown): string => (e instanceof Error ? e.message : String(e));

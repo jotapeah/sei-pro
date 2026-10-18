@@ -1,6 +1,7 @@
 import { resumo } from "./util";
 import { verificarAppCruzamento } from "./verificar-app-cruzamento";
 import { verificarAppModelo } from "./verificar-app-modelo";
+import { verificarAppVerificacao } from "./verificar-app-verificacao";
 import { verificarCampos } from "./verificar-campos";
 import { verificarConstantes } from "./verificar-constantes";
 import { verificarCsv } from "./verificar-csv";
@@ -22,4 +23,5 @@ await verificarRepositorio();
 await verificarExecutor();
 await verificarAppModelo();
 await verificarAppCruzamento();
+await verificarAppVerificacao();
 resumo();

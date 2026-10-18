@@ -563,3 +563,41 @@ table.spro-resultado td a {
 .dl-estimativa:empty {
   display: none;
 }
+
+/* ---------- Verificacao dos processos de destino (destino coluna) ---------- */
+.dl-verificacao .dl-tabela {
+  max-height: 38vh;
+}
+.dl-tabela-verificacao td:nth-child(2) {
+  font-variant-numeric: tabular-nums;
+}
+/* Situacao: sempre o texto; a cor so reforca. */
+.dl-tabela-verificacao tr.dl-status-ok td:nth-child(3) strong {
+  color: var(--spro-ok);
+}
+.dl-tabela-verificacao tr.dl-status-verificando td:nth-child(3) strong {
+  color: var(--spro-suave);
+  font-weight: 400;
+}
+.dl-tabela-verificacao tr:not(.dl-status-ok):not(.dl-status-verificando) td:nth-child(3) strong {
+  color: var(--spro-perigo);
+}
+.dl-tabela-verificacao td small {
+  display: block;
+}
+.dl-erro-abrir {
+  color: var(--spro-perigo);
+}
+.dl-acoes-linha {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.dl-linhas-problema[hidden] {
+  display: none;
+}
+.dl-linhas-problema h3 {
+  margin: 4px 0;
+  font-size: 13px;
+}

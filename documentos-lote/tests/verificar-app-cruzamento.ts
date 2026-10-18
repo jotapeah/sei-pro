@@ -268,7 +268,12 @@ export async function verificarAppCruzamento(): Promise<void> {
 
   secao("app: etapa Cruzamento");
   {
-    checar("cruzamento registrado depois da planilha", ETAPAS.map((e) => e.id).join(",") === "modelo,planilha,cruzamento");
+    checar(
+      "cruzamento registrado depois da planilha",
+      ETAPAS.map((e) => e.id)
+        .join(",")
+        .startsWith("modelo,planilha,cruzamento"),
+    );
     const m = montar();
     await naPlanilha(m);
     await m.escolherArquivo("a.csv", utf8("nome;cargo;alvo\nAna;Chefe;00001.000001/2026-11\n"));

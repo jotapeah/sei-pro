@@ -17,6 +17,7 @@ import { TelaCruzamento } from "./cruzamento";
 import type { DefinicaoEtapa, EstadoApp, TelaEtapa } from "./estado";
 import { TelaModelo } from "./modelo";
 import { TelaPlanilha } from "./planilha";
+import { TelaVerificacao } from "./verificacao";
 
 /** O que o tratador `contexto` devolve: o da aba sem a base nem o link da árvore (levam o infra_hash). */
 export type ContextoApp = Omit<ContextoDocumentos, "base" | "linkArvore">;
@@ -37,7 +38,33 @@ export const ETAPAS: readonly DefinicaoEtapa[] = [
   { id: "modelo", rotulo: "Modelo", criar: (d) => new TelaModelo(d) },
   { id: "planilha", rotulo: "Planilha", criar: (d) => new TelaPlanilha(d) },
   { id: "cruzamento", rotulo: "Cruzamento", criar: (d) => new TelaCruzamento(d) },
+  {
+    id: "verificacao",
+    rotulo: "Verificação",
+    criar: (d) => new TelaVerificacao(d),
+    aplicavel: (e) => e.config?.destino.tipo === "coluna",
+  },
 ];
+
+const aplicavel = (i: number, estado: EstadoApp): boolean => {
+  const def = ETAPAS[i];
+  return !!def && (def.aplicavel?.(estado) ?? true);
+};
+
+/**
+ * A etapa depois de `atual` que vale para o estado (null: não há). É o ponto de extensão da navegação: uma etapa
+ * nova entra em `ETAPAS` (com `aplicavel`, se for condicional) e o Avançar a encontra por aqui.
+ */
+export function proximaEtapa(estado: EstadoApp, atual: number): number | null {
+  for (let i = atual + 1; i < ETAPAS.length; i += 1) if (aplicavel(i, estado)) return i;
+  return null;
+}
+
+/** A etapa antes de `atual` que vale para o estado (null: é a primeira). */
+export function etapaAnterior(estado: EstadoApp, atual: number): number | null {
+  for (let i = atual - 1; i >= 0; i -= 1) if (aplicavel(i, estado)) return i;
+  return null;
+}
 
 export class AppDocumentosLote {
   /** O estado das etapas (as provas o leem; as telas o recebem por `DepsEtapa`). */
@@ -115,30 +142,33 @@ export class AppDocumentosLote {
     const tela = def.criar({ rpc: this.d.rpc, estado: this.estado, aoMudar: () => this.atualizarRodape() });
     this.tela = tela;
     this.conteudo.replaceChildren(tela.el);
-    this.desenharEtapas();
     this.atualizarRodape();
     await tela.iniciar?.();
   }
 
   private avancar(): void {
     if (!this.tela?.completa()) return;
-    void this.irPara(this.indice + 1);
+    const i = proximaEtapa(this.estado, this.indice);
+    if (i !== null) void this.irPara(i);
   }
 
   private voltar(): void {
-    if (this.indice > 0) void this.irPara(this.indice - 1);
+    const i = etapaAnterior(this.estado, this.indice);
+    if (i !== null) void this.irPara(i);
   }
 
+  /** Só as etapas que valem para o estado atual (a Verificação aparece quando o destino é a coluna). */
   private desenharEtapas(): void {
+    const visiveis = ETAPAS.map((e, i) => ({ e, i })).filter(({ i }) => i === this.indice || aplicavel(i, this.estado));
     this.etapas.replaceChildren(
-      ...ETAPAS.map((e, i) =>
+      ...visiveis.map(({ e, i }, n) =>
         h(
           "li",
           {
             class: i < this.indice ? "feita" : i === this.indice ? "atual" : undefined,
             "aria-current": i === this.indice ? "step" : undefined,
           },
-          h("span", { class: "dl-etapa-num" }, String(i + 1)),
+          h("span", { class: "dl-etapa-num" }, String(n + 1)),
           e.rotulo,
         ),
       ),
@@ -147,7 +177,8 @@ export class AppDocumentosLote {
 
   private atualizarRodape(): void {
     if (this.destruido) return;
-    this.botaoVoltar.hidden = this.indice === 0;
+    this.desenharEtapas();
+    this.botaoVoltar.hidden = etapaAnterior(this.estado, this.indice) === null;
     this.botaoAvancar.disabled = !this.tela?.completa();
     this.botaoAvancar.textContent = this.tela?.rotuloAvancar?.() ?? "Avançar";
   }
