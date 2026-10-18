@@ -4,7 +4,7 @@
  * offline: que cada tela é lida do jeito certo.
  */
 
-import { lerEditor, textoDoHtml } from "../src/dominio/editor";
+import { corpoSalvarCk5, lerEditor, textoDoHtml } from "../src/dominio/editor";
 import { lerContexto, lerIdUnidade, lerVersao } from "../src/sei";
 import { lerCaixaDaPagina } from "../src/dominio/caixa";
 import { Formulario } from "../src/formulario/formulario";
@@ -59,6 +59,18 @@ export async function verificarDominio(): Promise<void> {
   const ed5 = lerEditor({ url: "https://h/sei/x", status: 200, html: `<script>window.INFRA_EDITOR_CONFIG = ${JSON.stringify(cfg)};</script>`, get doc() { return null as unknown as Document; } });
   checar("ck5 com chaves dentro de string", ed5.tipo === "ck5" && ed5.secoes.length === 2 && ed5.ck5?.versao === 3);
   checar("ck5 principal pelo rootsAttributes", ed5.secoes[1].principal && ed5.secoes[0].somenteLeitura);
+
+  secao("editor ck5: gravacao fora do Latin-1 (N1 do SEI MJ 5.0.4)");
+  // O SEI decodifica o JSON e grava em ISO-8859-1: o que passa de U+00FF chegava como "?".
+  const novoCk5 = "<p>Coordena\u00E7\u00E3o \u2014 \u201CAspas\u201D 10\u20AC &amp; \u00C1gua</p>";
+  const json5 = corpoSalvarCk5(ed5, { txaEditor_2: novoCk5 }, "U", false);
+  const enviado = (JSON.parse(json5) as { secoesConteudo: Array<{ nome: string; html: string }> }).secoesConteudo;
+  const corpo5 = enviado.find((x) => x.nome === "txaEditor_2")?.html ?? "";
+  checar("ck5: travessao, aspas curvas e euro viram referencia numerica", corpo5.includes("&#8212;") && corpo5.includes("&#8220;Aspas&#8221;") && corpo5.includes("10&#8364;"), corpo5);
+  checar("ck5: nada fora do Latin-1 no corpo enviado", [...json5].every((c) => c.codePointAt(0)! <= 0xff), json5);
+  checar("ck5: acentos Latin-1 e entidades ficam como estavam", corpo5 === "<p>Coordena\u00E7\u00E3o &#8212; &#8220;Aspas&#8221; 10&#8364; &amp; \u00C1gua</p>", corpo5);
+  checar("ck5: secao sem troca vai igual", enviado.find((x) => x.nome === "txaEditor_1")?.html === "<p>cab</p>");
+  checar("ck5: texto so Latin-1 vai identico", (JSON.parse(corpoSalvarCk5(ed5, { txaEditor_2: "<p>A\u00E7\u00E3o</p>" }, "U")) as { secoesConteudo: Array<{ html: string }> }).secoesConteudo[1].html === "<p>A\u00E7\u00E3o</p>");
 
   secao("texto de html");
   checar("paragrafos viram linhas", textoDoHtml("<p>a&nbsp;b</p><p>c</p>") === "a b\nc", textoDoHtml("<p>a&nbsp;b</p><p>c</p>"));

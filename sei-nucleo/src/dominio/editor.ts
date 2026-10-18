@@ -29,6 +29,7 @@ import type { OpcoesEscrita, ResultadoEscrita } from "./escrita";
 import { Formulario } from "../formulario/formulario";
 import { linkDaAcao } from "../links/links";
 import { analisarHtml, decodificarEntidades } from "../sessao/dom";
+import { paraLatin1Seguro } from "../sessao/codificacao";
 import { ErroSei } from "../sessao/erros";
 import type { Pagina } from "../sessao/http";
 import type { Sei } from "../sei";
@@ -188,20 +189,33 @@ export async function abrirEditor(sei: Sei, d: DocumentoLocalizado, sinal?: Abor
   return lerEditor(await sei.http.obter(link, { sinal }));
 }
 
+/**
+ * Corpo JSON da gravação no CK5 (`editor_salvar_conteudo`).
+ *
+ * O JSON vai em UTF-8, mas o SEI grava em ISO-8859-1: o que passa de U+00FF
+ * (travessão, aspas curvas, euro) chegava ao documento como "?" (provado no
+ * SEI 5.0.4 do MJ). Como no CK4 (`modos: "html"`), cada seção passa antes por
+ * `paraLatin1Seguro(…, "html")`, que troca esses caracteres por referência
+ * numérica (`&#8212;`) e não mexe no que já é Latin-1.
+ */
+export function corpoSalvarCk5(ed: EditorDocumento, novas: Record<string, string>, siglaUnidade: string, documentoNovo = false): string {
+  const versao = ed.ck5!.versao;
+  const semVersao = documentoNovo && (versao === null || versao === undefined || versao === "");
+  return JSON.stringify({
+    siglaUnidade,
+    versao: semVersao ? null : versao,
+    ignorarNovaVersao: semVersao ? "S" : "N",
+    secoesConteudo: ed.secoes.map((s) => ({ nome: s.nome, html: paraLatin1Seguro(novas[s.nome] ?? s.html, "html") })),
+  });
+}
+
 async function salvar(sei: Sei, ed: EditorDocumento, novas: Record<string, string>, sinal?: AbortSignal, documentoNovo = false): Promise<void> {
   if (ed.tipo === "ck5") {
     const url = sei.http.absoluta(ed.ck5!.urlSalvar);
     // Documento que acabou de ser criado por quem grava, sem versão na configuração: o SEI compararia null e
     // recusaria sempre ("Existe uma nova versão"); como o legado do Documentos em Lote, vai "S" com versão null.
-    const versao = ed.ck5!.versao;
-    const semVersao = documentoNovo && (versao === null || versao === undefined || versao === "");
-    const corpo = {
-      siglaUnidade: ed.ck5!.siglaUnidade || sei.contexto().unidade.sigla,
-      versao: semVersao ? null : versao,
-      ignorarNovaVersao: semVersao ? "S" : "N",
-      secoesConteudo: ed.secoes.map((s) => ({ nome: s.nome, html: novas[s.nome] ?? s.html })),
-    };
-    const r = await fetch(url, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo), signal: sinal });
+    const corpo = corpoSalvarCk5(ed, novas, ed.ck5!.siglaUnidade || sei.contexto().unidade.sigla, documentoNovo);
+    const r = await fetch(url, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: corpo, signal: sinal });
     const texto = await r.text();
     if (!r.ok || !/"versao"/.test(texto)) throw new ErroSei("SEI_VALIDACAO", `O SEI recusou o conte\u00FAdo: ${texto.slice(0, 300)}`);
     return;
