@@ -28,21 +28,78 @@ Salve no formato **CSV** (*Arquivo › Salvar como › CSV*).
 
 ### Como usar
 
-A ferramenta tem seis etapas:
+Clique em **Iniciar Documentos em Lote**, na barra de botões do processo. A janela guia você por etapas, mostradas no topo; o botão **Avançar** só é liberado quando a etapa está completa, e o **Voltar** permite corrigir a anterior. Para desistir, feche a janela no **X** (ou com **Esc**).
 
-1. **Documento modelo — Seleção:** abra o processo, clique em **Iniciar Documentos em Lote** na barra de botões e escolha, na árvore, o documento modelo (ou um Texto Padrão). Clique em **Avançar**;
-2. **Documento modelo — Campos dinâmicos:** confira os campos encontrados no modelo;
-3. **Base de dados — Upload:** escolha o arquivo CSV;
-4. **Base de dados — Cabeçalhos e registros:** confira as colunas e a quantidade de linhas encontradas;
-5. **Cruzamento de dados:** veja como cada coluna da planilha preenche cada campo do modelo. Aqui você também escolhe:
-   * **Coluna da planilha com o nome do documento na árvore de processos** — qual coluna dará nome a cada documento;
-   * **Descrição do documento** (opcional) — texto que vai no campo *Descrição* de cada documento gerado. Use `##coluna##` para trazer o valor da planilha, sozinho ou junto com texto: `Termo de sigilo - ##nome## (##unidade##)`. Em branco, o campo fica vazio;
-   * **Criar cada documento em um novo processo** — em vez de criar todos no processo atual, abre um processo para cada linha;
+1. **Modelo:** escolha, na árvore do processo, o documento modelo (ou um Texto Padrão). Os campos `##...##` encontrados são listados;
+2. **Planilha:** escolha o arquivo CSV. A ferramenta mostra as colunas e a quantidade de linhas lidas;
+3. **Cruzamento:** veja qual coluna preenche cada campo do modelo (as de mesmo nome já vêm escolhidas) e defina:
+   * **Coluna do nome na árvore** — qual coluna dará nome a cada documento (obrigatório);
+   * **Descrição do documento** (opcional) — texto do campo *Descrição* de cada documento. Use `##coluna##` para trazer o valor da planilha, sozinho ou junto com texto: `Termo de sigilo - ##nome## (##unidade##)`. Em branco, o campo fica vazio;
+   * **Onde criar os documentos** — o [processo de destino](#processo-de-destino);
+   * **Nível de acesso e hipótese legal** (opcional) — veja [abaixo](#nível-de-acesso-e-hipótese-legal);
+   * **Pausa entre um documento e outro**, em milissegundos;
+4. **Verificação** (só quando o destino é "o processo indicado em uma coluna"): confere cada processo antes de gravar — veja [Verificação antes de gravar](#verificação-antes-de-gravar);
+5. **Prévia:** mostra, linha a linha, como ficará cada documento (destino, nome, descrição e texto) e aponta os problemas. Clique em **Iniciar** para criar;
+6. **Execução e resultado:** acompanhe o progresso. Ao final aparece a tabela com cada linha da planilha, o documento gerado, o número SEI e o link, que pode ser **copiada** ou **baixada em CSV**. A árvore é atualizada com os novos documentos.
 
-   Clique em **Iniciar**;
-6. **Criando:** acompanhe o progresso. Ao final aparece *Progresso finalizado!* e uma tabela com cada linha da planilha, o documento gerado, o número SEI e o link — que pode ser **baixada** ou **copiada**. A árvore é atualizada com os novos documentos.
+### Processo de destino
 
-Os botões **Voltar** e **Cancelar** permitem corrigir uma etapa anterior ou desistir.
+Na etapa **Cruzamento** você escolhe onde cada documento será criado:
+
+* **No processo aberto na tela** — todos os documentos vão para o processo em que você abriu a ferramenta;
+* **Em um processo novo por linha** — a ferramenta abre um processo para cada linha e cria o documento dentro dele;
+* **No processo indicado em uma coluna** — a planilha traz uma coluna com o número do processo (por exemplo `50300.012345/2026-11`) e cada documento entra no processo da sua linha. Útil para mandar um documento diferente a vários processos já existentes. O mesmo processo pode aparecer em várias linhas.
+
+### Verificação antes de gravar
+
+No destino "processo indicado em uma coluna", cada processo é consultado **uma vez** antes de qualquer documento ser criado, para você não descobrir o problema só no meio do lote. A tabela mostra a situação de cada um:
+
+* **OK** — pode gravar;
+* **Não encontrado ou sem acesso** — o número não existe ou a sua unidade não o enxerga;
+* **Sigiloso** — o processo é sigiloso e não recebe documentos por esta ferramenta;
+* **Não aberto na unidade** — o processo não está aberto na unidade em que você está;
+* **Tipo indisponível** — o tipo de documento do modelo não pode ser criado naquele processo;
+* **Erro de rede** — a consulta falhou; tente de novo.
+
+Em cada linha há **Abrir em nova aba** (para ver o processo, receber ou reabrir) e **Verificar de novo**; também há **Verificar todos de novo**. Depois de resolver um problema no SEI, verifique de novo.
+
+Você não precisa resolver tudo: **Gravar** cria os documentos só das linhas válidas, e as demais ficam de fora. Mais tarde, quando elas estiverem corrigidas, o botão **Gravar as que ficaram de fora** cria o que faltou.
+
+### Nível de acesso e hipótese legal
+
+Duas colunas opcionais da planilha controlam o nível de acesso de **cada documento**:
+
+* **Coluna do nível de acesso** — aceita `Público` (ou `0`) e `Restrito` (ou `1`). Célula vazia vale como público;
+* **Coluna da hipótese legal** — obrigatória nas linhas restritas. Escreva o nome da hipótese como aparece no SEI.
+
+Sem coluna de nível, todos os documentos saem públicos. Um nível que não seja reconhecido, ou uma linha restrita sem hipótese, é apontado como erro da linha, para que um documento que deveria ser restrito não seja criado como público.
+
+### Prévia
+
+Antes de criar, a prévia permite conferir uma linha de cada vez, com o texto do documento já preenchido. Os campos `##...##` sem coluna correspondente aparecem **marcados**, porque ficariam como estão no texto. Linhas com erro (processo inválido, nome vazio, nível inválido) são listadas e ficam de fora.
+
+### Durante a execução
+
+Uma linha que falha **não interrompe o lote**: o erro é registrado e a ferramenta segue para a próxima. As linhas já criadas continuam no SEI. Há os botões **Pausar**, **Continuar** e **Minimizar** (que recolhe a janela numa pastilha de progresso no canto da tela). Não mude de página nesta aba enquanto o lote roda: mudar de página interrompe o lote, que fica guardado e pode ser retomado.
+
+### Retomar de onde parou
+
+O andamento do lote é guardado **só neste navegador**. Se a janela for fechada ou a página recarregada no meio, ao abrir a ferramenta de novo aparecem **Continuar de onde parou** e **Descartar**. A planilha guardada vale por **até 7 dias após o último uso** e é apagada quando o lote termina ou é descartado. Se o lote parecer estar rodando em outra aba, a ferramenta avisa, para não gerar documentos em duplicidade.
+
+### Repetir só as que falharam
+
+No resultado, **Repetir só as que falharam** cria novamente apenas as linhas que, com certeza, não foram criadas. As linhas **incertas** — aquelas em que a rede ou o SEI falhou no meio da criação, sem dar para saber se o documento nasceu — **não são repetidas automaticamente**, para não duplicar. **Confira no SEI** se o documento existe antes de repeti-las; se mesmo assim quiser, a ferramenta pede uma confirmação.
+
+### Resultado
+
+A tabela final traz, além das colunas da sua planilha, estas quatro:
+
+* `processo_destino` — o processo em que o documento foi criado;
+* `nome_documento_gerado` — o nome do documento na árvore;
+* `numero_sei_gerado` — o número SEI do documento;
+* `link_documento_gerado` — o link do documento.
+
+Ela pode ser copiada ou baixada em CSV. O botão **Gerar links permanentes destes documentos** abre a ferramenta de links permanentes já preenchida com os números criados.
 
 > A ferramenta foi construída a partir do código-fonte do **PluriDocs SEI!**, gentilmente cedido por tcgontijo.
 
@@ -57,7 +114,7 @@ A função vem **ligada** de fábrica. Ela fica nas [Configurações do SEI Pro]
 * Os acentos são retirados do **nome do documento na árvore** (*José* vira *Jose*), porque nem todos os caracteres são aceitos pelo SEI nesse campo. Símbolos como º, ª e ° continuam no nome (*Ofício nº 1ª* vira *Oficio nº 1ª*). O mesmo vale para o **Número**, nos tipos de documento em que ele é informado. O texto do documento mantém os acentos. No SEI 3, a ferramenta avisa antes de continuar.
 * Na **descrição dos documentos** e na **especificação dos novos processos**, os caracteres que o SEI não aceita, típicos de texto colado do Word ou do Excel, são trocados pelo equivalente simples: o travessão (—) vira hífen (-) e as aspas curvas (“ ”) viram aspas retas ("). Os acentos são mantidos. A descrição vai até 250 caracteres, o limite do SEI.
 * Os documentos são criados **sem assinatura**. Para assinar todos de uma vez, use [Ações em Lote](../pages/ACOESEMLOTE.md).
-* Se uma linha falhar, a ferramenta para ali e mostra o motivo e o número da linha. As linhas anteriores já foram criadas. No modo **Criar cada documento em um novo processo**, se o processo da linha chegou a ser aberto sem o documento (por uma falha ou porque você clicou em **Cancelar**), a ferramenta mostra o link dele: confira-o antes de executar de novo.
+* Se uma linha falhar, o motivo aparece no resultado e o lote continua. No destino **Em um processo novo por linha**, se o processo da linha chegou a ser aberto sem o documento, a ferramenta mostra o link dele: confira-o antes de repetir.
 * Faça um teste com uma planilha de duas ou três linhas antes de gerar um lote grande.
 
 ## Próximo item
