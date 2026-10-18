@@ -747,6 +747,72 @@ export async function verificarAppResultado(): Promise<void> {
     m.app.destruir();
   }
 
+  secao("resultado: processo criado sem o número lido mostra e exporta o link do processo");
+  {
+    const cn = config({ destino: { tipo: "novo-processo", idTipoProcesso: "100", especificacao: "x" } });
+    const LINK = `https://${HOST}/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento=7`;
+    const LINK2 = `https://${HOST}/sei/controlador.php?acao=procedimento_trabalhar&id_procedimento=8`;
+    const itens: ItemLote[] = [
+      { situacao: "erro", erro: "O processo foi criado, mas o número não pôde ser lido.", incerto: true, linkProcesso: LINK },
+      { situacao: "erro", erro: "Falhou o documento.", processo: "PN8", linkProcesso: LINK2 },
+      { situacao: "erro", erro: "x", incerto: true, linkProcesso: "javascript:alert(1)" },
+      { situacao: "erro", erro: "x", incerto: true, linkProcesso: `https://${HOST}/sei/controlador.php?id_procedimento=9&infra_hash=abc` },
+      { situacao: "erro", erro: "x", incerto: true, linkProcesso: "ftp://x/y" },
+    ];
+    const l = lote(cn, registros(5), itens);
+    const linhas = linhasDoResultado(l);
+    igual("processo_destino: o link quando o número é desconhecido", linhas[0]?.campos.processo_destino, LINK);
+    igual("processo_destino: o número quando conhecido", linhas[1]?.campos.processo_destino, "PN8");
+    igual(
+      "processo_destino: link inseguro nunca exportado",
+      linhas.slice(2).map((x) => x.campos.processo_destino),
+      ["", "", ""],
+    );
+    const csv = resultadoComoCsv(linhas, colunasDoResultado(l));
+    checar("CSV leva o link do processo", csv.includes(LINK), csv);
+    checar("CSV sem javascript:, infra_hash nem ftp:", !/javascript:|infra_hash|ftp:/i.test(csv), csv);
+
+    const m = await abrirCom(l);
+    const hrefs = [...m.raiz.querySelectorAll<HTMLAnchorElement>(".dl-resultado a")].map((a) => a.getAttribute("href") ?? "");
+    const abrir = [...m.raiz.querySelectorAll<HTMLAnchorElement>(".dl-resultado a")].filter(
+      (a) => a.getAttribute("href") === LINK && (a.textContent ?? "").includes("Abrir o processo criado"),
+    );
+    checar("incerta sem número: link clicável Abrir o processo criado", abrir.length >= 1, hrefs);
+    checar(
+      "abre em outra aba sem opener",
+      abrir.every((a) => a.getAttribute("target") === "_blank" && a.getAttribute("rel") === "noopener"),
+    );
+    checar("erro com processo conhecido: link do processo", hrefs.includes(LINK2), hrefs);
+    checar(
+      "só links http(s) sem infra_hash na tela",
+      hrefs.every((h) => /^https?:\/\//i.test(h) && !/infra_hash/i.test(h)),
+      hrefs,
+    );
+    const celula = m.raiz.querySelector(".dl-tabela tbody tr td a[href]");
+    checar(
+      "a tabela não mostra o endereço cru como texto",
+      !!celula && !(celula.textContent ?? "").startsWith("https:"),
+      celula?.textContent,
+    );
+
+    // Repetir mesmo assim: a confirmação diz que o processo JÁ foi criado e dá o link.
+    m.t.responder = false;
+    const repetir = [...m.raiz.querySelectorAll("button")].filter((b) => (b.textContent ?? "").includes("Repetir mesmo assim"));
+    disparar(repetir[0]!, "click");
+    await ate(() => m.t.confirmacoes.length === 1);
+    const t = m.t.confirmacoes[0] ?? "";
+    checar("confirmação: um processo já foi criado para a linha", t.includes("já foi criado"), t);
+    checar("confirmação: dá o link do processo", t.includes(LINK), t);
+    checar("confirmação: repetir cria outro processo", t.includes("outro processo"), t);
+    igual("recusada: nada enviado", m.chamadas.filter((c) => c.op === "criar" || c.op === "criarProcesso").length, 0);
+    // Link inseguro: a confirmação não o repete.
+    disparar(repetir[1]!, "click");
+    await ate(() => m.t.confirmacoes.length === 2);
+    const t2 = m.t.confirmacoes[1] ?? "";
+    checar("confirmação: link inseguro não aparece", !t2.includes("javascript:") && !t2.includes("já foi criado"), t2);
+    m.app.destruir();
+  }
+
   secao("resultado: Gerar links permanentes destes documentos");
   {
     igual(

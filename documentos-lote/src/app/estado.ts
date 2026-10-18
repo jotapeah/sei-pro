@@ -92,6 +92,8 @@ export interface DepsEtapa {
    * Iniciar). Rejeita, sem nada enviado ao SEI, se o lote não pôde ser montado ou gravado.
    */
   iniciarExecucao?(): Promise<void>;
+  /** O host e o login da aba (a Prévia mede o lote com eles, como o Iniciar o montará). */
+  ctx?: { host: string; login: string; idProcedimento?: string };
 }
 
 /** Uma tela de etapa. O app a cria ao entrar na etapa e a destrói ao sair (Avançar, Voltar ou fechar). */

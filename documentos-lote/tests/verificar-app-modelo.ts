@@ -7,7 +7,7 @@
 import { areaMemoria } from "@comum/armazenamento/area";
 import { AppDocumentosLote, type DepsApp } from "@dl/app/app";
 import { ROTULO_MODELO, ROTULO_TIPO } from "@dl/app/modelo";
-import { TETO } from "@dl/modelo/constantes";
+import { TETO, TETO_BYTES_LOTE } from "@dl/modelo/constantes";
 import type { EscolhaModelo, Modelo, ModelosDisponiveis } from "@dl/sei/modelo";
 import { RepositorioLote } from "../src/repositorio";
 import { botao, checar, combo, disparar, escolherCombo, igual, instalarDom, secao, tique } from "./util";
@@ -369,6 +369,16 @@ export async function verificarAppModelo(): Promise<void> {
     await m.escolherArquivo("grande.csv", utf8(grande));
     checar("acima do teto: erro", m.textoVisivel(`O limite é de ${TETO} linhas`));
     checar("acima do teto: Avançar desabilitado", m.avancar()?.disabled === true);
+
+    // Poucas linhas, mas grandes demais para o lote caber no armazenamento (teto de bytes).
+    const pesada = `nome;cargo\n${Array.from({ length: 3 }, (_, i) => `P${i};${"a".repeat(Math.ceil(TETO_BYTES_LOTE / 2))}`).join("\n")}\n`;
+    await m.escolherArquivo("pesada.csv", utf8(pesada));
+    checar(
+      "planilha grande demais em bytes: erro",
+      m.textoVisivel("A planilha é grande demais para guardar o andamento do lote") && m.textoVisivel("o limite é 2 MB"),
+    );
+    checar("planilha grande demais em bytes: Avançar desabilitado", m.avancar()?.disabled === true);
+    checar("planilha grande demais em bytes: estado limpo", m.app.estado.registros === undefined);
 
     // Voltar e Avançar de novo: o arquivo lido continua.
     await m.escolherArquivo("pessoas.csv", utf8("nome;cargo;cpf\nAna;Analista;1\n"));

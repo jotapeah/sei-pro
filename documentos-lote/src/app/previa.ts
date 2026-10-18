@@ -23,7 +23,7 @@ import type { ConfigLote } from "../modelo/lote";
 import { nomeNaArvore } from "../modelo/nomes";
 import type { DepsEtapa, TelaEtapa } from "./estado";
 import { mensagemDe } from "./estado";
-import { linhasDoLote } from "./lote";
+import { ErroLoteGrande, linhasDoLote, montarLote } from "./lote";
 
 export const ROTULO_LINHA_PREVIA = "Linha da prévia";
 
@@ -83,6 +83,8 @@ export class TelaPrevia implements TelaEtapa {
   private prontas: LinhaDocumento[] = [];
   private escolhida: LinhaDocumento | null = null;
   private problema: string | null = null;
+  /** O lote não caberia no armazenamento (teto de bytes): a prévia aparece, o Iniciar não. */
+  private excesso: string | null = null;
   private ocupado = false;
   private destruida = false;
   private combo: Combo | null = null;
@@ -96,7 +98,7 @@ export class TelaPrevia implements TelaEtapa {
   }
 
   completa(): boolean {
-    return !this.ocupado && !this.problema && this.prontas.length > 0;
+    return !this.ocupado && !this.problema && !this.excesso && this.prontas.length > 0;
   }
 
   rotuloAvancar(): string {
@@ -133,7 +135,16 @@ export class TelaPrevia implements TelaEtapa {
     this.linhas = r.linhas;
     this.prontas = r.linhas.filter((_, k) => r.situacoes[k] === "pendente");
     this.escolhida = this.prontas[0] ?? null;
-    if (!this.escolhida) this.problema = "Nenhuma linha pronta para gravar: corrija a planilha ou o cruzamento (Voltar).";
+    if (!this.escolhida) {
+      this.problema = "Nenhuma linha pronta para gravar: corrija a planilha ou o cruzamento (Voltar).";
+      return;
+    }
+    // O mesmo lote que o Iniciar montaria (e que ele confere de novo antes de gravar).
+    try {
+      montarLote(this.d.estado, this.d.ctx ?? { host: "", login: "" });
+    } catch (e) {
+      if (e instanceof ErroLoteGrande) this.excesso = e.message;
+    }
   }
 
   private get cfg(): ConfigLote {
@@ -198,6 +209,7 @@ export class TelaPrevia implements TelaEtapa {
       this.detalhe,
       this.erro,
     );
+    if (this.excesso) this.mostrarErro(this.excesso);
     this.desenharLinha();
   }
 

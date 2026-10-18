@@ -31,6 +31,7 @@ import {
   foraRegravaveis,
   gravouNoProcessoDaTela,
   linhasDoResultado,
+  linkDoProcesso,
   numerosParaLink,
   repetiveis,
   TelaResultado,
@@ -290,6 +291,7 @@ export class AppDocumentosLote {
       estado: this.estado,
       aoMudar: () => this.atualizarRodape(),
       iniciarExecucao: () => this.iniciarExecucao(),
+      ctx: this.d.ctx,
     });
     this.tela = tela;
     this.conteudo.replaceChildren(tela.el);
@@ -605,12 +607,17 @@ export class AppDocumentosLote {
     const item = lote.itens[k];
     // Novo processo sem o número: a incerteza é do processo (repetir cria outro processo, e o documento nele).
     const soDoProcesso = lote.config.destino.tipo === "novo-processo" && !item?.processo;
-    const sim = await this.d.confirmar(
-      soDoProcesso
-        ? `A linha ${k + 2} ficou incerta: o processo novo desta linha pode já ter sido criado no SEI. Antes de repetir, confira no Controle de Processos; se ele existir, repetir cria outro processo. Repetir mesmo assim?`
-        : `A linha ${k + 2} ficou incerta: o documento pode já ter sido criado no SEI. Antes de repetir, confira o processo de destino; se o documento existir, repetir cria outro igual. Repetir mesmo assim?`,
-      "Repetir mesmo assim",
-    );
+    // O processo que a linha criou (só http(s) sem infra_hash): com ele, não há dúvida de que existe.
+    const link = linkDoProcesso(item);
+    const destino = item?.processo ? `o processo ${item.processo}${link ? ` (${link})` : ""}` : "o processo de destino";
+    let texto: string;
+    if (soDoProcesso && link)
+      texto = `A linha ${k + 2} ficou incerta: um processo novo já foi criado para ela no SEI, mas o número dele não pôde ser lido. Abra-o antes de repetir (${link}). Repetir cria outro processo, e o documento nele. Repetir mesmo assim?`;
+    else if (soDoProcesso)
+      texto = `A linha ${k + 2} ficou incerta: o processo novo desta linha pode já ter sido criado no SEI. Antes de repetir, confira no Controle de Processos; se ele existir, repetir cria outro processo. Repetir mesmo assim?`;
+    else
+      texto = `A linha ${k + 2} ficou incerta: o documento pode já ter sido criado no SEI. Antes de repetir, confira ${destino}; se o documento existir, repetir cria outro igual. Repetir mesmo assim?`;
+    const sim = await this.d.confirmar(texto, "Repetir mesmo assim");
     if (!sim || this.destruido) return;
     await this.repetir(tela, lote, [k]);
   }

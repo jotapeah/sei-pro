@@ -92,7 +92,7 @@ O andamento do lote é guardado **só neste navegador**. Se a janela for fechada
 
 ### Repetir só as que falharam
 
-No resultado, **Repetir só as que falharam** cria novamente apenas as linhas que, com certeza, não foram criadas. As linhas **incertas** — aquelas em que a rede ou o SEI falhou no meio da criação, sem dar para saber se o documento nasceu — **não são repetidas automaticamente**, para não duplicar. **Confira no SEI** se o documento existe antes de repeti-las; se mesmo assim quiser, a ferramenta pede uma confirmação.
+No resultado, **Repetir só as que falharam** cria novamente apenas as linhas que, com certeza, não foram criadas. As linhas **incertas** — aquelas em que a rede ou o SEI falhou no meio da criação, sem dar para saber se o documento nasceu — **não são repetidas automaticamente**, para não duplicar. **Confira no SEI** se o documento existe antes de repeti-las; se mesmo assim quiser, a ferramenta pede uma confirmação. Quando o **processo novo** de uma linha foi criado mas o número dele não pôde ser lido, o resultado mostra o link **Abrir o processo criado** (o mesmo link vai na coluna `processo_destino` do CSV): confira esse processo antes de repetir, porque repetir a linha cria outro processo.
 
 ### Resultado
 
@@ -119,7 +119,7 @@ A função vem **ligada** de fábrica. Ela fica nas [Configurações do SEI Pro]
 * Na **descrição dos documentos** e na **especificação dos novos processos**, os caracteres que o SEI não aceita, típicos de texto colado do Word ou do Excel, são trocados pelo equivalente simples: o travessão (—) vira hífen (-) e as aspas curvas (“ ”) viram aspas retas ("). Os acentos são mantidos. A descrição vai até 250 caracteres, o limite do SEI.
 * Os documentos são criados **sem assinatura**. Para assinar todos de uma vez, use [Ações em Lote](../pages/ACOESEMLOTE.md).
 * Se uma linha falhar, o motivo aparece no resultado e o lote continua. No destino **Em um processo novo por linha**, se o processo da linha chegou a ser aberto sem o documento, a ferramenta mostra o link dele: confira-o antes de repetir.
-* Cada lote aceita até **2000 linhas**. Para mais que isso, divida a planilha em arquivos menores.
+* Cada lote aceita até **2000 linhas** e até **2 MB** de dados (o andamento do lote é guardado no navegador, num espaço dividido com as outras ferramentas do SEI Pro). Planilhas com células muito longas podem passar desse limite mesmo com menos linhas: a ferramenta avisa ao carregar o arquivo ou na Prévia, sem enviar nada ao SEI. Nos dois casos, divida a planilha em arquivos menores.
 * Faça um teste com uma planilha de duas ou três linhas antes de gerar um lote grande.
 
 ## Próximo item

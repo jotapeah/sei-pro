@@ -24,6 +24,7 @@ import type { Rpc } from "@comum/ponte/rpc";
 import { h, icone } from "@comum/ui/dom";
 import { CUSTO_DOCUMENTO_MS, CUSTO_PROCESSO_MS, PAUSA_MAXIMA, PRAZO_CRIAR_MS } from "../modelo/constantes";
 import { estimarDuracao } from "../modelo/estimativa";
+import { linkSeguro } from "../modelo/links";
 import type { ItemLote, LoteDocumentos, RepositorioLote } from "../repositorio";
 import { mensagemDe } from "./estado";
 import { modeloSemTexto } from "./lote";
@@ -46,13 +47,6 @@ const EM_VOO: ItemLote = { situacao: "erro", erro: MENSAGEM_EM_VOO, incerto: tru
 
 const ehObjeto = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const texto = (v: unknown): string => (typeof v === "string" ? v : "");
-
-/** Link guardável: só http(s) e nunca com infra_hash (o hash é da sessão; o resultado é guardado e copiado). */
-function linkSeguro(v: unknown): string {
-  const s = texto(v);
-  if (!s || /infra_hash/i.test(s) || !/^https?:\/\//i.test(s)) return "";
-  return s;
-}
 
 /** O que a execução sabe do processo criado pela própria linha (destino novo processo). */
 interface ProcessoCriado {

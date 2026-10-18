@@ -2,13 +2,14 @@
  * Etapa 2, Planilha: o usuário escolhe o arquivo CSV; a tela o lê aqui mesmo (`lerCsv`, nada vai à aba nem à rede)
  * e mostra as colunas, a quantidade de linhas, a codificação detectada e os avisos da leitura.
  *
- * Arquivo vazio, só com o cabeçalho ou acima do teto: erro, e nada fica no estado (o Avançar fica desabilitado).
+ * Arquivo vazio, só com o cabeçalho, acima do teto de linhas ou grande demais para o lote guardado (TETO_BYTES_LOTE): erro, e nada fica no estado (o Avançar fica desabilitado).
  * Cada escolha abre uma geração: a leitura atrasada de um arquivo anterior não vale.
  */
 
 import { h, icone } from "@comum/ui/dom";
-import { TETO } from "../modelo/constantes";
+import { TETO, TETO_BYTES_LOTE } from "../modelo/constantes";
 import { type CsvLido, lerCsv } from "../modelo/csv";
+import { mensagemLoteGrande } from "../modelo/lote";
 import { type DepsEtapa, type EstadoApp, limparVerificacao, mensagemDe, type TelaEtapa } from "./estado";
 
 /** O mínimo de um `File` que a tela usa (o teste passa um `File` de verdade do Node). */
@@ -117,6 +118,11 @@ export class TelaPlanilha implements TelaEtapa {
     if (lido && !lido.colunas.length) falha = ERROS_PLANILHA.vazio;
     else if (lido && !lido.registros.length) falha = ERROS_PLANILHA.soCabecalho;
     else if (lido && lido.registros.length > TETO) falha = ERROS_PLANILHA.teto(lido.registros.length);
+    else if (lido) {
+      // Só os registros já não caberiam no lote guardado: avisa agora, não na Prévia.
+      const bytes = JSON.stringify(lido.registros).length;
+      if (bytes > TETO_BYTES_LOTE) falha = mensagemLoteGrande(bytes);
+    }
     if (falha || !lido) {
       this.mostrarErro(falha);
     } else {

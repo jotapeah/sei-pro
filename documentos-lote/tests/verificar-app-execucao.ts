@@ -10,8 +10,9 @@ import { ETAPAS, proximaEtapa } from "@dl/app/app";
 import { ROTULO_COLUNA_NOME } from "@dl/app/cruzamento";
 import { chaveVerificacao, type DepsEtapa, type EstadoApp } from "@dl/app/estado";
 import { ExecucaoDocumentos, MENSAGEM_EM_VOO, MENSAGEM_NAO_ABERTO, MENSAGEM_SESSAO, TelaExecucao } from "@dl/app/execucao";
-import { linhasDoLote, montarLote } from "@dl/app/lote";
+import { linhasDoLote, montarLote, tamanhoDoLote } from "@dl/app/lote";
 import { ROTULO_LINHA_PREVIA, TelaPrevia } from "@dl/app/previa";
+import { TETO_BYTES_LOTE } from "@dl/modelo/constantes";
 import { prepararLinhas } from "@dl/modelo/destinos";
 import type { ConfigLote } from "@dl/modelo/lote";
 import type { Modelo } from "@dl/sei/modelo";
@@ -139,6 +140,7 @@ function previa(estado: EstadoApp, iniciar?: () => Promise<void>) {
       t.iniciou += 1;
       if (iniciar) await iniciar();
     },
+    ctx: { host: HOST, login: "ana" },
   };
   const tl = new TelaPrevia(d);
   doc.getElementById("app")!.append(tl.el);
@@ -327,6 +329,45 @@ export async function verificarAppExecucao(): Promise<void> {
     await tique(2);
     checar("falha ao iniciar aparece", f.texto(".dl-erro").includes("disco cheio"), f.texto(".dl-erro"));
     checar("e volta a completar", f.tl.completa());
+  }
+
+  secao("lote: teto de bytes do lote guardado (a cota do chrome.storage.local é dividida com outros módulos)");
+  {
+    igual("TETO_BYTES_LOTE é 2 MB", TETO_BYTES_LOTE, 2 * 1024 * 1024);
+    // O tamanho de um lote com uma célula de `n` caracteres: o mesmo que `gravar` guarda (sem o texto do modelo).
+    const comCelula = (n: number) => estadoPrevia({ registros: [{ nome: "Ana", cargo: "x".repeat(n), proc: "", nivel: "", hip: "" }] });
+    const base = tamanhoDoLote(montarLote(comCelula(0), { host: HOST, login: "ana" }));
+    const sobra = TETO_BYTES_LOTE - base;
+    const abaixo = comCelula(sobra - 10);
+    const l = montarLote(abaixo, { host: HOST, login: "ana" });
+    checar("logo abaixo do limite: monta", tamanhoDoLote(l) <= TETO_BYTES_LOTE, tamanhoDoLote(l));
+    // O texto do modelo (a prévia) não conta: `gravar` não o guarda.
+    const comTexto = comCelula(sobra - 10);
+    (comTexto.config as ConfigLote).modelo = { ...MODELO, texto: "y".repeat(500_000) };
+    checar("o texto do modelo não conta", !!montarLote(comTexto, { host: HOST, login: "ana" }));
+    let erro = "";
+    try {
+      montarLote(comCelula(sobra + 10), { host: HOST, login: "ana" });
+    } catch (e) {
+      erro = e instanceof Error ? e.message : String(e);
+    }
+    checar(
+      "logo acima do limite: recusa com a mensagem",
+      erro.startsWith("A planilha é grande demais para guardar o andamento do lote (2,1 MB; o limite é 2 MB). Divida em partes menores."),
+      erro,
+    );
+
+    const ok = previa(abaixo);
+    checar("prévia abaixo do limite: Iniciar liberado", ok.tl.completa());
+    const grande = previa(comCelula(sobra + 10));
+    checar("prévia acima do limite: Iniciar não libera", !grande.tl.completa());
+    checar(
+      "prévia acima do limite: a mensagem",
+      grande.texto(".dl-erro").includes("grande demais para guardar o andamento"),
+      grande.texto(".dl-erro"),
+    );
+    grande.tl.avancar?.();
+    igual("prévia acima do limite: Iniciar não chama o app", grande.t.iniciou, 0);
   }
 
   secao("lote: montado da prévia (itens pendente/fora, verificações sem linkArvore)");
@@ -786,5 +827,41 @@ export async function verificarAppExecucao(): Promise<void> {
       g2?.itens.map((i) => i.situacao),
       ["criada", "pendente", "pendente"],
     );
+  }
+
+  secao("app: lote acima do teto de bytes não inicia (nada enviado, nada guardado)");
+  {
+    // 2000 linhas cujos registros cabem no teto, mas o lote (linhas + itens) passa dele.
+    const celula = Math.floor((TETO_BYTES_LOTE - 30_000) / 2000) - 30;
+    const regs = Array.from({ length: 2000 }, (_, k) => ({ nome: `P${String(k).padStart(4, "0")}`, cargo: "c".repeat(celula) }));
+    checar("pré-condição: os registros cabem no teto", JSON.stringify(regs).length < TETO_BYTES_LOTE, JSON.stringify(regs).length);
+    const m = montar();
+    m.deps.esperar = () => tique(0);
+    const chamar = m.deps.rpc.chamar;
+    const enviados: string[] = [];
+    m.deps.rpc.chamar = (async (op: string, args?: unknown, prazo?: number) => {
+      if (op === "criar" || op === "criarProcesso") {
+        enviados.push(op);
+        return okCriar(enviados.length);
+      }
+      return chamar(op, args, prazo);
+    }) as typeof chamar;
+    await naPlanilha(m);
+    await m.escolherArquivo("grande.csv", utf8(`nome;cargo\n${regs.map((r) => `${r.nome};${r.cargo}`).join("\n")}\n`));
+    await ate(() => m.avancar()?.disabled === false);
+    disparar(m.avancar()!, "click");
+    await ate(() => !!m.raiz.querySelector(`button[role="combobox"][aria-label="${ROTULO_COLUNA_NOME}"]`));
+    escolherCombo(m.raiz, ROTULO_COLUNA_NOME, "nome");
+    const rodape = () => m.raiz.querySelector<HTMLButtonElement>(".dl-rodape-etapa .primario");
+    disparar(rodape()!, "click");
+    await ate(() => !!m.raiz.querySelector(".dl-previa"), 3000);
+    checar("prévia: a mensagem do tamanho", m.textoVisivel("A planilha é grande demais para guardar o andamento do lote"));
+    checar("prévia: Iniciar desabilitado", rodape()?.disabled === true);
+    disparar(rodape()!, "click");
+    await tique(20);
+    igual("nada enviado ao SEI", enviados, []);
+    checar("nenhuma execução", !m.raiz.querySelector(".dl-execucao"));
+    igual("nada guardado", await m.deps.repo.carregar("sei.x.gov.br", "ana"), null);
+    m.app.destruir();
   }
 }

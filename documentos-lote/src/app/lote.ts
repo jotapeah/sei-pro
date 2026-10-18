@@ -9,8 +9,9 @@
  */
 
 import { novoId } from "@comum/id";
+import { TETO_BYTES_LOTE } from "../modelo/constantes";
 import { type LinhaDocumento, prepararLinhas } from "../modelo/destinos";
-import type { ConfigLote } from "../modelo/lote";
+import { type ConfigLote, mensagemLoteGrande } from "../modelo/lote";
 import type { ItemLote, LoteDocumentos, SituacaoLinha, VerificacaoGuardada } from "../repositorio";
 import type { Modelo } from "../sei/modelo";
 import { type EstadoApp, mensagemDe, verificacaoVale } from "./estado";
@@ -80,7 +81,24 @@ export interface OpcoesLote {
   id?: string;
 }
 
-/** O lote novo do estado atual. Lança (com a mensagem para o usuário) se ainda não há o que gravar. */
+/** O tamanho do lote como `gravar` o guarda (o JSON, sem o texto do modelo). */
+export function tamanhoDoLote(l: LoteDocumentos): number {
+  return JSON.stringify({ ...l, config: configDoLote(l.config) }).length;
+}
+
+/** O lote não cabe no teto de bytes do armazenamento (TETO_BYTES_LOTE): nada é gravado nem enviado. */
+export class ErroLoteGrande extends Error {
+  constructor(readonly bytes: number) {
+    super(mensagemLoteGrande(bytes));
+    this.name = "ErroLoteGrande";
+  }
+}
+
+/**
+ * O lote novo do estado atual. Lança (com a mensagem para o usuário) se ainda não há o que gravar ou se o lote passa
+ * do teto de bytes (`ErroLoteGrande`): a cota do `chrome.storage.local` é dividida com os outros módulos e cada
+ * `marcar` regrava o lote inteiro. A checagem vem antes de qualquer gravação ou pedido ao SEI.
+ */
 export function montarLote(
   estado: EstadoApp,
   ctx: { host: string; login: string; idProcedimento?: string },
@@ -113,5 +131,7 @@ export function montarLote(
   if (estado.colunas?.length) lote.colunas = [...estado.colunas];
   // O alvo "tela" é a tela ATUAL da aba: a retomada e a repetição conferem que é o mesmo processo.
   if (cfg.destino.tipo === "tela" && ctx.idProcedimento) lote.idProcedimentoTela = ctx.idProcedimento;
+  const bytes = tamanhoDoLote(lote);
+  if (bytes > TETO_BYTES_LOTE) throw new ErroLoteGrande(bytes);
   return lote;
 }

@@ -46,3 +46,9 @@ export const MAX_TEXTO_PREVIA = 20_000;
  * aqui para os pacotes não se importarem: mudou lá, muda aqui (a prova compara as duas).
  */
 export const CHAVE_ENTRADA_LINK = "link-permanente/entrada";
+
+/**
+ * Teto do lote guardado, em bytes (o JSON gravado): a cota do `chrome.storage.local` é dividida com os outros módulos
+ * do SEI Pro, e cada `marcar` regrava o lote inteiro. Acima disso o lote não começa (nada vai ao SEI).
+ */
+export const TETO_BYTES_LOTE = 2 * 1024 * 1024;

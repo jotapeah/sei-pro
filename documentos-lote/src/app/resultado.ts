@@ -15,6 +15,7 @@
 
 import { h, icone, type NomeIcone } from "@comum/ui/dom";
 import { type ColunaResultado, type LinhaResultado, montarTabelaResultado } from "@comum/ui/tabelaResultado";
+import { linkSeguro } from "../modelo/links";
 import { nomeNaArvore } from "../modelo/nomes";
 import type { ItemLote, LoteDocumentos } from "../repositorio";
 
@@ -23,6 +24,7 @@ export const COLUNAS_GERADAS = ["processo_destino", "nome_documento_gerado", "nu
 const COLUNA_OBSERVACAO = "observacao";
 
 export const ROTULO_INCERTO = "Incerto (confira no SEI)";
+export const ROTULO_ABRIR_PROCESSO = "Abrir o processo criado";
 export const DICA_INCERTO = "O documento pode ter sido criado: confira no SEI antes de repetir esta linha.";
 
 const ehIncerto = (i: ItemLote | undefined): boolean => i?.situacao === "erro" && i.incerto === true;
@@ -55,7 +57,18 @@ export function colunasDoResultado(l: LoteDocumentos): ColunaResultado[] {
   ];
 }
 
-/** O processo em que o documento da linha vai (ou foi) gravado. */
+/**
+ * O link do processo que a linha criou (destino novo processo), só para a linha com erro (incerta ou não), e só
+ * http(s) sem infra_hash (o item vem do armazenamento: é revalidado aqui, nunca mostrado ou exportado cru).
+ */
+export function linkDoProcesso(i: ItemLote | undefined): string {
+  return i?.situacao === "erro" ? linkSeguro(i.linkProcesso) : "";
+}
+
+/**
+ * O processo em que o documento da linha vai (ou foi) gravado. Processo novo criado sem o número lido: o link dele
+ * (é o único jeito de achá-lo; repetir a linha criaria outro).
+ */
 function processoDestino(l: LoteDocumentos, k: number): string {
   const item = l.itens[k];
   const linha = l.linhas[k];
@@ -65,7 +78,7 @@ function processoDestino(l: LoteDocumentos, k: number): string {
     case "coluna":
       return linha?.destino ?? "";
     default:
-      return item?.processo ?? "";
+      return item?.processo || linkDoProcesso(item);
   }
 }
 
@@ -245,9 +258,16 @@ export class TelaResultado {
     };
     this.erro = h("p", { class: "dl-erro", role: "alert", hidden: true });
     const tabela = montarTabelaResultado(document, linhasDoResultado(lote), colunasDoResultado(lote));
-    // A cor só reforça: o incerto já diz "Incerto" na Situação.
+    // A coluna processo_destino na tabela (a primeira é a Situação).
+    const colunaProcesso = 1 + colunasDoResultado(lote).findIndex((c) => c.chave === "processo_destino");
+    const abrirProcesso = (i: ItemLote | undefined, rotulo: string) =>
+      h("a", { class: "dl-link-processo", href: linkDoProcesso(i), target: "_blank", rel: "noopener" }, rotulo);
     [...tabela.querySelectorAll("tbody tr")].forEach((tr, k) => {
-      if (ehIncerto(lote.itens[k])) tr.classList.add("dl-incerto");
+      const i = lote.itens[k];
+      // A cor só reforça: o incerto já diz "Incerto" na Situação.
+      if (ehIncerto(i)) tr.classList.add("dl-incerto");
+      // O processo criado pela linha com erro vira link (sem o número: "Abrir o processo criado", não o endereço).
+      if (linkDoProcesso(i)) tr.children[colunaProcesso]?.replaceChildren(abrirProcesso(i, i?.processo || ROTULO_ABRIR_PROCESSO));
     });
     const pendencia = c.erros || c.incertas || c.pendentes || foraRegravaveis(lote).length;
     const listaIncertas = incertas(lote);
@@ -283,6 +303,8 @@ export class TelaResultado {
                   h("strong", {}, `Linha ${k + 2}`),
                   ` ${i?.erro ?? ""}`,
                   i?.link ? h("a", { href: i.link, target: "_blank", rel: "noopener" }, " (documento)") : null,
+                  linkDoProcesso(i) ? " " : null,
+                  linkDoProcesso(i) ? abrirProcesso(i, ROTULO_ABRIR_PROCESSO) : null,
                   " ",
                   botao("Repetir mesmo assim", "atualizar", () => a.repetirIncerta(k), "fantasma"),
                 );
