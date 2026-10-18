@@ -182,6 +182,7 @@ export class TelaModelo implements TelaEtapa {
     if (valor === e.escolha) return;
     e.escolha = valor || undefined;
     e.modelo = undefined;
+    e.config = undefined;
     this.seq++;
     this.mostrarErro(null);
     this.mostrarCarregando(null);
@@ -199,6 +200,7 @@ export class TelaModelo implements TelaEtapa {
     e.tipoTextoPadrao = id || undefined;
     if (!e.escolha?.startsWith(PREFIXO_TP)) return;
     e.modelo = undefined;
+    e.config = undefined;
     this.seq++;
     this.mostrarErro(null);
     this.desenharInfo();
@@ -226,6 +228,7 @@ export class TelaModelo implements TelaEtapa {
     this.mostrarCarregando(null);
     if (ehObjeto(r) && r.situacao === "ok" && ehObjeto(r.modelo)) {
       this.d.estado.modelo = r.modelo;
+      this.d.estado.config = undefined;
     } else {
       const falha = ehObjeto(r) && r.situacao === "erro" ? r : { erro: "Resposta inesperada da aba do SEI.", sessao: undefined };
       this.mostrarErro(mensagemFalhaModelo(String(falha.erro ?? ""), !!falha.sessao));

@@ -41,7 +41,7 @@ interface OpcoesMontar {
   ler?: (e: EscolhaModelo) => RespostaLer | Error | Promise<RespostaLer | Error>;
 }
 
-function montar(o: OpcoesMontar = {}) {
+export function montar(o: OpcoesMontar = {}) {
   const doc = instalarDom('<html><body><div id="app"></div></body></html>');
   const raiz = doc.getElementById("app")!;
   const chamadas: Array<{ op: string; args: unknown }> = [];
@@ -102,7 +102,7 @@ function montar(o: OpcoesMontar = {}) {
   return { doc, raiz, app, deps, chamadas, t, textoVisivel, visivel, avancar, ler, arquivo, escolherArquivo };
 }
 
-async function ate(cond: () => boolean, ms = 1000): Promise<void> {
+export async function ate(cond: () => boolean, ms = 1000): Promise<void> {
   const fim = Date.now() + ms;
   while (!cond()) {
     if (Date.now() > fim) throw new Error("condição não chegou");
@@ -110,7 +110,7 @@ async function ate(cond: () => boolean, ms = 1000): Promise<void> {
   }
 }
 
-const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s);
+export const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s);
 
 /** Até a etapa Modelo estar com a lista carregada. */
 async function iniciado(m: ReturnType<typeof montar>): Promise<void> {
@@ -120,7 +120,7 @@ async function iniciado(m: ReturnType<typeof montar>): Promise<void> {
 }
 
 /** Escolhe o documento 0000123 (campos nome e cargo) e avança para a Planilha. */
-async function naPlanilha(m: ReturnType<typeof montar>): Promise<void> {
+export async function naPlanilha(m: ReturnType<typeof montar>): Promise<void> {
   await iniciado(m);
   escolherCombo(m.raiz, ROTULO_MODELO, "doc:0000123");
   await ate(() => m.avancar()?.disabled === false);

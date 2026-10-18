@@ -10,7 +10,9 @@
  */
 
 import type { Rpc } from "@comum/ponte/rpc";
+import type { TipoProcesso } from "@pl/sei/tipos";
 import type { CsvLido } from "../modelo/csv";
+import type { ConfigLote } from "../modelo/lote";
 import type { Modelo, ModelosDisponiveis } from "../sei/modelo";
 
 export interface EstadoApp {
@@ -33,10 +35,36 @@ export interface EstadoApp {
   codificacao?: CsvLido["codificacao"];
   /** Avisos da leitura do CSV (não bloqueiam). */
   avisosCsv?: string[];
+
+  /* ---- Etapa 3: Cruzamento e destino ---- */
+  /** Os tipos de processo da unidade (só pedidos se o destino for novo processo). */
+  tiposProcesso?: TipoProcesso[];
+  /** O que a tela tem preenchido (sobrevive ao Voltar); recomeça quando o modelo ou as colunas mudam. */
+  cruzamento?: RascunhoCruzamento;
+  /** O modelo e as colunas a que o `cruzamento` se refere (comparados por referência). */
+  baseCruzamento?: { modelo: Modelo; colunas: string[] };
+  /** Só existe quando a tela está completa; apagada quando incompleta ou quando o modelo/a planilha mudam. */
+  config?: ConfigLote;
+}
+
+/** O preenchimento bruto da etapa 3 (a `config` é derivada dele quando completo). */
+export interface RascunhoCruzamento {
+  /** Campo do modelo → coluna; só os campos com coluna escolhida. */
+  cruzados: Record<string, string>;
+  colunaNome?: string;
+  descricao: string;
+  destino: "tela" | "novo-processo" | "coluna";
+  idTipo?: string;
+  especificacao: string;
+  colunaProcesso?: string;
+  colunaNivel?: string;
+  colunaHipotese?: string;
+  /** Texto do campo (pode estar fora da faixa até ser corrigido). */
+  pausa: string;
 }
 
 /** Id de cada etapa, na ordem do app. As próximas tarefas acrescentam as suas (cruzamento, verificação, prévia...). */
-export type IdEtapa = "modelo" | "planilha";
+export type IdEtapa = "modelo" | "planilha" | "cruzamento";
 
 /** O que o app entrega a cada tela de etapa. */
 export interface DepsEtapa {
@@ -51,6 +79,8 @@ export interface TelaEtapa {
   readonly el: HTMLElement;
   /** Tem o que a etapa seguinte precisa: habilita o Avançar. */
   completa(): boolean;
+  /** Texto do botão do rodapé (padrão "Avançar"); o app o relê a cada `aoMudar()`. */
+  rotuloAvancar?(): string;
   /** Chamado depois de `el` entrar na página (carregar listas da aba, por exemplo). */
   iniciar?(): Promise<void> | void;
   /** Para o que estiver pendente: resposta que chegar depois não pode mexer no estado. */

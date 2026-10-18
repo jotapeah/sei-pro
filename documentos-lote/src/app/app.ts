@@ -13,6 +13,7 @@ import type { Rpc } from "@comum/ponte/rpc";
 import { h, icone } from "@comum/ui/dom";
 import type { ContextoDocumentos } from "../pagina/contexto";
 import type { RepositorioLote } from "../repositorio";
+import { TelaCruzamento } from "./cruzamento";
 import type { DefinicaoEtapa, EstadoApp, TelaEtapa } from "./estado";
 import { TelaModelo } from "./modelo";
 import { TelaPlanilha } from "./planilha";
@@ -35,6 +36,7 @@ export interface DepsApp {
 export const ETAPAS: readonly DefinicaoEtapa[] = [
   { id: "modelo", rotulo: "Modelo", criar: (d) => new TelaModelo(d) },
   { id: "planilha", rotulo: "Planilha", criar: (d) => new TelaPlanilha(d) },
+  { id: "cruzamento", rotulo: "Cruzamento", criar: (d) => new TelaCruzamento(d) },
 ];
 
 export class AppDocumentosLote {
@@ -147,5 +149,6 @@ export class AppDocumentosLote {
     if (this.destruido) return;
     this.botaoVoltar.hidden = this.indice === 0;
     this.botaoAvancar.disabled = !this.tela?.completa();
+    this.botaoAvancar.textContent = this.tela?.rotuloAvancar?.() ?? "Avançar";
   }
 }

@@ -19,6 +19,8 @@ export const VALIDADE_LOTE_MS = 7 * 24 * 3600 * 1000;
 
 /** A descrição do documento aceita no máximo 250 caracteres. */
 export const MAX_DESCRICAO = 250;
+/** A especificação do processo novo aceita no máximo 100 caracteres (como no Processos em Lote). */
+export const MAX_ESPECIFICACAO = 100;
 /** O nome na árvore aceita no máximo 50 caracteres (sem acento). */
 export const MAX_NOME_ARVORE = 50;
 
@@ -29,3 +31,8 @@ export const PRAZO_CRIAR_MS = 60_000;
  * execução viva é um `criar` no prazo máximo mais a pausa máxima.
  */
 export const JANELA_OUTRA_ABA_MS = PRAZO_CRIAR_MS + PAUSA_MAXIMA;
+
+/** Custo aproximado de uma requisição ao SEI, em ms, para a estimativa de duração (criar um documento = 2 a 3). */
+export const CUSTO_DOCUMENTO_MS = 1500;
+/** Custo a mais de criar um processo novo antes do documento. */
+export const CUSTO_PROCESSO_MS = 900;

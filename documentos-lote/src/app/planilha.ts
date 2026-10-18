@@ -36,6 +36,7 @@ export const linhasTexto = (n: number): string => `${n} ${n === 1 ? "linha" : "l
 function limparPlanilha(e: EstadoApp): void {
   e.nomeArquivo = undefined;
   e.colunas = undefined;
+  e.config = undefined;
   e.registros = undefined;
   e.codificacao = undefined;
   e.avisosCsv = undefined;
@@ -120,6 +121,7 @@ export class TelaPlanilha implements TelaEtapa {
     } else {
       e.nomeArquivo = f.name;
       e.colunas = lido.colunas;
+      e.config = undefined;
       e.registros = lido.registros;
       e.codificacao = lido.codificacao;
       e.avisosCsv = lido.avisos;
