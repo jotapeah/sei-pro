@@ -370,19 +370,6 @@ a.newLink.iconBoxSlim .newIconTitle,
     height: 55px;
     vertical-align: middle;
 }
-.seiSlim.seiSlim_parent div#divInfraBarraSistemaPadraoE.barSuspenso::before,
-.seiSlim.seiSlim_parent div#divInfraBarraSistemaE.barSuspenso::before {
-    margin-top: 25px;
-}
-.seiSlim.seiSlim_parent.newSEI div#divInfraBarraSistemaPadraoE.barSuspenso::before {
-    font-size: 1.7em;
-}
-.seiSlim.seiSlim_parent.newSEI div#divInfraBarraSistemaPadraoE.barSuspenso.barSuspenso_show::before {
-    margin: 16px 0 0 -11px;
-}
-.seiSlim.seiSlim_parent.newSEI div#divInfraBarraSistemaPadraoE.barSuspenso.barSuspenso_hide::before {
-    margin: 25px 0 0 0px;
-}
 .seiSlim.seiSlim_parent span.infraTituloLogoSistema {
     font-weight: normal !important;
     position: absolute;
@@ -4188,8 +4175,6 @@ td .linhaNumerada:after {
 .seiSlim td.editCellSEI:hover:after,
 .seiSlim td.editCellNew:hover:after,
 .seiSlim td.editCellSelect:hover:after,
-.seiSlim div#divInfraBarraSistemaPadraoE.barSuspenso:before,
-.seiSlim div#divInfraBarraSistemaE.barSuspenso:before,
 .seiSlim .tableOptionConfig tr[data-key="tipo_processo"] td:first-child:before,
 .seiSlim .tableOptionConfig tr[data-key="etiquetas"] td:first-child:before,
 .seiSlim .tableOptionConfig tr[data-key="checklist"] td:first-child:before,

@@ -2845,33 +2845,6 @@ td.editCellSelect.editCellLoading:after {
 td.inEdit:hover:after {
     display: none !important;
 }
-.infraAreaTelaE.menuSuspenso,
-body:not(.newSEI) .divInfraAreaTelaE.menuSuspenso,
-body.seiSlim .divInfraAreaTelaE.menuSuspenso {
-    position: absolute;
-    z-index: 99999;
-    box-shadow: 3px 3px 5px 0px #8686868a;
-    background: #fff;
-}
-div#divInfraBarraSistemaPadraoE.barSuspenso_show::before,
-div#divInfraBarraSistemaE.barSuspenso_show::before {
-    transform: rotate(90deg);
-    transition: all 300ms linear;
-}
-div#divInfraBarraSistemaPadraoE.barSuspenso,
-div#divInfraBarraSistemaE.barSuspenso {
-    cursor: pointer;
-}
-div#divInfraBarraSistemaPadraoE.barSuspenso:before,
-div#divInfraBarraSistemaE.barSuspenso:before {
-    content: "\f0c9";
-    font-family: 'Font Awesome 5 Pro';
-    color: #fff;
-    font-size: 2em;
-    margin: 7px 10px 0 0;
-    float: left;
-    font-weight: 600;
-}
 .tableSortable .ui-sortable-helper {
     display: table;
 }

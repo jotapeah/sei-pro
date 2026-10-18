@@ -71,8 +71,5 @@ function initSeiProVisualizacao() {
     if (typeof parent.setCapaProcesso === 'function') {
         parent.setCapaProcesso();
     }
-    if (typeof parent.verifyMenuSistemaView === 'function') {
-        parent.verifyMenuSistemaView();
-    }
 }
 $(document).ready(function () { initSeiProVisualizacao() });

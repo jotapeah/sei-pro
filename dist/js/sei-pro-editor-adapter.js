@@ -36,7 +36,7 @@
             'infraAbrirJanela', 'infraArvoreAcao', 'infraArvoreNo',
             'infraClientHeight', 'infraClientWidth',
             'infraFormatarTamanhoBytes',
-            'infraMenuSistemaEsquema', 'infraMenuSistemaEsquemaPro'
+            'infraMenuSistemaEsquema'
         ];
         stubs.forEach(function (name) {
             if (typeof window[name] === 'undefined') window[name] = noop;

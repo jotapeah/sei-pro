@@ -88,19 +88,6 @@ function initRangerSelectShift(TimeOut = 9000) {
         }, 500);
     }
 }
-function initHideMenuSistemaView(TimeOut = 9000) {
-    if (TimeOut <= 0) { return; }
-    if (typeof getOptionsPro !== 'undefined' && typeof hideMenuSistemaView !== 'undefined' && typeof checkConfigValue !== 'undefined' && typeof jmespath !== 'undefined') { 
-        if (verifyConfigValue('menususpenso')) {
-            hideMenuSistemaView();
-        }
-    } else {
-        setTimeout(function(){ 
-            initHideMenuSistemaView(TimeOut - 100); 
-            if(typeof verifyConfigValue !== 'undefined' && verifyConfigValue('debugpage'))console.log('Reload initHideMenuSistemaView'); 
-        }, 500);
-    }
-}
 function initSetMomentPtBr(TimeOut = 9000) {
     if (TimeOut <= 0) { return; }
     else if (TimeOut < 7000) { 
@@ -644,7 +631,7 @@ function initPagesInfiniteSearch(TimeOut = 9000) {
     // nas demais telas que so tem o init_all.js) quem injeta o jmespath na pagina e o initSeiProAll, no mesmo instante
     // em que agenda esta funcao: o typeof jmespath do init_all.js roda no mundo isolado, onde o manifest ja o carregou,
     // e nunca injeta. Se o jmespath chegasse depois, a opcao era lida como desligada uma unica vez e a rolagem infinita
-    // nao era ligada ate recarregar. Espera o jmespath como ja fazem initHideMenuSistemaView e initTableSorter.
+    // nao era ligada ate recarregar. Espera o jmespath como ja faz initTableSorter.
     if (typeof verifyConfigValue !== 'undefined' && typeof jmespath !== 'undefined') {
         if (verifyConfigValue('rolageminfinita') && $(frmPesquisaProtocolo).length > 0) {
             startPagesInfiniteSearch();
@@ -964,7 +951,6 @@ function initSeiProAll() {
     initTableSorter();
     repairLnkControleProcesso();
     initRangerSelectShift();
-    initHideMenuSistemaView();
     initInsertNewLinksMenu();
     initSetMomentPtBr();
     initTablePesquisaDownload();
