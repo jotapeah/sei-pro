@@ -204,6 +204,8 @@ export async function tiposDocumento(sei: Sei, refProcesso: string, sinal?: Abor
 export interface NovoDocumento {
   /** Nome ou id do tipo (série), ex.: "Despacho". */
   tipo: string;
+  /** Id exato do tipo: quando presente, só ele vale (`tipo` vira rótulo) e id fora da lista da unidade é recusado. */
+  tipoId?: string;
   descricao?: string;
   /** Número (para tipos numerados pelo usuário) e nome na árvore. */
   numero?: string;
@@ -289,7 +291,9 @@ async function cadastrar(sei: Sei, ref: string, arv: Arvore, escolha: Formulario
 /** Cria um documento interno (vazio ou a partir de modelo/texto padrão). Devolve o número e o link do editor. */
 export async function criarDocumento(sei: Sei, refProcesso: string, novo: NovoDocumento, op: OpcoesEscrita): Promise<ResultadoEscrita> {
   const arv = await sei.arvore(refProcesso, { sinal: op.sinal });
-  const { escolha, tipo } = await prepararCriacao(sei, arv, novo.tipo, op.sinal);
+  const { escolha, tipo } = novo.tipoId
+    ? await prepararCriacao(sei, arv, novo.tipoId, op.sinal, true)
+    : await prepararCriacao(sei, arv, novo.tipo, op.sinal);
 
   const mudancas: ResultadoEscrita["mudancas"] = [
     { campo: "Documento", antes: "", depois: `${tipo.texto}${novo.numero ? ` ${novo.numero}` : ""}${novo.nomeArvore ? ` ${novo.nomeArvore}` : ""}` },
@@ -308,6 +312,25 @@ export async function criarDocumento(sei: Sei, refProcesso: string, novo: NovoDo
     resumo: `${tipo.texto} ${numero} criado no processo ${arv.protocolo}.`,
     dados: { idDocumento, numero },
   };
+}
+
+/**
+ * Tipo (série) de um documento, lido da tela "Alterar Documento" (`hdnIdSerie`).
+ * O nome vem da lista de tipos da unidade (id exato); se o id não estiver nela,
+ * cai no texto da série na própria tela e, na falta, no id. Não lança por causa do nome.
+ */
+export async function tipoDoDocumento(sei: Sei, numero: string, sinal?: AbortSignal): Promise<{ id: string; nome: string }> {
+  const { d, form } = await telaAlteracao(sei, numero, sinal);
+  const id = form.valor("hdnIdSerie") ?? "";
+  if (!id) throw new ErroSei("SEI_VERSAO_NAO_SUPORTADA", `A tela do documento ${d.documento.numero} n\u00E3o informa o tipo (hdnIdSerie).`);
+  let nome = "";
+  try {
+    nome = lerTipos((await telaEscolherTipo(sei, d.arvore, sinal)).pagina).find((t) => t.id === id)?.nome ?? "";
+  } catch (e) {
+    if (sinal?.aborted || (e instanceof ErroSei && e.codigo === "SEI_SIGILOSO")) throw e;
+  }
+  if (!nome) nome = form.opcoes("selSerie").find((o) => o.valor === id)?.texto?.trim() ?? "";
+  return { id, nome: nome || id };
 }
 
 /** Número que o usuário digitou (ex.: "A-12/2026"). Numérico puro é o SEI quem dá, e copiar repetiria o número. */

@@ -32,6 +32,7 @@ export {
   criarDocumento,
   duplicarDocumento,
   tiposDocumento,
+  tipoDoDocumento,
   pesquisarContatos,
   pesquisarAssuntos,
   type AlteracaoDocumento,

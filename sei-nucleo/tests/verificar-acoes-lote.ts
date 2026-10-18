@@ -16,7 +16,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { lerArvore, type Arvore } from "../src/dominio/arvore";
-import { duplicarDocumento } from "../src/dominio/documento";
+import { criarDocumento, duplicarDocumento, tipoDoDocumento } from "../src/dominio/documento";
 import { moverDocumento, resolverProcessoDestino } from "../src/dominio/moverDocumento";
 import { gerarPdfDocumentos } from "../src/dominio/pdfProcesso";
 import { lerLupa } from "../src/formulario/formulario";
@@ -265,6 +265,46 @@ export async function verificarAcoesLote(): Promise<void> {
     const { sei, estado } = montar({ processoSigiloso: true });
     const e = await lanca(() => duplicarDocumento(sei, "0103947", APLICAR));
     checar("processo sigiloso: SEI_SIGILOSO sem abrir a tela de alteracao", e?.codigo === "SEI_SIGILOSO" && estado.gets.length === 0 && estado.posts.length === 0, { e, gets: estado.gets });
+  }
+
+  secao("acoes em lote: tipo por id exato e tipo do documento");
+  {
+    const { sei, estado } = montar();
+    const r = await criarDocumento(sei, "148265", { tipo: "Ata", tipoId: "5" }, PREVIA);
+    checar("tipoId vence o nome: previa cita o tipo de id 5 (Despacho), nao 'Ata'", r.resumo.includes("Despacho") && !r.resumo.includes("Ata"), r.resumo);
+    checar("previa: nada gravado", !estado.posts.some((p) => valor(p, "hdnIdSerie")), estado.posts.map((p) => p.url));
+  }
+  {
+    const { sei, estado } = montar();
+    await criarDocumento(sei, "148265", { tipo: "Ata", tipoId: "5" }, APLICAR);
+    const escolha = estado.posts.find((p) => /acao=documento_escolher_tipo&/.test(p.url) && valor(p, "hdnIdSerie"));
+    checar("aplicar com tipoId: escolhe hdnIdSerie 5", valor(escolha, "hdnIdSerie") === "5", escolha?.pares);
+  }
+  {
+    const { sei, estado } = montar();
+    const e = await lanca(() => criarDocumento(sei, "148265", { tipo: "Despacho", tipoId: "99999" }, APLICAR));
+    checar("tipoId inexistente: SEI_ACAO_INDISPONIVEL (o nome nao salva)", e?.codigo === "SEI_ACAO_INDISPONIVEL", e);
+    checar("tipoId inexistente: nenhum cadastro", !estado.posts.some(ehCadastro) && !estado.posts.some((p) => valor(p, "hdnIdSerie")), estado.posts.map((p) => p.url));
+  }
+  {
+    const { sei } = montar();
+    const r = await criarDocumento(sei, "148265", { tipo: "Despacho" }, PREVIA);
+    checar("sem tipoId: casamento por nome como antes", r.resumo.includes("Despacho"), r.resumo);
+  }
+  {
+    const { sei } = montar();
+    const t = await tipoDoDocumento(sei, "0103947");
+    checar("tipoDoDocumento devolve id e nome da fixture", t.id === "5" && t.nome === "Despacho", t);
+  }
+  {
+    const { sei } = montar({ semTipoOriginal: true });
+    const t = await tipoDoDocumento(sei, "0103947");
+    checar("tipoDoDocumento: id fora da lista da unidade nao lanca", t.id === "5" && t.nome.length > 0, t);
+  }
+  {
+    const { sei } = montar();
+    const e = await lanca(() => tipoDoDocumento(sei, "0103925"));
+    checar("tipoDoDocumento: externo sem hdnIdSerie nao devolve tipo inventado", e?.codigo === "SEI_VERSAO_NAO_SUPORTADA" || e?.codigo === "SEI_ACAO_INDISPONIVEL", e);
   }
 
   secao("acoes em lote: mover documento");
