@@ -6,7 +6,7 @@ const CAMPO = /##([^#]+?)##/g;
 /** Nomes únicos entre `##…##` (sem os `#`), na ordem de aparição. O espaço não separável conta como espaço. */
 export function extrairCampos(html: string): string[] {
   const vistos: string[] = [];
-  for (const m of html.replace(/ /g, " ").matchAll(CAMPO)) {
+  for (const m of html.replace(/\u00A0/g, " ").matchAll(CAMPO)) {
     const nome = m[1] as string;
     if (!vistos.includes(nome)) vistos.push(nome);
   }

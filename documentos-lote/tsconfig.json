@@ -16,7 +16,8 @@
     "paths": {
       "@dl/*": ["./src/*"],
       "@comum/*": ["../sei-comum/src/*"],
-      "@nucleo/*": ["../sei-nucleo/src/*"]
+      "@nucleo/*": ["../sei-nucleo/src/*"],
+      "@pl/*": ["../processos-lote/src/*"]
     }
   },
   "include": ["src/**/*.ts", "tests/**/*.ts"]

@@ -10,8 +10,10 @@ import { corDoTemaSei, manterTemaNoContexto, seiEscuro } from "@comum/pagina/tem
 import type { PortaRpc } from "@comum/ponte/rpc";
 import { criarControleModal, ligarAvisoSemModal } from "@comum/ui/modalIframe";
 import { CANAL_DOCUMENTOS_LOTE } from "@dl/modelo/constantes";
-import { documentoTopo } from "@nucleo/sessao/pagina";
+import { Sei } from "@nucleo/sei";
+import { documentoTopo, paginaDe } from "@nucleo/sessao/pagina";
 import { type ContextoDocumentos, contextoDocumentos } from "./contexto";
+import { tratadoresDocumentosLote } from "./executor";
 import { marcarAtivo } from "./marca";
 import { armarSeLigado, CONFIG_MODAL } from "./modal";
 
@@ -57,21 +59,12 @@ async function principal(): Promise<void> {
 }
 
 function ligarModal(ctx: ContextoDocumentos): void {
+  const sei = new Sei(location.href, () => paginaDe(document, location.href));
   criarControleModal(document, CONFIG_MODAL, {
     // O tema vai no endereco: o app ja nasce com o esquema de cores do iframe (sem fundo opaco).
     urlApp: () => chrome.runtime.getURL(`html/documentos-lote.html#modo=modal&tema=${ctx.temaEscuro ? "escuro" : "claro"}`),
     temaEscuro: ctx.temaEscuro,
     conectar: () => chrome.runtime.connect({ name: CANAL_DOCUMENTOS_LOTE }) as unknown as PortaRpc,
-    // Provisorio: a Tarefa 10 troca estes tratadores minimos pelos do executor.
-    tratadores: (fechar, minimizar) => ({
-      fechar: () => {
-        fechar();
-        return true;
-      },
-      minimizar: (args) => {
-        minimizar((args as { minimizado?: unknown } | undefined)?.minimizado === true);
-        return true;
-      },
-    }),
+    tratadores: (fechar, minimizar) => tratadoresDocumentosLote({ sei, ctx, fechar, minimizar }),
   });
 }

@@ -38,7 +38,11 @@ export function numeroDeProcesso(celula: string): string | null {
 }
 
 function lerNivel(valor: string): "publico" | "restrito" | null {
-  const v = valor.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const v = valor
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
   if (v === "publico" || v === "0") return "publico";
   if (v === "restrito" || v === "1") return "restrito";
   return null;
