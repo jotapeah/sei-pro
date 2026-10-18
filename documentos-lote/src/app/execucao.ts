@@ -33,7 +33,7 @@ export const MENSAGEM_NAO_ABERTO = "Processo não está aberto na unidade";
 export const MENSAGEM_SESSAO = "Sessão do SEI expirada: entre de novo no SEI (nesta aba) e clique em Continuar.";
 export const MENSAGEM_EM_VOO = "Interrompido antes da confirmação: confira o processo antes de repetir.";
 export const MENSAGEM_PONTE =
-  "A aba do SEI não respondeu. O documento da última linha pode ter sido criado: confira o processo. O lote está pausado.";
+  "A aba do SEI não respondeu. O documento da última linha pode ter sido criado (a aba ainda pode estar terminando o pedido): espere cerca de 1 minuto e confira o processo antes de clicar em Continuar. O lote está pausado.";
 export const MENSAGEM_GRAVAR =
   "Não foi possível gravar o progresso do lote neste navegador. O lote está pausado para não perder o controle do que já foi criado.";
 export const MENSAGEM_ASSUMIDO = "O lote foi descartado ou assumido por outra aba. Execução parada; nada mais foi enviado.";
@@ -237,8 +237,14 @@ export class ExecucaoDocumentos {
         if ("saida" in r) return r.saida;
         processo = r.processo;
         // O processo existe: a linha em voo passa a lembrar dele (se o app morrer agora, ele não se perde).
-        if (!(await this.gravar(k, { ...EM_VOO, processo: processo.numero, ...(processo.link ? { linkProcesso: processo.link } : {}) }))) {
-          return { situacao: "erro", erro: this.motivo ?? MENSAGEM_GRAVAR, parar: true };
+        if (!(await this.gravar(k, this.comProcesso(EM_VOO, processo)))) {
+          // O processo existe e o repositório não o registrou (outra aba trocou o lote ou o storage falhou): ao
+          // menos a memória (resumo, resultado) e a tela guardam o número. Nada mais é enviado nesta linha.
+          console.warn("[SEI Pro] documentos em lote: processo criado e não registrado:", processo.numero);
+          const aviso = `O processo ${processo.numero} foi criado, mas não ficou registrado neste navegador; o documento desta linha não foi criado. Confira o processo antes de repetir.`;
+          this.lote.itens[k] = this.comProcesso({ ...EM_VOO, erro: aviso }, processo);
+          this.motivo = `${this.motivo ?? MENSAGEM_GRAVAR} ${aviso}`;
+          return { situacao: "erro", erro: aviso, parar: true };
         }
         alvo = { tipo: "novo-processo", numero: processo.numero };
       } else if (cfg.destino.tipo === "coluna") {

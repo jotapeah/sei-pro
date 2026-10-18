@@ -567,6 +567,42 @@ export async function verificarAppExecucao(): Promise<void> {
     igual("erro incerto com o processo (repetir duplicaria o processo)", [i?.situacao, i?.incerto, i?.processo], ["erro", true, "PN9"]);
   }
 
+  secao("execução: processo criado e não registrado (outra aba ou falha do storage)");
+  for (const modo of ["false", "lanca"] as const) {
+    instalarDom('<html><body><div id="app"></div></body></html>');
+    const cfg = config({ destino: { tipo: "novo-processo", idTipoProcesso: "100", especificacao: "x" } });
+    const m = await execucao(loteDe(cfg, registros(2)), (op) =>
+      op === "criarProcesso" ? { situacao: "ok", criado: { numero: "PN77" } } : op === "criar" ? okCriar(1) : null,
+    );
+    const marcar = m.repo.marcar.bind(m.repo);
+    let n = 0;
+    m.repo.marcar = async (id, k, item) => {
+      n += 1;
+      if (n === 2) {
+        if (modo === "lanca") throw new Error("cota do storage");
+        return false;
+      }
+      return marcar(id, k, item);
+    };
+    const avisos: unknown[][] = [];
+    const warn = console.warn;
+    console.warn = (...a: unknown[]) => void avisos.push(a);
+    await m.ex.rodar();
+    console.warn = warn;
+    igual(`${modo}: nenhum criar enviado`, m.criar().length, 0);
+    igual(`${modo}: parou`, m.ex.estado, "pausado");
+    const i = m.ex.lote.itens[0];
+    igual(`${modo}: memória guarda o processo, incerto`, [i?.situacao, i?.incerto, i?.processo], ["erro", true, "PN77"]);
+    checar(`${modo}: motivo cita o processo`, (m.ex.motivo ?? "").includes("PN77"), m.ex.motivo);
+    const tela = new TelaExecucao(m.ex, { pausar: () => {}, continuar: () => {}, minimizar: () => {} });
+    checar(`${modo}: a tela mostra o processo`, (tela.el.querySelector(".dl-motivo")?.textContent ?? "").includes("PN77"));
+    checar(
+      `${modo}: console.warn com o número`,
+      avisos.some((a) => String(a[0]).includes("processo criado e não registrado") && a.includes("PN77")),
+      avisos,
+    );
+  }
+
   secao("execução: falha da ponte (prazo) vira erro incerto e pausa");
   {
     const m = await execucao(loteDe(config(), registros(3)), (op, _a, n) =>

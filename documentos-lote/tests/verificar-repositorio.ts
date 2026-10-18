@@ -99,6 +99,14 @@ export async function verificarRepositorio(): Promise<void> {
   await repo.gravar(comLink);
   igual("gravar remove linkArvore das verificações", (await repo.carregar(HOST, "ana"))?.verificacoes, exemplo().verificacoes);
 
+  // O texto do modelo (só da prévia) nunca vai para o storage, mesmo se quem grava esquecer de tirá-lo.
+  const comTexto = exemplo();
+  (comTexto.config.modelo as Mutavel).texto = "Texto longo do modelo ".repeat(500);
+  await repo.gravar(comTexto);
+  const cru = JSON.stringify((await area.obter(CHAVE))[CHAVE]);
+  checar("gravar remove config.modelo.texto", !cru.includes("Texto longo do modelo") && !cru.includes('"texto"'), cru.slice(0, 200));
+  checar("gravar não muda o lote de quem chamou", typeof (comTexto.config.modelo as Mutavel).texto === "string");
+
   // Validade: 7 dias.
   await repo.gravar(exemplo());
   relogio = 5000 + VALIDADE_LOTE_MS - 1;

@@ -103,6 +103,12 @@ function semLinkArvore(verificacoes: Record<string, VerificacaoGuardada>): Recor
   return saida;
 }
 
+/** O texto do modelo é só da prévia (pode ser longo e é conteúdo do documento): nunca vai para o storage. */
+function semTextoDoModelo(config: ConfigLote): ConfigLote {
+  const { texto: _descartado, ...modelo } = config.modelo;
+  return { ...config, modelo };
+}
+
 /**
  * Um lote em andamento por instalação (chave `docslote/lote`); `carregar` só o entrega ao mesmo host e login.
  * As escritas desta instância são enfileiradas (o read-modify-write do `marcar` não se perde). Outra aba não é
@@ -147,7 +153,9 @@ export class RepositorioLote {
 
   gravar(l: LoteDocumentos): Promise<void> {
     return this.enfileirar(() =>
-      this.area.gravar({ [CHAVE]: { ...l, verificacoes: semLinkArvore(l.verificacoes), atualizadoEm: this.agora() } }),
+      this.area.gravar({
+        [CHAVE]: { ...l, config: semTextoDoModelo(l.config), verificacoes: semLinkArvore(l.verificacoes), atualizadoEm: this.agora() },
+      }),
     );
   }
 
