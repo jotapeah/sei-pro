@@ -16,10 +16,9 @@
 import { ExecutorLote, type ItemLote } from "@comum/lote/executor";
 import { h, icone } from "@comum/ui/dom";
 import { agruparPorProcesso, type LinhaDocumento, prepararLinhas } from "../modelo/destinos";
-import type { ConfigLote } from "../modelo/lote";
 import type { SituacaoLinha, VerificacaoGuardada } from "../repositorio";
 import type { StatusProcesso } from "../sei/verificar";
-import { type DepsEtapa, type EstadoApp, mensagemDe, type TelaEtapa } from "./estado";
+import { chaveVerificacao, type DepsEtapa, type EstadoApp, limparVerificacao, mensagemDe, type TelaEtapa, verificacaoVale } from "./estado";
 
 /** Pausa entre duas consultas (curta: cada uma já lê três páginas do SEI). */
 export const PAUSA_VERIFICACAO_MS = 200;
@@ -44,12 +43,6 @@ export interface OpcoesVerificacao {
   esperar?(ms: number): Promise<void>;
 }
 
-/** O que da config decide a verificação (a pausa, a descrição e os campos não mudam o resultado). */
-function chaveDe(cfg: ConfigLote): string {
-  const coluna = cfg.destino.tipo === "coluna" ? cfg.destino.coluna : "";
-  return JSON.stringify([coluna, cfg.colunaNome, cfg.colunaNivel ?? "", cfg.colunaHipotese ?? "", cfg.modelo.tipoId ?? ""]);
-}
-
 /** A linha está pronta para gravar: sem erro na planilha e com o processo verificado "ok". */
 function linhaPronta(l: LinhaDocumento, verificacoes: Record<string, VerificacaoGuardada>): boolean {
   return !l.erroLinha && l.destino !== undefined && verificacoes[l.destino]?.status === "ok";
@@ -60,6 +53,8 @@ function linhaPronta(l: LinhaDocumento, verificacoes: Record<string, Verificacao
  * demais. A Tarefa 14 cria o lote com isto.
  */
 export function situacoesIniciais(estado: EstadoApp): SituacaoLinha[] {
+  // Resultado de outra config, outro destino ou outra planilha não vale (seria gravar com "prontas" velhas).
+  if (!verificacaoVale(estado)) return [];
   const prontas = new Set(estado.prontas ?? []);
   return (estado.linhas ?? []).map((l) => (prontas.has(l.indice) ? "pendente" : "fora"));
 }
@@ -192,9 +187,8 @@ export class TelaVerificacao implements TelaEtapa {
       this.mostrarErro("Escolha a coluna do processo de destino na etapa anterior.");
       return;
     }
-    const chave = chaveDe(cfg);
-    const base = e.baseVerificacao;
-    const mesma = !!base && base.registros === registros && base.chave === chave && !!e.linhas && !!e.verificacoes;
+    const chave = chaveVerificacao(cfg);
+    const mesma = verificacaoVale(e);
     if (!mesma) {
       try {
         e.linhas = prepararLinhas(registros, cfg);
@@ -211,11 +205,7 @@ export class TelaVerificacao implements TelaEtapa {
   }
 
   private limparEstado(): void {
-    const e = this.d.estado;
-    e.linhas = undefined;
-    e.verificacoes = undefined;
-    e.prontas = undefined;
-    e.baseVerificacao = undefined;
+    limparVerificacao(this.d.estado);
   }
 
   /** Refaz `estado.prontas` (só existe terminada a verificação e com ao menos uma pronta). */
@@ -243,7 +233,6 @@ export class TelaVerificacao implements TelaEtapa {
   /** Consulta os processos pelo executor (um por vez, pausa curta). Resolve ao terminar ou ao fechar a tela. */
   private async consultar(numeros: string[], deNovo: boolean): Promise<void> {
     for (const n of numeros) this.marcarEmCurso(n);
-    this.atualizar();
     const itens: ItemLote<string, undefined>[] = numeros.map((entrada, indice) => ({
       indice,
       entrada,
@@ -260,6 +249,7 @@ export class TelaVerificacao implements TelaEtapa {
       },
     });
     this.executor = executor;
+    this.atualizar();
     await executor.iniciar();
     if (this.destruida || this.executor !== executor) return;
     this.executor = null;
@@ -300,7 +290,8 @@ export class TelaVerificacao implements TelaEtapa {
   }
 
   private verificarDeNovo(numero: string): void {
-    if (this.emCurso.has(numero)) return;
+    // Uma consulta por vez à aba: durante uma rodada do executor o botão fica desabilitado.
+    if (this.executor || this.emCurso.has(numero)) return;
     this.marcarEmCurso(numero);
     this.atualizar();
     void this.consultarUm(numero, true);
@@ -389,7 +380,14 @@ export class TelaVerificacao implements TelaEtapa {
       acoes.append(
         h(
           "button",
-          { type: "button", class: "spro-botao", onclick: () => this.verificarDeNovo(numero) },
+          {
+            type: "button",
+            class: "spro-botao",
+            // Durante uma rodada (inicial ou "Verificar todos de novo") não sai consulta concorrente à aba.
+            disabled: !!this.executor,
+            title: this.executor ? "Aguarde terminar a verificação em curso." : undefined,
+            onclick: () => this.verificarDeNovo(numero),
+          },
           icone("atualizar", 14),
           "Verificar de novo",
         ),

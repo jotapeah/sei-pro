@@ -11,7 +11,7 @@
 import { type Combo, criarCombo, type OpcaoCombo } from "@comum/ui/combobox";
 import { h, icone } from "@comum/ui/dom";
 import type { EscolhaModelo, Modelo, ModelosDisponiveis } from "../sei/modelo";
-import { type DepsEtapa, mensagemDe, type TelaEtapa } from "./estado";
+import { type DepsEtapa, limparVerificacao, mensagemDe, type TelaEtapa } from "./estado";
 
 export const ROTULO_MODELO = "Modelo";
 export const ROTULO_TIPO = "Tipo do documento";
@@ -183,6 +183,7 @@ export class TelaModelo implements TelaEtapa {
     e.escolha = valor || undefined;
     e.modelo = undefined;
     e.config = undefined;
+    limparVerificacao(e);
     this.seq++;
     this.mostrarErro(null);
     this.mostrarCarregando(null);
@@ -201,6 +202,7 @@ export class TelaModelo implements TelaEtapa {
     if (!e.escolha?.startsWith(PREFIXO_TP)) return;
     e.modelo = undefined;
     e.config = undefined;
+    limparVerificacao(e);
     this.seq++;
     this.mostrarErro(null);
     this.desenharInfo();
@@ -229,6 +231,7 @@ export class TelaModelo implements TelaEtapa {
     if (ehObjeto(r) && r.situacao === "ok" && ehObjeto(r.modelo)) {
       this.d.estado.modelo = r.modelo;
       this.d.estado.config = undefined;
+      limparVerificacao(this.d.estado);
     } else {
       const falha = ehObjeto(r) && r.situacao === "erro" ? r : { erro: "Resposta inesperada da aba do SEI.", sessao: undefined };
       this.mostrarErro(mensagemFalhaModelo(String(falha.erro ?? ""), !!falha.sessao));

@@ -395,7 +395,7 @@ export async function verificarAppVerificacao(): Promise<void> {
       return chamar(op, args, prazo);
     }) as typeof chamar;
     await naPlanilha(m);
-    await m.escolherArquivo("a.csv", utf8(`nome;alvo\nAna;${P1}\nBia;${P1}\n`));
+    await m.escolherArquivo("a.csv", utf8(`nome;alvo;outro\nAna;${P1};${P2}\nBia;${P1};${P2}\n`));
     await ate(() => m.avancar()?.disabled === false);
     disparar(m.avancar()!, "click");
     await ate(() => !!combo(m.raiz, ROTULO_COLUNA_NOME));
@@ -424,6 +424,83 @@ export async function verificarAppVerificacao(): Promise<void> {
     disparar(botao(m.raiz, "Voltar")!, "click");
     await ate(() => !!combo(m.raiz, ROTULO_COLUNA_NOME));
     checar("Voltar leva ao Cruzamento", true);
+
+    // Mudar só a pausa não invalida a verificação.
+    const pausa = m.raiz.querySelector<HTMLInputElement>('input[type="number"]')!;
+    pausa.value = "900";
+    disparar(pausa, "input");
+    disparar(pausa, "change");
+    checar("mudar a pausa mantém a verificação", m.app.estado.prontas !== undefined && m.app.estado.verificacoes !== undefined);
+    disparar(rodape()!, "click");
+    await ate(() => !!m.raiz.querySelector(".dl-verificacao"));
+    await ate(() => rodape()?.disabled === false, 3000);
+    igual("mudar a pausa: nenhuma consulta nova", verifs.length, 1);
+    igual("e as situações valem", situacoesIniciais(m.app.estado), ["pendente", "pendente"]);
+
+    // Voltar e mudar para o destino tela: o resultado da verificação some.
+    disparar(botao(m.raiz, "Voltar")!, "click");
+    await ate(() => !!combo(m.raiz, ROTULO_COLUNA_NOME));
+    const tela = m.raiz.querySelector<HTMLInputElement>('input[value="tela"]')!;
+    tela.checked = true;
+    disparar(tela, "change");
+    checar(
+      "destino tela: linhas, verificações, prontas e base limpas",
+      !m.app.estado.linhas && !m.app.estado.verificacoes && !m.app.estado.prontas && !m.app.estado.baseVerificacao,
+    );
+    igual("destino tela: situacoesIniciais vazio", situacoesIniciais(m.app.estado), []);
+
+    // De volta ao destino coluna, com outra coluna do processo: tudo consultado de novo.
+    const col = m.raiz.querySelector<HTMLInputElement>('input[value="coluna"]')!;
+    col.checked = true;
+    disparar(col, "change");
+    escolherCombo(m.raiz, ROTULO_COLUNA_PROCESSO, "outro");
+    disparar(rodape()!, "click");
+    await ate(() => !!m.raiz.querySelector(".dl-verificacao"));
+    await ate(() => rodape()?.disabled === false, 3000);
+    igual("outra coluna do processo: consultou de novo", verifs.slice(1), [{ numero: P2, tipoId: "6" }]);
     m.app.destruir();
+  }
+
+  secao("verificação: o resultado só vale para a config e a planilha verificadas");
+  {
+    const m = tela({ status: { [P2]: "nao-aberto" } });
+    await m.tl.iniciar?.();
+    await m.pronto();
+    m.tl.destruir?.();
+    igual("válido", situacoesIniciais(m.estado).length, 5);
+    const cfg = m.estado.config!;
+    m.estado.config = { ...cfg, pausa: 9000 };
+    igual("só a pausa mudou: continua válido", situacoesIniciais(m.estado).length, 5);
+    m.estado.config = { ...cfg, destino: { tipo: "tela" } };
+    igual("destino tela (sem limpar): vazio", situacoesIniciais(m.estado), []);
+    m.estado.config = { ...cfg, destino: { tipo: "coluna", coluna: "nome" } };
+    igual("outra coluna (sem limpar): vazio", situacoesIniciais(m.estado), []);
+    m.estado.config = cfg;
+    m.estado.registros = [...REGISTROS];
+    igual("outra planilha (sem limpar): vazio", situacoesIniciais(m.estado), []);
+  }
+
+  secao("verificação: Verificar de novo por linha espera a rodada em curso");
+  {
+    let soltar: (() => void) | undefined;
+    const m = tela({
+      verificar: (a) =>
+        a.numero === P2
+          ? new Promise((r) => {
+              soltar = () => r(resposta(a.numero, "ok"));
+            })
+          : resposta(a.numero, "nao-aberto"),
+    });
+    void m.tl.iniciar?.();
+    await ate(() => !!soltar);
+    const b = m.botaoDe(P1, "Verificar de novo");
+    checar("durante a rodada o botão da linha existe e está desabilitado", !!b && b.disabled === true);
+    disparar(b!, "click");
+    await tique(5);
+    igual("clicar não dispara consulta concorrente", m.verificacoes().length, 2);
+    soltar?.();
+    await m.pronto();
+    checar("terminada a rodada, o botão habilita", m.botaoDe(P1, "Verificar de novo")?.disabled === false);
+    m.tl.destruir?.();
   }
 }

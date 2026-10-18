@@ -30,7 +30,7 @@ import {
 import type { Destino } from "../modelo/destinos";
 import { estimarDuracao, limitarPausa } from "../modelo/estimativa";
 import type { ConfigLote } from "../modelo/lote";
-import { type DepsEtapa, mensagemDe, type RascunhoCruzamento, type TelaEtapa } from "./estado";
+import { conferirVerificacao, type DepsEtapa, limparVerificacao, mensagemDe, type RascunhoCruzamento, type TelaEtapa } from "./estado";
 
 export const ROTULO_COLUNA_NOME = "Coluna do nome na árvore";
 export const ROTULO_TIPO_PROCESSO = "Tipo do processo";
@@ -86,6 +86,7 @@ export class TelaCruzamento implements TelaEtapa {
     if (!e.cruzamento || !modelo || base?.modelo !== modelo || base.colunas !== e.colunas) {
       e.cruzamento = this.rascunhoNovo();
       e.config = undefined;
+      limparVerificacao(e);
       if (modelo && e.colunas) e.baseCruzamento = { modelo, colunas: e.colunas };
     }
     const r = e.cruzamento;
@@ -397,6 +398,8 @@ export class TelaCruzamento implements TelaEtapa {
   private sincronizar(): void {
     if (this.destruida) return;
     this.d.estado.config = this.montarConfig() ?? undefined;
+    // Outro destino, outra coluna do processo, nome, nível, hipótese: a verificação feita não vale mais.
+    conferirVerificacao(this.d.estado);
     const tam = this.rascunho.descricao.length;
     this.contador.textContent =
       tam > MAX_DESCRICAO

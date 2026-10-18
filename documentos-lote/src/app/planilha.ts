@@ -9,7 +9,7 @@
 import { h, icone } from "@comum/ui/dom";
 import { TETO } from "../modelo/constantes";
 import { type CsvLido, lerCsv } from "../modelo/csv";
-import { type DepsEtapa, type EstadoApp, mensagemDe, type TelaEtapa } from "./estado";
+import { type DepsEtapa, type EstadoApp, limparVerificacao, mensagemDe, type TelaEtapa } from "./estado";
 
 /** O mínimo de um `File` que a tela usa (o teste passa um `File` de verdade do Node). */
 interface ArquivoLido {
@@ -37,6 +37,7 @@ function limparPlanilha(e: EstadoApp): void {
   e.nomeArquivo = undefined;
   e.colunas = undefined;
   e.config = undefined;
+  limparVerificacao(e);
   e.registros = undefined;
   e.codificacao = undefined;
   e.avisosCsv = undefined;
@@ -122,6 +123,7 @@ export class TelaPlanilha implements TelaEtapa {
       e.nomeArquivo = f.name;
       e.colunas = lido.colunas;
       e.config = undefined;
+      limparVerificacao(e);
       e.registros = lido.registros;
       e.codificacao = lido.codificacao;
       e.avisosCsv = lido.avisos;

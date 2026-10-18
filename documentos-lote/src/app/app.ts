@@ -14,7 +14,7 @@ import { h, icone } from "@comum/ui/dom";
 import type { ContextoDocumentos } from "../pagina/contexto";
 import type { RepositorioLote } from "../repositorio";
 import { TelaCruzamento } from "./cruzamento";
-import type { DefinicaoEtapa, EstadoApp, TelaEtapa } from "./estado";
+import { conferirVerificacao, type DefinicaoEtapa, type EstadoApp, type TelaEtapa } from "./estado";
 import { TelaModelo } from "./modelo";
 import { TelaPlanilha } from "./planilha";
 import { TelaVerificacao } from "./verificacao";
@@ -148,6 +148,8 @@ export class AppDocumentosLote {
 
   private avancar(): void {
     if (!this.tela?.completa()) return;
+    // Pular a Verificação (destino que não é a coluna) não pode deixar o resultado de uma verificação antiga.
+    conferirVerificacao(this.estado);
     const i = proximaEtapa(this.estado, this.indice);
     if (i !== null) void this.irPara(i);
   }

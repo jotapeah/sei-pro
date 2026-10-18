@@ -111,4 +111,41 @@ export interface DefinicaoEtapa {
   aplicavel?(estado: EstadoApp): boolean;
 }
 
+/** O que da config decide a verificação (a pausa, a descrição e os campos não mudam o resultado). */
+export function chaveVerificacao(cfg: ConfigLote): string {
+  const coluna = cfg.destino.tipo === "coluna" ? cfg.destino.coluna : "";
+  return JSON.stringify([coluna, cfg.colunaNome, cfg.colunaNivel ?? "", cfg.colunaHipotese ?? "", cfg.modelo.tipoId ?? ""]);
+}
+
+/**
+ * O resultado da verificação (`linhas`, `verificacoes`, `prontas`) vale para o estado atual: destino coluna, a mesma
+ * chave da config e a mesma planilha (referência) que foram verificadas.
+ */
+export function verificacaoVale(e: EstadoApp): boolean {
+  const cfg = e.config;
+  const base = e.baseVerificacao;
+  return (
+    cfg?.destino.tipo === "coluna" &&
+    !!base &&
+    !!e.registros &&
+    base.registros === e.registros &&
+    base.chave === chaveVerificacao(cfg) &&
+    !!e.linhas &&
+    !!e.verificacoes
+  );
+}
+
+/** Apaga o resultado da verificação (outro destino, outra config, outro modelo ou outra planilha). */
+export function limparVerificacao(e: EstadoApp): void {
+  e.linhas = undefined;
+  e.verificacoes = undefined;
+  e.prontas = undefined;
+  e.baseVerificacao = undefined;
+}
+
+/** Depois de a config mudar: o resultado da verificação some se não vale mais (só a pausa mudar não conta). */
+export function conferirVerificacao(e: EstadoApp): void {
+  if (e.baseVerificacao && !verificacaoVale(e)) limparVerificacao(e);
+}
+
 export const mensagemDe = (e: unknown): string => (e instanceof Error ? e.message : String(e));
