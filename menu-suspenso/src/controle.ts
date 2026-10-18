@@ -17,6 +17,8 @@ export const ATRIBUTO_ESTADO = 'data-spro-menu';
 const CLASSE_SEM_COLUNA = 'seiSlim_hidemenu';
 /** Variável CSS do recuo do topo do menu (ver `recuoSobBarra`); só existe no layout novo, com o menu aberto. */
 const VARIAVEL_RECUO = '--spro-menu-recuo';
+/** Presente só na aplicação inicial: sem ele o menu deslizaria para fora (piscando aberto) a cada tela que carrega. */
+const ATRIBUTO_SEM_ANIMACAO = 'data-spro-menu-sem-animacao';
 const ROTULO = 'Abrir ou fechar o menu';
 
 /**
@@ -123,7 +125,13 @@ export function iniciar(doc: Document) {
     doc.addEventListener('click', clique, true);
     doc.addEventListener('keydown', tecla);
     aberto = false;
+    raiz.setAttribute(ATRIBUTO_SEM_ANIMACAO, '');
     aplicar();
+    // Dois quadros: o primeiro pinta o estado fechado, o segundo já pode animar.
+    const janela = doc.defaultView;
+    const soltar = () => raiz.removeAttribute(ATRIBUTO_SEM_ANIMACAO);
+    if (janela?.requestAnimationFrame) janela.requestAnimationFrame(() => janela.requestAnimationFrame(soltar));
+    else setTimeout(soltar, 50);
   }
   function desligar() {
     doc.defaultView?.removeEventListener('scroll', recuar, true);
@@ -140,6 +148,7 @@ export function iniciar(doc: Document) {
     marcouCorpo = false;
     raiz.removeAttribute(ATRIBUTO_LAYOUT);
     raiz.removeAttribute(ATRIBUTO_ESTADO);
+    raiz.removeAttribute(ATRIBUTO_SEM_ANIMACAO);
     layout = null;
     aberto = false;
   }

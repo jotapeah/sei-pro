@@ -5,8 +5,8 @@ import { layoutDaPagina, recuoSobBarra } from '../src/layout';
 import { opcaoLegadaMarcada } from '../../sei-comum/src/opcoes/legadas';
 
 let n = 0;
-function teste(nome: string, fn: () => void) {
-  fn();
+async function teste(nome: string, fn: () => void | Promise<void>) {
+  await fn();
   console.log(`OK ${++n}: ${nome}`);
 }
 const NOVO = `<nav><div id="divInfraBarraSistemaPadraoE" title="Logo" onclick="infraMenuSistemaEsquemaPro()"><span id="logo">sei</span>
@@ -30,16 +30,16 @@ const tecla = (d: Document, key: string, em: Element | Document = d) => {
 };
 const estado = (d: Document) => d.documentElement.getAttribute(ATRIBUTO_ESTADO);
 
-teste('layout: ul#infraMenu é o SEI novo, menu sem ela é o antigo, sem menu é nada', () => {
+await teste('layout: ul#infraMenu é o SEI novo, menu sem ela é o antigo, sem menu é nada', () => {
   assert.equal(layoutDaPagina(criar(NOVO)), 'novo');
   assert.equal(layoutDaPagina(criar(ANTIGO)), 'antigo');
   assert.equal(layoutDaPagina(criar('<p>popup</p>')), null);
 });
-teste('opção ausente deixa desligada e só a escolha salva liga', () => {
+await teste('opção ausente deixa desligada e só a escolha salva liga', () => {
   assert.equal(opcaoLegadaMarcada(undefined, 'menususpenso'), false);
   assert.equal(opcaoLegadaMarcada(JSON.stringify([{ configGeral: [{ name: 'menususpenso', value: true }] }]), 'menususpenso'), true);
 });
-teste('desligada, a página fica intocada', () => {
+await teste('desligada, a página fica intocada', () => {
   const d = criar(NOVO);
   const antes = d.documentElement.outerHTML;
   const c = iniciar(d);
@@ -48,14 +48,14 @@ teste('desligada, a página fica intocada', () => {
   assert.equal(d.documentElement.outerHTML, antes);
   c.encerrar();
 });
-teste('ligar começa fechado e marca o layout', () => {
+await teste('ligar começa fechado e marca o layout', () => {
   const d = criar(NOVO);
   iniciar(d).configurar(true);
   assert.equal(d.documentElement.getAttribute(ATRIBUTO_LAYOUT), 'novo');
   assert.equal(estado(d), 'fechado');
 });
 // Que o onclick inline do SEI não rode só se prova no navegador (o DOM simulado não tem fase de captura).
-teste('o logo e o link Menu alternam e o clique é consumido', () => {
+await teste('o logo e o link Menu alternam e o clique é consumido', () => {
   const d = criar(NOVO);
   const c = iniciar(d);
   c.configurar(true);
@@ -68,7 +68,7 @@ teste('o logo e o link Menu alternam e o clique é consumido', () => {
   assert.equal(estado(d), 'aberto');
   c.encerrar();
 });
-teste('clique no menu mantém aberto; clique fora e Esc fecham, sem engolir o clique', () => {
+await teste('clique no menu mantém aberto; clique fora e Esc fecham, sem engolir o clique', () => {
   const d = criar(NOVO);
   const c = iniciar(d);
   c.configurar(true);
@@ -86,7 +86,7 @@ teste('clique no menu mantém aberto; clique fora e Esc fecham, sem engolir o cl
   assert.equal(estado(d), 'fechado');
   c.encerrar();
 });
-teste('aria-expanded e rótulo acompanham e voltam ao desligar, sem tocar no título', () => {
+await teste('aria-expanded e rótulo acompanham e voltam ao desligar, sem tocar no título', () => {
   const d = criar(NOVO);
   const barra = d.getElementById('divInfraBarraSistemaPadraoE')!;
   const c = iniciar(d);
@@ -105,7 +105,7 @@ teste('aria-expanded e rótulo acompanham e voltam ao desligar, sem tocar no tí
   assert.equal(d.documentElement.hasAttribute(ATRIBUTO_LAYOUT), false);
   assert.equal(d.documentElement.hasAttribute(ATRIBUTO_ESTADO), false);
 });
-teste('desligar tira os ouvintes: o clique volta a ser do SEI', () => {
+await teste('desligar tira os ouvintes: o clique volta a ser do SEI', () => {
   const d = criar(NOVO);
   const c = iniciar(d);
   c.configurar(true);
@@ -113,7 +113,7 @@ teste('desligar tira os ouvintes: o clique volta a ser do SEI', () => {
   assert.equal(clicar(d, 'logo').defaultPrevented, false);
   assert.equal(d.documentElement.hasAttribute(ATRIBUTO_ESTADO), false);
 });
-teste('ligar duas vezes não duplica ouvinte (um clique, uma troca)', () => {
+await teste('ligar duas vezes não duplica ouvinte (um clique, uma troca)', () => {
   const d = criar(NOVO);
   const c = iniciar(d);
   c.configurar(true);
@@ -122,7 +122,7 @@ teste('ligar duas vezes não duplica ouvinte (um clique, uma troca)', () => {
   assert.equal(estado(d), 'aberto');
   c.encerrar();
 });
-teste('SEI antigo: alterna e põe o body sem coluna só enquanto ligado', () => {
+await teste('SEI antigo: alterna e põe o body sem coluna só enquanto ligado', () => {
   const d = criar(ANTIGO);
   const c = iniciar(d);
   c.configurar(true);
@@ -133,7 +133,7 @@ teste('SEI antigo: alterna e põe o body sem coluna só enquanto ligado', () => 
   c.configurar(false);
   assert.equal(d.body.classList.contains('seiSlim_hidemenu'), false);
 });
-teste('SEI antigo: classe que já estava no body não é removida ao desligar', () => {
+await teste('SEI antigo: classe que já estava no body não é removida ao desligar', () => {
   const d = criar(ANTIGO);
   d.body.classList.add('seiSlim_hidemenu');
   const c = iniciar(d);
@@ -141,7 +141,7 @@ teste('SEI antigo: classe que já estava no body não é removida ao desligar', 
   c.configurar(false);
   assert.equal(d.body.classList.contains('seiSlim_hidemenu'), true);
 });
-teste('teclado: Enter e Espaço na barra alternam; em outro elemento, não', () => {
+await teste('teclado: Enter e Espaço na barra alternam; em outro elemento, não', () => {
   const d = criar(NOVO);
   const barra = d.getElementById('divInfraBarraSistemaPadraoE')!;
   const c = iniciar(d);
@@ -154,7 +154,7 @@ teste('teclado: Enter e Espaço na barra alternam; em outro elemento, não', () 
   assert.equal(estado(d), 'fechado');
   c.encerrar();
 });
-teste('janela estreita (menu de celular do SEI): o clique é do SEI', () => {
+await teste('janela estreita (menu de celular do SEI): o clique é do SEI', () => {
   const d = criar(NOVO);
   Object.defineProperty(d.defaultView, 'innerWidth', { value: 500, configurable: true });
   const c = iniciar(d);
@@ -166,13 +166,25 @@ teste('janela estreita (menu de celular do SEI): o clique é do SEI', () => {
   assert.equal(estado(d), 'aberto');
   c.encerrar();
 });
-teste('recuo sob a barra de ações: só com a barra fixa sobre a largura do menu', () => {
+await teste('recuo sob a barra de ações: só com a barra fixa sobre a largura do menu', () => {
   assert.equal(recuoSobBarra(true, { left: 16, bottom: 103 }, 50, 320), 61);
   assert.equal(recuoSobBarra(false, { left: 16, bottom: 103 }, 50, 320), 0);
   assert.equal(recuoSobBarra(true, { left: 400, bottom: 103 }, 50, 320), 0);
   assert.equal(recuoSobBarra(true, { left: 16, bottom: 40 }, 50, 320), 0);
 });
-teste('desligar tira o recuo do menu', () => {
+await teste('ligar não deixa a marca de "sem animação" para sempre e desligar a tira', async () => {
+  const d = criar(NOVO);
+  const c = iniciar(d);
+  c.configurar(true);
+  assert.equal(d.documentElement.hasAttribute('data-spro-menu-sem-animacao'), true);
+  await new Promise((r) => setTimeout(r, 120));
+  assert.equal(d.documentElement.hasAttribute('data-spro-menu-sem-animacao'), false);
+  c.configurar(false);
+  c.configurar(true);
+  c.configurar(false);
+  assert.equal(d.documentElement.hasAttribute('data-spro-menu-sem-animacao'), false);
+});
+await teste('desligar tira o recuo do menu', () => {
   const d = criar(NOVO);
   const menu = d.getElementById('divInfraAreaTelaE')!;
   menu.style.setProperty('--spro-menu-recuo', '60px');
@@ -181,7 +193,7 @@ teste('desligar tira o recuo do menu', () => {
   c.configurar(false);
   assert.equal(menu.style.getPropertyValue('--spro-menu-recuo'), '');
 });
-teste('página sem menu: ligar não faz nada', () => {
+await teste('página sem menu: ligar não faz nada', () => {
   const d = criar('<p>popup</p>');
   const c = iniciar(d);
   c.configurar(true);

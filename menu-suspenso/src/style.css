@@ -50,6 +50,9 @@
     box-shadow: 4px 0 18px rgba(0, 0, 0, 0.35);
     transition: transform 0.18s ease;
   }
+  :root[data-spro-menu-sem-animacao] #divInfraAreaTelaE {
+    transition: none !important;
+  }
   :root[data-spro-menu-suspenso='novo'] div.barraBotoesSEI.fixed {
     margin-top: -2px !important;
   }
