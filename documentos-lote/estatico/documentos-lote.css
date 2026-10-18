@@ -649,3 +649,26 @@ mark.dl-literal {
 .dl-execucao-fim[hidden] {
   display: none;
 }
+
+/* ---------- Resultado, retomada e gravar as de fora (Tarefa 14b) ---------- */
+/* O layout em coluna vem de `.dl-conteudo > section`. */
+.dl-resultado-resumo {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.dl-resultado-incertas ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+.dl-resultado-incertas li {
+  margin: 4px 0;
+}
+.dl-resultado tr.spro-situacao-erro.dl-incerto td:first-child {
+  color: var(--spro-aviso);
+}
+.dl-resultado tr.spro-situacao-pulado td:first-child {
+  color: var(--spro-suave);
+}
+.dl-resultado .dl-nota {
+  font-size: 12px;
+}

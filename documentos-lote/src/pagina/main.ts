@@ -13,7 +13,7 @@ import { CANAL_DOCUMENTOS_LOTE } from "@dl/modelo/constantes";
 import { Sei } from "@nucleo/sei";
 import { documentoTopo, paginaDe } from "@nucleo/sessao/pagina";
 import { type ContextoDocumentos, contextoDocumentos } from "./contexto";
-import { tratadoresDocumentosLote } from "./executor";
+import { dispararAbrirLinkPermanente, tratadoresDocumentosLote } from "./executor";
 import { marcarAtivo } from "./marca";
 import { armarSeLigado, CONFIG_MODAL } from "./modal";
 
@@ -65,6 +65,7 @@ function ligarModal(ctx: ContextoDocumentos): void {
     urlApp: () => chrome.runtime.getURL(`html/documentos-lote.html#modo=modal&tema=${ctx.temaEscuro ? "escuro" : "claro"}`),
     temaEscuro: ctx.temaEscuro,
     conectar: () => chrome.runtime.connect({ name: CANAL_DOCUMENTOS_LOTE }) as unknown as PortaRpc,
-    tratadores: (fechar, minimizar) => tratadoresDocumentosLote({ sei, ctx, fechar, minimizar }),
+    tratadores: (fechar, minimizar) =>
+      tratadoresDocumentosLote({ sei, ctx, fechar, minimizar, abrirLinkPermanente: () => dispararAbrirLinkPermanente(document) }),
   });
 }

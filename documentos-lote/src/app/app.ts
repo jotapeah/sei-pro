@@ -9,35 +9,80 @@
  * fecham (regra dos modais do SEI Pro).
  */
 
-import type { Rpc } from "@comum/ponte/rpc";
+import { novoId } from "@comum/id";
+import type { Rpc, Tratador } from "@comum/ponte/rpc";
+import { avisar } from "@comum/ui/aviso";
 import { h, icone } from "@comum/ui/dom";
+import { OP_RESTAURADO } from "@comum/ui/modalIframe";
+import { copiarResultado, resultadoComoCsv } from "@comum/ui/tabelaResultado";
+import { JANELA_OUTRA_ABA_MS } from "../modelo/constantes";
 import type { ContextoDocumentos } from "../pagina/contexto";
-import type { LoteDocumentos, RepositorioLote } from "../repositorio";
+import type { ItemLote, LoteDocumentos, RepositorioLote } from "../repositorio";
 import { TelaCruzamento } from "./cruzamento";
-import { conferirVerificacao, type DefinicaoEtapa, type EstadoApp, type TelaEtapa } from "./estado";
-import { ExecucaoDocumentos, resumoDoLote, TelaExecucao } from "./execucao";
-import { montarLote } from "./lote";
+import { chaveVerificacao, conferirVerificacao, type DefinicaoEtapa, type EstadoApp, mensagemDe, type TelaEtapa } from "./estado";
+import { ExecucaoDocumentos, MENSAGEM_ASSUMIDO, resumoDoLote, TelaExecucao } from "./execucao";
+import { montarLote, motivoDaVerificacao } from "./lote";
 import { TelaModelo } from "./modelo";
 import { TelaPlanilha } from "./planilha";
 import { TelaPrevia } from "./previa";
+import {
+  colunasDoResultado,
+  contagemDoLote,
+  foraRegravaveis,
+  linhasDoResultado,
+  numerosParaLink,
+  repetiveis,
+  TelaResultado,
+  temPendencia,
+} from "./resultado";
 import { TelaVerificacao } from "./verificacao";
 
 /** O que o tratador `contexto` devolve: o da aba sem a base nem o link da árvore (levam o infra_hash). */
 export type ContextoApp = Omit<ContextoDocumentos, "base" | "linkArvore">;
 
 export interface DepsApp {
-  /** `listarModelos`, `lerModelo`, ... e `fechar`/`minimizar` (pelo main), atendidos pela aba. */
+  /** `listarModelos`, `lerModelo`, ..., `abrirLinkPermanente` e `fechar`/`minimizar` (pelo main), atendidos pela aba. */
   rpc: Pick<Rpc, "chamar">;
   ctx: ContextoApp;
-  /** O lote em andamento: gravado ao Iniciar e a cada linha (a retomada ao abrir é da Tarefa 14b). */
+  /** O lote em andamento: gravado ao Iniciar e a cada linha; lido ao abrir (retomada). */
   repo: RepositorioLote;
   fechar(): void;
   /** Pastilha (true) ou tela cheia (false), pedido à aba durante a execução. */
   minimizar(minimizado: boolean): Promise<void>;
-  /** Injetáveis para as provas (pausa entre documentos e relógio do lote). */
+  /** Confirmação num diálogo do app, sem Cancelar (o X e o Esc respondem "não"). */
+  confirmar(texto: string, rotuloOk?: string): Promise<boolean>;
+  baixar(nome: string, conteudo: string, tipo: string): void;
+  clip: { write?: (itens: ClipboardItem[]) => Promise<void>; writeText(texto: string): Promise<void> };
+  ItemClip?: typeof ClipboardItem;
+  /** Deixa os números para o Link Permanente ler ao abrir (chrome.storage.local, CHAVE_ENTRADA_LINK). */
+  gravarEntradaLink(texto: string): Promise<void>;
+  /** Injetáveis para as provas (pausa entre documentos, relógio do lote e o aviso flutuante). */
   esperar?(ms: number): Promise<void>;
   agora?(): number;
+  avisar?(texto: string): void;
 }
+
+/**
+ * O que a aba pede ao app (lido a cada pedido pelo main): `restaurado` quando a aba devolve a janela minimizada
+ * sozinha (clique no item do menu com a pastilha, OP_RESTAURADO do modalIframe).
+ */
+export function tratadoresDoApp(app: { restaurado(): void }): Record<string, Tratador> {
+  return {
+    [OP_RESTAURADO]: () => {
+      app.restaurado();
+      return true;
+    },
+  };
+}
+
+/** O nome do modelo do lote, para a tela de retomada. */
+function nomeDoModelo(l: LoteDocumentos): string {
+  const m = l.config.modelo;
+  return (m.origem === "documento" ? m.titulo : m.nome) || m.tipoNome || "";
+}
+
+/** O que o corpo mostra fora das etapas. */
+type Corpo = "etapa" | "retomar" | "execucao" | "resultado" | "fora" | "concluido";
 
 /** As etapas, na ordem. */
 export const ETAPAS: readonly DefinicaoEtapa[] = [
@@ -93,6 +138,11 @@ export class AppDocumentosLote {
   private execucao: ExecucaoDocumentos | null = null;
   private telaExecucao: TelaExecucao | null = null;
   private minimizado = false;
+  private corpo: Corpo = "etapa";
+  /** O lote do resultado na tela (o que fechar o resultado apaga, se não houver pendência). */
+  private loteResultado: LoteDocumentos | null = null;
+  /** A reverificação do "Gravar as que ficaram de fora". */
+  private telaFora: TelaVerificacao | null = null;
 
   constructor(
     private readonly raiz: HTMLElement,
@@ -137,18 +187,52 @@ export class AppDocumentosLote {
     this.parar.push(() => raiz.ownerDocument.removeEventListener("keydown", teclado));
   }
 
-  /** Abre a primeira etapa. (A retomada de um lote guardado entra aqui na Tarefa 14.) */
+  /**
+   * Abre o lote guardado deste host/login, se houver (com linha pendente: Continuar ou Descartar; sem: direto no
+   * resultado); senão, a primeira etapa.
+   */
   async iniciar(): Promise<void> {
+    let guardado: LoteDocumentos | null = null;
+    try {
+      guardado = await this.d.repo.carregar(this.d.ctx.host, this.d.ctx.login);
+    } catch (e) {
+      console.warn("[SEI Pro] documentos em lote: lote guardado ilegível", e);
+    }
+    if (this.destruido) return;
+    if (guardado) {
+      if (guardado.itens.some((i) => i.situacao === "pendente")) this.telaRetomar(guardado);
+      else this.mostrarResultado(guardado);
+      return;
+    }
     await this.irPara(0);
   }
 
-  /** Fechar o modal: a tela atual para o que estiver pendente; a execução pausa (o lote fica, retomável). */
+  /**
+   * Fechar o modal: a tela atual para o que estiver pendente; a execução pausa (o lote fica, retomável). Com o
+   * resultado na tela e nada a repetir, conferir ou gravar, o lote é apagado (não sobra planilha guardada à toa);
+   * com pendência, ele fica até 7 dias do último uso.
+   */
   destruir(): void {
+    const resultado = this.corpo === "resultado" ? this.loteResultado : null;
     this.destruido = true;
     this.execucao?.parar();
     this.tela?.destruir?.();
     this.tela = null;
+    this.telaFora?.destruir();
+    this.telaFora = null;
     for (const p of this.parar.splice(0)) p();
+    if (resultado && !temPendencia(resultado)) {
+      void this.d.repo.apagar(resultado.id).catch((e) => console.warn("[SEI Pro] documentos em lote: falha ao apagar o lote", e));
+    }
+  }
+
+  /**
+   * A aba já restaurou a janela (clique no item do menu com a pastilha, `OP_RESTAURADO`): o app só volta a desenhar
+   * a tela cheia, sem pedir nada à aba.
+   */
+  restaurado(): void {
+    if (this.destruido || !this.minimizado) return;
+    this.marcarMinimizado(false);
   }
 
   /* ------------------------------------------------------------ etapas */
@@ -157,6 +241,10 @@ export class AppDocumentosLote {
     const def = ETAPAS[i];
     if (!def || this.destruido) return;
     this.tela?.destruir?.();
+    this.sairDoCorpo();
+    this.corpo = "etapa";
+    this.etapas.hidden = false;
+    this.rodape.hidden = false;
     this.indice = i;
     const tela = def.criar({
       rpc: this.d.rpc,
@@ -207,13 +295,405 @@ export class AppDocumentosLote {
 
   /* ------------------------------------------------------------ execução */
 
-  /** O Iniciar da Prévia: monta o lote, grava-o ANTES da primeira linha e mostra a execução. Rejeita sem enviar nada. */
+  /**
+   * O Iniciar da Prévia: monta o lote, grava-o ANTES da primeira linha e mostra a execução. Rejeita sem enviar nada.
+   *
+   * Guarda de escrita: há uma chave de lote por instalação, e gravar por cima apagaria o de outra aba. Um lote deste
+   * host/login com linha pendente atualizado há menos de JANELA_OUTRA_ABA_MS pode estar rodando: recusa. Fora da
+   * janela, um lote com pendência (pendente, erro, de fora) só é substituído com confirmação.
+   */
   private async iniciarExecucao(): Promise<void> {
     const lote = montarLote(this.estado, this.d.ctx, { agora: this.d.agora });
+    const existente = await this.d.repo.carregar(this.d.ctx.host, this.d.ctx.login);
+    if (this.destruido) return;
+    if (existente) {
+      const naoConcluido = existente.itens.some((i) => i.situacao === "pendente");
+      const desde = this.agora() - existente.atualizadoEm;
+      if (naoConcluido && desde < JANELA_OUTRA_ABA_MS) {
+        throw new Error(
+          `Há outro lote em andamento, atualizado há ${Math.max(0, Math.round(desde / 1000))} segundos, que pode estar rodando em outra aba do SEI. Espere ele terminar, ou feche esta janela e abra de novo para continuar ou descartar aquele lote.`,
+        );
+      }
+      if (temPendencia(existente)) {
+        const c = contagemDoLote(existente);
+        const sim = await this.d.confirmar(
+          `Há um lote anterior ${naoConcluido ? "não concluído" : "com pendências"} (${c.criadas} de ${c.total} criadas). Iniciar este lote apaga o registro daquele neste navegador (os documentos já criados continuam no SEI). Iniciar mesmo assim?`,
+          "Iniciar mesmo assim",
+        );
+        if (this.destruido) return;
+        if (!sim) throw new Error("O lote anterior foi mantido.");
+      }
+    }
     await this.d.repo.gravar(lote);
     if (this.destruido) return;
     this.executarLote(lote);
   }
+
+  private agora(): number {
+    return (this.d.agora ?? Date.now)();
+  }
+
+  /* ------------------------------------------------------------ corpo fora das etapas */
+
+  /** Troca o corpo por uma tela que não é etapa (retomada, execução, resultado, gravar as de fora). */
+  private mostrarCorpo(corpo: Corpo, el: HTMLElement): void {
+    this.tela?.destruir?.();
+    this.tela = null;
+    this.sairDoCorpo();
+    this.corpo = corpo;
+    this.etapas.hidden = true;
+    this.rodape.hidden = true;
+    this.conteudo.replaceChildren(el);
+    this.desenharPastilha();
+  }
+
+  /** Saindo do corpo atual: a reverificação em curso para e o resultado deixa de ser o da tela. */
+  private sairDoCorpo(): void {
+    this.telaFora?.destruir();
+    this.telaFora = null;
+    this.loteResultado = null;
+    this.telaExecucao = null;
+  }
+
+  /**
+   * O destino "processo da tela" grava no processo da tela ATUAL da aba: retomar ou repetir em outra tela gravaria
+   * no processo errado. Devolve o motivo do bloqueio (ou null).
+   */
+  private bloqueioDaTela(lote: LoteDocumentos): string | null {
+    if (lote.config.destino.tipo !== "tela" || !lote.idProcedimentoTela) return null;
+    if (lote.idProcedimentoTela === this.d.ctx.idProcedimento) return null;
+    return `Este lote grava no processo ${lote.protocoloTela ?? "da tela em que ele começou"}, o da tela em que começou. Abra esse processo no SEI e abra o Documentos em Lote de novo para continuar.`;
+  }
+
+  /**
+   * Assume o lote guardado antes de executar de novo nele (retomada, repetir, gravar as de fora): troca o id a partir
+   * do registro FRESCO, e outra aba que ainda o execute perde o `marcar` e para antes do próximo pedido. O lote da
+   * execução desta janela já é nosso. Devolve o lote a usar ou o motivo da recusa.
+   */
+  private async assumir(lote: LoteDocumentos): Promise<LoteDocumentos | string> {
+    if (this.execucao?.lote === lote) return lote;
+    let assumido: LoteDocumentos | null = null;
+    try {
+      assumido = await this.d.repo.assumir(lote.id, novoId());
+    } catch (e) {
+      return `Não foi possível gravar neste navegador; nada foi enviado ao SEI. ${mensagemDe(e)}`;
+    }
+    return assumido ?? "O lote mudou desde que esta janela abriu (outra aba o descartou ou assumiu). Feche e abra de novo.";
+  }
+
+  /** Grava cada item (lote assumido) antes de executar; o que falhar devolve o motivo, sem nada enviado ao SEI. */
+  private async marcarItens(lote: LoteDocumentos, mudancas: Array<[number, ItemLote]>): Promise<string | null> {
+    for (const [k, item] of mudancas) {
+      let ok = false;
+      try {
+        ok = await this.d.repo.marcar(lote.id, k, item);
+      } catch (e) {
+        return `Não foi possível gravar neste navegador; nada foi enviado ao SEI. ${mensagemDe(e)}`;
+      }
+      if (!ok) return MENSAGEM_ASSUMIDO;
+      lote.itens[k] = item;
+    }
+    return null;
+  }
+
+  /** A linha volta a `pendente`, com o processo que ela já criou (destino novo processo: não cria outro). */
+  private pendenteDe(item: ItemLote | undefined): ItemLote {
+    const p: ItemLote = { situacao: "pendente" };
+    if (item?.processo) p.processo = item.processo;
+    if (item?.linkProcesso) p.linkProcesso = item.linkProcesso;
+    return p;
+  }
+
+  /* ------------------------------------------------------------ retomada */
+
+  private telaRetomar(lote: LoteDocumentos): void {
+    // Escrita recente: o lote pode estar rodando em outra aba (minimizado, por exemplo). Continuar aqui duplicaria.
+    const desde = this.agora() - lote.atualizadoEm;
+    const recente = desde < JANELA_OUTRA_ABA_MS;
+    const c = contagemDoLote(lote);
+    const bloqueio = this.bloqueioDaTela(lote);
+    const quando = new Date(lote.iniciadoEm);
+    const data = Number.isFinite(quando.getTime()) ? quando.toLocaleString("pt-BR") : "";
+    const erro = h("p", { class: "dl-erro", role: "alert", hidden: true });
+    const mesmoAssim = h(
+      "button",
+      { type: "button", class: "spro-botao perigo", hidden: true, onclick: () => void this.retomar(lote, mesmoAssim, erro) },
+      icone("atualizar", 15),
+      "Continuar mesmo assim",
+    );
+    const continuar = h(
+      "button",
+      {
+        type: "button",
+        class: "spro-botao primario",
+        hidden: !!bloqueio,
+        onclick: () => {
+          // Lote recente: o primeiro clique só arma o segundo, explícito.
+          if (recente) {
+            continuar.hidden = true;
+            mesmoAssim.hidden = false;
+            mesmoAssim.focus?.({ preventScroll: true });
+            return;
+          }
+          void this.retomar(lote, continuar, erro);
+        },
+      },
+      icone("atualizar", 15),
+      "Continuar de onde parou",
+    );
+    const descartar = h(
+      "button",
+      {
+        type: "button",
+        class: "spro-botao perigo",
+        onclick: async () => {
+          const sim = await this.d.confirmar(
+            "Descartar o lote guardado? Os documentos já criados continuam no SEI; só o registro do que falta é apagado.",
+            "Descartar",
+          );
+          if (!sim || this.destruido) return;
+          await this.d.repo.apagar(lote.id).catch((e) => console.warn("[SEI Pro] documentos em lote: falha ao descartar", e));
+          if (this.destruido) return;
+          await this.irPara(0);
+        },
+      },
+      icone("lixeira", 15),
+      "Descartar",
+    );
+    const plural = (n: number, um: string, varios: string) => (n === 1 ? um : varios.replace("#", String(n)));
+    this.mostrarCorpo(
+      "retomar",
+      h(
+        "section",
+        { class: "dl-retomar", "aria-label": "Lote guardado" },
+        h("h2", {}, "Há um lote em andamento"),
+        h(
+          "p",
+          {},
+          `Modelo: ${nomeDoModelo(lote)}${data ? `, iniciado em ${data}` : ""}. `,
+          h("strong", {}, `${c.criadas} de ${c.total}`),
+          ` ${c.total === 1 ? "documento criado" : "documentos criados"}; ${plural(c.pendentes, "1 a gravar", "# a gravar")}.`,
+        ),
+        c.incertas
+          ? h(
+              "p",
+              { class: "dl-motivo" },
+              icone("alerta", 16),
+              `${plural(c.incertas, "1 linha ficou incerta", "# linhas ficaram incertas")} (o SEI não confirmou ou a janela fechou no meio do pedido). Elas não são repetidas: confira no SEI e decida no resultado.`,
+            )
+          : null,
+        recente
+          ? h(
+              "p",
+              { class: "dl-motivo dl-outra-aba", role: "alert" },
+              icone("alerta", 16),
+              `Este lote foi atualizado há ${Math.max(0, Math.round(desde / 1000))} segundos e pode estar rodando em outra aba do SEI. Só continue se tiver certeza de que a outra execução parou.`,
+            )
+          : null,
+        bloqueio ? h("p", { class: "dl-erro", role: "alert" }, icone("alerta", 16), h("span", {}, bloqueio)) : null,
+        erro,
+        h("div", { class: "dl-acoes" }, descartar, h("span", { class: "dl-espaco" }), continuar, mesmoAssim),
+      ),
+    );
+  }
+
+  /** Continuar: assume o lote e roda só as `pendente` (as criadas nunca são recriadas; as incertas ficam). */
+  private async retomar(lote: LoteDocumentos, botao: HTMLButtonElement, erro: HTMLElement): Promise<void> {
+    botao.disabled = true;
+    erro.hidden = true;
+    const l = await this.assumir(lote);
+    if (this.destruido) return;
+    if (typeof l === "string") {
+      botao.disabled = false;
+      erro.replaceChildren(icone("alerta", 16), h("span", {}, l));
+      erro.hidden = false;
+      return;
+    }
+    this.executarLote(l);
+  }
+
+  /* ------------------------------------------------------------ resultado */
+
+  private mostrarResultado(lote: LoteDocumentos): void {
+    const tela: TelaResultado = new TelaResultado(lote, {
+      baixarCsv: () => this.baixarCsv(lote),
+      copiar: () => void this.copiar(lote),
+      repetirFalhas: () => void this.repetir(tela, lote, repetiveis(lote)),
+      repetirIncerta: (k) => void this.repetirIncerta(tela, lote, k),
+      gravarFora: () => this.telaGravarFora(lote),
+      gerarLinks: () => void this.gerarLinks(tela, lote),
+      concluir: () => void this.concluir(lote),
+    });
+    this.mostrarCorpo("resultado", tela.el);
+    this.loteResultado = lote;
+  }
+
+  /** Nova rodada sobre `indices` (linhas `erro`), que voltam a `pendente` antes; nada sai se a gravação falhar. */
+  private async repetir(tela: TelaResultado, lote: LoteDocumentos, indices: number[]): Promise<void> {
+    if (!indices.length) return;
+    const bloqueio = this.bloqueioDaTela(lote);
+    if (bloqueio) {
+      tela.mostrarErro(bloqueio);
+      return;
+    }
+    tela.ocupado(true);
+    tela.mostrarErro("");
+    const l = await this.assumir(lote);
+    if (this.destruido) return;
+    const falha =
+      typeof l === "string"
+        ? l
+        : await this.marcarItens(
+            l,
+            indices.map((k) => [k, this.pendenteDe(l.itens[k])]),
+          );
+    if (this.destruido) return;
+    if (falha !== null || typeof l === "string") {
+      tela.ocupado(false);
+      tela.mostrarErro(falha ?? "");
+      return;
+    }
+    this.executarLote(l, indices);
+  }
+
+  /** Incerta (Ruling 16): só com a confirmação explícita, e só esta linha. */
+  private async repetirIncerta(tela: TelaResultado, lote: LoteDocumentos, k: number): Promise<void> {
+    const sim = await this.d.confirmar(
+      `A linha ${k + 2} ficou incerta: o documento pode já ter sido criado no SEI. Antes de repetir, confira o processo de destino; se o documento existir, repetir cria outro igual. Repetir mesmo assim?`,
+      "Repetir mesmo assim",
+    );
+    if (!sim || this.destruido) return;
+    await this.repetir(tela, lote, [k]);
+  }
+
+  /**
+   * "Gravar as que ficaram de fora" (destino coluna): reverifica (com `deNovo`) os processos das linhas `fora` sem
+   * erro na planilha, na mesma tela/regras da Verificação, e grava as que passaram. As com erro na planilha aparecem
+   * com o motivo e não podem ser gravadas (precisam de correção no arquivo).
+   */
+  private telaGravarFora(lote: LoteDocumentos): void {
+    if (!foraRegravaveis(lote).length) return;
+    // A verificação lê o estado de uma etapa: um estado só desta reverificação, com as linhas de fora do lote.
+    const registros: Record<string, string>[] = [];
+    const estado: EstadoApp = {
+      config: lote.config,
+      registros,
+      linhas: lote.linhas.filter((_, k) => lote.itens[k]?.situacao === "fora"),
+      verificacoes: {},
+      baseVerificacao: { registros, chave: chaveVerificacao(lote.config) },
+    };
+    let ocupado = false;
+    const erro = h("p", { class: "dl-erro", role: "alert", hidden: true });
+    const gravar = h(
+      "button",
+      { type: "button", class: "spro-botao primario dl-gravar-fora-ok", disabled: true, onclick: () => void fazer() },
+      "Gravar",
+    );
+    const atualizar = () => {
+      gravar.disabled = ocupado || !tela.completa();
+      gravar.textContent = tela.rotuloAvancar();
+    };
+    const tela = new TelaVerificacao({ rpc: this.d.rpc, estado, aoMudar: atualizar }, { deNovo: true, esperar: this.d.esperar });
+    const fazer = async () => {
+      const prontas = estado.prontas ?? [];
+      if (ocupado || !tela.completa() || !prontas.length) return;
+      ocupado = true;
+      atualizar();
+      erro.hidden = true;
+      const l = await this.assumir(lote);
+      if (this.destruido || this.telaFora !== tela) return;
+      let falha = typeof l === "string" ? l : null;
+      if (typeof l !== "string") {
+        const v = estado.verificacoes ?? {};
+        const aprovadas = new Set(prontas);
+        const mudancas: Array<[number, ItemLote]> = [];
+        for (const k of foraRegravaveis(l)) {
+          if (aprovadas.has(k)) {
+            mudancas.push([k, { situacao: "pendente" }]);
+            continue;
+          }
+          // A que continua de fora fica com o motivo da verificação nova.
+          const r = v[l.linhas[k]?.destino ?? ""];
+          if (r) mudancas.push([k, { situacao: "fora", erro: motivoDaVerificacao(r) }]);
+        }
+        for (const [n, r] of Object.entries(v)) l.verificacoes[n] = r;
+        falha = await this.marcarItens(l, mudancas);
+        if (this.destruido) return;
+        if (falha === null) {
+          this.executarLote(l, prontas);
+          return;
+        }
+      }
+      ocupado = false;
+      atualizar();
+      erro.replaceChildren(icone("alerta", 16), h("span", {}, falha ?? ""));
+      erro.hidden = false;
+    };
+    const voltar = h("button", { type: "button", class: "spro-botao", onclick: () => this.mostrarResultado(lote) }, "Voltar ao resultado");
+    this.mostrarCorpo(
+      "fora",
+      h(
+        "section",
+        { class: "dl-gravar-fora", "aria-label": "Gravar as que ficaram de fora" },
+        h("h2", {}, "Gravar as que ficaram de fora"),
+        tela.el,
+        erro,
+        h("div", { class: "dl-acoes" }, voltar, h("span", { class: "dl-espaco" }), gravar),
+      ),
+    );
+    this.telaFora = tela;
+    atualizar();
+    void tela.iniciar();
+  }
+
+  private baixarCsv(lote: LoteDocumentos): void {
+    this.d.baixar("documentos-em-lote.csv", resultadoComoCsv(linhasDoResultado(lote), colunasDoResultado(lote)), "text/csv;charset=utf-8");
+  }
+
+  private async copiar(lote: LoteDocumentos): Promise<void> {
+    const linhas = linhasDoResultado(lote);
+    const colunas = colunasDoResultado(lote);
+    const aviso = this.d.avisar ?? ((t: string) => avisar(t));
+    try {
+      const modo = await copiarResultado(linhas, colunas, this.d.clip, this.d.ItemClip);
+      aviso(modo === "rico" ? "Copiado com links clicáveis" : "Copiado como texto");
+    } catch (e) {
+      aviso(`Não foi possível copiar: ${mensagemDe(e)}`);
+    }
+  }
+
+  /** Os números das criadas (sem as incertas) vão para o Link Permanente, que abre já com eles; esta janela fecha. */
+  private async gerarLinks(tela: TelaResultado, lote: LoteDocumentos): Promise<void> {
+    const numeros = numerosParaLink(lote);
+    if (!numeros.length) return;
+    try {
+      await this.d.gravarEntradaLink(numeros.join("\n"));
+      const aberto = await this.d.rpc.chamar<unknown>("abrirLinkPermanente");
+      if (aberto === false) throw new Error("o Link Permanente não está disponível nesta aba.");
+    } catch (e) {
+      if (!this.destruido) tela.mostrarErro(`Não foi possível abrir o Pesquisar Link Permanente: ${mensagemDe(e)}`);
+      return;
+    }
+    if (!this.destruido) this.d.fechar();
+  }
+
+  /** Concluir: apaga o lote (com pendência, só depois de confirmar) e fecha a janela. */
+  private async concluir(lote: LoteDocumentos): Promise<void> {
+    if (temPendencia(lote)) {
+      const sim = await this.d.confirmar(
+        "Concluir apaga o registro deste lote neste navegador: as linhas com erro, incertas ou de fora não poderão mais ser repetidas por aqui (os documentos criados continuam no SEI). Concluir mesmo assim?",
+        "Concluir",
+      );
+      if (!sim || this.destruido) return;
+    }
+    await this.d.repo.apagar(lote.id).catch((e) => console.warn("[SEI Pro] documentos em lote: falha ao apagar o lote", e));
+    if (this.destruido) return;
+    this.sairDoCorpo();
+    this.corpo = "concluido";
+    this.d.fechar();
+  }
+
+  /* ------------------------------------------------------------ execução */
 
   /**
    * Mostra a execução no lugar do corpo e roda uma rodada sobre `indices` (padrão: as linhas `pendente`). Ponto de
@@ -223,8 +703,6 @@ export class AppDocumentosLote {
   executarLote(lote: LoteDocumentos, indices?: number[]): void {
     if (this.destruido) return;
     if (this.execucao?.rodando) return;
-    this.tela?.destruir?.();
-    this.tela = null;
     const ex =
       this.execucao && this.execucao.lote.id === lote.id
         ? this.execucao
@@ -243,10 +721,8 @@ export class AppDocumentosLote {
       },
       minimizar: () => void this.minimizar(true),
     });
+    this.mostrarCorpo("execucao", tela.el);
     this.telaExecucao = tela;
-    this.etapas.hidden = true;
-    this.rodape.hidden = true;
-    this.conteudo.replaceChildren(tela.el);
     void this.acompanhar(ex, ex.rodar(indices));
   }
 
@@ -261,11 +737,10 @@ export class AppDocumentosLote {
     this.aoMudarExecucao();
   }
 
-  /**
-   * Todas as linhas da rodada processadas. Ponto de extensão da Tarefa 14b: mostrar a tela de resultado (e apagar
-   * o lote ao fechá-lo ou descartá-lo). Aqui o lote concluído fica no repositório.
-   */
-  protected aoConcluir(_lote: LoteDocumentos): void {}
+  /** Todas as linhas da rodada processadas: o resultado (o lote fica até o usuário fechar o resultado ou concluir). */
+  protected aoConcluir(lote: LoteDocumentos): void {
+    this.mostrarResultado(lote);
+  }
 
   private aoMudarExecucao(): void {
     if (this.destruido) return;
@@ -285,6 +760,10 @@ export class AppDocumentosLote {
       return;
     }
     if (this.destruido) return;
+    this.marcarMinimizado(m);
+  }
+
+  private marcarMinimizado(m: boolean): void {
     this.minimizado = m;
     const html = this.raiz.ownerDocument.documentElement;
     if (m) html.setAttribute("data-minimizado", "1");

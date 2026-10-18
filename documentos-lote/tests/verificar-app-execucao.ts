@@ -675,9 +675,10 @@ export async function verificarAppExecucao(): Promise<void> {
       "execução: indicador e rodapé escondidos",
       m.visivel(m.raiz.querySelector(".dl-etapas")) === false && m.visivel(rodape()) === false,
     );
-    await ate(() => !!m.raiz.querySelector(".dl-execucao-fim:not([hidden])"), 3000);
+    // Concluída a rodada, o app mostra o resultado (Tarefa 14b); o lote fica até o usuário fechar o resultado.
+    await ate(() => !!m.raiz.querySelector(".dl-resultado"), 3000);
     const guardado = (await m.deps.repo.carregar("sei.x.gov.br", "ana")) as LoteDocumentos;
-    checar("lote concluído continua no repositório (a 14b apaga)", !!guardado);
+    checar("lote concluído continua no repositório enquanto o resultado está na tela", !!guardado);
     igual(
       "itens: criada, fora, criada",
       guardado?.itens.map((i) => i.situacao),
@@ -685,7 +686,7 @@ export async function verificarAppExecucao(): Promise<void> {
     );
     igual("iniciadoEm pelo relógio do app", guardado?.iniciadoEm, 777);
     igual("2 criar", criados.length, 2);
-    checar("resumo do fim", (m.raiz.querySelector(".dl-execucao-fim")?.textContent ?? "").includes("1 ficou de fora"));
+    checar("resumo do fim", (m.raiz.querySelector(".dl-resultado-resumo")?.textContent ?? "").includes("1 ficou de fora"));
     checar("sem botão Cancelar", !botao(m.doc, "Cancelar"));
     m.app.destruir();
 

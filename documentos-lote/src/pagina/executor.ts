@@ -20,6 +20,18 @@ import { type EscolhaModelo, lerModelo, listarModelos, type Modelo } from "../se
 import { type StatusProcesso, verificarProcesso } from "../sei/verificar";
 import type { ContextoDocumentos } from "./contexto";
 
+/**
+ * Evento do content script do Link Permanente (EVENTO_ABRIR em link-permanente/src/modelo/constantes.ts, duplicado
+ * aqui como no processos-lote: os pacotes não se importam; a prova compara as duas strings).
+ */
+export const EVENTO_ABRIR_LINK_PERMANENTE = "spro-link-permanente-abrir";
+
+/** Abre o Pesquisar Link Permanente na página do SEI: ele lê a entrada de `chrome.storage.local` ao abrir. */
+export function dispararAbrirLinkPermanente(doc: Document): void {
+  const Ev = (doc.defaultView as (Window & typeof globalThis) | null)?.CustomEvent ?? CustomEvent;
+  doc.dispatchEvent(new Ev(EVENTO_ABRIR_LINK_PERMANENTE));
+}
+
 /** As chamadas ao SEI, trocáveis nas provas para forçar cada desfecho sem rede. */
 export interface Chamadas {
   listarModelos: typeof listarModelos;
@@ -52,6 +64,8 @@ export interface DepsExecutor {
   minimizar(minimizado: boolean): void;
   /** Abre um endereço já validado em outra aba; trocável nas provas. */
   abrirJanela?: (url: string) => void;
+  /** Abre o Pesquisar Link Permanente nesta aba (o content script dele ouve o evento); sem isto, o RPC devolve false. */
+  abrirLinkPermanente?: () => void;
   chamadas?: Partial<Chamadas>;
 }
 
@@ -413,6 +427,11 @@ export function tratadoresDocumentosLote(d: DepsExecutor): Record<string, Tratad
     },
     minimizar: (args) => {
       d.minimizar((args as { minimizado?: unknown } | undefined)?.minimizado === true);
+      return true;
+    },
+    abrirLinkPermanente: () => {
+      if (!d.abrirLinkPermanente) return false;
+      d.abrirLinkPermanente();
       return true;
     },
   };

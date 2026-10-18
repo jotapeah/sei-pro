@@ -45,7 +45,17 @@ export function montar(o: OpcoesMontar = {}) {
   const doc = instalarDom('<html><body><div id="app"></div></body></html>');
   const raiz = doc.getElementById("app")!;
   const chamadas: Array<{ op: string; args: unknown }> = [];
-  const t = { fechou: 0 };
+  const t = {
+    fechou: 0,
+    /** Textos das confirmações pedidas e a resposta (Tarefa 14b). */
+    confirmacoes: [] as string[],
+    responder: true,
+    baixados: [] as Array<{ nome: string; conteudo: string; tipo: string }>,
+    copiados: [] as string[],
+    avisos: [] as string[],
+    entradaLink: [] as string[],
+    minimizou: [] as boolean[],
+  };
   const deps: DepsApp = {
     rpc: {
       chamar: (async (op: string, args?: unknown) => {
@@ -79,7 +89,19 @@ export function montar(o: OpcoesMontar = {}) {
     fechar: () => {
       t.fechou += 1;
     },
-    minimizar: async () => undefined,
+    minimizar: async (m) => {
+      t.minimizou.push(m);
+    },
+    confirmar: async (texto) => {
+      t.confirmacoes.push(texto);
+      return t.responder;
+    },
+    baixar: (nome, conteudo, tipo) => void t.baixados.push({ nome, conteudo, tipo }),
+    clip: {
+      writeText: async (texto) => void t.copiados.push(texto),
+    },
+    avisar: (texto) => void t.avisos.push(texto),
+    gravarEntradaLink: async (texto) => void t.entradaLink.push(texto),
   };
   const app = new AppDocumentosLote(raiz, deps);
   const visivel = (el: Element | null | undefined) => !!el && !(el as HTMLElement).hidden && !el.closest("[hidden]");

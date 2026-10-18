@@ -62,12 +62,16 @@ function verificacoesGuardaveis(v: Record<string, VerificacaoGuardada> | undefin
   return saida;
 }
 
+/** O resultado de uma verificação em texto ("Não aberto na unidade: Enviado para outra unidade"). */
+export function motivoDaVerificacao(v: VerificacaoGuardada): string {
+  return v.mensagem ? `${ROTULO_STATUS[v.status]}: ${v.mensagem}` : ROTULO_STATUS[v.status];
+}
+
 /** Por que a linha ficou de fora, em texto (vai no item `fora`, para o resultado). */
 function motivoFora(l: LinhaDocumento, verificacoes: Record<string, VerificacaoGuardada>): string | undefined {
   if (l.erroLinha) return l.erroLinha;
   const v = l.destino ? verificacoes[l.destino] : undefined;
-  if (!v) return undefined;
-  return v.mensagem ? `${ROTULO_STATUS[v.status]}: ${v.mensagem}` : ROTULO_STATUS[v.status];
+  return v ? motivoDaVerificacao(v) : undefined;
 }
 
 export interface OpcoesLote {
@@ -77,7 +81,11 @@ export interface OpcoesLote {
 }
 
 /** O lote novo do estado atual. Lança (com a mensagem para o usuário) se ainda não há o que gravar. */
-export function montarLote(estado: EstadoApp, ctx: { host: string; login: string }, o: OpcoesLote = {}): LoteDocumentos {
+export function montarLote(
+  estado: EstadoApp,
+  ctx: { host: string; login: string; idProcedimento?: string },
+  o: OpcoesLote = {},
+): LoteDocumentos {
   const r = linhasDoLote(estado);
   if ("erro" in r) throw new Error(r.erro);
   const cfg = estado.config as ConfigLote;
@@ -101,5 +109,7 @@ export function montarLote(estado: EstadoApp, ctx: { host: string; login: string
     verificacoes,
   };
   if (estado.protocolo) lote.protocoloTela = estado.protocolo;
+  // O alvo "tela" é a tela ATUAL da aba: a retomada e a repetição conferem que é o mesmo processo.
+  if (cfg.destino.tipo === "tela" && ctx.idProcedimento) lote.idProcedimentoTela = ctx.idProcedimento;
   return lote;
 }

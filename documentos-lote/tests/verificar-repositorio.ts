@@ -156,4 +156,25 @@ export async function verificarRepositorio(): Promise<void> {
   checar("apagar de outro lote não remove", CHAVE in (await area.obter()));
   await repo.apagar("l1");
   checar("apagar remove a chave", !(CHAVE in (await area.obter())));
+
+  // assumir (retomada, Tarefa 14b): troca o id do lote guardado; quem ainda executa com o id antigo para no marcar.
+  relogio = 8000;
+  await repo.gravar({ ...exemplo(), idProcedimentoTela: "77" });
+  const assumido = await repo.assumir("l1", "l2");
+  igual(
+    "assumir devolve o lote fresco com o id novo",
+    [assumido?.id, assumido?.atualizadoEm, assumido?.idProcedimentoTela],
+    ["l2", 8000, "77"],
+  );
+  igual("o guardado tem o id novo", (await repo.carregar(HOST, "ana"))?.id, "l2");
+  checar("marcar com o id antigo devolve false", (await repo.marcar("l1", 0, { situacao: "erro", erro: "x" })) === false);
+  igual("assumir de id que não é o guardado: null", await repo.assumir("l1", "l3"), null);
+  await repo.apagar("l2");
+  igual("assumir sem lote: null", await repo.assumir("l2", "l4"), null);
+  {
+    const v: Mutavel = exemplo();
+    v.idProcedimentoTela = 9;
+    await area.gravar({ [CHAVE]: v });
+    igual("inválido (idProcedimentoTela com tipo errado) carrega null", await repo.carregar(HOST, "ana"), null);
+  }
 }

@@ -43,6 +43,11 @@ export interface LoteDocumentos {
   verificacoes: Record<string, VerificacaoGuardada>;
   /** Protocolo do processo da tela (o destino "processo da tela"), para o resultado mostrar o destino. */
   protocoloTela?: string;
+  /**
+   * Id do processo da tela em que o lote começou (destino "processo da tela"): o `criar` com alvo "tela" grava no
+   * processo da tela ATUAL, então retomar ou repetir só vale com a mesma tela aberta.
+   */
+  idProcedimentoTela?: string;
 }
 
 const CHAVE = `${PREFIXO_CHAVE}lote`;
@@ -90,7 +95,7 @@ function loteValido(v: unknown): v is LoteDocumentos {
   if (v.linhas.length > TETO || v.itens.length !== v.linhas.length) return false;
   if (!v.linhas.every((l) => ehObjeto(l) && typeof l.indice === "number" && ehObjeto(l.dados))) return false;
   if (!ehObjeto(v.verificacoes)) return false;
-  if (!opcionalTexto(v.protocoloTela)) return false;
+  if (!opcionalTexto(v.protocoloTela) || !opcionalTexto(v.idProcedimentoTela)) return false;
   return v.itens.every(itemValido);
 }
 
@@ -171,6 +176,22 @@ export class RepositorioLote {
       itens[indice] = item;
       await this.area.gravar({ [CHAVE]: { ...atual, itens, atualizadoEm: this.agora() } });
       return true;
+    });
+  }
+
+  /**
+   * Retomada: troca o id do lote guardado por `idNovo`, a partir do registro FRESCO, e o devolve. Outra aba que ainda
+   * execute o lote com o id antigo perde o `marcar` (false) e para antes do próximo pedido. null: o guardado não é
+   * mais `idEsperado` (outra aba o descartou ou assumiu). Entre abas a releitura e a escrita não são atômicas; o
+   * aviso de "lote recente" estreita essa janela.
+   */
+  assumir(idEsperado: string, idNovo: string): Promise<LoteDocumentos | null> {
+    return this.enfileirar(async () => {
+      const atual = await this.ler();
+      if (!atual || atual.id !== idEsperado) return null;
+      const novo: LoteDocumentos = { ...atual, id: idNovo, atualizadoEm: this.agora() };
+      await this.area.gravar({ [CHAVE]: novo });
+      return novo;
     });
   }
 

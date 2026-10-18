@@ -41,6 +41,11 @@ const STATUS = new Set<string>(Object.keys(ROTULO_STATUS));
 export interface OpcoesVerificacao {
   /** Injetável para as provas não dormirem a pausa de verdade. */
   esperar?(ms: number): Promise<void>;
+  /**
+   * A primeira consulta já vai com `deNovo` (a aba esquece o que guardou do processo). É o "Gravar as que ficaram
+   * de fora" do resultado (Tarefa 14b), que reverifica processos consultados numa passagem anterior.
+   */
+  deNovo?: boolean;
 }
 
 /** A linha está pronta para gravar: sem erro na planilha e com o processo verificado "ok". */
@@ -166,7 +171,7 @@ export class TelaVerificacao implements TelaEtapa {
   async iniciar(): Promise<void> {
     const v = this.d.estado.verificacoes ?? {};
     const faltam = [...this.grupos.keys()].filter((n) => !v[n]);
-    if (faltam.length) await this.consultar(faltam, false);
+    if (faltam.length) await this.consultar(faltam, this.o.deNovo === true);
   }
 
   destruir(): void {

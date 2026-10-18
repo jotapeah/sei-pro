@@ -12,12 +12,13 @@ import type { Tratador } from "@comum/ponte/rpc";
 import type { Arvore } from "@nucleo/dominio/arvore";
 import { ErroSei } from "@nucleo/sessao/erros";
 import { ErroProcessoCriado } from "@pl/sei/criar";
+import { EVENTO_ABRIR as EVENTO_LP } from "../../link-permanente/src/modelo/constantes";
 import type { ContextoDocumentos } from "../src/pagina/contexto";
-import { type Chamadas, tratadoresDocumentosLote } from "../src/pagina/executor";
+import { type Chamadas, dispararAbrirLinkPermanente, EVENTO_ABRIR_LINK_PERMANENTE, tratadoresDocumentosLote } from "../src/pagina/executor";
 import { type DocumentoCriado, ErroDocumentoCriado, type PedidoCriar } from "../src/sei/criar";
 import type { Modelo } from "../src/sei/modelo";
 import type { ResultadoVerificacao } from "../src/sei/verificar";
-import { checar, igual, secao } from "./util";
+import { checar, igual, instalarDom, secao } from "./util";
 
 const H = "f".repeat(64);
 const ORIGEM = "https://sei.x.gov.br/sei/controlador.php";
@@ -492,6 +493,30 @@ export async function verificarExecutor(): Promise<void> {
     await t.minimizar!({ minimizado: true });
     await t.minimizar!({ minimizado: false });
     igual("minimizar", reg.minimizar, [true, false]);
+  }
+
+  secao("Executor: abrirLinkPermanente dispara o evento do Link Permanente (Tarefa 14b)");
+  {
+    const { t } = montar();
+    checar("sem o gancho na aba: false", (await t.abrirLinkPermanente!(undefined)) === false);
+    let abertos = 0;
+    const { sei } = seiFalso({});
+    const t2 = tratadoresDocumentosLote({
+      sei: sei as never,
+      ctx: CTX,
+      fechar: () => {},
+      minimizar: () => {},
+      abrirLinkPermanente: () => {
+        abertos += 1;
+      },
+    });
+    checar("com o gancho: true e uma abertura", (await t2.abrirLinkPermanente!(undefined)) === true && abertos === 1, abertos);
+    const doc = instalarDom();
+    const vistos: string[] = [];
+    doc.addEventListener(EVENTO_ABRIR_LINK_PERMANENTE, (ev) => vistos.push(ev.type));
+    dispararAbrirLinkPermanente(doc);
+    igual("evento no document com o nome do Link Permanente", vistos, ["spro-link-permanente-abrir"]);
+    igual("mesma string do pacote link-permanente", EVENTO_ABRIR_LINK_PERMANENTE, EVENTO_LP);
   }
 
   secao("Executor: nada de infra_hash nem linkArvore para o app");

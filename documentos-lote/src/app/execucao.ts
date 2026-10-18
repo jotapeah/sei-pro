@@ -15,8 +15,8 @@
  * linha volta a `pendente` (nada foi criado; Continuar a refaz), salvo se a linha já criou o processo novo (aí
  * ela fica incerta: refazê-la criaria outro processo); erro comum → erro com o texto e segue.
  *
- * Ponto de extensão (Tarefa 14b): `rodar(indices)` aceita outra lista fixa (repetir as falhas, gravar as que
- * ficaram de fora) sobre o mesmo lote; `TelaExecucao.concluida()` é o lugar do botão "Ver resultado".
+ * `rodar(indices)` aceita outra lista fixa (repetir as falhas, gravar as que ficaram de fora, retomar) sobre o
+ * mesmo lote. Uma linha `pendente` que já traz `processo` (destino novo processo, repetição) pula o `criarProcesso`.
  */
 
 import { type EstadoLote, ExecutorLote, type ItemLote as ItemExecutor, RitmoAdaptativo, type SaidaItem } from "@comum/lote/executor";
@@ -82,6 +82,8 @@ export class ExecucaoDocumentos {
   private rodadaAtual: Promise<void> | null = null;
   /** Linhas que voltam a `pendente` no executor depois do desfecho (sessão expirada antes de criar). */
   private readonly devolver = new Set<number>();
+  /** A linha com pedido em voo (fica fora da contagem: o item dela é o `erro` incerto provisório). */
+  private emVoo: number | null = null;
 
   constructor(
     readonly lote: LoteDocumentos,
@@ -100,17 +102,22 @@ export class ExecucaoDocumentos {
     return this.rodadaAtual !== null;
   }
 
+  /**
+   * `feitos`/`total` são da rodada (a barra); `criadas`, `erros` e `fora` são do LOTE INTEIRO, acumulados entre as
+   * rodadas (repetir as falhas, gravar as de fora, retomar), para o resumo e o resultado contarem a mesma coisa. A
+   * linha em voo não conta como erro.
+   */
   get progresso(): { feitos: number; total: number; criadas: number; erros: number; fora: number } {
     let feitos = 0;
     for (const i of this.itensExecutor) if (i.situacao !== "pendente") feitos += 1;
     let criadas = 0;
     let erros = 0;
-    for (const k of this.recorte) {
-      const s = this.lote.itens[k]?.situacao;
-      if (s === "criada") criadas += 1;
-      else if (s === "erro") erros += 1;
-    }
-    const fora = this.lote.itens.filter((i) => i.situacao === "fora").length;
+    let fora = 0;
+    this.lote.itens.forEach((i, k) => {
+      if (i.situacao === "criada") criadas += 1;
+      else if (i.situacao === "erro" && k !== this.emVoo) erros += 1;
+      else if (i.situacao === "fora") fora += 1;
+    });
     return { feitos, total: this.recorte.length, criadas, erros, fora };
   }
 
@@ -201,12 +208,19 @@ export class ExecucaoDocumentos {
     return true;
   }
 
-  /** Nada foi enviado nesta linha: ela volta a `pendente` (memória e, se der, repositório) e o lote pausa. */
+  /**
+   * Nada foi enviado nesta linha: ela volta a `pendente` (memória e, se der, repositório) e o lote pausa. O processo
+   * que a linha já tinha (destino novo processo, repetição) continua com ela: a próxima tentativa não cria outro.
+   */
   private async devolverPendente(k: number, motivo: string): Promise<Saida> {
     this.devolver.add(k);
+    const atual = this.lote.itens[k];
+    const pendente: ItemLote = { situacao: "pendente" };
+    if (atual?.processo) pendente.processo = atual.processo;
+    if (atual?.linkProcesso) pendente.linkProcesso = atual.linkProcesso;
     // Sem gravar, o motivo fica o da falha de gravação (ou da outra aba), que `gravar` já pôs.
-    if (await this.gravar(k, { situacao: "pendente" })) this.motivo = motivo;
-    this.lote.itens[k] = { situacao: "pendente" };
+    if (await this.gravar(k, pendente)) this.motivo = motivo;
+    this.lote.itens[k] = pendente;
     return { situacao: "erro", erro: this.motivo ?? motivo, parar: true };
   }
 
@@ -223,16 +237,25 @@ export class ExecucaoDocumentos {
     const linha = this.lote.linhas[k];
     if (!linha) return { situacao: "erro", erro: "Linha inexistente no lote." };
     const cfg = this.lote.config;
+    // Destino novo processo com o processo já criado (repetição de uma linha cujo documento falhou): só o `criar`.
+    const anterior = this.lote.itens[k];
+    const existente: ProcessoCriado | null =
+      cfg.destino.tipo === "novo-processo" && anterior?.processo
+        ? { numero: anterior.processo, link: linkSeguro(anterior.linkProcesso) }
+        : null;
 
     // 1. Grava antes de pedir. Sem a gravação nada sai: a linha segue pendente e o lote para.
-    if (!(await this.gravar(k, EM_VOO))) return this.devolverPendente(k, this.motivo ?? MENSAGEM_GRAVAR);
+    if (!(await this.gravar(k, this.comProcesso(EM_VOO, existente)))) return this.devolverPendente(k, this.motivo ?? MENSAGEM_GRAVAR);
 
     const agora = this.d.agora ?? Date.now;
     const inicio = agora();
+    this.emVoo = k;
     try {
-      let processo: ProcessoCriado | null = null;
+      let processo: ProcessoCriado | null = existente;
       let alvo: { tipo: "tela" } | { tipo: "coluna"; numero: string } | { tipo: "novo-processo"; numero: string };
-      if (cfg.destino.tipo === "novo-processo") {
+      if (existente) {
+        alvo = { tipo: "novo-processo", numero: existente.numero };
+      } else if (cfg.destino.tipo === "novo-processo") {
         const r = await this.criarProcesso(k, cfg.destino.idTipoProcesso, especificacaoDaLinha(cfg.destino.especificacao, linha.dados));
         if ("saida" in r) return r.saida;
         processo = r.processo;
@@ -279,6 +302,7 @@ export class ExecucaoDocumentos {
       }
       return this.desfechoDoCriar(k, r, processo);
     } finally {
+      this.emVoo = null;
       this.ritmo.registrar(agora() - inicio);
     }
   }
@@ -452,10 +476,7 @@ export class TelaExecucao {
     this.continuar.hidden = this.concluido || !pausado || rodando;
   }
 
-  /**
-   * Todas as linhas da rodada foram processadas: resumo mínimo. Ponto de extensão (Tarefa 14b): aqui entra o botão
-   * "Ver resultado" (tabela, CSV, repetir falhas, gravar as de fora); o lote concluído ainda não é apagado.
-   */
+  /** Todas as linhas da rodada foram processadas: resumo mínimo (o app troca a tela pelo resultado em seguida). */
   concluida(): void {
     this.concluido = true;
     this.fim.textContent = resumoDoLote(this.ex.progresso);

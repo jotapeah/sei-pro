@@ -39,3 +39,10 @@ export const CUSTO_PROCESSO_MS = 900;
 
 /** O texto do modelo guardado para a prévia (só a tela o usa) vai até este tamanho. */
 export const MAX_TEXTO_PREVIA = 20_000;
+
+/**
+ * Chave em chrome.storage.local com a entrada que o Link Permanente lê ao abrir (uso único). É a MESMA string de
+ * CHAVE_ENTRADA em link-permanente/src/modelo/constantes.ts (e de CHAVE_ENTRADA_LINK no processos-lote), duplicada
+ * aqui para os pacotes não se importarem: mudou lá, muda aqui (a prova compara as duas).
+ */
+export const CHAVE_ENTRADA_LINK = "link-permanente/entrada";
