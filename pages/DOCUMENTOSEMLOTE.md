@@ -14,6 +14,8 @@ Cria **vários documentos de uma vez** a partir de um **modelo** e de uma **plan
 
 Também é possível usar como modelo um **Texto Padrão** da unidade.
 
+**Documentos em outros processos.** O SEI copia o texto do modelo **exatamente como está**, inclusive um cabeçalho como "Processo nº ... / Interessado: ...". Se os documentos forem criados em **outros processos** (destino "processo novo por linha" ou "processo indicado em uma coluna"), esse cabeçalho sairá com o número e o interessado do processo do modelo. Nesse caso, **não deixe número de processo nem interessado fixos no modelo**: troque-os por campos (`##processo##`, `##interessado##`) e traga os valores da planilha. A prévia avisa quando o texto do modelo cita o número do processo dele e algum documento vai para outro processo.
+
 **2. A planilha.** No Excel, LibreOffice Calc ou Google Planilhas, monte uma tabela em que:
 
 * a **primeira linha** traz os nomes dos campos, **exatamente iguais** aos do modelo, sem as cerquilhas (`nome`, `municipio`...);
@@ -40,7 +42,7 @@ Clique em **Iniciar Documentos em Lote**, na barra de botões do processo. A jan
    * **Pausa entre um documento e outro**, em milissegundos;
 4. **Verificação** (só quando o destino é "o processo indicado em uma coluna"): confere cada processo antes de gravar — veja [Verificação antes de gravar](#verificação-antes-de-gravar);
 5. **Prévia:** mostra, linha a linha, como ficará cada documento (destino, nome, descrição e texto) e aponta os problemas. Clique em **Iniciar** para criar;
-6. **Execução e resultado:** acompanhe o progresso. Ao final aparece a tabela com cada linha da planilha, o documento gerado, o número SEI e o link, que pode ser **copiada** ou **baixada em CSV**. A árvore é atualizada com os novos documentos.
+6. **Execução e resultado:** acompanhe o progresso. Ao final aparece a tabela com cada linha da planilha, o documento gerado, o número SEI e o link, que pode ser **copiada** ou **baixada em CSV**. Quando algum documento é criado no processo aberto na tela, a árvore desse processo é atualizada ao final.
 
 ### Processo de destino
 
@@ -61,7 +63,7 @@ No destino "processo indicado em uma coluna", cada processo é consultado **uma 
 * **Tipo indisponível** — o tipo de documento do modelo não pode ser criado naquele processo;
 * **Erro de rede** — a consulta falhou; tente de novo.
 
-Em cada linha há **Abrir em nova aba** (para ver o processo, receber ou reabrir) e **Verificar de novo**; também há **Verificar todos de novo**. Depois de resolver um problema no SEI, verifique de novo.
+Em cada linha há **Abrir em nova aba** (para ver o processo, receber ou reabrir) e **Verificar de novo**; no topo, **Verificar de novo os com problema** consulta outra vez todos os processos que não deram OK (os que deram OK são conferidos de novo na hora de gravar cada documento). Depois de resolver um problema no SEI, verifique de novo.
 
 Você não precisa resolver tudo: **Gravar** cria os documentos só das linhas válidas, e as demais ficam de fora. Mais tarde, quando elas estiverem corrigidas, o botão **Gravar as que ficaram de fora** cria o que faltou.
 
@@ -78,13 +80,15 @@ Sem coluna de nível, todos os documentos saem públicos. Um nível que não sej
 
 Antes de criar, a prévia permite conferir uma linha de cada vez, com o texto do documento já preenchido. Os campos `##...##` sem coluna correspondente aparecem **marcados**, porque ficariam como estão no texto. Linhas com erro (processo inválido, nome vazio, nível inválido) são listadas e ficam de fora.
 
+Se o texto do modelo cita o número do processo em que o modelo está e algum documento vai para **outro processo**, a prévia mostra um aviso: esses documentos manterão aquele número (e provavelmente o interessado do processo original). O aviso não impede de iniciar, mas o recomendado é corrigir o modelo antes (veja [Documentos em outros processos](#antes-de-começar-prepare-o-modelo-e-a-planilha)).
+
 ### Durante a execução
 
 Uma linha que falha **não interrompe o lote**: o erro é registrado e a ferramenta segue para a próxima. As linhas já criadas continuam no SEI. Há os botões **Pausar**, **Continuar** e **Minimizar** (que recolhe a janela numa pastilha de progresso no canto da tela). Não mude de página nesta aba enquanto o lote roda: mudar de página interrompe o lote, que fica guardado e pode ser retomado.
 
 ### Retomar de onde parou
 
-O andamento do lote é guardado **só neste navegador**. Se a janela for fechada ou a página recarregada no meio, ao abrir a ferramenta de novo aparecem **Continuar de onde parou** e **Descartar**. A planilha guardada vale por **até 7 dias após o último uso** e é apagada quando o lote termina ou é descartado. Se o lote parecer estar rodando em outra aba, a ferramenta avisa, para não gerar documentos em duplicidade.
+O andamento do lote é guardado **só neste navegador**. Se a janela for fechada ou a página recarregada no meio, ao abrir a ferramenta de novo aparecem **Continuar de onde parou** e **Descartar**. Quando o lote termina **sem nada pendente**, o registro é apagado ao fechar o resultado (ou ao clicar em **Concluir**). Se sobrar alguma linha com erro, incerta, de fora ou ainda não enviada, o lote fica guardado por **até 7 dias após o último uso**, a menos que você clique em **Concluir** ou **Descartar** antes. Se o lote parecer estar rodando em outra aba, a ferramenta avisa, para não gerar documentos em duplicidade.
 
 ### Repetir só as que falharam
 
@@ -115,6 +119,7 @@ A função vem **ligada** de fábrica. Ela fica nas [Configurações do SEI Pro]
 * Na **descrição dos documentos** e na **especificação dos novos processos**, os caracteres que o SEI não aceita, típicos de texto colado do Word ou do Excel, são trocados pelo equivalente simples: o travessão (—) vira hífen (-) e as aspas curvas (“ ”) viram aspas retas ("). Os acentos são mantidos. A descrição vai até 250 caracteres, o limite do SEI.
 * Os documentos são criados **sem assinatura**. Para assinar todos de uma vez, use [Ações em Lote](../pages/ACOESEMLOTE.md).
 * Se uma linha falhar, o motivo aparece no resultado e o lote continua. No destino **Em um processo novo por linha**, se o processo da linha chegou a ser aberto sem o documento, a ferramenta mostra o link dele: confira-o antes de repetir.
+* Cada lote aceita até **2000 linhas**. Para mais que isso, divida a planilha em arquivos menores.
 * Faça um teste com uma planilha de duas ou três linhas antes de gerar um lote grande.
 
 ## Próximo item
