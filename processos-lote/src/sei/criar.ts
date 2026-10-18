@@ -8,6 +8,7 @@
  * (travessao vira hifen, aspas curvas viram retas) para o corte de 100 caracteres valer sobre o texto final.
  */
 
+import { paraLatin1 } from "@comum/texto/latin1";
 import { lerLupa } from "@nucleo/formulario/formulario";
 import { parametros } from "@nucleo/links/links";
 import type { Sei } from "@nucleo/sei";
@@ -15,7 +16,6 @@ import { decodificarEntidades, textoDe } from "@nucleo/sessao/dom";
 import { ErroSei } from "@nucleo/sessao/erros";
 import type { Pagina } from "@nucleo/sessao/http";
 import { AVISO_INTERESSADO } from "../modelo/constantes";
-import { paraLatin1 } from "../modelo/latin1";
 import type { Criado } from "../repositorio";
 import { comCampos, type Pares } from "./campos";
 import type { FormTipo } from "./formularioTipo";

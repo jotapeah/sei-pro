@@ -9,10 +9,10 @@
  * "Depois de criar", que so aparece depois que alguma acao rodou (antes disso a tabela e a CSV ficam como eram).
  */
 
+import { paraLatin1 } from "@comum/texto/latin1";
 import { h, icone } from "@comum/ui/dom";
 import { type ColunaResultado, type LinhaResultado, montarTabelaResultado } from "@comum/ui/tabelaResultado";
 import { MAX_ESPECIFICACAO } from "../modelo/constantes";
-import { paraLatin1 } from "../modelo/latin1";
 import { NUMERO_INCERTO, NUMERO_NAO_IDENTIFICADO } from "../pagina/executor";
 import type { ItemProc } from "./execucao";
 

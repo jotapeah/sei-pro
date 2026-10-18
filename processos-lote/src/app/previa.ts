@@ -4,9 +4,9 @@
  * As repetidas saem com um clique; Voltar devolve a configuracao como estava.
  */
 
+import { paraLatin1 } from "@comum/texto/latin1";
 import { h, icone } from "@comum/ui/dom";
 import { MAX_ESPECIFICACAO } from "../modelo/constantes";
-import { paraLatin1 } from "../modelo/latin1";
 import type { LinhaLote } from "../modelo/linhas";
 import { type AvisoLinha, bloqueia, estimarDuracao, type LinhaPrevia, montarPrevia } from "../modelo/previa";
 import type { Parametros } from "../repositorio";

@@ -1,5 +1,5 @@
+import { paraLatin1 } from "@comum/texto/latin1";
 import { MAX_ESPECIFICACAO } from "./constantes";
-import { paraLatin1 } from "./latin1";
 import type { LinhaLote } from "./linhas";
 
 export { estimarDuracao, limitarPausa } from "./estimativa";
