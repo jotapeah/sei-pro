@@ -17,6 +17,7 @@ import { analisarHtml, definirAnalisador } from "@nucleo/sessao/dom";
 import { ErroSei } from "@nucleo/sessao/erros";
 import type { Http, OpcoesHttp, Pagina } from "@nucleo/sessao/http";
 import { DOMParser } from "linkedom";
+import { textoCitaProcesso } from "../src/app/previa";
 import { criarDocumentoDaLinha, ErroDocumentoCriado, type PedidoCriar } from "../src/sei/criar";
 import { lerModelo, listarModelos, type Modelo, textoDaPrevia } from "../src/sei/modelo";
 import { checar, igual, lanca, secao } from "./util";
@@ -127,6 +128,8 @@ interface Montagem {
   arvorePosCadastro?: "rede" | "aborto";
   /** CK5 com a configuração sem `versao`. */
   ck5SemVersao?: boolean;
+  /** Troca no HTML da visualização do modelo (documento 700). */
+  modelo?: (h: string) => string;
 }
 
 function docArvore(d: Partial<DocumentoArvore> & Pick<DocumentoArvore, "id" | "numero" | "titulo">): DocumentoArvore {
@@ -167,7 +170,7 @@ function montar(o: Montagem = {}) {
         return fixture("texto_padrao_consultar.html");
       if (abs.includes("acao=documento_escolher_tipo&acao_origem=arvore_visualizar")) return fixture("escolher_tipo.html");
       if (abs.includes("acao=documento_alterar&") && abs.includes("id_documento=700")) return fixture("documento_alterar.html");
-      if (abs.includes("acao=documento_visualizar&id_documento=700")) return fixture("modelo_visualizar.html");
+      if (abs.includes("acao=documento_visualizar&id_documento=700")) return fixture("modelo_visualizar.html", o.modelo);
       if (abs.includes("acao=editor_montar") && abs.includes("id_documento=701"))
         return pagina(abs, tipoEditor === "ck5" ? editorCk5(secoes, o.ck5SemVersao) : editorCk4(secoes));
     } else {
@@ -407,6 +410,63 @@ export async function verificarSei(): Promise<void> {
     const e = await lanca(() => lerModelo(sei, { textoPadrao: "77", tipoId: "12" }));
     checar("texto padrao inexistente: SEI_NAO_ENCONTRADO", e?.codigo === "SEI_NAO_ENCONTRADO", e);
   });
+
+  secao("sei: texto do modelo sem o cabecalho de codigo de barras que o SEI refaz (N2 do SEI MJ 5.0.4)");
+  {
+    // Estrutura real do SEI 5.0.4 do MJ (documento_visualizar): tabela externa de 100% com a tabela dos dois
+    // codigos de barras; o SEI a refaz em cada documento criado, com o numero e o processo de destino.
+    const PROC = "00000.000004/2025-54";
+    const cabecalho = [
+      '<table width="100%"><tbody><tr><td><table align="left"><tbody>',
+      '<tr><td align="center"><p class="Tabela_Texto_8_Centralizado"><img alt="C&oacute;digo de Barras do Documento" src="data:image/png;base64,AAAA" /></p></td>',
+      '<td align="center"><p class="Tabela_Texto_8_Centralizado"><img alt="C&oacute;digo de Barras do Processo" src="data:image/png;base64,AAAA" /></p></td></tr>',
+      `<tr><td align="center"><p class="Tabela_Texto_8_Centralizado">31573823</p></td><td align="center"><p class="Tabela_Texto_8_Centralizado">${PROC}</p></td></tr>`,
+      "</tbody></table></td></tr></tbody></table>",
+      '<p class="Texto_Centralizado">Minist&eacute;rio da Justi&ccedil;a</p>',
+    ].join("\n");
+    const comCabecalho = (corpoExtra: string) => (h: string) => h.replace("<body>", `<body>\n${cabecalho}\n${corpoExtra}`);
+    await comMontagem({ modelo: comCabecalho("") }, async ({ sei }) => {
+      const { texto, campos } = await lerModelo(sei, { documento: "0100001" });
+      checar(
+        "cabecalho de codigo de barras fora do texto do modelo",
+        !(texto ?? "").includes(PROC) && !(texto ?? "").includes("31573823"),
+        texto,
+      );
+      checar("corpo limpo: o aviso do processo do modelo NAO dispara", !textoCitaProcesso(texto ?? "", PROC), texto);
+      checar(
+        "o resto do texto continua (timbre e corpo)",
+        (texto ?? "").startsWith("Minist\u00E9rio da Justi\u00E7a\nOf\u00EDcio para ##nome##"),
+        texto,
+      );
+      igual("campos nao mudam", campos, ["nome", "cpf", "munic\u00EDpio"]);
+    });
+    await comMontagem({ modelo: comCabecalho(`<p class="Texto_Justificado">Ref.: Processo n&ordm; ${PROC}</p>`) }, async ({ sei }) => {
+      const { texto } = await lerModelo(sei, { documento: "0100001" });
+      checar("numero no texto editavel: o aviso dispara", textoCitaProcesso(texto ?? "", PROC), texto);
+    });
+    // SEI SP 4.1.5: o cabecalho "Processo n\u00BA ... / Interessado" e texto da secao editavel, copiado literal.
+    const SP = "99906.713-630.000032/2025-82";
+    const cabecalhoSp = `<p class="Texto_Alinhado_Esquerda">Processo n&ordm; ${SP}</p><p class="Texto_Alinhado_Esquerda">Interessado: CGE-CAUD</p>`;
+    await comMontagem({ modelo: (h) => h.replace("<body>", `<body>\n${cabecalhoSp}`) }, async ({ sei }) => {
+      const { texto } = await lerModelo(sei, { documento: "0100001" });
+      checar("cabecalho do SP (texto literal) continua avisando", textoCitaProcesso(texto ?? "", SP), texto);
+    });
+    // Tabela de layout que envolve o documento inteiro: so o pedaco do codigo de barras sai.
+    const envolto = (h: string) =>
+      h.replace(
+        "<body>",
+        `<body>\n<table width="100%"><tbody><tr><td>${cabecalho}<p class="Texto_Justificado">Processo ${PROC} citado no corpo</p></td></tr></tbody></table>`,
+      );
+    await comMontagem({ modelo: envolto }, async ({ sei }) => {
+      const { texto } = await lerModelo(sei, { documento: "0100001" });
+      checar(
+        "tabela de layout em volta: o corpo fica e o aviso dispara",
+        (texto ?? "").includes("citado no corpo") && textoCitaProcesso(texto ?? "", PROC),
+        texto,
+      );
+      checar("tabela de layout em volta: o numero do documento do cabecalho sai", !(texto ?? "").includes("31573823"), texto);
+    });
+  }
 
   secao("sei: texto da previa sem CSS, script, comentario nem imagem (D3)");
   {

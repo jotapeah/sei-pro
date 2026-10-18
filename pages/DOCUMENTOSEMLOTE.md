@@ -14,7 +14,7 @@ Cria **vários documentos de uma vez** a partir de um **modelo** e de uma **plan
 
 Também é possível usar como modelo um **Texto Padrão** da unidade.
 
-**Documentos em outros processos.** O SEI copia o texto do modelo **exatamente como está**, inclusive um cabeçalho como "Processo nº ... / Interessado: ...". Se os documentos forem criados em **outros processos** (destino "processo novo por linha" ou "processo indicado em uma coluna"), esse cabeçalho sairá com o número e o interessado do processo do modelo. Nesse caso, **não deixe número de processo nem interessado fixos no modelo**: troque-os por campos (`##processo##`, `##interessado##`) e traga os valores da planilha. A prévia avisa quando o texto do modelo cita o número do processo dele e algum documento vai para outro processo.
+**Documentos em outros processos.** O SEI copia o texto do modelo **exatamente como está**, inclusive um cabeçalho como "Processo nº ... / Interessado: ...". Se os documentos forem criados em **outros processos** (destino "processo novo por linha" ou "processo indicado em uma coluna"), esse cabeçalho sairá com o número e o interessado do processo do modelo. Nesse caso, **não deixe número de processo nem interessado fixos no modelo**: troque-os por campos (`##processo##`, `##interessado##`) e traga os valores da planilha. A prévia avisa quando o texto do modelo cita o número do processo dele e algum documento vai para outro processo. O cabeçalho com o código de barras não conta: esse o SEI refaz em cada documento, com o número e o processo de destino.
 
 **2. A planilha.** No Excel, LibreOffice Calc ou Google Planilhas, monte uma tabela em que:
 

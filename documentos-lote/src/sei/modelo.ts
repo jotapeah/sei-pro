@@ -12,7 +12,7 @@ import { MAX_TEXTO_PREVIA } from "@dl/modelo/constantes";
 import { lerConteudo, localizarDocumento, tipoDoDocumento, tiposDocumento } from "@nucleo/dominio/documento";
 import { textoDoHtml } from "@nucleo/dominio/editor";
 import type { Sei } from "@nucleo/sei";
-import { decodificarEntidades, textoDe } from "@nucleo/sessao/dom";
+import { analisarHtml, decodificarEntidades, textoDe } from "@nucleo/sessao/dom";
 import { ErroSei } from "@nucleo/sessao/erros";
 import type { OpcoesHttp } from "@nucleo/sessao/http";
 
@@ -96,6 +96,35 @@ export const textoDaPrevia = (html: string) =>
     .trim()
     .slice(0, MAX_TEXTO_PREVIA);
 
+/** `alt` das imagens do cabeçalho que o SEI gera ("Código de Barras do Documento" / "do Processo"). */
+const ALT_CODIGO_BARRAS = /c[o\u00F3]digo\s+de\s+barras/i;
+
+/**
+ * Tira o cabeçalho de código de barras (número do documento e do processo) do HTML do modelo (N2 da validação no
+ * SEI MJ 5.0.4). O SEI refaz esse cabeçalho em cada documento criado, com o número novo e o processo de destino:
+ * no modelo ele só mostra números que não vão para documento nenhum, e fazia o aviso do processo do modelo (D1)
+ * disparar em quase todo modelo. Sai a menor tabela em volta das imagens e, subindo, a tabela externa que só a
+ * envolve; uma tabela de layout com mais texto em volta fica. Sem essas imagens, o HTML volta como veio.
+ */
+export function semCabecalhoCodigoBarras(html: string): string {
+  if (!/<img\b/i.test(html) || !ALT_CODIGO_BARRAS.test(decodificarEntidades(html))) return html;
+  const doc = analisarHtml(`<!doctype html><html><head></head><body>${html}</body></html>`);
+  const tabelas = new Set<Element>();
+  for (const img of doc.querySelectorAll("img[alt]")) {
+    if (!ALT_CODIGO_BARRAS.test(img.getAttribute("alt") ?? "")) continue;
+    let tabela = img.closest("table");
+    if (!tabela) continue;
+    for (let acima = tabela.parentElement?.closest("table"); acima; acima = acima.parentElement?.closest("table")) {
+      if (textoDe(acima) !== textoDe(tabela)) break;
+      tabela = acima;
+    }
+    tabelas.add(tabela);
+  }
+  if (!tabelas.size) return html;
+  for (const t of tabelas) t.remove();
+  return doc.body?.innerHTML ?? html;
+}
+
 /** Só o corpo da página (o legado também cortava entre `<body>` e `</body>`): `##` no `<title>` não é campo. */
 function corpoDa(html: string): string {
   const ini = html.search(/<body[\s>]/i);
@@ -145,6 +174,7 @@ export async function lerModelo(sei: Sei, escolha: EscolhaModelo, sinal?: AbortS
     tipoId: tipo.id,
     tipoNome: tipo.nome,
     campos: camposDoHtml(corpoDa(html)),
-    texto: textoDaPrevia(corpoDa(html)),
+    // Sem o cabeçalho de código de barras: o SEI o refaz com os números do documento criado (N2).
+    texto: textoDaPrevia(semCabecalhoCodigoBarras(corpoDa(html))),
   };
 }
